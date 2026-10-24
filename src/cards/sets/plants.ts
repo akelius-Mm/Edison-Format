@@ -223,6 +223,12 @@ monster('Lonefire Blossom', {
   ],
 });
 
+/** Monsters in hand that could be Normal Summoned this turn to synchro with Quickdraw. */
+function quickdrawPartners(ctx: Ctx) {
+  if (ctx.game.players[ctx.player].normalSummonsLeft <= 0) return [];
+  return ctx.hand('me', (h) => h !== ctx.self && h.isMonster && !h.isTuner && !h.data.cannotNormalSummon && (h.data.level ?? 0) <= 4 && synchroOptions(ctx, [{ card: ctx.self }, { card: h }]).length > 0);
+}
+
 /** Quickdraw Synchron: what to send from the hand (higher = better to send). */
 function quickdrawCostScore(ctx: Ctx, c: CardInstance) {
   const darks = ctx.grave('me', (g) => g.isMonster && g.data.attribute === 'DARK').length;
@@ -254,6 +260,9 @@ function quickdrawCostScore(ctx: Ctx, c: CardInstance) {
       s = -cardValue(ctx.game, c) / 4;
   }
   if (dadInHand && c.data.attribute === 'DARK' && c.name !== 'Dark Armed Dragon') s += darks < 3 ? 150 : -300;
+  // Keep the only Normal Summon partner for an immediate Synchro.
+  const partners = quickdrawPartners(ctx);
+  if (partners.includes(c) && partners.length === 1 && c.name !== 'Dandylion') s -= 1200;
   return s;
 }
 
@@ -285,6 +294,9 @@ const quickdraw = monster('Quickdraw Synchron', {
           const cands = ctx.hand('me', (c) => c.isMonster && c !== ctx.self);
           if (!cands.length) return 0;
           const best = Math.max(...cands.map((c) => quickdrawCostScore(ctx, c)));
+          const cost = cands.find((c) => quickdrawCostScore(ctx, c) === best);
+          const synchroNext = synchroOptions(ctx, [{ card: ctx.self }]).length > 0 || quickdrawPartners(ctx).some((p) => p !== cost);
+          if (synchroNext && best > -600) return Math.max(70, best >= 1000 ? 82 : 0);
           if (best >= 1000) return 82;
           if (best >= 700) return 74;
           if (best >= 400) return 60;

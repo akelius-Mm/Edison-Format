@@ -535,7 +535,8 @@ export class Game {
     const from = card.location;
     const wasOnField = card.onField;
     let dest = to;
-    if (dest === 'grave' && this.queryPlayer(card.owner, 'banishInsteadOfGrave')) dest = 'banished';
+    const isBanishSource = !!card.data.effects?.some((e) => e.mods?.some((m) => m.q === 'banishInsteadOfGrave'));
+    if (dest === 'grave' && !isBanishSource && this.queryPlayer(card.owner, 'banishInsteadOfGrave')) dest = 'banished';
     if (dest === 'grave' && card.banishOnLeave && wasOnField) dest = 'banished';
     if (wasOnField && card.banishOnLeave && (dest === 'hand' || dest === 'deck')) dest = 'banished';
     if ((dest === 'deck' || dest === 'hand') && card.isExtra) dest = 'extra';

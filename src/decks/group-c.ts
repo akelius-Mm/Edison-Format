@@ -98,7 +98,7 @@ const TELE_DAD: DeckDef = {
     ['Book of Moon', 1],
     ['Pot of Avarice', 1],
     ['Foolish Burial', 1],
-    ['Burial from a Different Dimension', 1],
+    ['Smashing Ground', 1],
     // Traps (9)
     ['Solemn Judgment', 1],
     ['Mirror Force', 1],
