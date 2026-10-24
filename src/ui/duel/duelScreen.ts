@@ -141,6 +141,7 @@ class DuelScreen implements HumanUI {
     const right = h('div', 'duel-right');
     right.append(this.buildTopBar(), this.phaseBar.el, this.chain.el, this.log.el);
     this.root.append(left, center, right, this.overlay);
+    this.setupPhoneGestures(center);
     container.innerHTML = '';
     container.appendChild(this.root);
     this.board.mount(mat);
@@ -203,6 +204,64 @@ class DuelScreen implements HumanUI {
     this.applySpeedVar();
   }
 
+  // ------------------------------------------------------------------ phone
+  /** Long-press any card to read it; tap the sheet to close. Portrait phones only. */
+  private setupPhoneGestures(center: HTMLElement) {
+    const hint = h('div', 'phone-hint', 'Hold a card to read it · ⓘ shows the last card');
+    center.appendChild(hint);
+    window.setTimeout(() => hint.classList.add('is-gone'), 6000);
+    let timer = 0;
+    let startX = 0;
+    let startY = 0;
+    let swallowClick = false;
+    this.root.addEventListener('pointerdown', (ev) => {
+      if (!isPhonePortrait() || ev.pointerType === 'mouse') return;
+      const target = (ev.target as HTMLElement).closest('.dc, .yc');
+      if (!target || target.closest('.preview')) return;
+      startX = ev.clientX;
+      startY = ev.clientY;
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => {
+        swallowClick = true;
+        this.root.classList.remove('show-log-sheet');
+        this.root.classList.add('show-preview-sheet');
+        navigator.vibrate?.(12);
+      }, 420);
+    });
+    const cancel = (ev: PointerEvent) => {
+      if (ev.type === 'pointermove' && Math.hypot(ev.clientX - startX, ev.clientY - startY) < 10) return;
+      window.clearTimeout(timer);
+    };
+    this.root.addEventListener('pointermove', cancel);
+    this.root.addEventListener('pointerup', cancel);
+    this.root.addEventListener('pointercancel', cancel);
+    // The click that ends a long-press only opens the sheet.
+    this.root.addEventListener(
+      'click',
+      (ev) => {
+        if (swallowClick) {
+          swallowClick = false;
+          ev.stopPropagation();
+          ev.preventDefault();
+          return;
+        }
+        const t = ev.target as HTMLElement;
+        if (t.closest('.preview') || (!t.closest('.log') && !t.closest('.icon-btn'))) {
+          if (this.root.classList.contains('show-preview-sheet') && t.closest('.preview')) {
+            this.root.classList.remove('show-preview-sheet');
+            ev.stopPropagation();
+          } else if (!t.closest('.dc, .yc')) {
+            this.root.classList.remove('show-preview-sheet', 'show-log-sheet');
+          }
+        }
+      },
+      true,
+    );
+    this.root.addEventListener('contextmenu', (ev) => {
+      if (isPhonePortrait()) ev.preventDefault();
+    });
+  }
+
   // ------------------------------------------------------------------ chrome
   private buildTopBar() {
     const top = h('div', 'duel-top');
@@ -211,15 +270,28 @@ class DuelScreen implements HumanUI {
     const btns = h('div', 'duel-tools');
     const logBtn = h('button', 'icon-btn', ICONS.log) as HTMLButtonElement;
     logBtn.title = 'Toggle duel log';
-    logBtn.onclick = () => {
+    logBtn.onclick = (ev) => {
+      if (isPhonePortrait()) {
+        ev.stopPropagation();
+        this.root.classList.remove('show-preview-sheet');
+        this.root.classList.toggle('show-log-sheet');
+        return;
+      }
       this.root.classList.toggle('hide-log');
       updateSettings({ showLog: !this.root.classList.contains('hide-log') });
+    };
+    const infoBtn = h('button', 'icon-btn icon-btn--phone', ICONS.info) as HTMLButtonElement;
+    infoBtn.title = 'Card text';
+    infoBtn.onclick = (ev) => {
+      ev.stopPropagation();
+      this.root.classList.remove('show-log-sheet');
+      this.root.classList.toggle('show-preview-sheet');
     };
     this.soundBtn = h('button', 'icon-btn') as HTMLButtonElement;
     this.soundBtn.title = 'Toggle sound';
     this.soundBtn.onclick = () => updateSettings({ sound: !getSettings().sound });
     this.updateSoundBtn();
-    btns.append(logBtn, this.soundBtn);
+    btns.append(infoBtn, logBtn, this.soundBtn);
     const canSurrender = !this.spectator && (this.opts.allowSurrender ?? true);
     if (canSurrender || this.spectator) {
       const sur = h('button', 'icon-btn icon-btn--danger', ICONS.flag) as HTMLButtonElement;
@@ -793,4 +865,8 @@ class DuelScreen implements HumanUI {
     this.flush();
     return this.guard(declareDialog(this.dialogs, prompt, names));
   }
+}
+
+function isPhonePortrait() {
+  return typeof matchMedia === 'function' && matchMedia('(max-width: 600px) and (orientation: portrait)').matches;
 }

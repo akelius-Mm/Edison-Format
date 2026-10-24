@@ -63,6 +63,7 @@ export class BoardView {
   private views = new Map<number, View>();
   private lastLoc = new Map<number, Location>();
   private ro: ResizeObserver | null = null;
+  private handScale = 1.08;
   cw = 90;
 
   onCardClick?: (c: CardInstance, el: HTMLElement, ev: MouseEvent) => void;
@@ -199,7 +200,11 @@ export class BoardView {
     s.setProperty('--ch', `${(cw * RATIO).toFixed(2)}px`);
     const boardH = 4 * cw * RATIO * 1.03 + cw * 0.16 + cw * 0.42;
     const topRes = 0.82 * cw * RATIO * 0.55;
-    const botRes = 1.08 * cw * RATIO * 0.76;
+    // Tall, narrow screens (phones in portrait) get a bigger, fully visible hand.
+    const tallPhone = r.width < 520 && r.height > r.width * 1.05;
+    this.handScale = tallPhone ? 1.6 : 1.08;
+    this.stage.classList.toggle('stage--tall', tallPhone);
+    const botRes = tallPhone ? this.handScale * cw * RATIO * 1.02 : 1.08 * cw * RATIO * 0.76;
     const free = r.height - topRes - botRes - boardH;
     s.setProperty('--board-top', `${Math.max(0, topRes + free * 0.45).toFixed(1)}px`);
     this.stage.classList.toggle('stage--compact', compact);
@@ -479,8 +484,8 @@ export class BoardView {
       const cards = [...hand.children].filter((x) => x.classList.contains('dc')) as HTMLElement[];
       const n = cards.length;
       const isMe = p === this.cfg.me;
-      const cardW = this.cw * (isMe ? 1.08 : 0.82);
-      const maxW = this.stage.clientWidth * (isMe ? 0.7 : 0.6);
+      const cardW = this.cw * (isMe ? this.handScale : 0.82);
+      const maxW = this.stage.clientWidth * (isMe ? (this.handScale > 1.08 ? 0.9 : 0.7) : 0.6);
       const natural = n * cardW + (n - 1) * cardW * 0.06;
       let ml = cardW * 0.06;
       if (n > 1 && natural > maxW) ml = (maxW - n * cardW) / (n - 1);

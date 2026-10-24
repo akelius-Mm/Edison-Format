@@ -1343,3 +1343,149 @@
   .duel-right { top: auto; bottom: 18%; }
   .duel-left { bottom: auto; height: 100%; }
 }
+
+/* ---------------------------------------------------------------- phone portrait
+   Stacked layout: opponent strip + tools on top, board in the middle,
+   phase controls and your strip at the bottom. Card text and the log open as sheets. */
+.icon-btn--phone { display: none; }
+.phone-hint { display: none; }
+@media (max-width: 600px) and (orientation: portrait) {
+  .duel-root {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-rows: auto minmax(0, 1fr) auto auto;
+    grid-template-areas:
+      'opp tools'
+      'board board'
+      'phase phase'
+      'me me';
+    padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
+    row-gap: 4px;
+  }
+  .duel-left,
+  .duel-right { display: contents; }
+  .duel-center { grid-area: board; padding: 0; min-height: 0; }
+  .duel-mat { inset: 0; border-radius: 12px; }
+  .pp--opp { grid-area: opp; }
+  .pp--me { grid-area: me; }
+  .pp {
+    margin: 4px 6px;
+    padding: 5px 10px;
+    gap: 8px;
+    border-radius: 14px;
+    background: rgba(10, 14, 28, 0.9);
+    pointer-events: auto;
+  }
+  .pp-avatar .avatar { width: 30px !important; height: 30px !important; }
+  .pp-info { flex-direction: row; align-items: center; gap: 10px; }
+  .pp-name { font-size: 13px; flex: 1; min-width: 0; }
+  .pp-title { display: none; }
+  .pp-lprow { margin: 0; }
+  .pp-lp { font-size: 19px; }
+  .pp-bar { display: none; }
+  .pp-stats { display: flex; margin: 0; gap: 6px; font-size: 10.5px; }
+  .duel-top { grid-area: tools; flex-direction: row; align-items: center; padding: 4px 6px 4px 0; pointer-events: auto; }
+  .duel-top .duel-caption { display: none; }
+  .spec-speed { display: none; }
+  .icon-btn--phone { display: inline-flex; }
+  .icon-btn { width: 34px; height: 34px; padding: 7px; }
+  .phasebar {
+    grid-area: phase;
+    margin: 0 6px;
+    padding: 6px 8px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas: 'turn turn' 'list btns';
+    gap: 4px 8px;
+    align-items: center;
+    background: rgba(10, 14, 28, 0.9);
+    pointer-events: auto;
+  }
+  .phasebar-turn { grid-area: turn; font-size: 11px; }
+  .phasebar-list { grid-area: list; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 2px; }
+  .phasebar-list .ph b { font-size: 10px; }
+  .phasebar-btns { grid-area: btns; flex-direction: row; gap: 5px; }
+  .btn--phase { min-height: 36px; padding: 4px 9px; font-size: 11.5px; white-space: nowrap; }
+  .chain {
+    position: absolute;
+    z-index: 40;
+    top: calc(env(safe-area-inset-top, 0px) + 52px);
+    right: 8px;
+    width: min(62vw, 230px);
+    max-height: 36%;
+    pointer-events: none;
+  }
+  /* Card text sheet */
+  .preview {
+    display: flex;
+    position: fixed;
+    z-index: 120;
+    left: 8px;
+    right: 8px;
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 8px);
+    max-height: 62vh;
+    flex-direction: row;
+    gap: 10px;
+    padding: 12px;
+    border-radius: 18px;
+    background: rgba(8, 11, 24, 0.97);
+    border: 1px solid rgba(216, 180, 90, 0.4);
+    box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.7);
+    transform: translateY(calc(100% + 40px));
+    transition: transform 220ms ease;
+    overflow-y: auto;
+  }
+  .duel-root.show-preview-sheet .preview { transform: none; }
+  .preview-card { flex: 0 0 38%; }
+  .preview-details { min-width: 0; flex: 1; }
+  .preview-empty { font-size: 12px; }
+  /* Log sheet */
+  .log {
+    display: flex;
+    position: fixed;
+    z-index: 119;
+    left: 8px;
+    right: 8px;
+    top: calc(env(safe-area-inset-top, 0px) + 52px);
+    height: 55vh;
+    border-radius: 18px;
+    background: rgba(8, 11, 24, 0.97);
+    border: 1px solid rgba(216, 180, 90, 0.4);
+    transform: translateY(calc(-100% - 80px));
+    transition: transform 220ms ease;
+  }
+  .hide-log .log { display: flex; }
+  .duel-root.show-log-sheet .log { transform: none; }
+  .log-row { font-size: 12.5px; }
+  .phone-hint {
+    display: block;
+    position: absolute;
+    z-index: 35;
+    left: 50%;
+    top: 6px;
+    transform: translateX(-50%);
+    font-size: 10.5px;
+    color: var(--ef-text-dim);
+    background: rgba(8, 11, 24, 0.8);
+    padding: 3px 9px;
+    border-radius: 99px;
+    pointer-events: none;
+    transition: opacity 400ms ease;
+    white-space: nowrap;
+  }
+  .phone-hint.is-gone { opacity: 0; }
+  .dlg-layer--docked,
+  .dlg-layer--docked.dlg--response { bottom: calc(env(safe-area-inset-bottom, 0px) + 10px); width: calc(100vw - 16px); }
+  .sel { --tile-w: 74px; }
+}
+.stage--tall .hand-me { --hw: calc(var(--cw) * 1.6); bottom: calc(var(--ch) * 0.02); }
+.stage--tall .hand-me .dc:hover { transform: translateY(calc(var(--ch) * -0.12)) rotate(0deg) scale(1.05); }
+.duel-root { -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+@media (max-width: 600px) and (orientation: portrait) {
+  .pp--opp .pp-stats { display: none; }
+  .pp--opp .pp-name { font-size: 12.5px; }
+  .phasebar-list { display: flex; min-width: 0; }
+  .phasebar-list .ph { display: none; }
+  .phasebar-list .ph.is-current { display: flex; padding: 6px 8px; white-space: nowrap; }
+  .phasebar-list .ph.is-current b { display: none; }
+  .phasebar-list .ph.is-current span { display: inline; font-size: 11px; font-weight: 800; }
+}
