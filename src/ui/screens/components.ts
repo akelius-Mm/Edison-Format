@@ -5,7 +5,7 @@ import { findCard } from '../../cards';
 import { randomPersona } from '../../tournament/personas';
 import { badge, button, clear, h, icon, modal, segmented, type Child } from './dom';
 import { AVATAR_PRESETS, renderAvatar, renderCard } from './ext';
-import { coverCard, deckCount, type DeckInfo } from './store';
+import { coverCard, deckCount, getProfile, type DeckInfo } from './store';
 
 // ------------------------------------------------------------------ deck tiles
 
@@ -38,6 +38,7 @@ export function deckTile(d: DeckInfo, opts: { selected?: boolean; onClick?: () =
         { class: 'deck-tile-meta' },
         d.ref.kind === 'premade' ? tierBadge(d.tier) : badge('Custom', 'violet'),
         h('span', { class: 'deck-tile-count' }, `${main} + ${extra}`),
+        recordChip(d.key),
         d.problems.length ? h('span', { class: 'deck-tile-warn', title: d.problems.join('\n') }, icon('warn'), `${d.problems.length}`) : null,
       ),
     ),
@@ -45,6 +46,14 @@ export function deckTile(d: DeckInfo, opts: { selected?: boolean; onClick?: () =
     opts.selected ? h('span', { class: 'deck-tile-check' }, icon('check')) : null,
   );
   return el;
+}
+
+let statsCache: { at: number; decks: ReturnType<typeof getProfile>['decks'] } | null = null;
+function recordChip(key: string) {
+  if (!statsCache || Date.now() - statsCache.at > 1000) statsCache = { at: Date.now(), decks: getProfile().decks };
+  const r = statsCache.decks[key];
+  if (!r || !(r.w + r.l + r.d)) return null;
+  return h('span', { class: 'deck-tile-rec', title: 'Your games with this deck' }, `${r.w}W ${r.l}L`);
 }
 
 /** Scrollable list of decks grouped into "My decks" and "Premade decks", with a filter box. */

@@ -1,16 +1,25 @@
 // Application shell: registers every screen with the router and boots the app.
 import { clear } from './screens/dom';
+import { databaseScreen } from './screens/database';
+import { customizeScreen } from './screens/customize';
+import { deckBuilderScreen } from './screens/deckBuilder';
 import { duelSetupScreen, exhibitionScreen } from './screens/duelSetup';
-import { frame, registerRoute, startRouter, type ScreenFactory } from './screens/nav';
+import { registerRoute, startRouter } from './screens/nav';
+import { rulesScreen } from './screens/rules';
+import { settingsScreen } from './screens/settingsScreen';
 import { titleScreen } from './screens/title';
-
-const placeholder = (title: string): ScreenFactory => () => ({ el: frame(title, {}, 'Coming soon') });
+import { tournamentScreen } from './screens/tournament';
 
 export function startApp(root: HTMLElement) {
   registerRoute('title', titleScreen);
   registerRoute('duel', duelSetupScreen);
   registerRoute('exhibition', exhibitionScreen);
-  for (const r of ['tournament', 'deck-builder', 'database', 'customize', 'settings', 'rules']) registerRoute(r, placeholder(r));
+  registerRoute('deck-builder', deckBuilderScreen);
+  registerRoute('database', databaseScreen);
+  registerRoute('customize', customizeScreen);
+  registerRoute('settings', settingsScreen);
+  registerRoute('rules', rulesScreen);
+  registerRoute('tournament', tournamentScreen);
   clear(root);
   startRouter(root);
 }

@@ -163,16 +163,22 @@ export function deckCount(entries: Entry[]) {
   return entries.reduce((a, [, n]) => a + n, 0);
 }
 
-/** The card shown on a deck box: the highest-ATK monster or first card. */
+/** The card shown on a deck box: the deck's most-played archetype monster. */
 export function coverCard(d: Pick<DeckInfo, 'main' | 'extra'>) {
   let best: ReturnType<typeof findCard>;
-  for (const [n] of [...d.main, ...d.extra]) {
+  let bestScore = -Infinity;
+  for (const [n, k] of d.main) {
     const c = findCard(n);
     if (!c) continue;
-    if (!best) best = c;
-    if (c.kind === 'monster' && (c.aiValue ?? 0) + (c.atk ?? 0) / 1000 > (best.aiValue ?? 0) + (best.kind === 'monster' ? (best.atk ?? 0) / 1000 : -1)) best = c;
+    let score = k * 10 + (c.level ?? 0) + (c.sets?.length ? 15 : 0);
+    if (c.kind !== 'monster') score -= 60;
+    if ((c.limit ?? 3) < 3) score -= 25;
+    if (score > bestScore) {
+      bestScore = score;
+      best = c;
+    }
   }
-  return best;
+  return best ?? (d.extra[0] ? findCard(d.extra[0][0]) : undefined);
 }
 
 // ------------------------------------------------------------------ text import/export

@@ -3,7 +3,7 @@ import type { Difficulty } from '../../ai/ai';
 import { PREMADE_DECKS } from '../../decks';
 import type { DuelSide } from '../duel/api';
 import { getSettings, loadJSON, saveJSON } from '../settings';
-import { deckPicker, newPersona, personaEditor, type PersonaState } from './components';
+import { deckPicker, newPersona, personaEditor, randomAvatar, type PersonaState } from './components';
 import { button, confirmDialog, h, icon, segmented, toast } from './dom';
 import { SLEEVES, renderAvatar } from './ext';
 import { runMatch, type MatchSetup } from './match';
@@ -220,6 +220,7 @@ export function exhibitionScreen(): Screen {
     persona: x?.persona?.name ? x.persona : newPersona('normal'),
   });
   const st = { a: mk(saved.a), b: mk(saved.b), bestOf: (saved.bestOf === 3 ? 3 : 1) as 1 | 3 };
+  while (st.b.persona.avatar === st.a.persona.avatar) st.b.persona.avatar = randomAvatar();
   const persist = () => saveJSON(EXHIBITION_KEY, st);
 
   const sidePanel = (x: ExhibitionSide, label: string, cls: string) =>

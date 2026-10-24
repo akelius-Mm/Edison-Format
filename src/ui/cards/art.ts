@@ -31,7 +31,7 @@ const BASE: Record<string, ArtPalette> = {
 function paletteFor(data: CardData, r: Rand): ArtPalette {
   const key = data.kind === 'spell' ? 'SPELL' : data.kind === 'trap' ? 'TRAP' : data.attribute ?? 'EARTH';
   const p = BASE[key] ?? BASE.EARTH;
-  const dh = r.range(-14, 14);
+  const dh = data.kind === 'monster' ? r.range(-14, 14) : r.range(-26, 26);
   const ds = r.range(-0.06, 0.06);
   const out: any = {};
   for (const k of Object.keys(p) as (keyof ArtPalette)[]) {
@@ -492,58 +492,137 @@ const MOTIFS: Record<string, Emblem> = {
     <path d="M50 14 L66 34 L56 34 L56 50 L44 50 L44 34 L34 34 Z" fill="url(#gold)" stroke="LINE" stroke-width="1"/>
     <path d="M50 90 L34 70 L44 70 L44 56 L56 56 L56 70 L66 70 Z" fill="url(#body)" stroke="LINE" stroke-width="1"/>
     <circle cx="50" cy="53" r="30" fill="none" stroke="${p.glow}" stroke-width="1" stroke-dasharray="3 3" opacity=".7"/>`,
+  orb: (p) => `
+    <path d="M30 88 L70 88 L64 78 L36 78 Z" fill="url(#gold)" stroke="LINE" stroke-width="1"/>
+    <path d="M38 78 C34 74 36 70 40 70 L60 70 C64 70 66 74 62 78 Z" fill="url(#body)" stroke="LINE" stroke-width="1"/>
+    <circle cx="50" cy="44" r="27" fill="url(#body)" stroke="LINE" stroke-width="1.3" opacity=".9"/>
+    <circle cx="50" cy="44" r="21" fill="${p.glow}" opacity=".25"/>
+    <path d="M38 44 C42 34 58 34 62 44 C58 54 42 54 38 44 Z" fill="none" stroke="${p.eye}" stroke-width="1.4" filter="url(#eyeglow)"/>
+    <circle cx="50" cy="44" r="4" fill="${p.eye}" filter="url(#eyeglow)"/>
+    <path d="M34 34 C36 26 42 22 48 21" stroke="#fff" stroke-width="2.4" fill="none" opacity=".6" stroke-linecap="round"/>`,
+  scroll: (p) => `
+    <path d="M24 22 L76 22 L76 80 L24 80 Z" fill="#f6ecd0" stroke="LINE" stroke-width="1.2"/>
+    <path d="M20 18 C14 18 14 28 20 28 L80 28 C86 28 86 18 80 18 Z M20 74 C14 74 14 84 20 84 L80 84 C86 84 86 74 80 74 Z" fill="url(#body)" stroke="LINE" stroke-width="1.2"/>
+    <circle cx="50" cy="51" r="15" fill="none" stroke="${p.bg1}" stroke-width="1.4"/>
+    <polygon points="${starPoints(50, 51, 6, 14, 7)}" fill="none" stroke="${p.bg1}" stroke-width="1"/>
+    <circle cx="50" cy="51" r="4" fill="${p.eye}" filter="url(#eyeglow)"/>
+    <path d="M30 36 L44 36 M56 36 L70 36 M30 68 L44 68 M56 68 L70 68" stroke="${p.bg1}" stroke-width="1" opacity=".6"/>`,
+  potion: (p) => `
+    <rect x="43" y="10" width="14" height="8" rx="2" fill="#8a5a2a" stroke="LINE" stroke-width="1"/>
+    <path d="M44 18 L56 18 L56 34 C70 40 76 52 74 66 C72 80 62 90 50 90 C38 90 28 80 26 66 C24 52 30 40 44 34 Z" fill="${p.glow}" fill-opacity=".25" stroke="LINE" stroke-width="1.4"/>
+    <path d="M28 62 C36 58 64 58 72 62 C72 78 62 88 50 88 C38 88 28 78 28 62 Z" fill="url(#body)"/>
+    <circle cx="40" cy="72" r="3" fill="${p.eye}" opacity=".8"/><circle cx="56" cy="68" r="2" fill="${p.eye}" opacity=".8"/><circle cx="50" cy="78" r="2.4" fill="${p.eye}" opacity=".8"/>
+    <path d="M34 50 C34 44 38 40 42 38" stroke="#fff" stroke-width="2.4" fill="none" opacity=".6" stroke-linecap="round"/>`,
+  key: (p) => `
+    <circle cx="50" cy="28" r="16" fill="none" stroke="LINE" stroke-width="9"/>
+    <circle cx="50" cy="28" r="16" fill="none" stroke="url(#gold)" stroke-width="6.5"/>
+    <polygon points="${starPoints(50, 28, 4, 8, 3)}" fill="${p.eye}" filter="url(#eyeglow)"/>
+    <path d="M46 43 L54 43 L54 92 L46 92 Z M54 70 L64 70 L64 76 L54 76 Z M54 82 L68 82 L68 88 L54 88 Z" fill="url(#gold)" stroke="LINE" stroke-width="1.2" stroke-linejoin="round"/>`,
+  hourglass: (p) => `
+    <rect x="26" y="10" width="48" height="7" rx="2" fill="url(#gold)" stroke="LINE" stroke-width="1"/>
+    <rect x="26" y="83" width="48" height="7" rx="2" fill="url(#gold)" stroke="LINE" stroke-width="1"/>
+    <path d="M32 17 L68 17 C68 34 54 42 54 50 C54 58 68 66 68 83 L32 83 C32 66 46 58 46 50 C46 42 32 34 32 17 Z" fill="${p.glow}" fill-opacity=".2" stroke="LINE" stroke-width="1.3"/>
+    <path d="M38 26 L62 26 C60 34 52 40 50 46 C48 40 40 34 38 26 Z M36 80 L64 80 C62 70 54 66 50 64 C46 66 38 70 36 80 Z" fill="url(#body)"/>
+    <path d="M50 46 L50 70" stroke="${p.eye}" stroke-width="1.2" stroke-dasharray="1.5 2"/>`,
+  feather: (p) => {
+    let barbs = '';
+    for (let i = 0; i < 9; i++) {
+      const y = 22 + i * 7;
+      barbs += `<path d="M${50 + i * 0.6} ${y} C${36 - i * 0.2} ${y + 2} ${30} ${y + 8} ${28 + i} ${y + 12}" stroke="${p.accent}" stroke-width=".8" fill="none" opacity=".7"/>`;
+    }
+    return `<path d="M50 8 C70 20 74 50 62 76 C58 84 52 88 46 90 C34 76 30 50 50 8 Z" fill="url(#body)" stroke="LINE" stroke-width="1.3"/>
+      <path d="M50 10 C54 40 52 70 40 96" stroke="url(#gold)" stroke-width="2.2" fill="none"/>${barbs}
+      <path d="M20 30 L30 34 M16 50 L28 52 M74 22 L84 18" stroke="${p.glow}" stroke-width="1.4" opacity=".7"/>`;
+  },
+  mask: (p) => `
+    <path d="M18 34 C30 26 70 26 82 34 C84 56 72 82 50 88 C28 82 16 56 18 34 Z" fill="url(#body)" stroke="LINE" stroke-width="1.4"/>
+    <path d="M28 46 C32 40 42 40 45 48 C40 52 32 52 28 46 Z M72 46 C68 40 58 40 55 48 C60 52 68 52 72 46 Z" fill="#000"/>
+    <circle cx="37" cy="47" r="2" fill="${p.eye}" filter="url(#eyeglow)"/><circle cx="63" cy="47" r="2" fill="${p.eye}" filter="url(#eyeglow)"/>
+    <path d="M38 68 Q50 76 62 68" stroke="LINE" stroke-width="2" fill="none"/>
+    <path d="M50 30 L50 40 M24 36 L34 40 M76 36 L66 40" stroke="url(#gold)" stroke-width="2"/>`,
+  tower: (p) => `
+    <path d="M36 92 L40 36 L60 36 L64 92 Z" fill="url(#body)" stroke="LINE" stroke-width="1.3"/>
+    <path d="M34 36 L34 26 L39 26 L39 30 L45 30 L45 26 L55 26 L55 30 L61 30 L61 26 L66 26 L66 36 Z" fill="url(#body)" stroke="LINE" stroke-width="1.2"/>
+    <path d="M46 92 L46 78 C46 72 54 72 54 78 L54 92 Z" fill="#000" opacity=".8"/>
+    <rect x="47" y="46" width="6" height="10" rx="3" fill="${p.eye}" filter="url(#eyeglow)"/>
+    <path d="M50 26 L50 10 L62 14 L50 18" fill="url(#gold)" stroke="LINE" stroke-width=".8"/>
+    <path d="M40 60 L60 60 M39 74 L61 74" stroke="${p.accent}" stroke-width=".8" opacity=".6"/>`,
+  quake: (p) => `
+    <path d="M0 58 L100 58 L100 100 L0 100 Z" fill="url(#body)" stroke="LINE" stroke-width="1.2"/>
+    <path d="M44 58 L52 70 L46 78 L56 90 L52 100 L62 100 L64 88 L56 78 L62 68 L54 58 Z" fill="#000" opacity=".85"/>
+    <path d="M10 58 L18 46 L26 54 L34 40 L42 52 L50 44 L58 54 L66 38 L76 50 L86 44 L92 58 Z" fill="url(#body)" opacity=".8" stroke="LINE" stroke-width="1"/>
+    <path d="M52 70 L46 78 L56 90" stroke="${p.eye}" stroke-width="1.4" fill="none" filter="url(#eyeglow)"/>
+    <path d="M22 30 l4 -6 l4 6 M70 22 l3 -5 l3 5 M40 24 l2 -4 l2 4" stroke="${p.glow}" stroke-width="1.2" fill="none"/>`,
+  cloudstorm: (p) => `
+    <path d="M20 46 C12 46 10 34 20 32 C20 20 36 16 42 24 C46 12 66 12 68 26 C80 24 88 34 82 44 C88 50 82 58 74 56 L26 56 C16 58 12 48 20 46 Z" fill="url(#body)" stroke="LINE" stroke-width="1.3"/>
+    <path d="M30 30 C34 26 40 26 42 28" stroke="#fff" stroke-width="1.6" fill="none" opacity=".45"/>
+    <path d="M48 56 L38 76 L48 76 L42 94 L62 70 L52 70 L58 56 Z" fill="url(#gold)" stroke="LINE" stroke-width="1"/>
+    <path d="M26 62 L22 72 M32 64 L28 74 M70 62 L66 72 M76 60 L72 70 M80 66 L76 76" stroke="${p.glow}" stroke-width="1.4" stroke-linecap="round" opacity=".8"/>`,
+  sigil: (p, r) => {
+    const n = r.pick([5, 6, 7, 8]);
+    return `<circle cx="50" cy="50" r="38" fill="none" stroke="url(#gold)" stroke-width="2"/>
+      <circle cx="50" cy="50" r="32" fill="url(#body)" opacity=".55" stroke="LINE" stroke-width="1"/>
+      <polygon points="${starPoints(50, 50, n, 32, 13, -90 + r.range(0, 20))}" fill="none" stroke="${p.eye}" stroke-width="1.6" filter="url(#eyeglow)"/>
+      <polygon points="${polyPoints(50, 50, n, 18)}" fill="none" stroke="${p.accent}" stroke-width="1"/>
+      <circle cx="50" cy="50" r="6" fill="${p.eye}" filter="url(#eyeglow)"/>`;
+  },
 };
 
 const MOTIF_RULES: [RegExp, string][] = [
   [/sheep|goat|lamb/, 'sheep'],
   [/hole|vortex|void|abyss|dimension/, 'vortex'],
-  [/reborn|revive|resurrect|premature|haunted|rebirth|return/, 'ankh'],
+  [/reborn|revive|resurrect|premature|haunted|rebirth|reincarnation|zombie/, 'ankh'],
   [/moon|night|eclipse/, 'crescent'],
-  [/storm|typhoon|cyclone|tornado|wind|gust/, 'tornado'],
-  [/mirror|force|shatter|crystal/, 'shards'],
-  [/pot|jar|greed|avarice|urn/, 'jar'],
-  [/brain|mind|eye|vision|psych/, 'eye'],
-  [/chain|bind|gravity|prison|lock|shackle|seal/, 'chains'],
-  [/judg|solemn|law|justice|trial/, 'scales'],
-  [/royal|oppression|king|queen|crown|throne|monarch|emperor/, 'crown'],
-  [/limiter|machine|gear|factory|cyber/, 'gear'],
-  [/shield|wall|barrier|protect|guard|waboku|negat/, 'shield'],
-  [/fire|burn|blast|inferno|flame|lava|magma/, 'flame'],
-  [/death|doom|kill|destruct|soul|grave|ghost|skull|bury/, 'skull'],
-  [/draw|card|allure|trade|charity|hand destruction/, 'cards'],
-  [/hand|grab|snatch|steal|thief|control/, 'hand'],
-  [/star|light|shine|sun|ray/, 'star'],
-  [/heart|love|life|heal|recover|gift/, 'heart'],
-  [/coffin|burial|tomb|crypt/, 'coffin'],
-  [/bomb|explos|blow|smash|torrential|raigeki|decree/, 'explosion'],
-  [/sword|blade|saber|axe|lance|spear|weapon/, 'sword'],
-  [/swap|switch|change|book|transfer|exchange/, 'arrows'],
+  [/storm|tempest|thunder|lightning|spark/, 'cloudstorm'],
+  [/typhoon|cyclone|tornado|wind|gust|whirl/, 'tornado'],
+  [/mirror|force|shatter|crystal|prism/, 'shards'],
+  [/pot |pot$|jar|greed|avarice|urn/, 'jar'],
+  [/brain|mind|eye|vision|psych|insight|peek|forceful/, 'eye'],
+  [/chain|bind|gravity|prison|lock|shackle|seal|jail/, 'chains'],
+  [/judg|solemn|law|justice|trial|verdict/, 'scales'],
+  [/royal|oppression|king|queen|crown|throne|monarch|emperor|decree/, 'crown'],
+  [/limiter|machine|gear|factory|cyber|mechan/, 'gear'],
+  [/shield|wall|barrier|protect|guard|waboku|sakuretsu|armor/, 'shield'],
+  [/fire|burn|blast|inferno|flame|lava|magma|ring of/, 'flame'],
+  [/death|doom|kill|destruct|soul|ghost|skull|bury|deck devastation/, 'skull'],
+  [/sarcophag|coffin|burial|tomb|crypt|grave/, 'coffin'],
+  [/draw|allure|trade|charity|upstart|card of|hand destruction/, 'cards'],
+  [/hand|grab|snatch|steal|thief|control|delinquent|confiscat/, 'hand'],
+  [/star|light|shine|sun|ray|solar/, 'star'],
+  [/heart|love|life|heal|recover|gift|blessing/, 'heart'],
+  [/bomb|explos|blow|smash|torrential|raigeki|crush|trunade/, 'explosion'],
+  [/sword|blade|saber|axe|lance|spear|weapon|fang/, 'sword'],
+  [/swap|switch|change|book|transfer|exchange|reproduction/, 'arrows'],
+  [/feather|duster|wing|sky/, 'feather'],
+  [/fissure|quake|ground|earth|rift|crack/, 'quake'],
+  [/time|hour|clock|turn|stall|delay/, 'hourglass'],
+  [/key|unlock|gate|door/, 'key'],
+  [/potion|elixir|poison|venom|cure/, 'potion'],
+  [/mask|disguise|illusion|trick|fake|ruse/, 'mask'],
+  [/tower|castle|fortress|temple|citadel|sanctuary/, 'tower'],
+  [/scroll|ritual|rite|spell|magic|excavation|planter/, 'scroll'],
+  [/orb|ball|sphere|prophecy|fortune|future/, 'orb'],
 ];
 
-function motifFor(data: CardData): string {
+const FALLBACK_POOLS: Record<string, string[]> = {
+  normal: ['book', 'orb', 'scroll', 'sigil', 'cards', 'potion', 'star'],
+  quickplay: ['bolt', 'sigil', 'feather', 'bolt', 'explosion'],
+  continuous: ['infinity', 'tower', 'sigil', 'hourglass'],
+  equip: ['sword', 'shield', 'sword'],
+  field: ['landscape'],
+  ritual: ['altar'],
+  tnormal: ['jaws', 'mask', 'sigil', 'jaws', 'key'],
+  tcontinuous: ['chains', 'infinity', 'hourglass', 'tower'],
+  counter: ['counter', 'shield', 'counter'],
+};
+
+function motifFor(data: CardData, r: Rand): string {
   const n = data.name.toLowerCase();
+  if (data.kind === 'spell' && data.stype === 'field') return 'landscape';
+  if (data.kind === 'spell' && data.stype === 'ritual') return 'altar';
   for (const [re, m] of MOTIF_RULES) if (re.test(n)) return m;
-  if (data.kind === 'spell') {
-    switch (data.stype) {
-      case 'quickplay':
-        return 'bolt';
-      case 'continuous':
-        return 'infinity';
-      case 'equip':
-        return 'sword';
-      case 'field':
-        return 'landscape';
-      case 'ritual':
-        return 'altar';
-      default:
-        return 'book';
-    }
-  }
-  if (data.kind === 'trap') {
-    if (data.ttype === 'counter') return 'counter';
-    if (data.ttype === 'continuous') return 'chains';
-    return 'jaws';
-  }
+  if (data.kind === 'spell') return r.pick(FALLBACK_POOLS[data.stype ?? 'normal'] ?? FALLBACK_POOLS.normal);
+  if (data.kind === 'trap') return r.pick(FALLBACK_POOLS[data.ttype === 'counter' ? 'counter' : data.ttype === 'continuous' ? 'tcontinuous' : 'tnormal']);
   return 'star';
 }
 
@@ -695,7 +774,7 @@ function buildArt(data: CardData): string {
     if (/sheep|goat|lamb/.test(name)) emblem = MOTIFS.sheep(p, r);
     else emblem = (RACE_EMBLEMS[race] ?? MOTIFS.star)(p, r);
   } else {
-    emblem = MOTIFS[motifFor(data)](p, r);
+    emblem = MOTIFS[motifFor(data, r)](p, r);
   }
   emblem = fillWith(emblem, p);
   const flip = isMonster && r.chance(0.5) && race !== 'Psychic';

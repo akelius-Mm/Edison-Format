@@ -230,6 +230,8 @@ export function toast(msg: string, kind: 'info' | 'success' | 'error' | 'gold' =
     document.body.appendChild(toastHost);
   }
   const t = h('div', { class: ['toast', `toast-${kind}`] }, msg);
+  // keep at most two toasts on screen
+  while (toastHost.children.length >= 2) toastHost.firstElementChild!.remove();
   toastHost.appendChild(t);
   requestAnimationFrame(() => t.classList.add('in'));
   setTimeout(() => {

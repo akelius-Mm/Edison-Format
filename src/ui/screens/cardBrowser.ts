@@ -312,8 +312,23 @@ export function cardBrowser(o: BrowserOptions): CardBrowser {
   let shown = 0;
   const PAGE = 48;
 
-  const item = (c: CardData) => {
+  /** Rendered result elements, for in-place count updates. */
+  const rendered: { c: CardData; el: HTMLElement }[] = [];
+  const setCount = (el: HTMLElement, c: CardData) => {
     const n = o.countOf?.(c) ?? 0;
+    const host = el.querySelector<HTMLElement>('.cb-badges') ?? el;
+    let b = host.querySelector<HTMLElement>(':scope > .cb-n');
+    if (!n) return b?.remove();
+    if (!b) host.appendChild((b = h('span', { class: 'cb-n' })));
+    b.textContent = `×${n}`;
+  };
+  const item = (c: CardData) => {
+    const el = itemEl(c);
+    setCount(el, c);
+    rendered.push({ c, el });
+    return el;
+  };
+  const itemEl = (c: CardData) => {
     const common = {
       role: 'listitem',
       tabindex: '0',
@@ -339,7 +354,7 @@ export function cardBrowser(o: BrowserOptions): CardBrowser {
       },
     };
     if (view === 'grid') {
-      return h('div', { class: ['cb-cell', c.limit === 0 && 'forbidden'], ...common }, renderCard(c, { size: o.gridSize ?? 'sm', showLimit: true }), n ? h('span', { class: 'cb-n' }, `×${n}`) : null);
+      return h('div', { class: ['cb-cell', c.limit === 0 && 'forbidden'], ...common }, renderCard(c, { size: o.gridSize ?? 'sm', showLimit: true }));
     }
     const stats =
       c.kind === 'monster'
@@ -351,7 +366,7 @@ export function cardBrowser(o: BrowserOptions): CardBrowser {
       h('span', { class: 'cb-thumb' }, renderCard(c, { size: 'xs' })),
       h('span', { class: 'cb-row-text' }, h('span', { class: 'cb-name' }, c.name), h('span', { class: 'cb-type' }, c.kind === 'monster' ? `${c.attribute ?? ''} · ${typeLine(c)}` : typeLine(c))),
       stats,
-      h('span', { class: 'cb-badges' }, limitBadge(c), n ? h('span', { class: 'cb-n' }, `×${n}`) : null),
+      h('span', { class: 'cb-badges' }, limitBadge(c)),
     );
   };
 
@@ -366,6 +381,7 @@ export function cardBrowser(o: BrowserOptions): CardBrowser {
     persist();
     list = filterCards(cards, f);
     shown = 0;
+    rendered.length = 0;
     clear(results);
     results.className = `cb-results view-${view}`;
     countEl.textContent = `${list.length} card${list.length === 1 ? '' : 's'}`;
@@ -398,14 +414,7 @@ export function cardBrowser(o: BrowserOptions): CardBrowser {
   return {
     el,
     refresh: () => {
-      // keep scroll and re-render counts
-      const top = scroller.scrollTop;
-      const keep = shown;
-      clear(results);
-      shown = 0;
-      while (shown < keep && shown < list.length) more();
-      if (!list.length) results.appendChild(h('div', { class: 'empty' }, icon('search'), 'No cards match these filters.'));
-      scroller.scrollTop = top;
+      for (const r of rendered) setCount(r.el, r.c);
     },
     focusSearch: () => search.focus(),
   };

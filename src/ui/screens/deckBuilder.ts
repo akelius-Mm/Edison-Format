@@ -299,7 +299,8 @@ export function deckBuilderScreen(params: Params): Screen {
         'div',
         { class: 'db-hint' },
         icon('info'),
-        h('span', null, h('b', null, 'Click'), ' add · ', h('b', null, 'Shift/Right-click'), ' add to Side · ', h('b', null, 'Right-click'), ' a deck card to remove · ', h('b', null, 'Drag'), ' between sections or back to the list'),
+        h('span', { class: 'hint-mouse' }, h('b', null, 'Click'), ' add · ', h('b', null, 'Shift/Right-click'), ' add to Side · ', h('b', null, 'Right-click'), ' a deck card to remove · ', h('b', null, 'Drag'), ' between sections or back to the list'),
+        h('span', { class: 'hint-touch' }, h('b', null, 'Tap'), ' a card in the list to add it · ', h('b', null, 'Long-press'), ' a deck card to remove it · use ', h('b', null, 'Details'), ' for Side Deck'),
       ),
     );
   }
@@ -658,7 +659,7 @@ export function deckBuilderScreen(params: Params): Screen {
       'button',
       {
         type: 'button',
-        class: ['tab', mobileTab === t && 'on'],
+        class: ['tab', `tab-${t}`, mobileTab === t && 'on'],
         onclick: (e: MouseEvent) => {
           mobileTab = t;
           layout.dataset.tab = t;
