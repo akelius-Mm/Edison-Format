@@ -32,7 +32,7 @@ import { finalPlacements, roundComplete } from '../../tournament/swiss';
 import type { DuelSide } from '../duel/api';
 import { getSettings, loadJSON, saveJSON } from '../settings';
 import { deckPicker, tierBadge } from './components';
-import { badge, button, clear, confirmDialog, h, icon, pct, segmented, toast } from './dom';
+import { badge, button, clear, confirmDialog, h, icon, modal, pct, segmented, toast } from './dom';
 import { AVATAR_PRESETS, SLEEVES, renderAvatar } from './ext';
 import { runMatch } from './match';
 import { frame, go, lockNav, type Screen } from './nav';
@@ -91,7 +91,7 @@ function createScreen(): Screen {
   };
   drawSummary();
 
-  const createBtn = button('Create tournament', () => void create(), { variant: 'primary', icon: 'trophy', cls: 'btn-lg' });
+  const createBtn = button('Create tournament', () => void create(), { variant: 'primary', icon: 'trophy', cls: 'ui-btn-lg' });
 
   async function create() {
     const info = decks.find((d) => d.key === st.deck);
@@ -352,7 +352,9 @@ function hubScreen(t: Tournament): Screen {
     if (simulating) return c;
     const pending = pendingHumanMatch(t);
     const complete = isRoundComplete(t);
+    const othersLeft = currentMatches(t).some((m) => m.result == null && m.a !== t.humanId && m.b !== t.humanId);
     if (!complete && !pending) c.appendChild(button('Simulate remaining tables', () => void simulateRest(), { variant: 'primary', icon: 'robot' }));
+    else if (!complete && othersLeft) c.appendChild(button('Simulate other tables first', () => void simulateRest(), { variant: 'subtle', small: true, icon: 'robot', title: 'Resolve the other matches before playing yours' }));
     if (complete) {
       const isLastSwiss = t.phase === 'swiss' && t.rounds.length >= t.swissRounds;
       const isFinal = t.phase === 'top' && currentMatches(t).length === 1;
@@ -371,7 +373,7 @@ function hubScreen(t: Tournament): Screen {
             redraw();
             maybeAutoSimulate();
           },
-          { variant: 'primary', icon: isFinal ? 'trophy' : 'play', cls: 'btn-lg' },
+          { variant: 'primary', icon: isFinal ? 'trophy' : 'play', cls: 'ui-btn-lg' },
         ),
       );
     }
@@ -434,8 +436,9 @@ function hubScreen(t: Tournament): Screen {
         : h(
             'div',
             { class: 'mm-actions' },
-            button('Play match', () => void playMine(m), { variant: 'primary', icon: 'swords', cls: 'btn-lg' }),
+            button('Play match', () => void playMine(m), { variant: 'primary', icon: 'swords', cls: 'ui-btn-lg' }),
             button('Auto-play my match', () => void autoPlayMine(m), { variant: 'ghost', icon: 'robot', title: 'Let the AI play your deck for you' }),
+            button('Report result', () => reportMine(m), { variant: 'subtle', icon: 'edit', title: 'Enter the result of your match manually' }),
           ),
     );
   }
@@ -501,7 +504,7 @@ function hubScreen(t: Tournament): Screen {
           tab = 'round';
           redraw();
           maybeAutoSimulate();
-        }, { variant: 'primary', icon: 'play', cls: 'btn-lg' }),
+        }, { variant: 'primary', icon: 'play', cls: 'ui-btn-lg' }),
       ),
       h(
         'section',
@@ -613,6 +616,43 @@ function hubScreen(t: Tournament): Screen {
       context: `${t.name} · ${m.label}`,
       actions: [{ label: 'Continue tournament', variant: 'primary', icon: 'trophy', onClick: () => go('tournament', { t: t.id, r: String(Date.now()) }, { replace: true }) }],
     });
+  }
+
+  function reportMine(m: Match) {
+    const meA = m.a === t.humanId;
+    const opp = E(meA ? m.b : m.a)!;
+    type Opt = { label: string; mine: number; theirs: number; draws: number };
+    const opts: Opt[] =
+      t.bestOf === 3
+        ? [
+            { label: 'Won 2–0', mine: 2, theirs: 0, draws: 0 },
+            { label: 'Won 2–1', mine: 2, theirs: 1, draws: 0 },
+            { label: 'Lost 1–2', mine: 1, theirs: 2, draws: 0 },
+            { label: 'Lost 0–2', mine: 0, theirs: 2, draws: 0 },
+            ...(m.stage === 'swiss' ? [{ label: 'Draw 1–1–1', mine: 1, theirs: 1, draws: 1 }] : []),
+          ]
+        : [
+            { label: 'Won', mine: 1, theirs: 0, draws: 0 },
+            { label: 'Lost', mine: 0, theirs: 1, draws: 0 },
+            ...(m.stage === 'swiss' ? [{ label: 'Draw', mine: 0, theirs: 0, draws: 1 }] : []),
+          ];
+    const pick = (o: Opt) => {
+      const g = (w: 0 | 1 | null) => ({ winner: w, turns: 0, reason: 'Result reported', how: 'human' as const });
+      const mineIdx: 0 | 1 = meA ? 0 : 1;
+      const theirIdx: 0 | 1 = meA ? 1 : 0;
+      const games = [...Array(o.mine).fill(g(mineIdx)), ...Array(o.theirs).fill(g(theirIdx)), ...Array(o.draws).fill(g(null))];
+      const res = o.mine === o.theirs ? 'draw' : (o.mine > o.theirs) === meA ? 'a' : 'b';
+      recordHumanMatch(t, m.id, games, res);
+      saveTournament(t);
+      recordMatch({ date: Date.now(), deckName: E(t.humanId)!.deck.name, oppName: opp.name, oppDeck: opp.deck.name, result: o.mine > o.theirs ? 'W' : o.mine < o.theirs ? 'L' : 'D', score: `${o.mine}-${o.theirs}`, context: `${t.name} · ${m.label} (reported)` });
+      redraw();
+      maybeAutoSimulate();
+    };
+    const mm = modal(
+      'Report match result',
+      h('div', { class: 'report' }, h('p', { class: 'muted' }, `${m.label} · Table ${m.table} — you vs ${opp.name} (${opp.deck.name})`), h('div', { class: 'report-opts' }, opts.map((o) => button(o.label, () => (mm.close(), pick(o)), { variant: o.mine > o.theirs ? 'primary' : 'ghost' })))),
+      [{ label: 'Cancel' }],
+    );
   }
 
   async function autoPlayMine(m: Match) {
@@ -850,8 +890,8 @@ function finalScreen(t: Tournament): Screen {
         button('New tournament', () => {
           clearActiveTournament();
           go('tournament', {}, { replace: true });
-        }, { variant: 'primary', icon: 'trophy', cls: 'btn-lg' }),
-        button('Main menu', () => go('title'), { variant: 'ghost', icon: 'back', cls: 'btn-lg' }),
+        }, { variant: 'primary', icon: 'trophy', cls: 'ui-btn-lg' }),
+        button('Main menu', () => go('title'), { variant: 'ghost', icon: 'back', cls: 'ui-btn-lg' }),
       ),
     ),
   );

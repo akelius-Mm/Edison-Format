@@ -97,7 +97,11 @@ export function filterCards(cards: CardData[], f: CardFilter): CardData[] {
     if (f.limit && String(c.limit ?? 3) !== f.limit) return false;
     return true;
   });
-  return sortCards(out, f.sort);
+  const sorted = sortCards(out, f.sort);
+  if (!q) return sorted;
+  // exact name, then name matches, then text-only matches
+  const rank = (c: CardData) => (c.name.toLowerCase() === q ? 0 : c.name.toLowerCase().includes(q) ? 1 : 2);
+  return sorted.map((c, i) => [c, i] as const).sort((a, b) => rank(a[0]) - rank(b[0]) || a[1] - b[1]).map(([c]) => c);
 }
 
 export function isExtraCard(c: CardData) {

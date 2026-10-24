@@ -22,6 +22,8 @@ export interface FxHost {
   speed(): number;
   /** Render everything now (board + panels). */
   flush(opts?: RenderOpts): void;
+  /** Show a card in the preview panel (when visible to the viewer). */
+  spotlight(c: CardInstance): void;
 }
 
 export const sleep = (ms: number) => new Promise<void>((r) => window.setTimeout(r, ms));
@@ -96,6 +98,8 @@ export class FxDirector {
         h.flush();
         const method = a.method as string;
         const uids = a.cards as number[];
+        const first = h.game.card(uids[0]);
+        if (first && first.faceUp) h.spotlight(first);
         if (method === 'set') {
           h.sfx.play('set');
           for (const u of uids) this.pulse(u, 'fx-set', 500);
@@ -118,6 +122,7 @@ export class FxDirector {
         h.sfx.play('activate');
         const c = h.game.card(a.card);
         if (c) {
+          h.spotlight(c);
           this.pulse(c.uid, 'fx-activate', 900);
           this.showcase(c, a.chainIndex as number, a.player as PlayerId);
         }

@@ -74,10 +74,10 @@ export function showResults(o: ResultsOptions) {
       h(
         'div',
         { class: 'res-actions' },
-        o.actions.map((a) => button(a.label, a.onClick, { variant: a.variant ?? 'ghost', icon: a.icon, cls: 'btn-lg' })),
+        o.actions.map((a) => button(a.label, a.onClick, { variant: a.variant ?? 'ghost', icon: a.icon, cls: 'ui-btn-lg' })),
       ),
     ),
   );
-  const screen: Screen = { el, onShow: () => setTimeout(() => el.querySelector<HTMLElement>('.res-actions .btn')?.focus(), 80) };
+  const screen: Screen = { el, onShow: () => setTimeout(() => el.querySelector<HTMLElement>('.res-actions .ui-btn')?.focus(), 80) };
   showScreen(screen, 'results');
 }

@@ -105,16 +105,16 @@ function interstitial(host: HTMLElement, setup: MatchSetup, games: GameResult[],
     let msg = '';
     if (loser == null) {
       msg = 'The last game was a draw — a coin toss decides who goes first.';
-      actions.append(button('Continue', () => resolve('coin'), { variant: 'primary', icon: 'play', cls: 'btn-lg' }));
+      actions.append(button('Continue', () => resolve('coin'), { variant: 'primary', icon: 'play', cls: 'ui-btn-lg' }));
     } else if (isHuman(setup.sides[loser])) {
       msg = 'You lost the previous game, so you choose: go first or second?';
       actions.append(
-        button('Go First', () => resolve(loser), { variant: 'primary', icon: 'bolt', cls: 'btn-lg' }),
-        button('Go Second', () => resolve((1 - loser) as PlayerId), { variant: 'ghost', icon: 'hand', cls: 'btn-lg' }),
+        button('Go First', () => resolve(loser), { variant: 'primary', icon: 'bolt', cls: 'ui-btn-lg' }),
+        button('Go Second', () => resolve((1 - loser) as PlayerId), { variant: 'ghost', icon: 'hand', cls: 'ui-btn-lg' }),
       );
     } else {
       msg = `${setup.sides[loser].name} lost the previous game and chooses to go first.`;
-      actions.append(button('Continue', () => resolve(loser), { variant: 'primary', icon: 'play', cls: 'btn-lg' }));
+      actions.append(button('Continue', () => resolve(loser), { variant: 'primary', icon: 'play', cls: 'ui-btn-lg' }));
     }
     if (humanPlays) actions.append(button('Concede match', () => resolve('concede'), { variant: 'subtle', icon: 'flag' }));
     else setTimeout(() => resolve(loser ?? 'coin'), 4500); // exhibitions continue on their own

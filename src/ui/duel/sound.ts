@@ -33,6 +33,9 @@ export class Sfx {
 
   private ensure(): AudioContext | null {
     if (!this.enabled) return null;
+    // Browsers refuse to start audio before any user gesture; avoid console noise until then.
+    const ua = (navigator as any).userActivation;
+    if (ua && !ua.hasBeenActive) return null;
     try {
       if (!this.ctx) {
         const AC = (window as any).AudioContext || (window as any).webkitAudioContext;

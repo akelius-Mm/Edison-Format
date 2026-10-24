@@ -127,7 +127,7 @@ export function button(
     'button',
     {
       type: 'button',
-      class: ['btn', opts.variant && `btn-${opts.variant}`, opts.small && 'btn-sm', opts.cls],
+      class: ['ui-btn', opts.variant && `ui-btn-${opts.variant}`, opts.small && 'ui-btn-sm', opts.cls],
       title: opts.title,
       'aria-label': opts.title,
       onclick: (e: MouseEvent) => {
@@ -136,7 +136,7 @@ export function button(
       },
     },
     opts.icon ? icon(opts.icon) : null,
-    label != null && label !== '' ? h('span', { class: 'btn-label' }, label) : null,
+    label != null && label !== '' ? h('span', { class: 'ui-btn-label' }, label) : null,
   );
   if (opts.disabled) b.disabled = true;
   return b;
@@ -226,10 +226,10 @@ export function badge(text: string, kind = '') {
 let toastHost: HTMLElement | null = null;
 export function toast(msg: string, kind: 'info' | 'success' | 'error' | 'gold' = 'info', ms = 2600) {
   if (!toastHost || !toastHost.isConnected) {
-    toastHost = h('div', { class: 'toast-host', role: 'status', 'aria-live': 'polite' });
+    toastHost = h('div', { class: 'ui-toast-host', role: 'status', 'aria-live': 'polite' });
     document.body.appendChild(toastHost);
   }
-  const t = h('div', { class: ['toast', `toast-${kind}`] }, msg);
+  const t = h('div', { class: ['ui-toast', `ui-toast-${kind}`] }, msg);
   // keep at most two toasts on screen
   while (toastHost.children.length >= 2) toastHost.firstElementChild!.remove();
   toastHost.appendChild(t);
@@ -310,7 +310,7 @@ export function modal(
   document.body.appendChild(backdrop);
   requestAnimationFrame(() => {
     backdrop.classList.add('in');
-    const primary = box.querySelector<HTMLElement>('.modal-foot .btn-primary, .modal-foot .btn-gold, .modal-foot .btn-danger') ?? box.querySelector<HTMLElement>('input,button');
+    const primary = box.querySelector<HTMLElement>('.modal-foot .ui-btn-primary, .modal-foot .ui-btn-gold, .modal-foot .ui-btn-danger') ?? box.querySelector<HTMLElement>('input,button');
     primary?.focus();
   });
   return handle;

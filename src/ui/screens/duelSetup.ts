@@ -129,7 +129,7 @@ export function duelSetupScreen(): Screen {
     ),
   );
 
-  const startBtn = button('Duel!', () => void start(), { variant: 'primary', icon: 'swords', cls: 'btn-lg start-btn' });
+  const startBtn = button('Duel!', () => void start(), { variant: 'primary', icon: 'swords', cls: 'ui-btn-lg start-btn' });
   const formatSeg = segmented<1 | 3>(
     [
       { value: 1, label: 'Single game' },
@@ -245,7 +245,7 @@ export function exhibitionScreen(): Screen {
       { name: st.a.persona.name, deck: toDeckList(a), avatar: st.a.persona.avatar, sleeve: randomSleeve(), control: st.a.persona.difficulty as Difficulty, title: a.name },
       { name: st.b.persona.name, deck: toDeckList(b), avatar: st.b.persona.avatar, sleeve: randomSleeve(), control: st.b.persona.difficulty as Difficulty, title: b.name },
     ];
-    const setup: MatchSetup = { sides, bestOf: st.bestOf, caption: `Exhibition · ${a.name} vs ${b.name}` };
+    const setup: MatchSetup = { sides, bestOf: st.bestOf, caption: `Exhibition match` };
     const outcome = await runMatch(setup);
     showResults({
       setup,
@@ -282,7 +282,7 @@ export function exhibitionScreen(): Screen {
         ),
       ),
       h('div', { class: 'setup-summary muted' }, icon('eye'), ' You will spectate; the duel plays itself.'),
-      button('Start exhibition', () => void start(), { variant: 'primary', icon: 'play', cls: 'btn-lg start-btn' }),
+      button('Start exhibition', () => void start(), { variant: 'primary', icon: 'play', cls: 'ui-btn-lg start-btn' }),
     ),
   );
   return { el };

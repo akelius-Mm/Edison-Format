@@ -347,7 +347,7 @@ export function confirmDialog(d: Dialogs, req: ConfirmRequest, yes = 'Yes', no =
   return new Promise((resolve) => {
     let m: ModalHandle;
     const body = h('div', 'confirm-body');
-    if (req.source) body.innerHTML = `<div class="confirm-src">${esc(req.source.name)}</div>`;
+    if (req.source && !req.prompt.includes(req.source.name)) body.textContent = req.source.name;
     m = d.modal({
       title: req.prompt,
       source: req.source?.data,

@@ -12,6 +12,7 @@ export function databaseScreen(): Screen {
   let pinned: CardData | null = null;
   const show = (c: CardData | null) => {
     clear(detail);
+    if (c && pinned?.name === c.name) detail.appendChild(h('div', { class: 'dbx-pin' }, badge('Pinned', 'gold'), h('span', { class: 'muted' }, 'Click the card again to unpin')));
     detail.appendChild(cardDetail(c, { size: 'xl' }));
     if (!c) return;
     const decks = PREMADE_DECKS.filter((d) => [...d.main, ...d.extra, ...(d.side ?? [])].some(([n]) => n === c.name));

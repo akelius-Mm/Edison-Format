@@ -284,6 +284,11 @@ export class BoardView {
     v.place = place;
     const el = v.el;
     el.dataset.place = place;
+    if (place !== 'hand' && el.style.zIndex) {
+      el.style.zIndex = '';
+      el.style.removeProperty('--fan-r');
+      el.style.removeProperty('--fan-y');
+    }
     el.classList.toggle('is-def', place === 'mzone' && c.pos === 'def');
     el.classList.toggle('is-set', (place === 'mzone' || place === 'szone' || place === 'fzone') && !c.faceUp);
     el.classList.toggle('is-opp', c.controller !== this.cfg.me);

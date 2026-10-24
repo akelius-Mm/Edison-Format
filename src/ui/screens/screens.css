@@ -623,7 +623,7 @@
   display: flex;
   gap: 8px;
 }
-.persona-name-row .btn {
+.persona-name-row .ui-btn {
   padding: 0 10px;
 }
 
@@ -1171,7 +1171,7 @@ body.in-duel {
 .cb-search {
   padding-left: 36px;
 }
-.btn.on {
+.ui-btn.on {
   --b-border: rgba(212, 175, 55, 0.6);
   --b-color: var(--gold-hi);
   --b-bg: rgba(212, 175, 55, 0.1);
@@ -1937,13 +1937,13 @@ i.k-monster,
   .frame-sub {
     display: none;
   }
-  .frame-back .btn-label {
+  .frame-back .ui-btn-label {
     display: none;
   }
   .frame-head {
     gap: 8px;
   }
-  .db-head-actions .btn-label {
+  .db-head-actions .ui-btn-label {
     display: none;
   }
   .db-switch {
@@ -1952,7 +1952,7 @@ i.k-monster,
   .dk-grid {
     --slot: 52px;
   }
-  .db-tools .btn-label {
+  .db-tools .ui-btn-label {
     display: none;
   }
 }
@@ -2312,7 +2312,7 @@ i.k-monster,
   font-size: 13px;
   margin: 4px 0;
 }
-.pool-deck .btn {
+.pool-deck .ui-btn {
   justify-self: start;
   padding-left: 0;
 }
@@ -3136,6 +3136,7 @@ tr.pending .pt-score {
 /* ---------------------------------------------------------------- bracket */
 .bracket-wrap {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 12px;
 }
 .br-note {
@@ -3151,7 +3152,8 @@ tr.pending .pt-score {
   padding: 8px 4px 16px;
 }
 .br-col {
-  flex: 1 0 220px;
+  flex: 1 1 200px;
+  min-width: 150px;
   display: flex;
   flex-direction: column;
 }
@@ -3211,10 +3213,8 @@ tr.pending .pt-score {
   color: var(--gold-hi);
   font-weight: 700;
 }
-.br-slot.me .br-name::after {
-  content: ' (You)';
-  color: var(--gold);
-  font-weight: 600;
+.br-slot.me {
+  box-shadow: inset 3px 0 0 var(--gold);
 }
 .br-slot.tbd {
   color: var(--faint);
@@ -3404,7 +3404,8 @@ tr.pending .pt-score {
   gap: 26px;
 }
 .fin-bracket .br-col {
-  flex-basis: 180px;
+  flex-basis: 160px;
+  min-width: 140px;
 }
 .fin-bracket .br-col:not(.champ) .br-match::after {
   right: -27px;
@@ -3536,4 +3537,37 @@ tr.pending .pt-score {
   .pf-grid {
     grid-template-columns: 1fr;
   }
+}
+.dbx-pin {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+.dbx-detail .yc--xl {
+  --yc-w: min(320px, 100%);
+}
+
+@media (max-width: 600px) {
+  .tour-step-label {
+    display: none;
+  }
+  .tour-step {
+    min-width: 38px;
+  }
+  .frame-actions .ui-btn-label {
+    display: none;
+  }
+  .tour-steps {
+    margin-bottom: 8px;
+  }
+}
+.report {
+  display: grid;
+  gap: 12px;
+}
+.report-opts {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
 }

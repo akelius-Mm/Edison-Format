@@ -158,6 +158,9 @@ class DuelScreen implements HumanUI {
       names: [opts.sides[0].name, opts.sides[1].name],
       speed: () => this.speed(),
       flush: (o) => this.flush(o),
+      spotlight: (c) => {
+        if (this.canSee(c)) this.preview.show(c.data, c);
+      },
     });
 
     // ---- wiring
@@ -742,7 +745,13 @@ class DuelScreen implements HumanUI {
         title = 'Respond?';
     }
     this.sfx.play('target');
-    return this.guard(responseDialog(this.dialogs, this.promptCtx(), req, title));
+    let sub = req.prompt;
+    if (title === 'Respond?' && req.prompt && req.prompt !== 'Respond?') {
+      title = req.prompt;
+      sub = '';
+    }
+    if (sub === title || sub === 'Respond?') sub = '';
+    return this.guard(responseDialog(this.dialogs, this.promptCtx(), { ...req, prompt: sub }, title));
   }
 
   requestSelect(_p: PlayerId, req: SelectRequest): Promise<CardInstance[]> {
