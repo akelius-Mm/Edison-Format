@@ -271,6 +271,19 @@
   .yc-num.up { color: #6dff9a; }
   .yc-num.down { color: #ff7a7a; }
   .yc-name-text { font-size: max(var(--nfs, 6.6cqw), 6.2cqw); }
+  .yc-box--st { background: linear-gradient(180deg, rgba(0, 0, 0, 0.28), rgba(0, 0, 0, 0.5)); }
+  .yc-mini { display: grid !important; }
+}
+.yc-mini {
+  display: none;
+  flex: 1;
+  place-items: center;
+  text-align: center;
+  font: 800 6.6cqw/1.1 var(--ef-font-ui);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #fff;
+  text-shadow: 0 0.4cqw 0.6cqw rgba(0, 0, 0, 0.8);
 }
 
 /* Card back */

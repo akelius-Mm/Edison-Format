@@ -21,6 +21,8 @@ export interface Settings {
   skipFirstDraw: boolean;
   showLog: boolean;
   confirmEndTurn: boolean;
+  /** Opt-in: show official card artwork fetched from the YGOPRODeck database. */
+  officialImages: boolean;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -37,6 +39,7 @@ export const DEFAULT_SETTINGS: Settings = {
   skipFirstDraw: true,
   showLog: true,
   confirmEndTurn: false,
+  officialImages: false,
 };
 
 const KEY = 'edison.settings.v1';

@@ -176,7 +176,7 @@ export function cardFaceHTML(data: CardData, opts: RenderCardOptions = {}): stri
   <div class="yc-name${foil ? ' yc-name--foil' : ''}"><span class="yc-name-text" style="--nfs:${nameFontSize(data.name)}cqw">${esc(data.name)}</span><span class="yc-attr">${attributeIconSVG(attr as any)}</span></div>
   ${row}
   <div class="yc-art"><img src="${cardArtSrc(data)}" alt="" draggable="false" decoding="async"></div>
-  <div class="yc-box">${typeRow}<div class="yc-desc${descCls}${flavor}">${text}</div>${stats}</div>
+  <div class="yc-box${isMon ? '' : ' yc-box--st'}">${typeRow}<div class="yc-desc${descCls}${flavor}">${text}</div>${stats}${isMon ? '' : `<div class="yc-mini">${esc(typeLine(data))}</div>`}</div>
   ${foil ? '<div class="yc-foil"></div>' : ''}
 </div>${limit}`;
 }
