@@ -273,7 +273,7 @@ export class Ctx {
   }
   async specialSummon(
     cards: CardInstance[] | CardInstance,
-    opts: { pos?: BattlePos | 'choose'; faceDown?: boolean; controller?: PlayerId; ignoreConditions?: boolean; proper?: boolean; method?: 'special' | 'synchro' | 'fusion' | 'ritual' } = {},
+    opts: { pos?: BattlePos | 'choose'; faceDown?: boolean; controller?: PlayerId; ignoreConditions?: boolean; proper?: boolean; method?: 'special' | 'synchro' | 'fusion' | 'ritual'; reasonCard?: CardInstance } = {},
   ) {
     const list = Array.isArray(cards) ? cards : [cards];
     return this.game.specialSummon(list, this.player, { pos: opts.pos ?? 'choose', reasonCard: this.self, ...opts });

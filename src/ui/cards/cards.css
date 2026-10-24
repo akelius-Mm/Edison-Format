@@ -19,7 +19,7 @@
   --f2: #a8501d;
   --nt: #1a1208;
   --nts: none;
-  --foil: linear-gradient(100deg, #6a4808 0%, #c8962a 22%, #3a2400 40%, #b8862a 58%, #5a3a00 80%, #c8962a 100%);
+  --foil: linear-gradient(100deg, #3a2600 0%, #8a5a0a 30%, #2a1800 50%, #7a4e08 70%, #3a2600 100%);
 }
 .yc *,
 .yc *::before,
@@ -34,12 +34,12 @@
 
 .yc[data-frame='normal'] { --f1: #ecca7c; --f2: #b48a3a; }
 .yc[data-frame='effect'] { --f1: #e98c4c; --f2: #a64e1b; }
-.yc[data-frame='fusion'] { --f1: #ae7ad8; --f2: #5c3184; --nt: #fff; --nts: 0 0.4cqw 0.6cqw rgba(0, 0, 0, 0.8); --foil: linear-gradient(100deg, #fff4c6 0%, #e6b440 22%, #fffbe8 40%, #d9a030 58%, #fff4c6 80%, #f0c860 100%); }
+.yc[data-frame='fusion'] { --f1: #ae7ad8; --f2: #5c3184; --nt: #fff; --nts: 0 0.4cqw 0.6cqw rgba(0, 0, 0, 0.8); --foil: linear-gradient(100deg, #fffbe6 0%, #ffe08a 30%, #ffffff 50%, #ffd060 70%, #fffbe6 100%); }
 .yc[data-frame='synchro'] { --f1: #fbfbfe; --f2: #b6bbca; }
-.yc[data-frame='ritual'] { --f1: #74a0ea; --f2: #2a4c94; --nt: #fff; --nts: 0 0.4cqw 0.6cqw rgba(0, 0, 0, 0.8); --foil: linear-gradient(100deg, #fff4c6 0%, #e6b440 22%, #fffbe8 40%, #d9a030 58%, #fff4c6 80%, #f0c860 100%); }
+.yc[data-frame='ritual'] { --f1: #74a0ea; --f2: #2a4c94; --nt: #fff; --nts: 0 0.4cqw 0.6cqw rgba(0, 0, 0, 0.8); --foil: linear-gradient(100deg, #fffbe6 0%, #ffe08a 30%, #ffffff 50%, #ffd060 70%, #fffbe6 100%); }
 .yc[data-frame='token'] { --f1: #bdbdbd; --f2: #6c6c6c; }
-.yc[data-frame='spell'] { --f1: #31b89e; --f2: #0b6656; --nt: #fff; --nts: 0 0.4cqw 0.6cqw rgba(0, 0, 0, 0.85); --foil: linear-gradient(100deg, #fff4c6 0%, #e6b440 22%, #fffbe8 40%, #d9a030 58%, #fff4c6 80%, #f0c860 100%); }
-.yc[data-frame='trap'] { --f1: #d24f9c; --f2: #761852; --nt: #fff; --nts: 0 0.4cqw 0.6cqw rgba(0, 0, 0, 0.85); --foil: linear-gradient(100deg, #fff4c6 0%, #e6b440 22%, #fffbe8 40%, #d9a030 58%, #fff4c6 80%, #f0c860 100%); }
+.yc[data-frame='spell'] { --f1: #31b89e; --f2: #0b6656; --nt: #fff; --nts: 0 0.4cqw 0.6cqw rgba(0, 0, 0, 0.85); --foil: linear-gradient(100deg, #fffbe6 0%, #ffe08a 30%, #ffffff 50%, #ffd060 70%, #fffbe6 100%); }
+.yc[data-frame='trap'] { --f1: #d24f9c; --f2: #761852; --nt: #fff; --nts: 0 0.4cqw 0.6cqw rgba(0, 0, 0, 0.85); --foil: linear-gradient(100deg, #fffbe6 0%, #ffe08a 30%, #ffffff 50%, #ffd060 70%, #fffbe6 100%); }
 
 .yc-in {
   position: absolute;
@@ -104,7 +104,7 @@
   background-clip: text;
   color: transparent;
   text-shadow: none;
-  filter: drop-shadow(0 0.3cqw 0.2cqw rgba(0, 0, 0, 0.55));
+  filter: drop-shadow(0 0.25cqw 0.15cqw rgba(0, 0, 0, 0.9));
 }
 .yc-attr {
   flex: none;
@@ -245,14 +245,14 @@
 /* Forbidden / limited badge */
 .yc-limit {
   position: absolute;
-  top: -3cqw;
-  left: -3cqw;
-  width: 17cqw;
-  height: 17cqw;
+  top: 22.5cqw;
+  left: 6.5cqw;
+  width: 14cqw;
+  height: 14cqw;
   border-radius: 50%;
   display: grid;
   place-items: center;
-  font: 800 10cqw/1 var(--ef-font-ui);
+  font: 800 8.4cqw/1 var(--ef-font-ui);
   color: #fff;
   background: radial-gradient(circle at 35% 30%, #ff6a6a, #a80d0d);
   border: 0.9cqw solid #fff;

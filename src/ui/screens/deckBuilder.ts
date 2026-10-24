@@ -4,7 +4,7 @@ import { PREMADE_DECKS, validateDeck } from '../../decks';
 import type { CardData } from '../../engine/card';
 import { isExtraCard, cardBrowser, sortCards } from './cardBrowser';
 import { cardDetail, deckTile } from './components';
-import { button, clear, confirmDialog, h, icon, modal, promptDialog, toast, type Child } from './dom';
+import { append, button, clear, confirmDialog, h, icon, modal, promptDialog, toast, type Child } from './dom';
 import { renderCard } from './ext';
 import { frame, go, type Params, type Screen } from './nav';
 import {
@@ -40,6 +40,8 @@ export function deckBuilderScreen(params: Params): Screen {
     if (p) {
       cur = copyOfPremade(p);
       saveCustomDeck(cur);
+      // don't create another copy if the page is reloaded
+      history.replaceState(null, '', `#/deck-builder?deck=${cur.id}`);
     }
   }
   if (!cur && params.deck) cur = getCustomDeck(params.deck) ?? null;
@@ -527,11 +529,12 @@ export function deckBuilderScreen(params: Params): Screen {
     const preview = () => {
       const p = parseDeckText(ta.value);
       const n = deckCount(p.main) + deckCount(p.extra) + deckCount(p.side);
-      report.replaceChildren(
+      clear(report);
+      append(report, [
         h('span', null, `${deckCount(p.main)} main · ${deckCount(p.extra)} extra · ${deckCount(p.side)} side`),
         p.unknown.length ? h('span', { class: 'bad' }, ` · ${p.unknown.length} unknown: ${p.unknown.slice(0, 4).join(', ')}${p.unknown.length > 4 ? '…' : ''}`) : null,
         !n && ta.value.trim() ? h('span', { class: 'bad' }, ' · nothing recognised') : null,
-      );
+      ]);
     };
     ta.addEventListener('input', preview);
     const doImport = (asNew: boolean) => {

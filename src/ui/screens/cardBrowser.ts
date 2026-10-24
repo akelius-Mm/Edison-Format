@@ -389,8 +389,6 @@ export function cardBrowser(o: BrowserOptions): CardBrowser {
     search.value = f.q;
     drawKinds();
     textToggle.checked = f.searchText;
-    for (const s of adv.querySelectorAll('select')) s.dispatchEvent(new Event('sync'));
-    // re-create advanced controls with reset values
     adv.querySelectorAll<HTMLSelectElement>('select').forEach((s) => (s.value = ''));
     adv.querySelectorAll<HTMLInputElement>('input[type=number]').forEach((i) => (i.value = ''));
     apply();

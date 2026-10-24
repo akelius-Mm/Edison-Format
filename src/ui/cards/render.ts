@@ -88,7 +88,7 @@ function stName(t: string | undefined) {
 
 export function isFoil(data: CardData) {
   const t = data.mtypes ?? [];
-  return t.includes('synchro') || t.includes('fusion') || (data.aiValue ?? 0) >= 1200 || data.limit === 1;
+  return t.includes('synchro') || t.includes('fusion') || t.includes('ritual') || (data.aiValue ?? 0) >= 1200;
 }
 
 function nameFontSize(name: string) {
