@@ -109,6 +109,18 @@ export function listsSynchron(synchro: CardInstance) {
   return /Synchron/.test(desc) || /Synchron/.test(firstLine);
 }
 
+/**
+ * Position for an effect Special Summon: humans choose; for the AI, low-ATK utility monsters go to
+ * Defense unless they can attack profitably into an empty board with a big body.
+ */
+export function autoPos(ctx: Ctx, c: CardInstance): 'atk' | 'def' | 'choose' {
+  if (ctx.game.controllers[ctx.player]?.isHuman) return 'choose';
+  const atk = c.data.atk ?? 0;
+  const oppBest = Math.max(0, ...ctx.faceUpMonsters('opp').map((m) => (m.pos === 'atk' ? ctx.atk(m) : 0)));
+  if (atk >= 1900 && atk > oppBest) return 'atk';
+  return (c.data.def ?? 0) >= atk || atk < 1500 ? 'def' : atk > oppBest ? 'atk' : 'def';
+}
+
 const isPlant = (c: CardInstance) => c.isMonster && c.data.race === 'Plant';
 
 // =================================================================== tokens
@@ -208,7 +220,7 @@ monster('Lonefire Blossom', {
         const sel = await ctx.select(ctx.deck('me', isPlant), 1, 1, 'Special Summon 1 Plant-Type monster from your Deck.', 'specialSummon', {
           aiScore: (c) => lonefireFetchScore(ctx, c),
         });
-        if (sel.length) await ctx.specialSummon(sel[0]);
+        if (sel.length) await ctx.specialSummon(sel[0], { pos: autoPos(ctx, sel[0]) });
         ctx.game.shuffleDeck(ctx.player);
       },
       ai: {

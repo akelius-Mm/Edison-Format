@@ -125,6 +125,14 @@ export class AIController implements PlayerController {
     } catch (e) {
       s = 0;
     }
+    // Don't stack a second copy of the same kind of protection on one chain.
+    const cats = act.effect.categories ?? [];
+    if (cats.includes('negateAttack') && (game.battle?.negated || game.chain.some((l) => l.player === p && (l.effect.categories ?? []).includes('negateAttack')))) {
+      return -1;
+    }
+    if (cats.includes('negate') && game.chain.some((l) => l.player === p && l.index === game.chain.length && (l.effect.categories ?? []).includes('negate'))) {
+      return -1;
+    }
     // Save a card that is about to be destroyed / removed by chaining it.
     const top = game.chain[game.chain.length - 1];
     if (top && top.player !== p && act.card.onField && !act.card.faceUp && top.ctx.targets.includes(act.card)) {
@@ -216,7 +224,8 @@ export class AIController implements PlayerController {
           if (game.phase === 'main1' && atk > oppBest && atk >= def - 300) return 18;
           return -1;
         }
-        if (game.phase === 'main2' && atk < oppBest && def > atk) return 12;
+        if (game.phase === 'main2' && atk < oppBest) return def > atk ? 14 : 10;
+        if (game.phase === 'main2' && atk < 1400 && game.monsters(game.opp(p)).length && def >= atk) return 8;
         return -1;
       }
       case 'setST':
@@ -265,15 +274,29 @@ export class AIController implements PlayerController {
       const gain = this.monsterScoreOnField(game, c) - tribLoss;
       if (gain < 400) return -1;
     }
-    const hasSummonTrigger = (c.data.effects ?? []).some(
-      (e) => e.kind === 'trigger' && (([] as string[]).concat(e.event ?? [])).some((x) => x === 'normalSummoned' || x === 'summoned' || x === 'tributeSummoned'),
-    );
+    const hasSummonTrigger = (c.data.effects ?? []).some((e) => {
+      if (e.kind !== 'trigger') return false;
+      const evs = ([] as string[]).concat(e.event ?? []);
+      if (evs.includes('normalSummoned') || (need > 0 && evs.includes('tributeSummoned'))) return true;
+      if (!evs.includes('summoned')) return false;
+      // Generic "summoned" triggers: probe the filter with a hypothetical Normal Summon.
+      if (!e.eventFilter) return true;
+      try {
+        const ctx = new Ctx(game, c, e, p);
+        return !!e.eventFilter(ctx, { type: 'summoned', card: c, player: p, method: need ? 'tribute' : 'normal', seq: 0, batch: 0 } as any);
+      } catch {
+        return false;
+      }
+    });
     const isFlip = c.hasType('flip');
     const ai = c.data.aiValue ?? 0;
+    const enablesSynchro = need === 0 && this.enablesSynchro(game, p, c);
+    if (enablesSynchro) return set ? -1 : 62 + ai / 100;
     if (set) {
       if (isFlip) return 45 + ai / 100;
       if (hasSummonTrigger) return 5;
       if (atk < oppBest && def >= 1200) return 38 + def / 200;
+      if (atk < oppBest) return 32 + ai / 200; // hide a weak monster instead of feeding it to an attack
       if (atk < 1200 && def >= atk) return 30;
       return 8;
     }
@@ -282,6 +305,36 @@ export class AIController implements PlayerController {
     if (atk < oppBest && !hasSummonTrigger && game.phase === 'main1') s -= 15;
     // keep the tuner for a synchro if there is a non-tuner on board
     return s;
+  }
+
+  /** Would Normal Summoning `c` give us a Synchro Summon with what's on the field? */
+  private enablesSynchro(game: Game, p: PlayerId, c: CardInstance): boolean {
+    if (game.queryPlayer(p, 'cannotSpecialSummon')) return false;
+    const field = game.faceUpMonsters(p).filter((m) => !game.queryCard(m, 'cannotBeSynchroMaterial'));
+    if (!field.length) return false;
+    const lv = (m: CardInstance) => (m === c ? c.data.level ?? 0 : game.getLevel(m));
+    const mons = [...field, c];
+    for (const syn of game.players[p].extra) {
+      const req = syn.data.synchro;
+      if (!req || !syn.hasType('synchro')) continue;
+      const target = syn.data.level ?? 0;
+      for (const t of mons) {
+        if (!t.isTuner || (req.tuner && !req.tuner(t))) continue;
+        const nonT = mons.filter((m) => m !== t && !m.isTuner && (!req.nonTuner || req.nonTuner(m)));
+        const n = nonT.length;
+        for (let mask = 1; mask < 1 << n; mask++) {
+          const sel = nonT.filter((_, i) => mask & (1 << i));
+          const combo = [t, ...sel];
+          if (!combo.includes(c)) continue;
+          if (sel.length < (req.minNonTuners ?? 1) || sel.length > (req.maxNonTuners ?? 99)) continue;
+          if (combo.reduce((a, m) => a + lv(m), 0) !== target) continue;
+          if (combo.some((m) => m.data.synchroMaterialCheck && !m.data.synchroMaterialCheck(syn, combo, m))) continue;
+          const val = (syn.data.atk ?? 0) + (syn.data.aiValue ?? 0);
+          if (val >= 2300) return true;
+        }
+      }
+    }
+    return false;
   }
 
   private scoreSynchro(game: Game, p: PlayerId, syn: CardInstance): number {
@@ -314,7 +367,16 @@ export class AIController implements PlayerController {
       if (!best || score > best.score) best = { target, score };
     };
     if (direct) consider(null, 60 + atk / 100 + (game.players[opp].lp <= atk ? 500 : 0));
+    // Monsters with an end-of-Battle-Phase effect (Gladiator Beast tag-outs) want to attack
+    // even without winning, as long as they survive the battle.
+    const tagOut = (attacker.data.effects ?? []).some((e) => e.kind === 'trigger' && ([] as string[]).concat(e.event ?? []).includes('battleEnd'));
     for (const t of targets) {
+      if (tagOut) {
+        const survives = t.faceUp
+          ? t.pos === 'def' || game.getAtk(t) < atk || game.queryCard(attacker, 'indestructibleBattle')
+          : atk >= 1600;
+        if (survives) consider(t, 26 + (t.faceUp && t.pos === 'def' ? -Math.max(0, game.getDef(t) - atk) / 200 : 0));
+      }
       if (!t.faceUp && this.knows(t)) {
         // We saw this monster before it was flipped face-down.
         const td = game.getDef(t);
@@ -460,10 +522,16 @@ export class AIController implements PlayerController {
     const atk = card.data.atk ?? 0;
     const def = card.data.def ?? 0;
     const oppBest = this.bestOppAtk(game, p);
+    const oppHasMonsters = game.monsters(game.opp(p)).length > 0;
+    const canStillAttack = game.turnPlayer === p && game.phase === 'main1' && game.turn > 1;
     let pos: BattlePos = 'atk';
-    if (game.turnPlayer !== p) pos = def > atk || atk < oppBest ? 'def' : 'atk';
-    else if (atk < oppBest && def > atk) pos = 'def';
+    if (game.turnPlayer !== p) pos = def > atk || atk < oppBest || atk < 1600 ? 'def' : 'atk';
+    else if (atk < oppBest) pos = 'def';
+    else if (!canStillAttack && atk < 1600 && oppHasMonsters) pos = 'def';
+    else if (atk < 1000 && oppHasMonsters) pos = 'def';
     else if (atk === 0 && def > 0) pos = 'def';
+    // Synchro / fusion material fodder that will be used immediately stays in attack (harmless either way).
+    if (card.isToken && pos === 'atk' && atk === 0) pos = 'def';
     if (!allowed.includes(pos)) return allowed[0];
     return pos;
   }

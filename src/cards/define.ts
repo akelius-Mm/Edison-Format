@@ -51,6 +51,7 @@ interface MonsterOpts {
   fusion?: FusionReq;
   aiValue?: number;
   setCode?: string;
+  synchroMaterialCheck?: CardData['synchroMaterialCheck'];
 }
 
 /** Define an effect / normal / extra deck monster. */
@@ -78,6 +79,7 @@ export function monster(name: string, o: MonsterOpts): CardData {
     fusion: o.fusion,
     aiValue: o.aiValue,
     setCode: o.setCode,
+    synchroMaterialCheck: o.synchroMaterialCheck,
   });
 }
 
