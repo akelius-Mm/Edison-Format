@@ -7,6 +7,7 @@ import { getSettings } from '../settings';
 import { applySleeve } from '../theme/sleeves';
 import { esc } from '../theme/util';
 import { cardArtSVG, cardArtSrc } from './art';
+import { attachOfficialArt } from './officialArt';
 import { LEVEL_STAR_SVG, attributeIconSVG, spellTypeIcon } from './icons';
 
 export { cardArtSVG, cardArtSrc };
@@ -140,6 +141,8 @@ export function renderCard(data: CardData, opts: RenderCardOptions = {}): HTMLEl
   const frame = frameOf(data);
   el.dataset.frame = frame;
   el.innerHTML = cardFaceHTML(data, opts);
+  const art = el.querySelector('.yc-art') as HTMLElement | null;
+  if (art) attachOfficialArt(art, data.name);
   return el;
 }
 

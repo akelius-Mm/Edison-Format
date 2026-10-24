@@ -250,6 +250,11 @@ export class PreviewPanel {
     this.refresh();
   }
 
+  invalidate() {
+    this.sig = '';
+    this.refresh();
+  }
+
   refresh() {
     if (!this.current) return;
     const { data, inst } = this.current;

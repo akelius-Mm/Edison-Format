@@ -522,6 +522,11 @@ export class BoardView {
     }
   }
 
+  /** Force every visible card face to be rebuilt on the next render (e.g. art setting changed). */
+  invalidateFaces() {
+    for (const v of this.views.values()) v.sig = '';
+  }
+
   // ------------------------------------------------------------------ highlight helpers
   clearMarks(...classes: string[]) {
     for (const cls of classes) this.stage.querySelectorAll(`.${cls}`).forEach((e) => e.classList.remove(cls));

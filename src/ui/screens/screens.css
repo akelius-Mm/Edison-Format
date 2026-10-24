@@ -3571,3 +3571,7 @@ tr.pending .pt-score {
   grid-template-columns: repeat(2, 1fr);
   gap: 8px;
 }
+.res-dash {
+  align-self: flex-end;
+  margin-bottom: 4px;
+}

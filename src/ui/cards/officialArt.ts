@@ -120,12 +120,12 @@ export function attachOfficialArt(artEl: HTMLElement, cardName: string, mode: 'a
     if (!img) return;
     const el = new Image();
     el.decoding = 'async';
-    el.loading = 'lazy';
     el.alt = cardName;
     el.draggable = false;
     el.className = 'official-art';
     el.style.cssText = 'width:100%;height:100%;object-fit:cover;display:block;';
     el.onload = () => {
+      if (!artEl.isConnected && !artEl.parentElement) return;
       artEl.replaceChildren(el);
       artEl.classList.add('has-official-art');
     };

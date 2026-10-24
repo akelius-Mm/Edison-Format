@@ -187,7 +187,14 @@ class DuelScreen implements HumanUI {
         if (this.aborted && a.type !== 'negate') throw this.aborted;
       },
     };
+    let officialImages = s.officialImages;
     this.unsubSettings = onSettingsChange((st) => {
+      if (st.officialImages !== officialImages) {
+        officialImages = st.officialImages;
+        this.board.invalidateFaces();
+        this.flush();
+        this.preview.invalidate();
+      }
       this.sfx.enabled = st.sound;
       this.sfx.volume = st.volume;
       this.updateSoundBtn();

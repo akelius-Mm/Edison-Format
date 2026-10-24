@@ -178,6 +178,10 @@
   display: block;
   pointer-events: none;
 }
+.yc-art img.official-art {
+  object-fit: cover;
+  object-position: center;
+}
 
 /* Text box */
 .yc-box {
