@@ -25,7 +25,9 @@ a Swiss + Top Cut tournament mode.
 - **Deck builder** — searchable card database, live banlist validation, import/export.
 - **Tournament mode** — 8/16/32-player Swiss with OMW% tiebreakers, Top 8 single
   elimination, best-of-3 matches, simulated or fully played-out AI matches, saved progress.
-- **Customization** — sleeves, playmats, avatars, player name, animation speed, sound.
+- **Customization** — 12 sleeves, 10 playmats, 12+ avatars, player name, animation speed, sound.
+- **Optional official card images** — Settings → "Load official card images" fetches artwork
+  from the public YGOPRODeck database when online (falls back to generated art).
 
 ## Getting started
 
@@ -35,6 +37,9 @@ npm run dev        # http://localhost:5173
 npm run build      # production build in dist/
 npm run build:single  # single self-contained HTML file in dist-single/
 ```
+
+Developer harness: `npm run dev` then open `/duel-dev.html` (`?gallery` shows every card,
+sleeve, playmat and avatar; `?mode=spectate&seed=N` runs AI-vs-AI duels).
 
 ## Testing
 
@@ -58,3 +63,13 @@ npx tsx scripts/sim.ts --deck quickdraw-plant --games 1 --log   # full duel log
 | `src/tournament/` | Swiss pairing, standings, top cut, match simulation |
 | `scripts/` | Headless simulator and rules tests |
 | `docs/CARD_SCRIPTING.md` | How to add or script new cards |
+
+## Known simplifications
+
+The engine covers the format's real interactions, but a few rare mechanics are approximated
+(each is documented in `docs/engine-requests/`): Gemini monsters use a "Gemini Summon" effect
+that consumes the Normal Summon, "destroy this instead" replacement effects (Nettles, Power Tool
+Dragon) are partial, effects that "end the Battle Phase" stop further attacks instead, Swap Frog's
+extra Normal Summon isn't limited to Frogs, Fusion Summons made by card effects can't be negated
+by Solemn Judgment, and some lingering effects (Swords of Revealing Light's countdown) use the
+chain. No side-decking between Best-of-3 games yet.
