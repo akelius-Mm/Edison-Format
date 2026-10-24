@@ -321,7 +321,9 @@ defTrap('Dimensional Prison', 'normal', {
       activate: targetAttacker,
       resolve: async (ctx) => {
         const t = ctx.validTargets((c) => c.location === 'mzone');
-        if (t.length) await ctx.banish(t);
+        if (!t.length) return;
+        ctx.log(`${t[0].name} is banished.`);
+        await ctx.banish(t);
       },
       ai: {
         score: (ctx) => {
@@ -1291,6 +1293,7 @@ defTrap('Karma Cut', 'normal', {
         const t = ctx.validTargets((c) => c.location === 'mzone' && c.faceUp);
         if (!t.length) return;
         const name = t[0].name;
+        ctx.log(`${name} is banished, along with every "${name}" in the opponent's GY.`);
         const r = await ctx.banish(t);
         if (r.length && r[0].location === 'banished') {
           const same = ctx.grave('opp', (c) => c.name === name);

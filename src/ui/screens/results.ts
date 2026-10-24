@@ -1,6 +1,6 @@
 // Match results screen.
 import type { GameResult } from '../../tournament/types';
-import { button, h, icon, type Child } from './dom';
+import { button, h, icon, ICONS, type Child } from './dom';
 import { renderAvatar } from './ext';
 import type { MatchOutcome, MatchSetup } from './match';
 import { showScreen, type Screen } from './nav';
@@ -12,7 +12,7 @@ export interface ResultsOptions {
   /** Perspective: index of the human side, or null for spectated matches. */
   human: 0 | null;
   context?: string;
-  actions: { label: string; variant?: 'primary' | 'ghost' | 'gold'; icon?: Parameters<typeof button>[2]['icon']; onClick: () => void }[];
+  actions: { label: string; variant?: 'primary' | 'ghost' | 'gold'; icon?: keyof typeof ICONS; onClick: () => void }[];
   extra?: Child;
 }
 

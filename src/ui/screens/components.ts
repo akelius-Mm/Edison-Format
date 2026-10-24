@@ -21,7 +21,7 @@ export function deckTile(d: DeckInfo, opts: { selected?: boolean; onClick?: () =
     'button',
     {
       type: 'button',
-      class: ['deck-tile', opts.selected && 'on', opts.compact && 'compact', d.problems.length && 'invalid'],
+      class: ['deck-tile', opts.selected && 'on', opts.compact && 'compact', d.problems.length > 0 && 'invalid'],
       style: { '--deck': d.color },
       onclick: opts.onClick,
       'aria-pressed': opts.selected ? 'true' : 'false',

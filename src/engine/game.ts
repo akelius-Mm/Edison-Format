@@ -546,7 +546,7 @@ export class Game {
     if (from !== dest || wasOnField) {
       const keepProper = card.properlySummoned;
       card.resetOnMove();
-      card.properlySummoned = keepProper && (dest === 'grave' || dest === 'banished');
+      card.properlySummoned = keepProper && (dest === 'grave' || dest === 'banished' || dest === 'mzone');
       if (dest !== 'mzone') card.banishOnLeave = false;
     }
     void leavingField;

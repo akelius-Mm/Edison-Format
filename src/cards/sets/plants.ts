@@ -9,6 +9,7 @@ import type { Ctx } from '../../engine/ctx';
 
 /** Tribute cards as a cost (not for a Tribute Summon). Emits `tributed`. */
 export async function tributeCost(ctx: Ctx, cards: CardInstance[]) {
+  if (cards.length) ctx.log(`${ctx.game.players[ctx.player].name} Tributes ${cards.map((c) => c.name).join(', ')}.`);
   return ctx.game.moveCards(cards, 'grave', { reason: 'tribute', reasons: ['tribute', 'cost'], reasonPlayer: ctx.player, reasonCard: ctx.self });
 }
 

@@ -546,7 +546,7 @@ monster('Blackwing Armor Master', {
           if (!hit.length) return 0;
           const b = ctx.battle;
           if (b && !b.inDamageStep && b.attacker.controller === ctx.opp && hit.includes(b.attacker)) return 75;
-          if (ctx.isMyTurn && (ctx.phase === 'battle' || ctx.phase === 'main1') && !b) {
+          if (ctx.isMyTurn && (ctx.phase === 'battle' || ctx.phase === 'main1') && !b && !ctx.chainTop()) {
             // Clear the way for my attackers.
             const myBest = Math.max(0, ...ctx.monsters('me', (c) => ctx.game.canAttack(c)).map((c) => ctx.atk(c)));
             const blocks = hit.some((c) => (c.pos === 'atk' ? ctx.atk(c) : ctx.def(c)) >= myBest);
