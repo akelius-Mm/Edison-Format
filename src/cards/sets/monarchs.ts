@@ -1,0 +1,2 @@
+// Card definitions: monarchs
+export {};

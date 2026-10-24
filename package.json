@@ -1,0 +1,24 @@
+{
+  "name": "edison-format-simulator",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "build:single": "vite build --mode single",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "sim": "tsx scripts/sim.ts",
+    "test": "tsx scripts/rules-test.ts && tsx scripts/sim.ts --games 40",
+    "test:rules": "tsx scripts/rules-test.ts",
+    "test:sim": "tsx scripts/sim.ts --games 40"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "tsx": "^4.23.15",
+    "typescript": "^5.9.3",
+    "vite": "^5.4.21",
+    "vite-plugin-singlefile": "^2.3.4"
+  }
+}

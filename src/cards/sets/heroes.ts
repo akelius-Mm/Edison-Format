@@ -1,0 +1,2 @@
+// Card definitions: heroes
+export {};

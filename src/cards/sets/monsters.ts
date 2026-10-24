@@ -1,0 +1,2 @@
+// Card definitions: monsters
+export {};

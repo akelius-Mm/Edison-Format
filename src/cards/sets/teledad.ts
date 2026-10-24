@@ -1,0 +1,2 @@
+// Card definitions: teledad
+export {};
