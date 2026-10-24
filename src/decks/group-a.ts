@@ -12,10 +12,10 @@ const quickdrawPlant: DeckDef = {
   description:
     'The Edison synchro toolbox. Quickdraw Synchron special summons itself by dumping Dandylion or Level Eater, Lonefire Blossom chains Plants out of the Deck, and Debris Dragon revives the discarded Plants for instant Junk Destroyer, Black Rose Dragon or Stardust Dragon. Fluff Tokens, Level Eater and Plaguespreader keep feeding more synchros, with Dark Armed Dragon as the finisher.',
   main: [
-    // Monsters (18)
+    // Monsters (19)
     ['Quickdraw Synchron', 3],
     ['Lonefire Blossom', 3],
-    ['Dandylion', 2],
+    ['Dandylion', 3],
     ['Debris Dragon', 2],
     ['Level Eater', 2],
     ['Plaguespreader Zombie', 1],
@@ -37,7 +37,7 @@ const quickdrawPlant: DeckDef = {
     ['Mystical Space Typhoon', 1],
     ['Book of Moon', 1],
     ['Scapegoat', 1],
-    // Traps (10)
+    // Traps (9)
     ['Solemn Judgment', 1],
     ['Solemn Warning', 2],
     ['Bottomless Trap Hole', 2],
@@ -45,7 +45,6 @@ const quickdrawPlant: DeckDef = {
     ['Mirror Force', 1],
     ['Call of the Haunted', 1],
     ['Trap Dustshoot', 1],
-    ['Dimensional Prison', 1],
   ],
   extra: [
     ['Stardust Dragon', 2],
