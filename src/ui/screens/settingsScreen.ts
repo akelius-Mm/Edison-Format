@@ -1,5 +1,6 @@
 // Settings screen.
 import type { Difficulty } from '../../ai/ai';
+import { clearOfficialArtCache } from '../cards/officialArt';
 import { DEFAULT_SETTINGS, getSettings, updateSettings, type Settings } from '../settings';
 import { button, confirmDialog, h, segmented, toast, toggle } from './dom';
 import { frame, go, type Screen } from './nav';
@@ -76,6 +77,14 @@ export function settingsScreen(): Screen {
         row('Show duel log', 'Display the running log of actions beside the field.', toggle(s.showLog, (v) => set({ showLog: v }), 'Show duel log')),
       ),
       group(
+        'Display',
+        row(
+          'Load official card images',
+          'Shows official card artwork loaded from the YGOPRODeck card database when online. Card art is © its owners. Falls back to generated art when unavailable.',
+          toggle(s.officialImages, (v) => set({ officialImages: v }), 'Load official card images'),
+        ),
+      ),
+      group(
         'Audio',
         row('Sound effects', 'Card, chain and damage sounds.', toggle(s.sound, (v) => set({ sound: v }), 'Sound effects')),
         row('Music', 'Ambient background music during duels.', toggle(s.music, (v) => set({ music: v }), 'Music')),
@@ -110,6 +119,7 @@ export function settingsScreen(): Screen {
             'Reset data',
             async () => {
               if (!(await confirmDialog('Reset all data', 'This permanently deletes your decks, stats, tournaments and settings. Continue?', 'Delete everything', true))) return;
+              clearOfficialArtCache();
               resetAllData();
               toast('All data has been reset.', 'success');
               setTimeout(() => location.replace(location.pathname + '#/title'), 300);
