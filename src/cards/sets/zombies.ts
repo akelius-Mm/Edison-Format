@@ -186,6 +186,12 @@ monster('Mezuki', {
   ],
 });
 
+/** Attack Position only if it would not just be a free target (AI + human default). */
+export function safePos(ctx: Ctx, c: CardInstance): 'atk' | 'def' {
+  const oppBest = Math.max(0, ...ctx.faceUpMonsters('opp', (m) => m.pos === 'atk').map((m) => ctx.atk(m)));
+  return (c.data.atk ?? 0) >= oppBest && ctx.isMyTurn ? 'atk' : (c.data.def ?? 0) > (c.data.atk ?? 0) || oppBest > (c.data.atk ?? 0) ? 'def' : 'atk';
+}
+
 /** Card the AI puts back on top of the Deck for Plaguespreader (higher = put back). */
 function putBackScore(ctx: Ctx, c: CardInstance) {
   const dup = ctx.hand('me', (h) => h.name === c.name).length > 1 ? 400 : 0;
@@ -217,7 +223,7 @@ monster('Plaguespreader Zombie', {
       },
       resolve: async (ctx) => {
         if (ctx.self.location !== 'grave') return;
-        const r = await ctx.specialSummon(ctx.self);
+        const r = await ctx.specialSummon(ctx.self, { pos: safePos(ctx, ctx.self) });
         for (const c of r) c.banishOnLeave = true;
       },
       ai: {
@@ -226,7 +232,6 @@ monster('Plaguespreader Zombie', {
           // In the Standby Phase other monsters may still be summoned; count likely materials.
           if (synchroOptions(ctx, [{ card: ctx.self }]).length) return 1;
           const hand = ctx.hand();
-          if (ctx.monsters('me').length === 0 && hand.length >= 2) return 1;
           // A normal-summonable non-Tuner in hand that pairs with it.
           const pair = hand.some((h) => h.isMonster && !h.isTuner && !h.data.cannotNormalSummon && (h.data.level ?? 0) <= 4 && synchroOptions(ctx, [{ card: ctx.self }, { card: h }]).length);
           return pair && hand.length >= 2 ? 1 : 0;

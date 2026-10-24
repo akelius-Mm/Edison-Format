@@ -369,12 +369,17 @@ monster('Level Eater', {
         const t = ctx.validTargets((c) => c.location === 'mzone' && c.faceUp && ctx.level(c) >= 5);
         if (!t.length || ctx.self.location !== 'grave') return;
         ctx.addTempMod(t[0], 'level', -1, 'field');
-        await ctx.specialSummon(ctx.self);
+        const oppBest = Math.max(0, ...ctx.faceUpMonsters('opp', (m) => m.pos === 'atk').map((m) => ctx.atk(m)));
+        await ctx.specialSummon(ctx.self, { pos: oppBest > 600 ? 'def' : 'choose' });
       },
       ai: {
         score: (ctx) => {
           if (ctx.freeMZones() <= 0) return 0;
-          return synchroOptions(ctx, [{ card: ctx.self }]).length ? 66 : 32;
+          if (synchroOptions(ctx, [{ card: ctx.self }]).length) return 66;
+          // A spare tuner in hand turns the extra body into a synchro next.
+          if (ctx.hand('me', (h) => h.isTuner && !h.data.cannotNormalSummon).length && ctx.game.players[ctx.player].normalSummonsLeft > 0) return 40;
+          // Otherwise only as a free attacker / blocker.
+          return ctx.monsters('opp').length === 0 && ctx.phase === 'main1' && ctx.turn > 1 ? 25 : 0;
         },
       },
     },

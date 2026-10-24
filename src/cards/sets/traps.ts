@@ -1,12 +1,19 @@
 // Card definitions: generic Traps (see docs/CARD_ALLOCATION.md, "traps.ts").
 import { allCards, token, trap } from '../define';
 import { bestTarget, cardValue } from '../helpers';
-import type { CardInstance, QueryKey } from '../../engine/card';
+import type { CardData, CardInstance, QueryKey } from '../../engine/card';
 import type { Ctx } from '../../engine/ctx';
 import type { ChainLink, Game } from '../../engine/game';
 import type { Category, GameEvent, PlayerId } from '../../engine/types';
 
 // ============================================================ shared helpers
+
+const DEFINED: CardData[] = [];
+const defTrap = (...a: Parameters<typeof trap>) => {
+  const d = trap(...a);
+  DEFINED.push(d);
+  return d;
+};
 
 const evc = (ev: GameEvent) => ev.card as CardInstance;
 
@@ -231,7 +238,7 @@ function removalScore(ctx: Ctx, cands: CardInstance[], base: number) {
 
 // =================================================================== TRAPS
 
-trap('Torrential Tribute', 'normal', {
+defTrap('Torrential Tribute', 'normal', {
   text: 'When a monster is Summoned: Destroy all monsters on the field.',
   aiValue: 500,
   effects: [
@@ -257,7 +264,7 @@ trap('Torrential Tribute', 'normal', {
   ],
 });
 
-trap('Solemn Warning', 'counter', {
+defTrap('Solemn Warning', 'counter', {
   text: 'When a monster(s) would be Summoned, OR when a card or effect that includes Special Summoning a monster is activated: Pay 2000 LP; negate the Summon or activation, and if you do, destroy that card.',
   aiValue: 600,
   effects: [
@@ -302,7 +309,7 @@ trap('Solemn Warning', 'counter', {
   ],
 });
 
-trap('Dimensional Prison', 'normal', {
+defTrap('Dimensional Prison', 'normal', {
   text: "When an opponent's monster declares an attack: Target that attacking monster; banish that target.",
   aiValue: 300,
   effects: [
@@ -327,7 +334,7 @@ trap('Dimensional Prison', 'normal', {
   ],
 });
 
-trap('Trap Dustshoot', 'normal', {
+defTrap('Trap Dustshoot', 'normal', {
   text: "Activate only if your opponent has 4 or more cards in their hand. Look at their hand, choose 1 Monster Card in it, and shuffle it into their Deck.",
   effects: [
     {
@@ -361,7 +368,7 @@ trap('Trap Dustshoot', 'normal', {
   ],
 });
 
-trap('Magic Cylinder', 'normal', {
+defTrap('Magic Cylinder', 'normal', {
   text: "When an opponent's monster declares an attack: Target the attacking monster; negate the attack, and if you do, inflict damage to your opponent equal to its ATK.",
   aiValue: 300,
   effects: [
@@ -393,7 +400,7 @@ trap('Magic Cylinder', 'normal', {
   ],
 });
 
-trap('Sakuretsu Armor', 'normal', {
+defTrap('Sakuretsu Armor', 'normal', {
   text: 'When an opponent\'s monster declares an attack: Target the attacking monster; destroy that target.',
   effects: [
     {
@@ -417,7 +424,7 @@ trap('Sakuretsu Armor', 'normal', {
   ],
 });
 
-trap('Compulsory Evacuation Device', 'normal', {
+defTrap('Compulsory Evacuation Device', 'normal', {
   text: 'Target 1 monster on the field; return that target to the hand.',
   aiValue: 200,
   effects: [
@@ -449,7 +456,7 @@ trap('Compulsory Evacuation Device', 'normal', {
   ],
 });
 
-trap('Phoenix Wing Wind Blast', 'normal', {
+defTrap('Phoenix Wing Wind Blast', 'normal', {
   text: 'Discard 1 card, then target 1 card your opponent controls; place that target on the top of the Deck.',
   effects: [
     {
@@ -491,7 +498,7 @@ function wouldDestroyTwoOfMine(ctx: Ctx, l: ChainLink): boolean {
   return pool.length >= 2;
 }
 
-trap('Starlight Road', 'counter', {
+defTrap('Starlight Road', 'counter', {
   text: 'When a card or effect is activated that would destroy 2 or more cards you control: Negate the activation, and if you do, destroy that card. Then, you can Special Summon 1 "Stardust Dragon" from your Extra Deck.',
   aiValue: 400,
   effects: [
@@ -517,7 +524,7 @@ trap('Starlight Road', 'counter', {
   ],
 });
 
-trap('Trap Stun', 'normal', {
+defTrap('Trap Stun', 'normal', {
   text: 'Negate all other Trap effects on the field this turn.',
   effects: [
     {
@@ -547,7 +554,7 @@ trap('Trap Stun', 'normal', {
   ],
 });
 
-trap('Seven Tools of the Bandit', 'counter', {
+defTrap('Seven Tools of the Bandit', 'counter', {
   text: 'When a Trap Card is activated: Pay 1000 LP; negate the activation, and if you do, destroy it.',
   aiValue: 300,
   effects: [
@@ -577,7 +584,7 @@ trap('Seven Tools of the Bandit', 'counter', {
   ],
 });
 
-trap('Divine Wrath', 'counter', {
+defTrap('Divine Wrath', 'counter', {
   text: "When a monster effect is activated: Discard 1 card; negate the activation, and if you do, destroy that monster.",
   aiValue: 200,
   effects: [
@@ -608,7 +615,7 @@ trap('Divine Wrath', 'counter', {
   ],
 });
 
-trap('Royal Decree', 'continuous', {
+defTrap('Royal Decree', 'continuous', {
   text: 'Negate all other Trap effects on the field.',
   effects: [
     {
@@ -645,7 +652,7 @@ function declarableNames(ctx: Ctx) {
   return { revealed: [...new Set(revealed)], seen: [...new Set(seen)] };
 }
 
-trap('Mind Crush', 'normal', {
+defTrap('Mind Crush', 'normal', {
   text: 'Declare 1 card name; if that card is in your opponent\'s hand, they must discard all copies of it. Otherwise, you discard 1 random card.',
   effects: [
     {
@@ -667,11 +674,16 @@ trap('Mind Crush', 'normal', {
         g.log(`${g.players[ctx.player].name} declares "${name}".`, 'action', ctx.player);
         const hits = ctx.hand('opp').filter((c) => c.name === name);
         if (hits.length) {
+          g.log(`${g.players[ctx.opp].name} discards ${hits.length} cop${hits.length > 1 ? 'ies' : 'y'} of "${name}".`, 'action', ctx.opp);
           await ctx.discard(hits);
         } else {
           g.log(`"${name}" is not in ${g.players[ctx.opp].name}'s hand.`, 'action', ctx.player);
           const mine = ctx.hand('me');
-          if (mine.length) await ctx.discard([mine[g.rng.int(mine.length)]]);
+          if (mine.length) {
+            const lost = mine[g.rng.int(mine.length)];
+            g.log(`${g.players[ctx.player].name} randomly discards ${lost.name}.`, 'action', ctx.player);
+            await ctx.discard([lost]);
+          }
         }
       },
       ai: {
@@ -684,7 +696,7 @@ trap('Mind Crush', 'normal', {
   ],
 });
 
-trap('Dust Tornado', 'normal', {
+defTrap('Dust Tornado', 'normal', {
   text: 'Target 1 Spell/Trap Card your opponent controls; destroy that target, then you can Set 1 Spell/Trap Card from your hand.',
   aiValue: 200,
   effects: [
@@ -723,7 +735,7 @@ trap('Dust Tornado', 'normal', {
   ],
 });
 
-trap('Raigeki Break', 'normal', {
+defTrap('Raigeki Break', 'normal', {
   text: 'Discard 1 card, then target 1 card on the field; destroy that target.',
   effects: [
     {
@@ -743,7 +755,7 @@ trap('Raigeki Break', 'normal', {
   ],
 });
 
-trap('Threatening Roar', 'normal', {
+defTrap('Threatening Roar', 'normal', {
   text: 'Your opponent cannot declare an attack this turn.',
   effects: [
     {
@@ -765,7 +777,7 @@ trap('Threatening Roar', 'normal', {
   ],
 });
 
-trap('Negate Attack', 'counter', {
+defTrap('Negate Attack', 'counter', {
   text: "When an opponent's monster declares an attack: Negate the attack, then end the Battle Phase.",
   aiValue: 200,
   effects: [
@@ -793,7 +805,7 @@ trap('Negate Attack', 'counter', {
   ],
 });
 
-trap('Ultimate Offering', 'continuous', {
+defTrap('Ultimate Offering', 'continuous', {
   text: 'During your Main Phase or your opponent\'s Battle Phase: You can pay 500 LP; immediately after this effect resolves, Normal Summon/Set 1 monster.',
   effects: [
     {
@@ -829,7 +841,7 @@ function offeringUseful(ctx: Ctx) {
   }).length > 0;
 }
 
-trap('Ceasefire', 'normal', {
+defTrap('Ceasefire', 'normal', {
   text: 'Activate only if there is a face-down Defense Position monster or a face-up Effect Monster on the field. Change all face-down Defense Position monsters on the field to face-up Defense Position (Flip effects are not activated), then inflict 500 damage to your opponent for each Effect Monster on the field.',
   effects: [
     {
@@ -862,7 +874,7 @@ trap('Ceasefire', 'normal', {
   ],
 });
 
-trap('Skill Drain', 'continuous', {
+defTrap('Skill Drain', 'continuous', {
   text: 'Activate by paying 1000 LP. Negate the effects of all face-up monsters while they are face-up on the field (their effects can still be activated).',
   aiValue: 300,
   effects: [
@@ -894,7 +906,7 @@ trap('Skill Drain', 'continuous', {
   ],
 });
 
-trap('Macro Cosmos', 'continuous', {
+defTrap('Macro Cosmos', 'continuous', {
   text: 'When this card resolves, you can Special Summon 1 "Helios - The Primordial Sun" from your hand or Deck. While this card is face-up on the field, any card sent to the GY is banished instead.',
   aiValue: 200,
   effects: [
@@ -926,7 +938,7 @@ trap('Macro Cosmos', 'continuous', {
   ],
 });
 
-trap('Trap Hole', 'normal', {
+defTrap('Trap Hole', 'normal', {
   text: 'When your opponent Normal or Flip Summons a monster with 1000 or more ATK: Target that monster; destroy that target.',
   effects: [
     {
@@ -957,7 +969,7 @@ trap('Trap Hole', 'normal', {
   ],
 });
 
-trap('Magic Drain', 'counter', {
+defTrap('Magic Drain', 'counter', {
   text: 'When your opponent activates a Spell Card: They can discard 1 Spell Card to negate this card\'s effect; otherwise, negate the Spell Card\'s activation, and if you do, destroy it.',
   effects: [
     {
@@ -995,7 +1007,7 @@ trap('Magic Drain', 'counter', {
   ],
 });
 
-trap('Dark Bribe', 'counter', {
+defTrap('Dark Bribe', 'counter', {
   text: 'When your opponent activates a Spell/Trap Card: They draw 1 card, then negate the activation, and if you do, destroy it.',
   aiValue: 200,
   effects: [
@@ -1025,7 +1037,7 @@ trap('Dark Bribe', 'counter', {
   ],
 });
 
-trap('Horn of Heaven', 'counter', {
+defTrap('Horn of Heaven', 'counter', {
   text: 'When a monster(s) would be Summoned: Tribute 1 monster; negate the Summon, and if you do, destroy that monster(s).',
   effects: [
     {
@@ -1059,7 +1071,7 @@ const ojamaToken = token('Ojama Token', 'LIGHT', 'Beast', 2, 0, 1000, 'Special S
 /** Ojama Tokens -> the Ojama Trio that created them (tokens have no location to run their own effect from). */
 const OJAMA_SRC = new WeakMap<CardInstance, CardInstance>();
 const OJAMA_CHARGED = new WeakSet<CardInstance>();
-trap('Ojama Trio', 'normal', {
+defTrap('Ojama Trio', 'normal', {
   text: 'Special Summon 3 "Ojama Tokens" (Beast/LIGHT/Level 2/ATK 0/DEF 1000) to your opponent\'s field in Defense Position. They cannot be Tributed for a Tribute Summon. Each time an Ojama Token is destroyed, its controller takes 300 damage.',
   effects: [
     {
@@ -1101,7 +1113,7 @@ trap('Ojama Trio', 'normal', {
   ],
 });
 
-trap('Waboku', 'normal', {
+defTrap('Waboku', 'normal', {
   text: 'You take no battle damage this turn. Your monsters cannot be destroyed by battle this turn.',
   effects: [
     {
@@ -1124,7 +1136,7 @@ trap('Waboku', 'normal', {
   ],
 });
 
-trap('Return from the Different Dimension', 'normal', {
+defTrap('Return from the Different Dimension', 'normal', {
   text: 'Pay half your LP; Special Summon as many of your banished monsters as possible. During the End Phase, banish all monsters Special Summoned by this effect.',
   aiValue: 300,
   effects: [
@@ -1165,7 +1177,7 @@ trap('Return from the Different Dimension', 'normal', {
   ],
 });
 
-trap('Wall of Revealing Light', 'continuous', {
+defTrap('Wall of Revealing Light', 'continuous', {
   text: 'Activate by paying any multiple of 1000 LP. Monsters your opponent controls with ATK less than or equal to the amount you paid cannot attack.',
   effects: [
     {
@@ -1205,7 +1217,7 @@ trap('Wall of Revealing Light', 'continuous', {
   ],
 });
 
-trap('Michizure', 'normal', {
+defTrap('Michizure', 'normal', {
   text: 'When a monster you control is destroyed and sent to the GY: Target 1 monster on the field; destroy that target.',
   effects: [
     {
@@ -1233,7 +1245,7 @@ trap('Michizure', 'normal', {
   ],
 });
 
-trap('Widespread Ruin', 'normal', {
+defTrap('Widespread Ruin', 'normal', {
   text: "When an opponent's monster declares an attack: Destroy the Attack Position monster your opponent controls with the highest ATK (your choice, if tied).",
   effects: [
     {
@@ -1264,7 +1276,7 @@ trap('Widespread Ruin', 'normal', {
   ],
 });
 
-trap('Karma Cut', 'normal', {
+defTrap('Karma Cut', 'normal', {
   text: 'Discard 1 card, then target 1 face-up monster your opponent controls; banish that target, and if you do, banish all cards with that name from your opponent\'s GY.',
   effects: [
     {
@@ -1290,7 +1302,7 @@ trap('Karma Cut', 'normal', {
   ],
 });
 
-trap('Reckless Greed', 'normal', {
+defTrap('Reckless Greed', 'normal', {
   text: 'Draw 2 cards, then skip your next 2 Draw Phases.',
   effects: [
     {
@@ -1314,7 +1326,7 @@ trap('Reckless Greed', 'normal', {
   ],
 });
 
-trap('Magical Explosion', 'normal', {
+defTrap('Magical Explosion', 'normal', {
   text: 'Activate only while you have no cards in your hand. Inflict 200 damage to your opponent for each Spell Card in your GY.',
   effects: [
     {
@@ -1369,7 +1381,7 @@ function bindAiScore(ctx: Ctx, base: number, atkLoss: number) {
   return 0;
 }
 
-trap('Shadow Spell', 'continuous', {
+defTrap('Shadow Spell', 'continuous', {
   text: 'Activate this card by targeting 1 face-up monster your opponent controls; it loses 700 ATK, and it cannot attack or change its battle position. When it leaves the field, destroy this card.',
   effects: [
     {
@@ -1398,7 +1410,7 @@ trap('Shadow Spell', 'continuous', {
   ],
 });
 
-trap('Spellbinding Circle', 'continuous', {
+defTrap('Spellbinding Circle', 'continuous', {
   text: 'Activate this card by targeting 1 monster your opponent controls; it cannot attack or change its battle position. When that monster is destroyed, destroy this card.',
   effects: [
     {
@@ -1438,7 +1450,7 @@ trap('Spellbinding Circle', 'continuous', {
   ],
 });
 
-trap('Draining Shield', 'normal', {
+defTrap('Draining Shield', 'normal', {
   text: "When an opponent's monster declares an attack: Target the attacking monster; negate the attack, and if you do, gain LP equal to that target's ATK.",
   effects: [
     {
@@ -1466,7 +1478,7 @@ trap('Draining Shield', 'normal', {
   ],
 });
 
-trap('Dimension Wall', 'normal', {
+defTrap('Dimension Wall', 'normal', {
   text: "When an opponent's monster declares an attack: Your opponent takes any battle damage you would have taken from this battle instead.",
   effects: [
     {
@@ -1497,7 +1509,7 @@ trap('Dimension Wall', 'normal', {
   ],
 });
 
-trap('Bad Reaction to Simochi', 'continuous', {
+defTrap('Bad Reaction to Simochi', 'continuous', {
   text: 'Any effect that would make your opponent gain LP inflicts that much damage to them instead.',
   effects: [
     {
@@ -1514,7 +1526,7 @@ trap('Bad Reaction to Simochi', 'continuous', {
   ],
 });
 
-trap('Time Seal', 'normal', {
+defTrap('Time Seal', 'normal', {
   text: "Skip your opponent's next Draw Phase.",
   effects: [
     {
@@ -1531,7 +1543,7 @@ trap('Time Seal', 'normal', {
   ],
 });
 
-trap('Imperial Order', 'continuous', {
+defTrap('Imperial Order', 'continuous', {
   text: 'Negate all Spell effects on the field. Once per turn, during your Standby Phase, pay 700 LP or destroy this card.',
   aiValue: 300,
   effects: [
@@ -1573,7 +1585,7 @@ trap('Imperial Order', 'continuous', {
   ],
 });
 
-trap('Last Turn', 'normal', {
+defTrap('Last Turn', 'normal', {
   text: "Activate only during your opponent's turn while your LP are 1000 or less. Choose 1 monster you control; send all other cards on the field and in both hands to the GY. Then your opponent Special Summons 1 monster from their Deck in Attack Position and it battles your monster. At the End Phase, the player who is the only one controlling a monster wins the Duel.",
   effects: [
     {
@@ -1638,7 +1650,7 @@ trap('Last Turn', 'normal', {
   ],
 });
 
-trap('Ring of Destruction', 'normal', {
+defTrap('Ring of Destruction', 'normal', {
   text: 'Target 1 face-up monster on the field; destroy it, and if you do, inflict damage to both players equal to its ATK.',
   aiValue: 400,
   effects: [
@@ -1685,7 +1697,7 @@ trap('Ring of Destruction', 'normal', {
 /** Crush Card Virus: card -> { victim, until (last turn number of the effect) }. */
 const VIRUS = new WeakMap<CardInstance, { victim: PlayerId; until: number }>();
 const virusVictim = (c: CardInstance) => c.isMonster && (c.data.atk ?? 0) >= 1500;
-trap('Crush Card Virus', 'normal', {
+defTrap('Crush Card Virus', 'normal', {
   text: "Tribute 1 DARK monster with 1000 or less ATK. Destroy all monsters your opponent controls with 1500 or more ATK, then look at their hand and destroy all such monsters in it. Until the end of their 3rd turn after activation, they check every card they draw and destroy monsters with 1500 or more ATK.",
   aiValue: 800,
   effects: [
@@ -1756,7 +1768,7 @@ trap('Crush Card Virus', 'normal', {
   ],
 });
 
-trap('Exchange of the Spirit', 'normal', {
+defTrap('Exchange of the Spirit', 'normal', {
   text: 'Activate only if both players have 15 or more cards in their GYs. Each player swaps the cards in their GY with the cards in their Deck, then shuffles their new Deck.',
   effects: [
     {
@@ -1777,5 +1789,16 @@ trap('Exchange of the Spirit', 'normal', {
     },
   ],
 });
+
+// The AI should not throw away Trap activations while a Royal Decree would negate them.
+const decreeUp = (ctx: Ctx) =>
+  ctx.game.allFieldCards().some((c) => c.name === 'Royal Decree' && c !== ctx.self && c.faceUp && c.activeOnField && !ctx.game.isNegated(c));
+for (const d of DEFINED) {
+  for (const ef of d.effects ?? []) {
+    const score = ef.ai?.score;
+    if (ef.kind !== 'activate' || !score) continue;
+    ef.ai!.score = (ctx) => (decreeUp(ctx) ? -1 : score(ctx));
+  }
+}
 
 export const TRAPS_LOADED = true;

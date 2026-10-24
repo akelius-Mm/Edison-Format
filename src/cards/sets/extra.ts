@@ -203,7 +203,7 @@ monster('Red Dragon Archfiend', {
   types: ['synchro'],
   text: '1 Tuner + 1 or more non-Tuner monsters\nAfter damage calculation, if this card attacked a Defense Position monster: destroy every Defense Position monster your opponent controls. During your End Phase: destroy all other monsters you control that did not declare an attack this turn.',
   synchro: { desc: '1 Tuner + 1+ non-Tuner monsters' },
-  aiValue: 600,
+  aiValue: 300,
   effects: [
     {
       kind: 'trigger',
@@ -877,7 +877,7 @@ monster('Ancient Sacred Wyvern', {
       resolve: async (ctx) => {
         if (ctx.self.location === 'grave') await ctx.specialSummon(ctx.self, { ignoreConditions: true });
       },
-      ai: { score: (ctx) => (ctx.lp >= 3000 && ctx.lp - 1000 >= ctx.oppLp - 1000 ? 1 : 0) },
+      ai: { score: (ctx) => (ctx.lp > 3000 && 2100 + (ctx.lp - 1000 - ctx.oppLp) >= 0 ? 1 : 0) },
     },
   ],
 });

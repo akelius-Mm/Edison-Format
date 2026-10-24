@@ -366,7 +366,7 @@ monster('Test Tiger', {
       activate: async (ctx) => {
         await ctx.sendToGrave(ctx.self, 'tribute');
         await ctx.selectTargets(ctx.faceUpMonsters('me', isGB), 1, 1, 'Target 1 face-up "Gladiator Beast" you control.', 'generic', {
-          aiScore: (c) => -cardValue(ctx.game, c) + (c.flags.dariusSrc ? -2000 : 0),
+          aiScore: (c) => -cardValue(ctx.game, c) + (c.flags.dariusSrc ? -2000 : 0) + (c.isExtra ? -10000 : 0),
         });
       },
       resolve: async (ctx) => {
@@ -385,6 +385,7 @@ monster('Test Tiger', {
       ai: {
         score: (ctx) => {
           if (ctx.phase !== 'main1') return 0;
+          if (!ctx.faceUpMonsters('me', (c) => isGB(c) && !c.isExtra).length) return 0;
           const best = Math.max(0, ...ctx.deck('me', isGB).map((c) => gbTagScore(ctx, c)));
           return best >= 800 ? 58 : best >= 600 ? 40 : 0;
         },
@@ -414,9 +415,13 @@ trap('Gladiator Beast War Chariot', 'counter', {
           const l = ctx.prevLink();
           if (!l || l.player !== ctx.opp) return 0;
           const cats = l.effect.categories ?? [];
-          if (cats.some((c) => ['destroy', 'destroyMulti', 'banish', 'control', 'negate', 'specialSummon', 'search', 'draw', 'toHand', 'discard'].includes(c))) return 70;
-          if (l.card.onField && cardValue(ctx.game, l.card) >= 1800) return 55;
-          return 35;
+          const onField = l.card.location === 'mzone';
+          if (cats.some((c) => ['destroy', 'destroyMulti', 'banish', 'control', 'negate', 'discard'].includes(c))) return 70;
+          if (onField && cardValue(ctx.game, l.card) >= 1800) return 60;
+          // Floaters / small revivals from the GY are not worth a Counter Trap.
+          if (!onField && cats.includes('specialSummon') && (l.card.data.atk ?? 0) < 1000 && l.card.location === 'grave') return -1;
+          if (cats.some((c) => ['specialSummon', 'search', 'draw', 'toHand'].includes(c))) return onField ? 60 : 40;
+          return onField ? 35 : -1;
         },
       },
     },

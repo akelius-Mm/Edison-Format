@@ -18,6 +18,13 @@ function battleSides(ctx: Ctx) {
   return { mine, theirs, b };
 }
 
+/** A Normal Spell/Trap that is currently resolving on the chain (it goes to the GY anyway). */
+function spentOnChain(ctx: Ctx, c: CardInstance) {
+  return ctx.game.chain.some(
+    (l) => l.card === c && l.isCardActivation && !['continuous', 'equip', 'field'].includes(c.data.stype ?? '') && c.data.ttype !== 'continuous',
+  );
+}
+
 /** Standard "if you control another face-up Blackwing, Special Summon from hand" procedure. */
 function bwProc(selfName: string): EffectDef {
   return {
@@ -417,20 +424,30 @@ trap('Icarus Attack', 'normal', {
         });
         await ctx.sendToGrave(cost, 'tribute');
         const cands = ctx.field('both', (c) => c !== ctx.self);
-        await ctx.selectTargets(cands, 2, 2, 'Target 2 cards on the field to destroy.', 'destroy');
+        await ctx.selectTargets(cands, 2, 2, 'Target 2 cards on the field to destroy.', 'destroy', {
+          aiScore: (c) => {
+            const mine = ctx.mine(c);
+            let v = cardValue(ctx.game, c);
+            // A Normal Spell/Trap already resolving on the chain leaves the field anyway.
+            if (spentOnChain(ctx, c)) v -= 5000;
+            return mine ? -v - 10000 : v;
+          },
+        });
       },
       resolve: destroyTargets,
       ai: {
         score: (ctx) => {
-          const opp = ctx.field('opp', (c) => ctx.canTarget(c));
-          if (opp.length < 2) return 0;
+          // Negative = never (also stops the AI from "saving" this card by chaining it pointlessly).
+          const opp = ctx.field('opp', (c) => ctx.canTarget(c) && !spentOnChain(ctx, c));
+          if (opp.length < 2) return -1;
           const wbs = ctx.monsters('me', (c) => c.faceUp && c.data.race === 'Winged Beast');
           const top = ctx.chainTop();
           if (top && top.player === ctx.opp) {
+            if (top.ctx.targets.includes(ctx.self)) return 70;
             if (top.ctx.targets.some((t) => wbs.includes(t))) return 80;
             const cats = top.effect.categories ?? [];
             if (cats.includes('destroyMulti') && wbs.length) return 75;
-            if (top.ctx.targets.some((t) => opp.includes(t))) return 0;
+            if (top.ctx.targets.some((t) => opp.includes(t))) return -1;
           }
           const b = ctx.battle;
           if (b && b.attacker.controller === ctx.opp && !b.inDamageStep) {
@@ -444,7 +461,7 @@ trap('Icarus Attack', 'normal', {
             const cheap = wbs.some((c) => cardValue(ctx.game, c) < 1800);
             if (setOpp >= 1 && wbs.length >= 2 && cheap) return 42;
           }
-          return 0;
+          return -1;
         },
       },
     },

@@ -918,7 +918,7 @@ spell('Burial from a Different Dimension', 'quickplay', {
   effects: [
     {
       kind: 'activate',
-      categories: ['toDeck'],
+      categories: [], // banished -> GY has no dedicated category
       canActivate: (ctx) => ctx.banished('both', (c) => c.isMonster && c.faceUp).length > 0,
       activate: async (ctx) => {
         const cands = ctx.banished('both', (c) => c.isMonster && c.faceUp);

@@ -185,9 +185,18 @@ monster('Elemental Hero Stratos', {
           if (sel.length) await ctx.destroy(sel);
           return;
         }
-        const handNames = new Set(ctx.hand().map((c) => c.name));
-        await ctx.search(isHero, 1, 'Add 1 "HERO" monster from your Deck to your hand.');
-        void handNames;
+        if (ctx.game.queryPlayer(ctx.player, 'cannotAddFromDeck')) return;
+        const hand = new Set(ctx.hand().map((c) => c.name));
+        const sel = await ctx.select(ctx.deck('me', isHero), 1, 1, 'Add 1 "HERO" monster from your Deck to your hand.', 'toHand', {
+          aiScore: (c) => {
+            if (c.name === 'Elemental Hero Ocean' && !hand.has(c.name)) return 700;
+            if (c.name === 'Elemental Hero Neos Alius') return 600 - (hand.has(c.name) ? 200 : 0);
+            if (c.name === 'Elemental Hero Bubbleman') return ctx.hand().length <= 1 ? 800 : 100;
+            return (c.data.atk ?? 0) / 10 - (hand.has(c.name) ? 300 : 0);
+          },
+        });
+        if (sel.length) await ctx.toHand(sel);
+        ctx.game.shuffleDeck(ctx.player);
       },
     },
   ],
@@ -298,11 +307,11 @@ monster('Elemental Hero Ocean', {
       resolve: async (ctx) => {
         const cands = [...ctx.grave('me', isHero), ...ctx.faceUpMonsters('me', isHero)];
         const sel = await ctx.select(cands, 1, 1, 'Return 1 "HERO" monster from your field or GY to your hand.', 'toHand', {
-          aiScore: (c) => (c.location === 'grave' ? (c.data.aiValue ?? 0) + (c.data.atk ?? 0) : -3000),
+          aiScore: (c) => (c.isExtra ? -2000 : c.location === 'grave' ? (c.data.aiValue ?? 0) + (c.data.atk ?? 0) : -3000),
         });
         if (sel.length) await ctx.toHand(sel);
       },
-      ai: { score: (ctx) => (ctx.grave('me', isHero).length ? 10 : 0) },
+      ai: { score: (ctx) => (ctx.grave('me', (c) => isHero(c) && !c.isExtra).length ? 10 : 0) },
     },
   ],
 });

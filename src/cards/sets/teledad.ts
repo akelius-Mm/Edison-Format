@@ -47,18 +47,31 @@ function darkMillPriority(ctx: Ctx, c: CardInstance) {
   }
 }
 
-/** Is there a Synchro in the Extra Deck we could make with a tuner of `tunerLv` + a face-up non-tuner? */
-function synchroReady(ctx: Ctx, tunerLv: number) {
-  const nonT = ctx.faceUpMonsters('me', (c) => !c.isTuner && !c.isToken).concat(ctx.faceUpMonsters('me', (c) => c.isToken));
-  const levels = new Set(nonT.filter((c) => !ctx.query(c, 'cannotBeSynchroMaterial')).map((c) => ctx.level(c) + tunerLv));
-  return ctx.extra('me', (c) => c.hasType('synchro') && levels.has(c.data.level ?? 0)).length > 0;
+/**
+ * Could a tuner with this card data be used right away for a Synchro Summon with one face-up
+ * non-tuner I control? (Checks levels and the Synchro monster's material requirements.)
+ */
+function synchroReadyWith(ctx: Ctx, tuner: CardInstance) {
+  const tLv = tuner.data.level ?? 0;
+  const nonT = ctx.faceUpMonsters('me', (c) => !c.isTuner && !ctx.query(c, 'cannotBeSynchroMaterial') && !c.flags.noSynchroMaterial);
+  return ctx.extra('me', (s) => {
+    const req = s.data.synchro;
+    if (!s.hasType('synchro') || !req) return false;
+    if (req.tuner && !req.tuner(tuner)) return false;
+    if ((req.minNonTuners ?? 1) > 1) return false;
+    return nonT.some((m) => ctx.level(m) + tLv === (s.data.level ?? 0) && (!req.nonTuner || req.nonTuner(m)));
+  }).length > 0;
+}
+/** Any Level 3 or lower Psychic tuner I could Teleport out that makes a Synchro. */
+function teleportSynchro(ctx: Ctx) {
+  return ctx.cards('me', ['hand', 'deck'], (c) => isPsychic(c) && c.isTuner && (c.data.level ?? 0) <= 3).some((t) => synchroReadyWith(ctx, t));
 }
 
 /** Monarch in hand that needs exactly one more body to Tribute Summon. */
 function needsTributeBody(ctx: Ctx) {
   if (ctx.game.players[ctx.player].normalSummonsLeft <= 0) return false;
-  const bodies = ctx.game.tributeCandidates(ctx.player).length;
-  return ctx.hand('me', (c) => c.isMonster && ctx.game.tributesNeeded(c) === bodies + 1 && (c.data.atk ?? 0) >= 2000).length > 0;
+  if (ctx.game.tributeCandidates(ctx.player).length > 0) return false;
+  return ctx.hand('me', (c) => c.isMonster && !c.data.cannotNormalSummon && ctx.game.tributesNeeded(c) === 1 && (c.data.atk ?? 0) >= 2000).length > 0;
 }
 
 // ============================================================ SPELLS
@@ -76,7 +89,7 @@ spell('Emergency Teleport', 'quickplay', {
         const sel = await ctx.select(cands, 1, 1, 'Special Summon 1 Level 3 or lower Psychic monster from your hand or Deck.', 'specialSummon', {
           aiScore: (c) => {
             let s = c.location === 'deck' ? 200 : 0; // thin the deck
-            if (synchroReady(ctx, c.data.level ?? 0)) s += 1000 + (c.data.level ?? 0);
+            if (c.isTuner && synchroReadyWith(ctx, c)) s += 1000 + (c.data.level ?? 0);
             if (c.name === 'Krebons') s += 100;
             return s;
           },
@@ -88,7 +101,10 @@ spell('Emergency Teleport', 'quickplay', {
             const m = r[0];
             const id = m.moveId;
             ctx.later('end', async () => {
-              if (m.location === 'mzone' && m.moveId === id) await ctx.game.banish([m], 'effect', ctx.player, ctx.self);
+              if (m.location === 'mzone' && m.moveId === id) {
+                ctx.game.log(`${m.name} is banished by the effect of Emergency Teleport.`, 'action', ctx.player);
+                await ctx.game.banish([m], 'effect', ctx.player, ctx.self);
+              }
             });
           }
         }
@@ -98,7 +114,7 @@ spell('Emergency Teleport', 'quickplay', {
         score: (ctx) => {
           if (ctx.isMyTurn) {
             if (ctx.phase !== 'main1' && ctx.phase !== 'main2') return 0;
-            if (synchroReady(ctx, 2) || synchroReady(ctx, 3)) return 62;
+            if (teleportSynchro(ctx)) return 62;
             if (needsTributeBody(ctx)) return 56;
             return 0;
           }
@@ -160,13 +176,14 @@ monster('Krebons', {
       ai: {
         score: (ctx) => {
           const b = ctx.battle;
-          if (!b || ctx.lp <= 1800) return 0;
+          if (!b || ctx.lp <= 2400) return 0;
           const stat = ctx.self.pos === 'atk' ? ctx.atk(ctx.self) : ctx.def(ctx.self);
           const a = ctx.atk(b.attacker);
           if (a <= stat) return 0;
-          // Worth saving if we want it as a tuner, or the damage is big.
-          if (ctx.self.pos === 'atk' && a - stat >= 800) return 50;
-          return ctx.lp > 3000 ? 40 : 0;
+          // Pay when it stops real damage, or keeps a tuner alive for a Synchro next turn.
+          if (ctx.self.pos === 'atk' && a - stat >= 1000) return 50;
+          if (synchroReadyWith(ctx, ctx.self) && ctx.lp > 4000) return 45;
+          return 0;
         },
       },
     },
