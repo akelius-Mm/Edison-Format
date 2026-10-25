@@ -28,8 +28,8 @@ export interface Settings {
 export const DEFAULT_SETTINGS: Settings = {
   playerName: 'Duelist',
   avatar: 'avatar-1',
-  sleeve: 'classic-red',
-  playmat: 'edison-night',
+  sleeve: 'matte-black',
+  playmat: 'championship-prize-mat',
   animationSpeed: 1,
   sound: true,
   volume: 0.6,
@@ -39,7 +39,7 @@ export const DEFAULT_SETTINGS: Settings = {
   skipFirstDraw: true,
   showLog: true,
   confirmEndTurn: false,
-  officialImages: false,
+  officialImages: true,
 };
 
 const KEY = 'edison.settings.v1';

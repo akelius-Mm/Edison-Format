@@ -1501,3 +1501,26 @@
   outline: 2px dashed rgba(255, 255, 255, 0.13);
   outline-offset: -7px;
 }
+
+/* Printed zone names on mats that have them (like real Yu-Gi-Oh! mats) */
+.zone-print { display: none; }
+[data-mat-labels='1'] .zone-print {
+  display: grid;
+  place-items: center;
+  position: absolute;
+  inset: 6%;
+  pointer-events: none;
+  text-align: center;
+  font: 800 calc(var(--cw) * 0.105) / 1.15 var(--ef-font-ui, sans-serif);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--zone-line);
+  opacity: 0.85;
+}
+[data-mat-labels='1'] .zone--ban .zone-print { font-size: calc(var(--cw) * 0.07); }
+[data-mat-labels='1'] .zone-label { display: none; }
+[data-mat-labels='1'] .zone--m::before,
+[data-mat-labels='1'] .zone--s::before,
+[data-mat-labels='1'] .zone--m::after,
+[data-mat-labels='1'] .zone--s::after { opacity: 0.25; }
+.side-opp .zone-print { transform: rotate(180deg); }

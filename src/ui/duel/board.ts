@@ -131,10 +131,21 @@ export class BoardView {
   private buildSide(p: PlayerId, bottom: boolean): SideEls {
     const root = div(`side ${bottom ? 'side-me' : 'side-opp'}`);
     root.dataset.p = String(p);
+    const PRINT: Record<string, string> = {
+      'zone--m': 'Monster Card Zone',
+      'zone--s': 'Spell & Trap Card Zone',
+      'zone--f': 'Field Card Zone',
+      'zone--pile zone--grave': 'Graveyard',
+      'zone--pile zone--ban': 'Remove from Play',
+      'zone--pile zone--deck': 'Deck Zone',
+      'zone--pile zone--extra': 'Extra Deck Zone',
+    };
     const zone = (cls: string, label = '') => {
       const z = div(`zone ${cls}`);
       z.dataset.p = String(p);
       if (label) z.innerHTML = `<span class="zone-label">${label}</span>`;
+      // Official-style printed label, shown only on mats that print their zones.
+      if (PRINT[cls]) z.insertAdjacentHTML('afterbegin', `<span class="zone-print">${PRINT[cls]}</span>`);
       return z;
     };
     const m = [0, 1, 2, 3, 4].map((i) => {

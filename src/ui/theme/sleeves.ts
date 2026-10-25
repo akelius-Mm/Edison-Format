@@ -365,7 +365,168 @@ const DESIGNS: { id: string; name: string; color: string; svg: () => string }[] 
     },
   },
   ...matteSleeves(),
+  ...eraSleeves(),
 ];
+
+/** Sleeve wrapper with a plastic finish: grain, sheen and a clear sleeve edge. */
+function sleeveSvg(inner: string, defs: string, bg: string, gloss = 0.22) {
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
+<defs>
+<filter id="sgrain" x="0" y="0" width="100%" height="100%"><feTurbulence type="fractalNoise" baseFrequency="1.2" numOctaves="2" stitchTiles="stitch"/><feColorMatrix values="0 0 0 0 .5  0 0 0 0 .5  0 0 0 0 .5  0 0 0 .4 0"/></filter>
+<linearGradient id="ssheen" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fff" stop-opacity="${gloss}"/><stop offset=".3" stop-color="#fff" stop-opacity="0"/><stop offset=".56" stop-color="#fff" stop-opacity="${gloss / 3}"/><stop offset=".68" stop-color="#fff" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".3"/></linearGradient>
+${defs}
+</defs>
+<rect width="${W}" height="${H}" rx="4" fill="${bg}"/>
+${inner}
+<rect width="${W}" height="${H}" rx="4" filter="url(#sgrain)" opacity=".35"/>
+<rect width="${W}" height="${H}" rx="4" fill="url(#ssheen)"/>
+<rect x=".7" y=".7" width="${W - 1.4}" height="${H - 1.4}" rx="3.6" fill="none" stroke="#fff" stroke-opacity=".25" stroke-width="1.1"/>
+</svg>`;
+}
+
+/** Original designs in the style of the art sleeves duelists used around 2010. */
+function eraSleeves() {
+  const feather = (x: number, y: number, len: number, rot: number, fill: string, op: number) => {
+    const barbs = Array.from({ length: 9 }, (_, i) => {
+      const t = (i + 1) / 10;
+      const yy = -len * t;
+      const w = len * 0.17 * Math.sin(Math.PI * t);
+      return `<path d="M0 ${yy.toFixed(1)} q${(w * 0.9).toFixed(1)} ${(-len * 0.05).toFixed(1)} ${w.toFixed(1)} ${(-len * 0.11).toFixed(1)} M0 ${yy.toFixed(1)} q${(-w * 0.9).toFixed(1)} ${(-len * 0.05).toFixed(1)} ${(-w).toFixed(1)} ${(-len * 0.11).toFixed(1)}"/>`;
+    }).join('');
+    return `<g transform="translate(${x} ${y}) rotate(${rot})" opacity="${op}"><path d="M0 0 C${len * 0.2} ${-len * 0.35} ${len * 0.16} ${-len * 0.8} 0 ${-len} C${-len * 0.16} ${-len * 0.8} ${-len * 0.2} ${-len * 0.35} 0 0 Z" fill="${fill}"/><g fill="none" stroke="#000" stroke-opacity=".35" stroke-width=".35">${barbs}</g><line x1="0" y1="4" x2="0" y2="${-len}" stroke="#fff" stroke-opacity=".25" stroke-width=".5"/></g>`;
+  };
+  const wing = (flip: boolean, color: string, edge: string) => {
+    let f = '';
+    for (let i = 0; i < 7; i++) {
+      const len = 40 - i * 3.6;
+      f += `<path d="M50 78 Q${30 - i * 2} ${70 - i * 7} ${14 - i * 1.2} ${58 - i * 8} Q${24 - i} ${66 - i * 5} ${50 - len * 0.1} ${80 + i * 0.5} Z" fill="${color}" opacity="${0.55 + i * 0.06}" stroke="${edge}" stroke-width=".5"/>`;
+    }
+    return `<g ${flip ? 'transform="translate(100 0) scale(-1 1)"' : ''}>${f}</g>`;
+  };
+  const stars = (seed: string, n: number, color: string) => {
+    const r = new Rand(seed);
+    let o = '';
+    for (let i = 0; i < n; i++) {
+      const x = r.range(6, 94);
+      const y = r.range(6, 140);
+      const sz = r.range(0.6, 2.2);
+      o += `<path d="M${x} ${y - sz * 2} L${x + sz * 0.5} ${y - sz * 0.5} L${x + sz * 2} ${y} L${x + sz * 0.5} ${y + sz * 0.5} L${x} ${y + sz * 2} L${x - sz * 0.5} ${y + sz * 0.5} L${x - sz * 2} ${y} L${x - sz * 0.5} ${y - sz * 0.5} Z" fill="${color}" opacity="${r.range(0.4, 1).toFixed(2)}"/>`;
+    }
+    return o;
+  };
+  return [
+    {
+      id: 'stardust-wings',
+      name: 'Stardust Wings',
+      color: '#c9d6ec',
+      svg: () =>
+        sleeveSvg(
+          `<rect x="0" y="0" width="${W}" height="${H}" rx="4" fill="url(#sdbg)"/>
+          <ellipse cx="50" cy="76" rx="44" ry="56" fill="url(#sdglow)"/>
+          ${wing(false, '#e9f2ff', '#7fa4d8')}${wing(true, '#e9f2ff', '#7fa4d8')}
+          <path d="M50 30 L53 74 L50 112 L47 74 Z" fill="#fff" opacity=".9"/>
+          ${stars('stardust', 26, '#ffffff')}`,
+          `<linearGradient id="sdbg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2b4a86"/><stop offset=".5" stop-color="#9fb6de"/><stop offset="1" stop-color="#1b2f5c"/></linearGradient>
+          <radialGradient id="sdglow"><stop offset="0" stop-color="#fff" stop-opacity=".85"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></radialGradient>`,
+          '#9fb6de',
+          0.3,
+        ),
+    },
+    {
+      id: 'black-feather',
+      name: 'Black Feather',
+      color: '#101422',
+      svg: () => {
+        const r = new Rand('blackfeather');
+        let f = '';
+        for (let i = 0; i < 14; i++) f += feather(r.range(8, 92), r.range(30, 150), r.range(26, 48), r.range(-40, 40), i % 3 ? '#2a3456' : '#4a5f9e', r.range(0.6, 1));
+        return sleeveSvg(
+          `${f}<circle cx="50" cy="73" r="22" fill="none" stroke="#5d7bd6" stroke-opacity=".35" stroke-width=".8"/>`,
+          '',
+          '#070910',
+          0.28,
+        );
+      },
+    },
+    {
+      id: 'synchro-rings',
+      name: 'Synchro Rings',
+      color: '#0d2a1a',
+      svg: () => {
+        let rings = '';
+        for (let i = 0; i < 6; i++)
+          rings += `<ellipse cx="50" cy="${40 + i * 13}" rx="${38 - Math.abs(i - 2.5) * 5}" ry="5.5" fill="none" stroke="#5cff9d" stroke-width="${1.6 - i * 0.12}" opacity="${0.9 - i * 0.08}"/>`;
+        return sleeveSvg(
+          `<rect width="${W}" height="${H}" rx="4" fill="url(#syn)"/>
+          <path d="M50 18 L50 128" stroke="#c9ffe0" stroke-width="2.2" opacity=".75"/>
+          <path d="M50 18 L50 128" stroke="#5cff9d" stroke-width="7" opacity=".18"/>
+          ${rings}
+          ${stars('synchro', 16, '#d9ffe9')}`,
+          '<radialGradient id="syn" cx="50%" cy="50%" r="75%"><stop offset="0" stop-color="#1d6b3f"/><stop offset=".6" stop-color="#0b2d1a"/><stop offset="1" stop-color="#030d07"/></radialGradient>',
+          '#0b2d1a',
+        );
+      },
+    },
+    {
+      id: 'crimson-mark',
+      name: 'Crimson Mark',
+      color: '#3a0508',
+      svg: () =>
+        sleeveSvg(
+          `<rect width="${W}" height="${H}" rx="4" fill="url(#crm)"/>
+          <g fill="none" stroke="#ff3b3b" stroke-linecap="round" filter="url(#cglow)">
+            <path d="M28 48 C40 40 60 40 72 48 C64 50 58 56 56 64" stroke-width="3"/>
+            <path d="M34 92 C42 104 58 104 66 92 C58 94 52 90 50 82" stroke-width="3"/>
+            <path d="M50 58 L50 86 M40 72 L60 72" stroke-width="2.4"/>
+            <path d="M22 70 C26 62 30 60 36 62 M78 70 C74 62 70 60 64 62" stroke-width="2"/>
+          </g>`,
+          `<radialGradient id="crm" cx="50%" cy="50%" r="75%"><stop offset="0" stop-color="#5c0a10"/><stop offset=".65" stop-color="#22030a"/><stop offset="1" stop-color="#0b0103"/></radialGradient>
+          <filter id="cglow" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="1.6" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>`,
+          '#22030a',
+        ),
+    },
+    {
+      id: 'championship-gold',
+      name: 'Championship Prize',
+      color: '#15110a',
+      svg: () => {
+        let laurel = '';
+        for (let i = 0; i < 9; i++) {
+          const a = 200 + i * 15;
+          const rad = (a * Math.PI) / 180;
+          const x = 50 + 26 * Math.cos(rad);
+          const y = 78 + 26 * Math.sin(rad);
+          laurel += `<ellipse cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" rx="2.2" ry="5" transform="rotate(${a + 100} ${x.toFixed(1)} ${y.toFixed(1)})" fill="url(#gold)"/>`;
+          const x2 = 100 - x;
+          laurel += `<ellipse cx="${x2.toFixed(1)}" cy="${y.toFixed(1)}" rx="2.2" ry="5" transform="rotate(${-(a + 100)} ${x2.toFixed(1)} ${y.toFixed(1)})" fill="url(#gold)"/>`;
+        }
+        return sleeveSvg(
+          `<rect x="5" y="5" width="90" height="136" rx="3" fill="none" stroke="url(#gold)" stroke-width="1.6"/>
+          <rect x="8" y="8" width="84" height="130" rx="2" fill="none" stroke="url(#gold)" stroke-width=".5"/>
+          ${laurel}
+          <path d="M50 58 L54 70 L66 70 L56 77 L60 89 L50 82 L40 89 L44 77 L34 70 L46 70 Z" fill="url(#gold)"/>
+          <rect x="22" y="104" width="56" height="9" rx="1.5" fill="url(#gold)"/>
+          <text x="50" y="110.6" text-anchor="middle" font-family="Georgia, serif" font-weight="700" font-size="5.4" letter-spacing="1.2" fill="#1a1206">CHAMPION</text>
+          <text x="50" y="125" text-anchor="middle" font-family="Georgia, serif" font-size="4" letter-spacing="1.6" fill="#d8b45a">EDISON · 2010</text>`,
+          `<linearGradient id="gold" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fff0b0"/><stop offset=".3" stop-color="#d8a43a"/><stop offset=".6" stop-color="#fbe39a"/><stop offset="1" stop-color="#8a5a12"/></linearGradient>`,
+          '#121010',
+        );
+      },
+    },
+    {
+      id: 'gloss-blue',
+      name: 'Classic Gloss Blue',
+      color: '#1747b5',
+      svg: () => sleeveSvg(`<rect width="${W}" height="${H}" rx="4" fill="url(#gb)"/>`, '<linearGradient id="gb" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#3f7af0"/><stop offset=".5" stop-color="#1747b5"/><stop offset="1" stop-color="#0a2263"/></linearGradient>', '#1747b5', 0.55),
+    },
+    {
+      id: 'gloss-red',
+      name: 'Classic Gloss Red',
+      color: '#b3141c',
+      svg: () => sleeveSvg(`<rect width="${W}" height="${H}" rx="4" fill="url(#gr)"/>`, '<linearGradient id="gr" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f04a4a"/><stop offset=".5" stop-color="#b3141c"/><stop offset="1" stop-color="#5a060b"/></linearGradient>', '#b3141c', 0.55),
+    },
+  ];
+}
 
 /** Solid matte sleeves like the ones players actually sleeve their decks in. */
 function matteSleeves() {
@@ -415,8 +576,16 @@ function sleeveUri(id: string): string {
 
 export const CUSTOM_ID = 'custom';
 
+/** Sleeves duelists actually used in 2010 come first in menus. */
+const ERA_FIRST = ['matte-black', 'matte-red', 'matte-purple', 'matte-blue', 'matte-white', 'stardust-wings', 'black-feather', 'synchro-rings', 'crimson-mark', 'championship-gold', 'gloss-blue', 'gloss-red'];
+const ORDERED = [...DESIGNS].sort((a, b) => {
+  const ia = ERA_FIRST.indexOf(a.id);
+  const ib = ERA_FIRST.indexOf(b.id);
+  return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib);
+});
+
 export const SLEEVES: Sleeve[] = [
-  ...DESIGNS.map((d) => ({
+  ...ORDERED.map((d) => ({
     id: d.id,
     name: d.name,
     color: d.color,

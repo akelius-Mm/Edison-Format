@@ -13,6 +13,8 @@ export interface Playmat {
   /** Zone outline & fill colours. */
   zoneLine: string;
   zoneFill: string;
+  /** Print official-style zone names ("Monster Card Zone"...) inside the zones. */
+  printedZones?: boolean;
   /** CSS background value. */
   readonly css: string;
 }
@@ -25,6 +27,7 @@ interface Def {
   accent: string;
   zoneLine: string;
   zoneFill: string;
+  printedZones?: boolean;
   gradient: string;
   svg: () => string;
 }
@@ -273,6 +276,7 @@ function realMats(): Def[] {
       accent: '#e8e8e8',
       zoneLine: 'rgba(240,240,240,.62)',
       zoneFill: 'rgba(255,255,255,.03)',
+      printedZones: true,
       gradient: 'radial-gradient(ellipse at 50% 45%, #24262c 0%, #131418 60%, #08090b 100%)',
       svg: () =>
         wrap(
@@ -334,6 +338,92 @@ function realMats(): Def[] {
           noise('grain', '.9', 0.07),
         ),
     },
+    ...eraMats(noise, grain),
+  ];
+}
+
+/** Original designs in the style of 2010 game mats: the starter-deck paper mat and event prize mats. */
+function eraMats(noise: (id: string, freq: string, alpha: number, octaves?: number, extra?: string) => string, grain: () => string): Def[] {
+  const burst = (cx: number, cy: number, n: number, r1: number, r2: number, color: string, op: number) => {
+    let o = '';
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * Math.PI * 2;
+      const a2 = a + Math.PI / n;
+      o += `<path d="M${cx} ${cy} L${(cx + r2 * Math.cos(a)).toFixed(0)} ${(cy + r2 * Math.sin(a)).toFixed(0)} L${(cx + r1 * Math.cos(a2)).toFixed(0)} ${(cy + r1 * Math.sin(a2)).toFixed(0)} Z"/>`;
+    }
+    return `<g fill="${color}" opacity="${op}">${o}</g>`;
+  };
+  const wings = (color: string, op: number) => {
+    let o = '';
+    for (const flip of [1, -1])
+      for (let i = 0; i < 8; i++) {
+        const sx = 800 + flip * (120 + i * 40);
+        o += `<path d="M800 520 Q${800 + flip * (260 + i * 60)} ${300 - i * 40} ${800 + flip * (520 + i * 70)} ${180 - i * 10} Q${sx + flip * 160} ${380 - i * 20} ${800 + flip * (60 + i * 16)} ${560 + i * 6} Z"/>`;
+      }
+    return `<g fill="${color}" opacity="${op}">${o}</g>`;
+  };
+  return [
+    {
+      id: 'starter-game-mat',
+      name: 'Starter Deck Game Mat',
+      description: 'The fold-out paper mat from a 2010 starter deck, zones printed and labelled.',
+      base: '#1b3f73',
+      accent: '#9fd2ff',
+      zoneLine: 'rgba(190,226,255,.75)',
+      zoneFill: 'rgba(120,180,255,.10)',
+      printedZones: true,
+      gradient: 'linear-gradient(180deg, #24508f 0%, #1b3f73 48%, #16365f 52%, #1e477f 100%)',
+      svg: () =>
+        wrap(
+          `${grain()}
+          <line x1="0" y1="500" x2="${VW}" y2="500" stroke="#0b1d38" stroke-opacity=".55" stroke-width="5"/>
+          <line x1="800" y1="0" x2="800" y2="${VH}" stroke="#0b1d38" stroke-opacity=".35" stroke-width="3"/>
+          <g fill="none" stroke="#b9dcff" opacity=".18" stroke-width="3"><circle cx="800" cy="500" r="120"/><circle cx="800" cy="500" r="96"/></g>
+          <text x="800" y="508" text-anchor="middle" font-family="Arial Black, Arial, sans-serif" font-size="22" letter-spacing="8" fill="#d6ecff" opacity=".35">GAME MAT</text>`,
+          noise('grain', '1.6', 0.06, 2),
+        ),
+    },
+    {
+      id: 'championship-prize-mat',
+      name: 'Championship Prize Mat',
+      description: 'Top-cut prize mat: a golden starburst and soaring wings behind printed zones.',
+      base: '#0a0d1c',
+      accent: '#f2cf6b',
+      zoneLine: 'rgba(255,240,200,.7)',
+      zoneFill: 'rgba(0,0,0,.25)',
+      printedZones: true,
+      gradient: 'radial-gradient(ellipse at 50% 50%, #3a3f8c 0%, #171a40 45%, #060714 100%)',
+      svg: () =>
+        wrap(
+          `${burst(800, 520, 36, 900, 900, '#f7d774', 0.08)}
+          <circle cx="800" cy="520" r="260" fill="url(#core)"/>
+          ${wings('#e8f0ff', 0.13)}
+          ${grain()}
+          <text x="800" y="508" text-anchor="middle" font-family="Georgia, serif" font-weight="700" font-size="26" letter-spacing="14" fill="#f2cf6b" opacity=".75">DUELIST CHAMPIONSHIP · EDISON, NJ · APRIL 2010</text>`,
+          noise('grain', '.9', 0.06) + '<radialGradient id="core"><stop offset="0" stop-color="#fff2c4" stop-opacity=".55"/><stop offset="1" stop-color="#fff2c4" stop-opacity="0"/></radialGradient>',
+        ),
+    },
+    {
+      id: 'regional-qualifier-mat',
+      name: 'Regional Qualifier Mat',
+      description: 'Deep violet event mat with synchro rings and gold zone printing.',
+      base: '#140a24',
+      accent: '#e6c46a',
+      zoneLine: 'rgba(230,196,106,.7)',
+      zoneFill: 'rgba(10,4,20,.35)',
+      printedZones: true,
+      gradient: 'radial-gradient(ellipse at 50% 50%, #3b1d66 0%, #1a0c30 55%, #07030d 100%)',
+      svg: () => {
+        let rings = '';
+        for (let i = 0; i < 7; i++) rings += `<ellipse cx="800" cy="${250 + i * 85}" rx="${520 - Math.abs(i - 3) * 70}" ry="46" fill="none" stroke="#7dffb0" stroke-width="${5 - i * 0.4}" opacity="${0.16 - i * 0.012}"/>`;
+        return wrap(
+          `${rings}<line x1="800" y1="120" x2="800" y2="900" stroke="#c9ffe0" stroke-width="6" opacity=".14"/>
+          ${grain()}
+          <text x="800" y="508" text-anchor="middle" font-family="Georgia, serif" font-size="24" letter-spacing="14" fill="#e6c46a" opacity=".6">REGIONAL QUALIFIER · 2010</text>`,
+          noise('grain', '.9', 0.06),
+        );
+      },
+    },
   ];
 }
 
@@ -349,6 +439,7 @@ const BUILT_IN: Playmat[] = DEFS.map((d) => ({
   accent: d.accent,
   zoneLine: d.zoneLine,
   zoneFill: d.zoneFill,
+  printedZones: d.printedZones,
   get css() {
     let c = cache.get(d.id);
     if (!c) {
@@ -359,8 +450,14 @@ const BUILT_IN: Playmat[] = DEFS.map((d) => ({
   },
 }));
 
+const ERA_MATS = ['starter-game-mat', 'championship-prize-mat', 'regional-qualifier-mat', 'tournament-black', 'edison-2010', 'green-felt', 'walnut-table'];
+
 export const PLAYMATS: Playmat[] = [
-  ...BUILT_IN,
+  ...[...BUILT_IN].sort((a, b) => {
+    const ia = ERA_MATS.indexOf(a.id);
+    const ib = ERA_MATS.indexOf(b.id);
+    return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib);
+  }),
   {
     id: CUSTOM_MAT_ID,
     name: 'Your Upload',
@@ -389,4 +486,5 @@ export function applyPlaymat(el: HTMLElement, id: string) {
   el.style.setProperty('--zone-fill', m.zoneFill);
   el.style.setProperty('--mat-base', m.base);
   el.dataset.playmat = m.id;
+  el.dataset.matLabels = m.printedZones ? '1' : '';
 }
