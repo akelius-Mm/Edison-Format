@@ -740,6 +740,15 @@ const isCyberDragonName = (c: C) => c.name === 'Cyber Dragon';
 /** Monsters that may be sent for Chimeratech Fortress Dragon: any of yours, face-up ones of your opponent. */
 const cfdPool = (ctx: Ctx) => ctx.monsters('both', (c) => c.controller === ctx.player || c.faceUp);
 const cfdMachine = (c: C) => c.data.race === 'Machine';
+/**
+ * "Cyber Dragon"s that can start the Contact Fusion: another Machine is available, and when your Monster Zones are
+ * full, one of the two is yours (sending only your opponent's monsters would leave no room for this card).
+ */
+const cfdCyberDragons = (ctx: Ctx) => {
+  const pool = cfdPool(ctx);
+  const full = ctx.freeMZones('me') <= 0;
+  return pool.filter((cd) => isCyberDragonName(cd) && pool.some((m) => m !== cd && cfdMachine(m) && (!full || cd.controller === ctx.player || m.controller === ctx.player)));
+};
 
 monster('Chimeratech Fortress Dragon', {
   attribute: 'DARK',
@@ -759,22 +768,34 @@ monster('Chimeratech Fortress Dragon', {
       range: ['extra'],
       label: 'Contact Fusion',
       categories: ['specialSummon'],
-      condition: (ctx) => {
-        const pool = cfdPool(ctx);
-        const cds = pool.filter(isCyberDragonName);
-        return cds.some((cd) => pool.some((m) => m !== cd && cfdMachine(m)));
-      },
+      condition: (ctx) => cfdCyberDragons(ctx).length > 0,
       perform: async (ctx) => {
         const pool = cfdPool(ctx);
-        const cds = pool.filter((cd) => isCyberDragonName(cd) && pool.some((m) => m !== cd && cfdMachine(m)));
+        const mine = (c: C) => c.controller === ctx.player;
+        const cds = cfdCyberDragons(ctx);
         const [cd] = await ctx.select(cds, 1, 1, 'Select "Cyber Dragon" to send to the GY.', 'material', {
           aiScore: (c) => (c.controller === ctx.opp ? 5000 : 0) - cardValue(ctx.game, c),
         });
         if (!cd) return false;
         const machines = pool.filter((m) => m !== cd && cfdMachine(m));
-        const more = await ctx.select(machines, 1, machines.length, 'Select 1 or more Machine monsters to send to the GY.', 'material', {
-          aiScore: (c) => (c.controller === ctx.opp ? 5000 + cardValue(ctx.game, c) : 900 - cardValue(ctx.game, c)),
-        });
+        const machineScore = (c: C) => (c.controller === ctx.opp ? 5000 + cardValue(ctx.game, c) : 900 - cardValue(ctx.game, c));
+        // With every Monster Zone full, one of the materials must be yours, or there is no room for this card.
+        const first: C[] = [];
+        if (ctx.freeMZones('me') <= 0 && !mine(cd)) {
+          first.push(
+            ...(await ctx.select(machines.filter(mine), 1, 1, 'Your Monster Zones are full: select 1 Machine monster you control to send to the GY.', 'material', {
+              aiScore: (c) => 900 - cardValue(ctx.game, c),
+            })),
+          );
+          if (!first.length) return false;
+        }
+        const rest = machines.filter((m) => !first.includes(m));
+        const more = [
+          ...first,
+          ...(await ctx.select(rest, first.length ? 0 : 1, rest.length, first.length ? 'Select any other Machine monsters to send to the GY.' : 'Select 1 or more Machine monsters to send to the GY.', 'material', {
+            aiScore: machineScore,
+          })),
+        ];
         if (!more.length) return false;
         const mats = [cd, ...more];
         ctx.log(`${ctx.game.players[ctx.player].name} sends ${mats.map(nameOf).join(', ')} to the GY.`);

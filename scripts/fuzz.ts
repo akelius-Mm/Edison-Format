@@ -64,7 +64,8 @@ export const DRAFT_CODES = ['TDGS', 'CSOC', 'GLAS', 'PTDN', 'LODT', 'CRMS', 'RGB
 
 // ------------------------------------------------------------------ job generation
 
-type Seat = Difficulty | 'chaos';
+/** 'chaos': uniformly random legal choices; 'eager': random too, but almost always activates / responds. */
+type Seat = Difficulty | 'chaos' | 'eager';
 interface Job {
   index: number;
   seed: number;
@@ -133,8 +134,9 @@ export function makeJob(seed0: number, index: number): Job {
   const diff = (): Difficulty => rng.pick(['easy', 'normal', 'hard'] as Difficulty[]);
   const r = rng.next();
   let seats: [Seat, Seat];
-  if (r < CHAOS * 0.12) seats = ['chaos', 'chaos'];
-  else if (r < CHAOS) seats = rng.next() < 0.5 ? ['chaos', diff()] : [diff(), 'chaos'];
+  const wild = (): Seat => (rng.next() < 0.4 ? 'eager' : 'chaos');
+  if (r < CHAOS * 0.15) seats = [wild(), wild()];
+  else if (r < CHAOS) seats = rng.next() < 0.5 ? [wild(), diff()] : [diff(), wild()];
   else seats = [diff(), diff()];
   return { index, seed, kind, label, decks, seats, skipFirstDraw: rng.next() < 0.5 };
 }
@@ -144,14 +146,21 @@ export function makeJob(seed0: number, index: number): Job {
 class ChaosHuman implements PlayerController {
   readonly isHuman = true;
   rng: Rng;
-  constructor(seed: number) {
+  constructor(
+    seed: number,
+    private eager = false,
+  ) {
     this.rng = new Rng(seed);
   }
   async chooseAction(_g: Game, _p: PlayerId, actions: Action[]) {
+    if (this.eager && this.rng.next() < 0.85) {
+      const busy = actions.filter((a) => a.type !== 'phase' && a.type !== 'position');
+      if (busy.length) return this.rng.pick(busy);
+    }
     return this.rng.pick(actions);
   }
   async chooseResponse(_g: Game, _p: PlayerId, req: ResponseRequest) {
-    if (!req.options.length || this.rng.next() < 0.5) return null;
+    if (!req.options.length || this.rng.next() < (this.eager ? 0.1 : 0.5)) return null;
     return this.rng.pick(req.options);
   }
   async selectCards(_g: Game, _p: PlayerId, req: SelectRequest) {
@@ -177,7 +186,7 @@ class ChaosHuman implements PlayerController {
     return this.rng.pick(opts);
   }
   async confirmTrigger() {
-    return this.rng.next() < 0.6;
+    return this.rng.next() < (this.eager ? 0.95 : 0.6);
   }
   async declareCard(_g: Game, _p: PlayerId, _prompt: string, names: string[]) {
     return this.rng.pick(names);
@@ -222,6 +231,10 @@ class NoLive implements PlayerController {
 // ------------------------------------------------------------------ invariants
 
 class FuzzAbort extends Error {}
+
+/** Prompts answered so far, and answers that back out (empty cancelable pick, "no", cancelled attack). */
+let prompts = 0;
+let cancels = 0;
 
 /** Per game coverage: effect key "Card Name#i" → [times offered, times activated, times chosen by a controller]. */
 let cov = new Map<string, [number, number, number]>();
@@ -374,6 +387,7 @@ class Guard implements PlayerController {
     this.isHuman = inner.isHuman;
   }
   private pre(g: Game, what: string) {
+    prompts++;
     const ck = this.ck();
     ck.tick('decision');
     ck.check(what);
@@ -404,16 +418,22 @@ class Guard implements PlayerController {
     if (r.min > r.candidates.length && !r.cancelable) this.ck().fail('stuck', `selection "${r.prompt}" needs ${r.min} of ${r.candidates.length}`);
     if (r.max < r.min) this.ck().fail('stuck', `selection "${r.prompt}" has max ${r.max} < min ${r.min}`);
     if (r.max <= 0) this.ck().fail('stuck', `selection "${r.prompt}" has max ${r.max}`);
-    return this.inner.selectCards(g, p, r);
+    const picked = await this.inner.selectCards(g, p, r);
+    if (picked.length < Math.min(r.min, r.candidates.length) || (r.cancelable && !picked.length)) cancels++;
+    return picked;
   }
   async chooseOption(g: Game, p: PlayerId, r: OptionRequest) {
     this.pre(g, 'option');
     if (!r.options.length) this.ck().fail('stuck', `option prompt "${r.prompt}" has no options`);
-    return this.inner.chooseOption(g, p, r);
+    const i = await this.inner.chooseOption(g, p, r);
+    if (/cancel|don't|do not|^no\b|none|skip/i.test(r.options[i] ?? '')) cancels++;
+    return i;
   }
   async confirm(g: Game, p: PlayerId, r: ConfirmRequest) {
     this.pre(g, 'confirm');
-    return this.inner.confirm(g, p, r);
+    const v = await this.inner.confirm(g, p, r);
+    if (!v) cancels++;
+    return v;
   }
   async choosePosition(g: Game, p: PlayerId, c: CardInstance, allowed: (BattlePos | 'set')[]) {
     this.pre(g, 'position');
@@ -423,7 +443,9 @@ class Guard implements PlayerController {
   async chooseAttackTarget(g: Game, p: PlayerId, a: CardInstance, t: CardInstance[], d: boolean) {
     this.pre(g, 'attack-target');
     if (!t.length && !d) this.ck().fail('empty-prompt', `attack target prompt for ${a.name} with no target and no direct attack`);
-    return this.inner.chooseAttackTarget(g, p, a, t, d);
+    const v = await this.inner.chooseAttackTarget(g, p, a, t, d);
+    if (v === 'cancel') cancels++;
+    return v;
   }
   async confirmTrigger(g: Game, p: PlayerId, act: Activation) {
     this.pre(g, 'trigger');
@@ -434,7 +456,8 @@ class Guard implements PlayerController {
   async declareCard(g: Game, p: PlayerId, prompt: string, names: string[]) {
     this.pre(g, 'declare');
     if (!names.length) this.ck().fail('stuck', `declare prompt "${prompt}" has no names`);
-    return this.inner.declareCard ? this.inner.declareCard(g, p, prompt, names) : names[0];
+    const v = this.inner.declareCard ? await this.inner.declareCard(g, p, prompt, names) : names[0];
+    return v;
   }
 }
 
@@ -479,7 +502,9 @@ export interface GameReport {
 }
 
 function controllersFor(job: Job): [PlayerController, PlayerController] {
-  return job.seats.map((s, i) => (s === 'chaos' ? new ChaosHuman(job.seed * 31 + i * 7 + 1) : new AIController(s, job.seed * 13 + i * 101))) as unknown as [PlayerController, PlayerController];
+  return job.seats.map((s, i) =>
+    s === 'chaos' || s === 'eager' ? new ChaosHuman(job.seed * 31 + i * 7 + 1, s === 'eager') : new AIController(s, job.seed * 13 + i * 101),
+  ) as unknown as [PlayerController, PlayerController];
 }
 
 async function playOne(job: Job, doReplay: boolean): Promise<GameReport> {
@@ -490,10 +515,28 @@ async function playOne(job: Job, doReplay: boolean): Promise<GameReport> {
   ck = new Checker(g);
   cov = new Map();
   const origActivate = g.activate.bind(g);
+  const noteFizzle = (what: string, p0: number, c0: number) => {
+    if (prompts === p0) ck.fail('fizzle-silent', `${what} was offered but did nothing, without asking anything`);
+    else if (cancels === c0) ck.fail('fizzle-after-choices', `${what} was offered, the player answered every prompt without cancelling, and it did nothing`);
+  };
   g.activate = async (player, act) => {
+    const p0 = prompts;
+    const c0 = cancels;
     const link = await origActivate(player, act);
     if (link) covBump(covKey(act.card, act.effectIndex), 1);
+    else if (!g.over) noteFizzle(`${act.card.name} (${act.effect.kind}${act.effect.label ? ': ' + act.effect.label : ''})`, p0, c0);
     return link;
+  };
+  const origPerform = g.performAction.bind(g);
+  g.performAction = async (player, a) => {
+    const p0 = prompts;
+    const c0 = cancels;
+    const before = 'card' in a ? a.card.location : null;
+    const moveId = 'card' in a ? a.card.moveId : 0;
+    const r = await origPerform(player, a);
+    if ((a.type === 'summon' || a.type === 'set' || a.type === 'proc' || a.type === 'synchro') && !g.over && a.card.location === before && a.card.moveId === moveId)
+      noteFizzle(`${a.type} of ${a.card.name}${a.type === 'proc' ? ` (${a.act.effect.label ?? 'proc'})` : ''}`, p0, c0);
+    return r;
   };
   if (VERBOSE) g.hooks.log = (e) => origError(`  [T${e.turn}] ${e.text}`);
   let prevTurn = -1;
@@ -504,7 +547,10 @@ async function playOne(job: Job, doReplay: boolean): Promise<GameReport> {
       if (prevTurn >= 0) {
         const prevTp = g.opp(g.turnPlayer);
         const n = g.players[prevTp].hand.length;
-        if (n > 6) ck.fail('hand-limit', `player ${prevTp} ended turn ${prevTurn} with ${n} cards in hand`);
+        // Cards added after the End Phase discard (e.g. Night Assailant discarded for hand size) are legal.
+        const endIdx = g.logEntries.findIndex((e) => e.turn === prevTurn && e.kind === 'phase' && e.text === 'End Phase');
+        const addedLate = endIdx >= 0 && g.logEntries.slice(endIdx).some((e) => / adds | draws? /.test(e.text));
+        if (n > 6 && !addedLate) ck.fail('hand-limit', `player ${prevTp} ended turn ${prevTurn} with ${n} cards in hand`);
       }
       prevTurn = g.turn;
     }
@@ -532,7 +578,7 @@ async function playOne(job: Job, doReplay: boolean): Promise<GameReport> {
     replayed = true;
     const want = snapshot(g);
     let mismatch = '';
-    const rp = recs.map((r, i) => new RecordingController(new NoLive(job.seats[i] === 'chaos'), { replay: r.log, onMismatch: (d) => (mismatch ||= d) })) as [RecordingController, RecordingController];
+    const rp = recs.map((r, i) => new RecordingController(new NoLive(job.seats[i] === 'chaos' || job.seats[i] === 'eager'), { replay: r.log, onMismatch: (d) => (mismatch ||= d) })) as [RecordingController, RecordingController];
     const g2 = new Game(job.decks, rp, { seed: job.seed, names: [job.label[0], job.label[1]], maxTurns: MAX_TURNS, skipFirstDraw: job.skipFirstDraw });
     consoleErrors = [];
     try {
@@ -645,7 +691,7 @@ function summarize(reports: GameReport[], started: number) {
       else groups.set(key, { n: 1, example: r, f });
     }
   }
-  const chaos = reports.filter((r) => r.seats.includes('chaos')).length;
+  const chaos = reports.filter((r) => r.seats.includes('chaos') || r.seats.includes('eager')).length;
   const draft = reports.filter((r) => r.kind === 'draft').length;
   const turns = reports.reduce((a, r) => a + r.turns, 0);
   const reasons = new Map<string, number>();

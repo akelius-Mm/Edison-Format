@@ -3655,4 +3655,46 @@ async function fuzzRegressionTests() {
     await g.recover(0, 200);
     eq(g.players[0].lp, 9000, 'Rainbow Life: gain -> Simochi damage -> gain');
   });
+
+  const procAct = (g: Game, c: CardInstance) => g.legalMainActions(0).find((a) => a.type === 'proc' && a.card === c);
+
+  await test('Chimeratech Fortress Dragon: with full Monster Zones it needs one of your own monsters as material', async () => {
+    const { g, place } = setup();
+    const cfd = place(0, cardByName('Chimeratech Fortress Dragon'), 'extra');
+    const mine = [0, 1, 2, 3].map(() => place(0, T.brute, 'mzone'));
+    const fifth = place(0, T.brute, 'mzone');
+    const cd = place(1, cardByName('Cyber Dragon'), 'mzone');
+    const gadget = place(1, cardByName('Yellow Gadget'), 'mzone');
+    eq(g.freeMZones(0), 0, 'Monster Zones full');
+    eq(!!procAct(g, cfd), false, 'not offered when only the opponent has the materials');
+    await g.sendToGrave([fifth], 'effect');
+    const own = place(0, cardByName('Green Gadget'), 'mzone');
+    eq(g.freeMZones(0), 0, 'Monster Zones full again');
+    const act = procAct(g, cfd);
+    if (!act) throw new Error('Contact Fusion not offered with an own Machine');
+    await g.performAction(0, act);
+    eq(cfd.location, 'mzone', 'Chimeratech Fortress Dragon Special Summoned');
+    eq(own.location, 'grave', 'own Machine used');
+    eq(cd.location, 'grave', "opponent's Cyber Dragon used");
+    eq(gadget.location, 'mzone', 'unpicked Machine stays');
+    eq(g.getAtk(cfd), 2000, '1000 x 2 materials');
+    void mine;
+  });
+
+  await test('Reptilianne Vaskii: with full Monster Zones it must Tribute one of your own 0-ATK monsters', async () => {
+    const { g, c0, place } = setup();
+    // A player who picks the opponent's monsters first: before the fix that Tributed 2 of theirs and summoned nothing.
+    c0.pick = (_g, req) => [...req.candidates].sort((a, b) => b.controller - a.controller).slice(0, req.min);
+    const vaskii = place(0, cardByName('Reptilianne Vaskii'), 'hand');
+    const zero = findCard('Rules Test Zero') ?? normal('Rules Test Zero', 'EARTH', 'Rock', 4, 0, 0);
+    [0, 1, 2, 3].forEach(() => place(0, T.brute, 'mzone'));
+    const own = place(0, zero, 'mzone');
+    const opp = [place(1, zero, 'mzone'), place(1, zero, 'mzone')];
+    const act = procAct(g, vaskii);
+    if (!act) throw new Error('Vaskii not offered');
+    await g.performAction(0, act);
+    eq(vaskii.location, 'mzone', 'Vaskii Special Summoned');
+    eq(own.location, 'grave', 'own 0-ATK monster Tributed');
+    eq(opp.filter((c) => c.location === 'grave').length, 1, 'one opponent monster Tributed');
+  });
 }

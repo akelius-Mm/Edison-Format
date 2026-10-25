@@ -1001,9 +1001,15 @@ monster('Reptilianne Vaskii', {
       },
       perform: async (ctx) => {
         const z = zeroAtk(ctx);
-        const sel = await ctx.select(z, 2, 2, 'Tribute 2 face-up monsters with 0 ATK.', 'tribute', {
-          aiScore: (c) => (c.controller === ctx.player ? -cardValue(ctx.game, c) : 5000 + cardValue(ctx.game, c)),
-        });
+        const aiScore = (c: CardInstance) => (c.controller === ctx.player ? -cardValue(ctx.game, c) : 5000 + cardValue(ctx.game, c));
+        // With every Monster Zone full, one of the two must be yours (else there is no room for Vaskii): ask for it first.
+        const first: CardInstance[] = [];
+        if (ctx.freeMZones() <= 0) {
+          first.push(...(await ctx.select(z.filter((c) => c.controller === ctx.player), 1, 1, 'Your Monster Zones are full: Tribute 1 face-up monster with 0 ATK you control.', 'tribute', { aiScore })));
+          if (!first.length) return false;
+        }
+        const rest = z.filter((c) => !first.includes(c));
+        const sel = [...first, ...(await ctx.select(rest, 2 - first.length, 2 - first.length, first.length ? 'Tribute 1 more face-up monster with 0 ATK.' : 'Tribute 2 face-up monsters with 0 ATK.', 'tribute', { aiScore }))];
         if (sel.length < 2) return false;
         if (ctx.freeMZones() + sel.filter((c) => c.controller === ctx.player).length <= 0) return false;
         await tributeCost(ctx, sel);
