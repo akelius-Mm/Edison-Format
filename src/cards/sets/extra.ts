@@ -467,7 +467,7 @@ monster('Magical Android', {
 
 monster('Mist Wurm', {
   attribute: 'WIND',
-  race: 'Aqua',
+  race: 'Thunder', // HA01: printed Type is Thunder (YGOJSON), was Aqua
   level: 9,
   atk: 2500,
   def: 1500,
