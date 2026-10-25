@@ -89,6 +89,11 @@ export interface Mod {
 export interface AiHints {
   /** Higher → AI more eager to activate. Return <= 0 to skip. */
   score?: (ctx: Ctx) => number;
+  /**
+   * Monster cards only, read from any of the card's effects while it is in the hand: a bonus for Normal Summoning it
+   * face-up (the AI then prefers the Summon over a Set), e.g. "Ancient Gear", whose Special Summons need it face-up.
+   */
+  summon?: (ctx: Ctx) => number;
 }
 
 export interface EffectDef {
