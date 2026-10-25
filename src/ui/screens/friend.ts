@@ -16,6 +16,7 @@ import './friend.css';
 import { createAI, type Difficulty } from '../../ai/ai';
 import { CARDS } from '../../cards';
 import type { CardData, CardInstance } from '../../engine/card';
+import type { PlayerController } from '../../engine/controller';
 import { GameOver, type Game } from '../../engine/game';
 import type { PlayerId } from '../../engine/types';
 import { newRoomCode, normalizeRoomCode, type GameEnd, type NetPlayer, type WireDeck } from '../../net/protocol';
@@ -64,6 +65,21 @@ const botLevel = (): Difficulty | null => {
   const b = query().get('netbot');
   return b === 'easy' || b === 'normal' || b === 'hard' ? b : null;
 };
+
+/** Test hook: the bot waits `ms` before each decision (`netpace`), so tests can act mid-game. */
+function paced(c: PlayerController, ms: number): PlayerController {
+  if (!ms) return c;
+  return new Proxy(c, {
+    get(t, k) {
+      const v = (t as any)[k];
+      if (typeof v !== 'function') return v;
+      return async (...a: unknown[]) => {
+        await new Promise((r) => setTimeout(r, ms));
+        return v.apply(t, a);
+      };
+    },
+  });
+}
 
 function clientId(): string {
   let id = loadJSON<string>(CLIENT_KEY, '');
@@ -139,6 +155,10 @@ export function friendScreen(params: Record<string, string>): Screen {
     },
   };
 
+  // an invite link for the room whose match is saved here resumes it instead of joining afresh
+  const savedFriend = loadActiveDuel();
+  const savedSnap = savedFriend?.tag.kind === 'friend' ? (savedFriend.tag.meta?.room as RoomSnapshot | undefined) : undefined;
+  if (params.join && savedSnap?.match && normalizeRoomCode(params.join) === savedSnap.code && !(active && !active.closed)) params = { ...params, resume: '1' };
   if (params.resume === '1') {
     history.replaceState(null, '', '#/friend');
     const saved = loadActiveDuel();
@@ -378,6 +398,8 @@ class FriendSession {
       }
     }
     if (this.closed) return;
+    // a reload from here should not join again as someone new
+    if (location.hash.startsWith('#/friend?')) history.replaceState(null, '', '#/friend');
     this.lobby();
   }
 
@@ -504,7 +526,7 @@ class FriendSession {
         );
       } else fmt.replaceChildren(h('div', { class: 'fr-format-ro' }, icon('list'), h('span', null, `${room.bestOf === 3 ? 'Best of three' : 'Single game'} · your friend chooses`)));
       readyBtn.classList.toggle('is-on', room.mine.ready);
-      (readyBtn.querySelector('span') as HTMLElement).textContent = room.mine.ready ? 'Ready · tap to cancel' : 'Ready';
+      (readyBtn.querySelector(':scope > span:last-child') as HTMLElement).textContent = room.mine.ready ? 'Ready · tap to cancel' : 'Ready';
       readyBtn.toggleAttribute('disabled', !room.mine.deck);
       note.textContent = !room.mine.deck
         ? 'Choose a legal deck to get ready.'
@@ -621,7 +643,7 @@ class FriendSession {
       resumable: false,
       replay: replay.length ? replay : undefined,
       remote,
-      localDriver: bot ? new AsHuman(createAI(bot, st.seed + room.mySeat * 7919)) : undefined,
+      localDriver: bot ? paced(new AsHuman(createAI(bot, st.seed + room.mySeat * 7919)), Number(query().get('netpace')) || 0) : undefined,
       onDecision: (log, game) => room.localDecision(g, log, game.turn),
       onMount: (ctl) => {
         this.duel = { g, ctl };
