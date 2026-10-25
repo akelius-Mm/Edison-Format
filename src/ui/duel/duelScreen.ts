@@ -6,7 +6,8 @@ import { createAI } from '../../ai/ai';
 import type { CardData, CardInstance, EffectDef } from '../../engine/card';
 import type { Action, Activation, ConfirmRequest, OptionRequest, ResponseRequest, SelectRequest } from '../../engine/controller';
 import { Ctx } from '../../engine/ctx';
-import { Game, GameOver, phaseName } from '../../engine/game';
+import { Game, GameOver, phaseName, type LogEntry } from '../../engine/game';
+import { RecordingController } from '../../engine/replay';
 import type { BattlePos, PlayerId } from '../../engine/types';
 import { ICONS } from '../cards/icons';
 import { zoomCard } from '../cards/zoom';
@@ -90,6 +91,13 @@ class DuelScreen implements HumanUI {
   private yieldCounter = 0;
   private speedBtns: HTMLButtonElement[] = [];
   private soundBtn!: HTMLButtonElement;
+  /** Records the human's decisions (and replays saved ones when resuming). */
+  private recorder: RecordingController | null = null;
+  /** Feeding saved decisions back: no rendering, animation or sound until the log runs out. */
+  private replaying = false;
+  private replayLog: LogEntry[] = [];
+  private restoringEl: HTMLElement | null = null;
+  private left = false;
 
   constructor(
     private container: HTMLElement,
@@ -103,17 +111,29 @@ class DuelScreen implements HumanUI {
     this.sfx.enabled = s.sound;
     this.sfx.volume = s.volume;
 
+    // One seed drives the shuffle, coin toss, card effects and the AI, so a duel is reproducible
+    // from its seed, decks and the human's decisions (see engine/replay.ts).
+    const seed = opts.seed ?? Math.floor(Math.random() * 2 ** 31);
+    this.replaying = !!opts.replay?.length;
     const controllers = opts.sides.map((side, i) => {
-      if (side.control === 'human') return new HumanController(this);
-      const ai = createAI(side.control, (opts.seed ?? Math.floor(Math.random() * 1e9)) + i * 7919);
+      if (side.control === 'human') {
+        const rec = new RecordingController(new HumanController(this), {
+          replay: opts.replay,
+          onDecision: (log, game) => opts.onDecision?.(log, game),
+          onReplayEnd: () => this.endReplay(),
+        });
+        this.recorder ??= rec;
+        return rec;
+      }
+      const ai = createAI(side.control, seed + i * 7919);
       return new PacedController(ai, { pace: (ms) => this.aiPace(ms) });
     }) as [any, any];
 
     this.game = new Game([opts.sides[0].deck, opts.sides[1].deck], controllers, {
-      seed: opts.seed,
+      seed,
       names: [opts.sides[0].name, opts.sides[1].name],
       firstPlayer: typeof opts.firstPlayer === 'number' ? opts.firstPlayer : undefined,
-      skipFirstDraw: s.skipFirstDraw,
+      skipFirstDraw: opts.skipFirstDraw ?? s.skipFirstDraw,
     });
 
     // ---- DOM
@@ -188,10 +208,16 @@ class DuelScreen implements HumanUI {
     this.root.addEventListener('click', () => this.dialogs.closeMenu());
 
     this.game.hooks = {
-      update: () => this.scheduleRender(),
-      log: (e) => this.log.add(e),
+      update: () => {
+        if (!this.replaying) this.scheduleRender();
+      },
+      log: (e) => {
+        if (this.replaying) this.replayLog.push(e);
+        else this.log.add(e);
+      },
       anim: async (a) => {
         if (this.aborted && a.type !== 'negate') throw this.aborted;
+        if (this.replaying) return;
         try {
           await this.fx.handle(a);
         } catch (e) {
@@ -318,7 +344,8 @@ class DuelScreen implements HumanUI {
     const canSurrender = !this.spectator && (this.opts.allowSurrender ?? true);
     if (canSurrender || this.spectator) {
       const sur = h('button', 'icon-btn icon-btn--danger', ICONS.flag) as HTMLButtonElement;
-      sur.title = this.spectator ? 'Stop watching' : 'Surrender';
+      sur.title = this.spectator ? 'Stop watching' : this.opts.resumable ? 'Leave or concede' : 'Surrender';
+      sur.setAttribute('aria-label', sur.title);
       sur.onclick = () => void this.surrender();
       btns.appendChild(sur);
     }
@@ -368,6 +395,7 @@ class DuelScreen implements HumanUI {
   }
 
   speed(): number {
+    if (this.replaying) return 0;
     const base = getSettings().animationSpeed;
     if (!(base > 0)) return 0;
     if (this.spectator) return this.specSpeed >= 1000 ? 0 : base / this.specSpeed;
@@ -418,8 +446,11 @@ class DuelScreen implements HumanUI {
   // ------------------------------------------------------------------ run
   async run(): Promise<DuelResult> {
     music.setScene('duel');
-    this.sfx.play('shuffle');
-    this.flush();
+    if (this.replaying) this.beginReplay();
+    else {
+      this.sfx.play('shuffle');
+      this.flush();
+    }
     let res: { winner: PlayerId | null; reason: string; turns: number };
     try {
       res = await this.game.start();
@@ -430,15 +461,57 @@ class DuelScreen implements HumanUI {
         res = { winner: null, reason: `Engine error: ${(e as Error)?.message ?? e}`, turns: this.game.turn };
       }
     }
+    const mismatch = this.recorder?.mismatch;
+    if (mismatch || this.left) {
+      if (mismatch) console.warn('Duel could not be restored:', mismatch);
+      this.replaying = false;
+      this.clearInteraction();
+      this.dialogs.closeAll();
+      this.teardown();
+      return mismatch ? { winner: null, reason: 'Restore failed', turns: this.game.turn, restoreFailed: true } : { winner: null, reason: 'Left', turns: this.game.turn, left: true };
+    }
+    // a log that ends with the game over never hands over: show the final board now
+    if (this.replaying) this.endReplay();
     if (this.surrendered) res = { winner: this.game.opp(this.me), reason: 'Surrender', turns: this.game.turn };
     this.clearInteraction();
     this.dialogs.closeAll();
     this.flush();
-    await this.showResult(res);
-    this.teardown();
     const out: DuelResult = { winner: res.winner, reason: res.reason, turns: res.turns };
     if (this.surrendered) out.surrendered = true;
+    try {
+      this.opts.onGameOver?.(out);
+    } catch (e) {
+      console.error(e);
+    }
+    await this.showResult(res);
+    this.teardown();
     return out;
+  }
+
+  /** Resuming: hide the board while the saved decisions are fed back. */
+  private beginReplay() {
+    this.sfx.enabled = false;
+    this.root.classList.add('is-restoring');
+    this.restoringEl = h('div', 'duel-restoring', '<div class="duel-restoring-box"><span class="spinner"></span><b>Restoring your duel…</b></div>');
+    this.root.appendChild(this.restoringEl);
+  }
+
+  /** The saved decisions ran out: render the board as it stands and hand over to the player. */
+  private endReplay() {
+    if (!this.replaying) return;
+    // render once at speed 0 so nothing animates from the starting position
+    this.flush();
+    this.log.addMany(this.replayLog);
+    this.replayLog = [];
+    this.replaying = false;
+    this.sfx.enabled = getSettings().sound;
+    this.root.classList.remove('is-restoring');
+    const r = this.restoringEl;
+    this.restoringEl = null;
+    if (r) {
+      r.classList.add('is-gone');
+      window.setTimeout(() => r.remove(), 250);
+    }
   }
 
   private teardown() {
@@ -497,6 +570,31 @@ class DuelScreen implements HumanUI {
 
   private async surrender() {
     if (this.aborted) return;
+    if (this.opts.resumable && !this.spectator) {
+      const choice = await new Promise<'leave' | 'concede' | null>((resolve) => {
+        const m = this.dialogs.modal({
+          title: 'Leave this duel?',
+          subtitle: 'Leave and save keeps the duel exactly as it is. Resume it later from Home.',
+          className: 'dlg--leave',
+          dismissible: true,
+          onDismiss: () => resolve(null),
+          actions: [
+            { label: 'Leave and save', kind: 'primary', onClick: () => (m.close(), resolve('leave')) },
+            { label: 'Concede', kind: 'danger', onClick: () => (m.close(), resolve('concede')) },
+            { label: 'Keep playing', kind: 'ghost', hotkey: 'Escape', onClick: () => (m.close(), resolve(null)) },
+          ],
+        });
+      });
+      if (!choice || this.aborted) return;
+      if (choice === 'leave') {
+        this.left = true;
+        this.abort(new GameOver(null, 'Left'));
+        return;
+      }
+      this.surrendered = true;
+      this.abort(new GameOver(this.game.opp(this.me), 'Surrender'));
+      return;
+    }
     const yes = await confirmDialog(
       this.dialogs,
       { prompt: this.spectator ? 'Stop watching this duel?' : 'Surrender this duel?' },
@@ -543,6 +641,12 @@ class DuelScreen implements HumanUI {
 
   private async aiPace(ms: number) {
     if (this.aborted) throw this.aborted;
+    if (this.replaying) {
+      // let the "Restoring" overlay paint now and then, otherwise run flat out
+      if (++this.yieldCounter % 64 === 0) await sleep(0);
+      if (this.aborted) throw this.aborted;
+      return;
+    }
     if (this.paused) await new Promise<void>((r) => this.pauseWaiters.push(r));
     const t = ms * this.speed();
     if (t > 0) await sleep(t);
