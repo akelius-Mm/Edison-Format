@@ -3697,4 +3697,20 @@ async function fuzzRegressionTests() {
     eq(own.location, 'grave', 'own 0-ATK monster Tributed');
     eq(opp.filter((c) => c.location === 'grave').length, 1, 'one opponent monster Tributed');
   });
+
+  await test('Synchro Summon is not lost when using a material switches a Special Summon lock back on (Brain Golem / Archlord Kristya)', async () => {
+    const { g, place } = setup();
+    place(1, cardByName('Archlord Kristya'), 'mzone');
+    const golem = place(0, cardByName('Brain Golem'), 'mzone');
+    const tune = place(0, tuner, 'mzone');
+    eq(g.queryPlayer(0, 'cannotSpecialSummon'), false, "Brain Golem negates Kristya's lock");
+    const goyo = place(0, cardByName('Stardust Dragon'), 'extra');
+    const act = g.legalMainActions(0).find((a) => a.type === 'synchro' && a.card === goyo);
+    if (!act) throw new Error('Synchro Summon not offered');
+    await g.performAction(0, act);
+    eq(golem.location, 'grave', 'Brain Golem used');
+    eq(tune.location, 'grave', 'Tuner used');
+    eq(goyo.location, 'mzone', 'Stardust Dragon Synchro Summoned');
+    eq(g.queryPlayer(0, 'cannotSpecialSummon'), true, 'the lock applies again afterwards');
+  });
 }

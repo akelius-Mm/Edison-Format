@@ -540,17 +540,19 @@ async function playOne(job: Job, doReplay: boolean): Promise<GameReport> {
   };
   if (VERBOSE) g.hooks.log = (e) => origError(`  [T${e.turn}] ${e.text}`);
   let prevTurn = -1;
+  /** Turn in which a card went to a hand during an End Phase (after the hand-size discard that is legal). */
+  let lateHandTurn = -1;
   g.hooks.anim = (a) => {
     ck.tick('anim');
+    if (g.phase === 'end' && (a.type === 'draw' || (a.type === 'move' && (a.cards ?? []).some((m: { to: string }) => m.to === 'hand')))) lateHandTurn = g.turn;
     if (a.type === 'turn') {
       ck.check('turn-start');
       if (prevTurn >= 0) {
         const prevTp = g.opp(g.turnPlayer);
         const n = g.players[prevTp].hand.length;
-        // Cards added after the End Phase discard (e.g. Night Assailant discarded for hand size) are legal.
-        const endIdx = g.logEntries.findIndex((e) => e.turn === prevTurn && e.kind === 'phase' && e.text === 'End Phase');
-        const addedLate = endIdx >= 0 && g.logEntries.slice(endIdx).some((e) => / adds | draws? /.test(e.text));
-        if (n > 6 && !addedLate) ck.fail('hand-limit', `player ${prevTp} ended turn ${prevTurn} with ${n} cards in hand`);
+        // Legal: cards added during the End Phase (e.g. Night Assailant discarded for hand size), and a skipped turn.
+        const skipped = g.logEntries.some((e) => e.turn === prevTurn && / turn is skipped/.test(e.text));
+        if (n > 6 && lateHandTurn !== prevTurn && !skipped) ck.fail('hand-limit', `player ${prevTp} ended turn ${prevTurn} with ${n} cards in hand`);
       }
       prevTurn = g.turn;
     }

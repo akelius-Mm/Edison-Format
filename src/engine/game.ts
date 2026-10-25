@@ -1763,8 +1763,14 @@ export class Game {
     method: 'special' | 'synchro' | 'fusion' = 'special',
     pos: BattlePos | 'choose' = 'choose',
     extraFlags: Record<string, any> = {},
+    /**
+     * The summon was already found legal before its materials / costs were paid (Synchro Summon, summon procedures):
+     * don't re-check "cannot Special Summon". Paying can switch such a lock back on, e.g. Brain Golem used as a
+     * material stops negating Archlord Kristya; the materials were already gone and the summon was lost.
+     */
+    legalityChecked = false,
   ) {
-    if (this.queryPlayer(p, 'cannotSpecialSummon')) return false;
+    if (!legalityChecked && this.queryPlayer(p, 'cannotSpecialSummon')) return false;
     let position: BattlePos = 'atk';
     if (pos === 'choose') {
       const r = await this.controllers[p].choosePosition(this, p, card, ['atk', 'def']);
@@ -1862,6 +1868,7 @@ export class Game {
   }
 
   async synchroSummon(p: PlayerId, synchro: CardInstance, forced?: CardInstance[]): Promise<boolean> {
+    if (this.queryPlayer(p, 'cannotSpecialSummon') || this.queryPlayer(p, 'cannotSynchroSummon')) return false;
     const combos = this.synchroCombos(p, synchro);
     const mats = forced ?? (await this.pickCombo(p, combos, `Select Synchro Materials for ${synchro.name}`));
     if (!mats) return false;
@@ -1869,7 +1876,7 @@ export class Game {
     this.log(`${this.players[p].name} Synchro Summons ${synchro.name} using ${mats.map((m) => m.name).join(', ')}.`, 'action', p);
     await this.moveCards(mats, 'grave', { reason: 'synchro', reasons: ['synchro', 'material'], reasonPlayer: p, reasonCard: synchro });
     const materials = mats.map((m) => ({ uid: m.uid, name: m.name, attribute: m.data.attribute, race: m.data.race, level: m.data.level, card: m }));
-    const ok = await this.inherentSpecialSummon(p, synchro, 'synchro', 'choose', { materials });
+    const ok = await this.inherentSpecialSummon(p, synchro, 'synchro', 'choose', { materials }, true);
     await this.processTriggers(true);
     return ok;
   }
@@ -2160,7 +2167,7 @@ export class Game {
         if (this.freeMZones(p) <= 0) return;
         const pos = ef.procPositions && ef.procPositions.length === 1 ? ef.procPositions[0] : 'choose';
         const method = card.hasType('fusion') ? 'fusion' : card.hasType('synchro') ? 'synchro' : 'special';
-        await this.inherentSpecialSummon(p, card, method === 'synchro' ? 'special' : method, pos);
+        await this.inherentSpecialSummon(p, card, method === 'synchro' ? 'special' : method, pos, {}, true);
         await this.processTriggers(true);
         return;
       }
