@@ -2404,3 +2404,6 @@
   .dc.is-target .dc-fx::before { animation: none; }
 }
 @keyframes fxFadeOnly { 0%, 100% { opacity: 0; } 12%, 80% { opacity: 1; } }
+
+/* Spectating (AI vs AI, Friends Locals): nobody here can change phase; say whose turn it is by name. */
+.phasebar.is-spectating .phasebar-btns { display: none; }

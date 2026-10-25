@@ -81,6 +81,8 @@ export class PeerTransport implements Transport {
   private destroyed = false;
   /** Rejecters of dials in flight, by target id (peer-unavailable arrives on the Peer). */
   private dials = new Map<string, (e: TransportError) => void>();
+  /** Registered under a fixed id (listen): keep that id when reconnecting. */
+  private listening = false;
 
   constructor(private cfg: PeerServerConfig) {}
 
@@ -135,6 +137,7 @@ export class PeerTransport implements Transport {
 
   async listen(id: string, onChannel: (ch: Channel) => void): Promise<void> {
     this.peer?.destroy();
+    this.listening = true;
     const peer = await this.open(id);
     peer.on('connection', (conn: DataConnection) => {
       const ch = wrap(conn);
@@ -148,6 +151,15 @@ export class PeerTransport implements Transport {
     else if (peer.disconnected) {
       this.revive();
       await new Promise((r) => setTimeout(r, 800));
+      // a dialling phone needs no fixed id: if the server will not take the old one back, start afresh
+      if (peer.disconnected && !this.listening) {
+        try {
+          peer.destroy();
+        } catch {
+          /* ignore */
+        }
+        peer = await this.open();
+      }
     }
     return new Promise<Channel>((resolve, reject) => {
       const conn = peer!.connect(id, { reliable: true, serialization: 'json' });

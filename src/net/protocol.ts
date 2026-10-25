@@ -10,6 +10,7 @@
 // log entries the other side is missing (see room.ts).
 import type { Decision } from '../engine/replay';
 import type { PlayerId } from '../engine/types';
+import type { TourneyMsg } from './tourneyProtocol';
 
 /** Bump when the messages or the lockstep rules change incompatibly. */
 export const PROTOCOL_VERSION = 1;
@@ -107,7 +108,9 @@ export type Msg =
   | { t: 'rematch'; m: string }
   | { t: 'leave'; reason?: 'left' | 'busy' | 'version' }
   | { t: 'ping'; at: number }
-  | { t: 'pong'; at: number };
+  | { t: 'pong'; at: number }
+  /** Friends Locals and spectating (tourneyProtocol.ts). */
+  | TourneyMsg;
 
 /** Seed of game `index` (0-based) of a match. */
 export function gameSeed(matchSeed: number, index: number): number {

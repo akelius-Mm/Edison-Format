@@ -17,6 +17,8 @@ import { mountTabBar } from './screens/tabbar';
 import { loadActiveDuel } from './duel/resume';
 // Play a friend (online, room codes).
 import { friendScreen } from './screens/friend';
+// Friends Locals (a Swiss tournament between friends' phones).
+import { friendLocalsScreen, restoreFriendsLocals } from './screens/friendLocals';
 
 export function startApp(root: HTMLElement) {
   registerRoute('title', titleScreen);
@@ -33,11 +35,14 @@ export function startApp(root: HTMLElement) {
   registerRoute('packs', packsScreen);
   registerRoute('binder', binderScreen);
   registerRoute('friend', friendScreen);
+  registerRoute('friend-locals', friendLocalsScreen);
   clear(root);
   // The app was closed in the middle of a duel (iOS kills home-screen apps in the background):
   // open on Home, where the "Duel in progress" card resumes it.
   // (A friend's invite link still opens the join screen.)
-  if (loadActiveDuel()?.live && !/^#?\/?(title)?$/.test(location.hash) && !location.hash.startsWith('#/friend?join=')) history.replaceState(null, '', '#/title');
+  if (loadActiveDuel()?.live && !/^#?\/?(title)?$/.test(location.hash) && !location.hash.startsWith('#/friend?join=') && !location.hash.startsWith('#/friend-locals?join=')) history.replaceState(null, '', '#/title');
   startRouter(root);
   mountTabBar();
+  // a Friends Locals event in progress reconnects in the background (the organiser's phone runs it)
+  restoreFriendsLocals();
 }
