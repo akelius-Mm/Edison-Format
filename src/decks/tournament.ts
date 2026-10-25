@@ -4,6 +4,15 @@ import type { DeckDef } from './types';
 // Every list below is the card-for-card list published for the 75th Shonen Jump Championship,
 // Edison, NJ (April 24-25, 2010; 2,700+ players). Sources are noted above each deck.
 // Card counts are reproduced exactly; nothing has been added, removed or "fixed".
+//
+// Release-date audit (Edison legality = English TCG release on or before 2010-04-24): every card in these lists
+// checks out. The ones that look post-Edison in most databases were legal through earlier promos:
+//   Tragoedia                   Shonen Jump Vol. 7 #9 promo (JUMP-EN033, Sept. 2009), long before Turbo Pack 4
+//   Chimeratech Fortress Dragon Shonen Jump Vol. 7 #3 promo (JUMP-EN031, March 2009), before Collectible Tins 2010
+//   Beast King Barbaros         Shonen Jump Vol. 7 #6 promo (JUMP-EN032, May/June 2009), before Collectible Tins 2011
+//   Thunder King Rai-Oh         Yu-Gi-Oh! GX Volume 2 promo (YG02-EN001, Nov. 2008), before Gold Series 3
+//   Shield Crush                Premium Pack 1 (PP01-EN007, 2007), before Turbo Pack 5
+// Cards that really are post-Edison are listed in POST_EDISON (src/cards/banlist.ts); none appear below.
 
 const SJC_EDISON = 'Shonen Jump Championship Edison';
 const SJC_EDISON_DATE = '2010-04-24';

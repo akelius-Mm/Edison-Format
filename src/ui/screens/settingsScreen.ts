@@ -78,7 +78,7 @@ export function settingsScreen(): Screen {
           ),
           { stack: true },
         ),
-        iosRow('First player skips draw', 'Edison-era rule for turn 1.', toggle(s.skipFirstDraw, (v) => set({ skipFirstDraw: v }), 'First player skips draw')),
+        iosRow('First player skips draw', 'Modern rule. Off in Edison: the player going first draws on turn 1.', toggle(s.skipFirstDraw, (v) => set({ skipFirstDraw: v }), 'First player skips draw')),
         iosRow('Confirm end of turn', 'Ask when you still have plays.', toggle(s.confirmEndTurn, (v) => set({ confirmEndTurn: v }), 'Confirm end of turn')),
         iosRow('Show duel log', null, toggle(s.showLog, (v) => set({ showLog: v }), 'Show duel log')),
       ],

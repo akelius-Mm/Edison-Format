@@ -8,7 +8,7 @@ const FROG_MONARCHS: DeckDef = {
   tier: 1,
   color: '#3f8f6b',
   description:
-    'Swap Frog sends Treeborn Frog and Ronintoadin to the GY, and those Frogs keep coming back as Tribute fodder. Each Tribute Summon of Caius, Raiza, Mobius, Thestalos or Zaborg takes a card from the opponent. Enemy Controller and Soul Exchange let you tribute away the opponent\'s monsters. The deck runs very few Spells/Traps to keep Treeborn Frog live, so plan around a mostly empty backrow.',
+    'Swap Frog sends Treeborn Frog to the GY, where it keeps coming back as Tribute fodder, while Flip Flop Frog bounces the opponent\'s monsters and Dupe Frog fetches more Frogs. Each Tribute Summon of Caius, Raiza, Mobius, Thestalos or Zaborg takes a card from the opponent. Enemy Controller and Soul Exchange let you tribute away the opponent\'s monsters. The deck runs very few Spells/Traps to keep Treeborn Frog live, so plan around a mostly empty backrow.',
   main: [
     // Monarchs (8)
     ['Caius the Shadow Monarch', 3],
@@ -19,7 +19,7 @@ const FROG_MONARCHS: DeckDef = {
     // Frogs (9)
     ['Swap Frog', 3],
     ['Treeborn Frog', 1],
-    ['Ronintoadin', 2],
+    ['Flip Flop Frog', 2],
     ['Dupe Frog', 2],
     ['Substitoad', 1],
     // Tech monsters (5)
@@ -47,7 +47,7 @@ const FROG_MONARCHS: DeckDef = {
     ['Solemn Judgment', 1],
   ],
   extra: [
-    ['Stardust Dragon', 1],
+    ['Stardust Dragon', 2],
     ['Brionac, Dragon of the Ice Barrier', 1],
     ['Goyo Guardian', 1],
     ['Red Dragon Archfiend', 1],
@@ -59,7 +59,6 @@ const FROG_MONARCHS: DeckDef = {
     ['Mist Wurm', 1],
     ['Ally of Justice Catastor', 1],
     ['Armory Arm', 1],
-    ['Junk Destroyer', 1],
   ],
 };
 
@@ -104,7 +103,7 @@ const TELE_DAD: DeckDef = {
     ['Mirror Force', 1],
     ['Torrential Tribute', 1],
     ['Bottomless Trap Hole', 2],
-    ['Solemn Warning', 2],
+    ['Dimensional Prison', 2],
     ['Call of the Haunted', 1],
     ['Trap Dustshoot', 1],
   ],
@@ -133,7 +132,7 @@ const HERO_BEAT: DeckDef = {
   tier: 2,
   color: '#d4a017',
   description:
-    'Elemental HEROes beat down with efficient Level 4s. Stratos searches or clears backrow, and E - Emergency Call, Hero Signal and Elemental Hero Ocean keep the HERO count up. Miracle Fusion banishes materials from the field or GY to bring out Absolute Zero, Great Tornado, Gaia or The Shining from the Extra Deck. Cyber Dragon and Thunder King Rai-Oh back up the beats.',
+    'Elemental HEROes beat down with efficient Level 4s. Stratos searches or clears backrow, and E - Emergency Call, Hero Signal and Elemental Hero Ocean keep the HERO count up. Miracle Fusion banishes materials from the field or GY to bring out Absolute Zero or Gaia from the Extra Deck. Cyber Dragon and Thunder King Rai-Oh back up the beats, and Cyber Dragon plus Card Trooper can become Chimeratech Fortress Dragon.',
   main: [
     // Monsters (17)
     ['Elemental Hero Stratos', 1],
@@ -169,14 +168,13 @@ const HERO_BEAT: DeckDef = {
     ['Mirror Force', 1],
     ['Torrential Tribute', 1],
     ['Bottomless Trap Hole', 2],
-    ['Solemn Warning', 1],
+    ['Dimensional Prison', 1],
     ['Call of the Haunted', 1],
   ],
   extra: [
-    ['Elemental Hero Absolute Zero', 2],
-    ['Elemental Hero Great Tornado', 2],
-    ['Elemental Hero Gaia', 2],
-    ['Elemental Hero The Shining', 2],
+    ['Elemental Hero Absolute Zero', 3],
+    ['Elemental Hero Gaia', 3],
+    ['Chimeratech Fortress Dragon', 2],
     ['Stardust Dragon', 1],
     ['Brionac, Dragon of the Ice Barrier', 1],
     ['Goyo Guardian', 1],

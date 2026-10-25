@@ -234,6 +234,157 @@ function eq(a: unknown, b: unknown, msg: string) {
     eq(g.canAttack(a), false, 'cannot attack');
   });
 
+  // ---------------------------------------------------------------- HA01 (Hidden Arsenal)
+  const activateCard = async (g: Game, p: PlayerId, card: CardInstance) => {
+    const act = g.getActivations(p, { open: true }).find((a) => a.card === card);
+    if (!act) throw new Error(`${card.name} cannot be activated`);
+    await g.performAction(p, { type: 'activate', card, act });
+  };
+
+  await test('HA01: Mist Valley Shaman returns Thunderbird, which Special Summons itself and cannot attack', async () => {
+    const { g, place } = setup();
+    const shaman = place(0, cardByName('Mist Valley Shaman'), 'mzone');
+    const bird = place(0, cardByName('Mist Valley Thunderbird'), 'mzone');
+    await activateCard(g, 0, shaman);
+    eq(g.getAtk(shaman), 1700, 'Shaman gained 500 ATK');
+    eq(bird.location, 'mzone', 'Thunderbird back on the field');
+    eq(bird.summonTurn, g.turn, 'Thunderbird was Special Summoned this turn');
+    eq(g.canAttack(bird), false, 'Thunderbird cannot attack this turn');
+    eq(g.getActivations(0, { open: true }).some((a) => a.card === shaman), false, 'Shaman is once per turn');
+  });
+
+  await test('HA01: Mist Valley Soldier returns a monster it battled that was not destroyed', async () => {
+    const { g, place } = setup();
+    const soldier = place(0, cardByName('Mist Valley Soldier'), 'mzone');
+    const wall = place(1, T.wall, 'mzone', { pos: 'def' });
+    await g.conductAttack(0, soldier);
+    eq(g.players[0].lp, 8000 - 300, 'reflect damage');
+    eq(wall.location, 'hand', 'wall returned to the hand');
+    eq(soldier.location, 'mzone', 'Soldier stays');
+  });
+
+  await test('HA01: Cryomancer of the Ice Barrier stops Level 4+ attacks only with another Ice Barrier monster', async () => {
+    const { g, place } = setup();
+    const a = place(0, T.brute, 'mzone');
+    const small = place(0, cardByName('Blizzard Warrior'), 'mzone');
+    place(1, cardByName('Cryomancer of the Ice Barrier'), 'mzone');
+    eq(g.canAttack(a), true, 'alone: no lock');
+    place(1, cardByName('Blizzed, Defender of the Ice Barrier'), 'mzone');
+    eq(g.canAttack(a), false, 'Level 4 cannot attack');
+    eq(g.canAttack(small), true, 'Level 3 can attack');
+  });
+
+  await test('HA01: Blizzed draws a card when destroyed by battle', async () => {
+    const { g, place } = setup();
+    const a = place(0, T.brute, 'mzone');
+    const blizzed = place(1, cardByName('Blizzed, Defender of the Ice Barrier'), 'mzone', { pos: 'def' });
+    const hand = g.players[1].hand.length;
+    await g.conductAttack(0, a);
+    eq(blizzed.location, 'grave', 'Blizzed destroyed');
+    eq(g.players[1].hand.length, hand + 1, 'Blizzed drew 1');
+  });
+
+  await test('HA01: Worm Erokin turns a Worm face-down; Cartaros searches again when flipped; Erokin cannot be revived', async () => {
+    const { g, c0, place } = setup();
+    const erokin = place(0, cardByName('Worm Erokin'), 'mzone');
+    const cart = place(0, cardByName('Worm Cartaros'), 'mzone');
+    const barses = place(0, cardByName('Worm Barses'), 'deck');
+    c0.pick = (_g, req) => (req.candidates.includes(cart) ? [cart] : req.candidates.slice(0, Math.max(1, req.min)));
+    await activateCard(g, 0, erokin);
+    eq(cart.faceUp, false, 'Cartaros face-down');
+    eq(cart.pos, 'def', 'Cartaros in Defense Position');
+    await g.performAction(0, { type: 'flip', card: cart });
+    eq(barses.location, 'hand', 'Cartaros searched Worm Barses');
+    // "Cannot be Special Summoned": Monster Reborn has no legal target with only Erokin in the GY.
+    await g.destroy([erokin], 'effect');
+    const reborn = place(0, cardByName('Monster Reborn'), 'hand');
+    eq(g.getActivations(0, { open: true }).some((a) => a.card === reborn), false, 'Monster Reborn cannot target Erokin');
+  });
+
+  await test('HA01: Worm Barses flips an opponent\'s face-down monster into Attack Position', async () => {
+    const { g, place } = setup();
+    const barses = place(0, cardByName('Worm Barses'), 'hand');
+    const fd = place(1, T.wall, 'mzone', { faceUp: false, pos: 'def' });
+    await g.performAction(0, { type: 'summon', card: barses });
+    eq(fd.faceUp, true, 'target face-up');
+    eq(fd.pos, 'atk', 'target in Attack Position');
+  });
+
+  await test('HA01: X-Saber Axel draws when a Saber monster is destroyed by battle', async () => {
+    const { g, place } = setup();
+    place(0, cardByName('X-Saber Axel'), 'mzone', { pos: 'def' });
+    const uruz = place(0, cardByName('X-Saber Uruz'), 'mzone');
+    place(1, T.wall, 'mzone', { pos: 'atk' });
+    const big = place(1, T.brute, 'mzone');
+    const hand = g.players[0].hand.length;
+    g.turnPlayer = 0;
+    g.battle = null;
+    // Uruz (1600) attacks Brute (1800) and is destroyed.
+    const ctrl = g.controllers[0] as TestController;
+    ctrl.chooseAttackTarget = async () => big;
+    await g.conductAttack(0, uruz);
+    eq(uruz.location, 'grave', 'Uruz destroyed');
+    eq(g.players[0].hand.length, hand + 1, 'Axel drew 1');
+  });
+
+  await test('HA01: Commander Gottoms boosts Saber monsters, not itself', async () => {
+    const { g, place } = setup();
+    const gott = place(0, cardByName('Commander Gottoms, Swordmaster'), 'mzone');
+    const axel = place(0, cardByName('X-Saber Axel'), 'mzone');
+    eq(g.getAtk(gott), 2100, 'Gottoms unchanged');
+    eq(g.getAtk(axel), 800, 'Axel +400');
+  });
+
+  await test('HA01: Ally of Justice Rudra gains 700 ATK only while battling a LIGHT monster', async () => {
+    const { g, place } = setup();
+    const rudra = place(0, cardByName('Ally of Justice Rudra'), 'mzone');
+    const light = place(1, cardByName('Worm Erokin'), 'mzone'); // LIGHT 2400
+    eq(g.getAtk(rudra), 1900, 'base ATK outside battle');
+    await g.conductAttack(0, rudra);
+    eq(light.location, 'grave', 'Rudra (2600) beat Erokin (2400)');
+    eq(g.players[1].lp, 8000 - 200, 'damage 200');
+  });
+
+  await test('HA01: X-Saber Urbellum puts a random card back when the opponent holds 4+', async () => {
+    const { g, place } = setup();
+    const urb = place(0, cardByName('X-Saber Urbellum'), 'mzone');
+    for (let i = 0; i < 5; i++) place(1, T.wall, 'hand');
+    const deck = g.players[1].deck.length;
+    await g.conductAttack(0, urb);
+    eq(g.players[1].lp, 8000 - 2200, 'direct damage');
+    eq(g.players[1].hand.length, 4, 'one card left the hand');
+    eq(g.players[1].deck.length, deck + 1, 'it went on top of the Deck');
+  });
+
+  await test('HA01: Evolution Burst destroys a card and Cyber Dragon cannot attack', async () => {
+    const { g, place } = setup();
+    const cd = place(0, cardByName('Cyber Dragon'), 'mzone');
+    const victim = place(1, T.wall, 'mzone');
+    const eb = place(0, cardByName('Evolution Burst'), 'hand');
+    eq(g.canAttack(cd), true, 'Cyber Dragon can attack before');
+    await activateCard(g, 0, eb);
+    eq(victim.location, 'grave', 'target destroyed');
+    eq(eb.location, 'grave', 'Evolution Burst in GY');
+    eq(g.canAttack(cd), false, 'Cyber Dragon cannot attack this turn');
+  });
+
+  await test('HA01: Flamvell Dragnov burns 500 when destroyed by battle, then searches from the GY', async () => {
+    const { g, place } = setup();
+    const a = place(1, T.brute, 'mzone');
+    const drag = place(0, cardByName('Flamvell Dragnov'), 'mzone');
+    g.turnPlayer = 1;
+    await g.conductAttack(1, a);
+    eq(drag.location, 'grave', 'Dragnov destroyed');
+    eq(g.players[1].lp, 8000 - 500, '500 burn');
+    g.turnPlayer = 0;
+    const fire = place(0, cardByName('Flamvell Guard'), 'mzone');
+    const next = place(0, cardByName('Flamvell Dragnov'), 'deck');
+    await activateCard(g, 0, drag);
+    eq(drag.location, 'banished', 'Dragnov banished');
+    eq(fire.location, 'banished', 'FIRE monster banished');
+    eq(next.location, 'hand', 'Dragnov searched');
+  });
+
   await test('Deck out loses the duel', async () => {
     const { g } = setup();
     g.players[0].deck.length = 0;

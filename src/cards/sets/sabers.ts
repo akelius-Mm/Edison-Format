@@ -252,19 +252,31 @@ monster('X-Saber Uruz', {
   race: 'Beast-Warrior',
   level: 4,
   atk: 1600,
-  def: 1200,
+  // HA01: DEF and effect corrected to the printed card (YGOJSON: 1600/1000, the Tribute is a cost).
+  def: 1000,
   sets: XS,
-  text: 'When this card destroys an opponent\'s monster by battle and sends it to the GY: You can return that monster to the top of its owner\'s Deck.',
+  text: 'When this card destroys an opponent\'s monster by battle and sends it to the Graveyard, you can Tribute this card to return the destroyed card to the top of its owner\'s Deck.',
   effects: [
     {
       kind: 'trigger',
       event: 'battleDestroyed',
-      label: 'Return to top of Deck',
+      label: 'Tribute: return to top of Deck',
       categories: ['toDeck'],
       eventFilter: (ctx, ev) => selfDestroysByBattle(ctx, ev) && (ev.card as CardInstance).location === 'grave',
+      canActivate: (ctx) => ctx.self.location === 'mzone' && ctx.self.faceUp && !ctx.query(ctx.self, 'cannotBeTributed'),
+      activate: async (ctx) => {
+        await ctx.game.moveCards([ctx.self], 'grave', { reason: 'tribute', reasons: ['tribute', 'cost'], reasonPlayer: ctx.player, reasonCard: ctx.self });
+      },
       resolve: async (ctx) => {
         const c = ctx.event!.card as CardInstance;
         if (c.location === 'grave') await ctx.toDeck(c, 'top');
+      },
+      ai: {
+        // Worth a 1600 body only to strip a Synchro/Fusion monster from the GY for good.
+        score: (ctx) => {
+          const c = ctx.event?.card as CardInstance | undefined;
+          return c && c.isExtra && (c.data.atk ?? 0) + (c.data.aiValue ?? 0) >= 2200 ? 40 : 0;
+        },
       },
     },
   ],

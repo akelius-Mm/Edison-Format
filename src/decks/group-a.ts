@@ -10,7 +10,7 @@ const quickdrawPlant: DeckDef = {
   tier: 1,
   color: '#4caf50',
   description:
-    'The Edison synchro toolbox. Quickdraw Synchron special summons itself by dumping Dandylion or Level Eater, Lonefire Blossom chains Plants out of the Deck, and Debris Dragon revives the discarded Plants for instant Junk Destroyer, Black Rose Dragon or Stardust Dragon. Fluff Tokens, Level Eater and Plaguespreader keep feeding more synchros, with Dark Armed Dragon as the finisher.',
+    'The Edison synchro toolbox. Quickdraw Synchron special summons itself by dumping Dandylion or Level Eater, Lonefire Blossom chains Plants out of the Deck, and Debris Dragon revives the discarded Plants for instant Drill Warrior, Black Rose Dragon or Stardust Dragon. Fluff Tokens, Level Eater and Plaguespreader keep feeding more synchros, with Dark Armed Dragon as the finisher.',
   main: [
     // Monsters (19)
     ['Quickdraw Synchron', 3],
@@ -39,7 +39,7 @@ const quickdrawPlant: DeckDef = {
     ['Scapegoat', 1],
     // Traps (9)
     ['Solemn Judgment', 1],
-    ['Solemn Warning', 2],
+    ['Dimensional Prison', 2],
     ['Bottomless Trap Hole', 2],
     ['Torrential Tribute', 1],
     ['Mirror Force', 1],
@@ -48,7 +48,7 @@ const quickdrawPlant: DeckDef = {
   ],
   extra: [
     ['Stardust Dragon', 2],
-    ['Junk Destroyer', 2],
+    ['Drill Warrior', 2],
     ['Black Rose Dragon', 1],
     ['Red Dragon Archfiend', 1],
     ['Ancient Fairy Dragon', 1],
@@ -100,8 +100,7 @@ const zombies: DeckDef = {
     ['Gold Sarcophagus', 1],
     // Traps (8)
     ['Solemn Judgment', 1],
-    ['Solemn Warning', 1],
-    ['Bottomless Trap Hole', 1],
+    ['Bottomless Trap Hole', 2],
     ['Torrential Tribute', 1],
     ['Mirror Force', 1],
     ['Call of the Haunted', 1],
@@ -157,8 +156,7 @@ const lightsworn: DeckDef = {
     ['Book of Moon', 1],
     // Traps (7)
     ['Solemn Judgment', 1],
-    ['Solemn Warning', 1],
-    ['Bottomless Trap Hole', 1],
+    ['Bottomless Trap Hole', 2],
     ['Torrential Tribute', 1],
     ['Mirror Force', 1],
     ['Call of the Haunted', 1],
