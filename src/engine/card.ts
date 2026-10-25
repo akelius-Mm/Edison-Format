@@ -10,6 +10,7 @@ import type {
   MonsterType,
   PlayerId,
   Race,
+  Reason,
   SpellType,
   TrapType,
 } from './types';
@@ -118,6 +119,13 @@ export interface EffectDef {
   perform?: (ctx: Ctx) => Promise<boolean>;
   /** For 'proc': allowed summon positions. */
   procPositions?: BattlePos[];
+  /**
+   * ANPR: destruction replacement ("if X would be destroyed, you can ... instead").
+   * Called by `Game.destroy` (reason 'effect') and by battle destruction (reason 'battle') for every
+   * source card in `range` (default: monsters 'mzone', Spells/Traps 'szone'/'fzone'; face-up, not negated
+   * when on the field). Receives the cards about to be destroyed; returns the ones it saved.
+   */
+  replaceDestroy?: (ctx: Ctx, cards: CardInstance[], reason: Reason) => Promise<CardInstance[]>;
   /** Effect may be activated while the card is face-down (e.g. hand traps don't need this). */
   ai?: AiHints;
 }

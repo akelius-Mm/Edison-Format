@@ -739,10 +739,53 @@ export class Game {
   }
 
   async destroy(cards: CardInstance[], reason: Reason, reasonPlayer?: PlayerId, reasonCard?: CardInstance, battleWith?: CardInstance) {
-    const list = cards.filter((c) => this.canDestroy(c, reason) && !this.isUnaffected(c, reasonCard, reasonPlayer));
+    let list = cards.filter((c) => this.canDestroy(c, reason) && !this.isUnaffected(c, reasonCard, reasonPlayer));
+    if (!list.length) return [];
+    // ANPR: destruction replacement effects (EffectDef.replaceDestroy).
+    list = await this.applyDestroyReplacements(list, reason, reasonPlayer, reasonCard);
     if (!list.length) return [];
     for (const c of list) this.log(`${c.name} is destroyed.`, 'action', c.controller);
     return this.moveCards(list, 'grave', { reason, reasons: [reason, 'destroy'], reasonPlayer, reasonCard, destroyed: true, battleWith });
+  }
+
+  // ANPR: destruction replacement hook. Asks every `replaceDestroy` source in range whether it saves any of
+  // `cards` ("if this card would be destroyed, you can ... instead"). Only for battle/effect destruction;
+  // destruction caused while a replacement is being applied is not replaced again.
+  private replacingDestroy = 0;
+  async applyDestroyReplacements(cards: CardInstance[], reason: Reason, reasonPlayer?: PlayerId, reasonCard?: CardInstance): Promise<CardInstance[]> {
+    if (this.replacingDestroy > 0 || (reason !== 'battle' && reason !== 'effect')) return cards;
+    let rest = cards;
+    this.replacingDestroy++;
+    try {
+      for (const src of [...this.allCards]) {
+        const effs = src.data.effects;
+        if (!effs) continue;
+        for (let i = 0; i < effs.length; i++) {
+          const ef = effs[i];
+          if (!ef.replaceDestroy) continue;
+          const live = rest.filter((c) => c.onField);
+          if (!live.length) return rest;
+          const range = ef.range ?? (src.isMonster ? ['mzone'] : ['szone', 'fzone']);
+          if (!range.includes(src.location)) continue;
+          if (src.onField && (!src.faceUp || this.isNegated(src) || (!src.isMonster && !src.activeOnField))) continue;
+          const ctx = new Ctx(this, src, ef, this.cardUser(src));
+          ctx.effectIndex = i;
+          ctx.data.reasonPlayer = reasonPlayer;
+          ctx.data.reasonCard = reasonCard;
+          let saved: CardInstance[] = [];
+          try {
+            saved = await ef.replaceDestroy(ctx, live, reason);
+          } catch (e) {
+            if (e instanceof GameOver) throw e;
+            console.error('replaceDestroy error', src.name, e);
+          }
+          if (saved.length) rest = rest.filter((c) => !saved.includes(c));
+        }
+      }
+    } finally {
+      this.replacingDestroy--;
+    }
+    return rest;
   }
 
   isUnaffected(card: CardInstance, by?: CardInstance, byPlayer?: PlayerId): boolean {
@@ -2259,7 +2302,12 @@ export class Game {
       }
     }
     // Destroy losers
-    const destroyGroup = losers.filter((l) => l.card.location === 'mzone' && this.canDestroy(l.card, 'battle'));
+    let destroyGroup = losers.filter((l) => l.card.location === 'mzone' && this.canDestroy(l.card, 'battle'));
+    // ANPR: destruction replacement effects also apply to battle destruction.
+    if (destroyGroup.length) {
+      const keep = await this.applyDestroyReplacements(destroyGroup.map((l) => l.card), 'battle', p, attacker);
+      destroyGroup = destroyGroup.filter((l) => keep.includes(l.card) && l.card.location === 'mzone');
+    }
     if (destroyGroup.length) {
       this.beginBatch();
       const moved: { card: CardInstance; by: CardInstance; from: Location; ctrl: PlayerId }[] = [];
