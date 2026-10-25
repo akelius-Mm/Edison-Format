@@ -12,6 +12,7 @@ import { ensureRgbtPatches } from '../src/cards/sets/rgbt';
 import { ensureCrmsPatches } from '../src/cards/sets/crms';
 import { ensurePtdnPatches } from '../src/cards/sets/ptdn';
 import { ensureLodtPatches } from '../src/cards/sets/lodt';
+import { ensureCsocPatches } from '../src/cards/sets/csoc';
 
 const T = {
   brute: findCard('Rules Test Brute') ?? normal('Rules Test Brute', 'EARTH', 'Warrior', 4, 1800, 1000),
@@ -867,6 +868,7 @@ function eq(a: unknown, b: unknown, msg: string) {
   await crmsTests();
   await ptdnTests();
   await lodtTests();
+  await csocTests();
 
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
@@ -2440,5 +2442,213 @@ async function lodtTests() {
     await (g as any).setPhase('standby');
     eq(dt.location, 'grave', 'Dice Try! used');
     eq(dmt.location, 'grave', 'Dangerous Machine Type-6 destroyed');
+  });
+}
+
+// ---------------------------------------------------------------- Crossroads of Chaos (CSOC)
+
+async function csocTests() {
+  const csocSetup = () => {
+    const s = setup();
+    ensureCsocPatches(s.g);
+    return s;
+  };
+  const live = (c: CardInstance) => {
+    c.activeOnField = true;
+    return c;
+  };
+  const battleEnd = async (g: Game) => {
+    g.beginBatch();
+    g.emit({ type: 'battleEnd', player: g.turnPlayer, phase: 'battle' });
+    await g.processTriggers(true);
+  };
+
+  await test('CSOC: Black Garden halves a Summoned monster and gives the opponent a Rose Token', async () => {
+    const { g, place } = csocSetup();
+    live(place(0, cardByName('Black Garden'), 'fzone'));
+    const b = place(0, T.brute, 'hand');
+    await g.performAction(0, { type: 'summon', card: b });
+    eq(g.getAtk(b), 900, 'ATK halved');
+    const rose = g.monsters(1).find((c) => c.name === 'Rose Token');
+    eq(!!rose, true, "Rose Token on the opponent's field");
+    eq(rose && g.getAtk(rose), 800, 'the Rose Token is not halved');
+    eq(rose?.pos, 'atk', 'in Attack Position');
+  });
+
+  await test('CSOC: Machine Lord Ür attacks every monster once, no battle damage to the opponent', async () => {
+    const { g, place } = csocSetup();
+    const ur = place(0, cardByName('Machine Lord Ür'), 'mzone');
+    const w1 = place(1, T.wall, 'mzone');
+    const w2 = place(1, T.wall, 'mzone');
+    await g.conductAttack(0, ur);
+    eq([w1, w2].filter((w) => w.location === 'grave').length, 1, 'first monster destroyed');
+    eq(g.players[1].lp, 8000, 'no battle damage');
+    eq(g.canAttack(ur), true, 'can attack the other monster');
+    eq(g.attackTargets(ur).targets.length, 1, 'only the monster not attacked yet');
+    await g.conductAttack(0, ur);
+    eq([w1, w2].every((w) => w.location === 'grave'), true, 'second monster destroyed');
+    eq(g.canAttack(ur), false, 'no third attack');
+  });
+
+  await test('CSOC: Morphtronic Magnen — only the highest ATK target (Attack), must be attacked (Defense)', async () => {
+    const { g, place } = csocSetup();
+    const mag = place(0, cardByName('Morphtronic Magnen'), 'mzone');
+    const brute = place(1, T.brute, 'mzone');
+    place(1, T.wall, 'mzone');
+    const t = g.attackTargets(mag).targets;
+    eq(t.length === 1 && t[0] === brute, true, 'only the highest ATK monster');
+    const mag2 = place(1, cardByName('Morphtronic Magnen'), 'mzone', { pos: 'def' });
+    const a = place(0, T.giant, 'mzone');
+    const t2 = g.attackTargets(a).targets;
+    eq(t2.length === 1 && t2[0] === mag2, true, 'Defense Position Magnen must be attacked');
+  });
+
+  await test('CSOC: Storm Caller returns a monster destroyed by another Psychic to the top of the Deck', async () => {
+    const { g, place } = csocSetup();
+    place(0, cardByName('Storm Caller'), 'mzone');
+    const inj = place(0, cardByName('Power Injector'), 'mzone');
+    const w = place(1, T.wall, 'mzone');
+    await g.conductAttack(0, inj);
+    eq(w.location, 'deck', 'placed in the Deck');
+    const deck = g.players[1].deck;
+    eq(deck[deck.length - 1], w, 'on top');
+    eq(g.players[1].lp, 8000 - 800, 'battle damage still applies');
+  });
+
+  await test('CSOC: Revived King Ha Des negates the effect of a monster it destroys by battle', async () => {
+    const { g, place } = csocSetup();
+    const hd = place(0, cardByName('Revived King Ha Des'), 'mzone');
+    place(1, cardByName('Sangan'), 'mzone');
+    await g.conductAttack(0, hd);
+    eq(g.players[1].hand.length, 0, 'Sangan does not search');
+  });
+
+  await test('CSOC: Wall of Ivy gives the opponent an Ivy Token that burns its controller', async () => {
+    const { g, place } = csocSetup();
+    const ivy = place(0, cardByName('Wall of Ivy'), 'mzone', { faceUp: false, pos: 'def' });
+    await g.flipSummon(0, ivy);
+    const tok = g.monsters(1).find((c) => c.name === 'Ivy Token');
+    eq(!!tok, true, "Ivy Token on the opponent's field");
+    await g.destroy([tok!], 'effect', 0);
+    await g.processTriggers(false);
+    eq(g.players[1].lp, 7700, 'its controller takes 300');
+  });
+
+  await test('CSOC: Cursed Fig locks 2 Set Spell/Trap Cards while it is in the GY', async () => {
+    const { g, place } = csocSetup();
+    const fig = place(1, cardByName('Cursed Fig'), 'mzone');
+    const mst = place(1, cardByName('Mystical Space Typhoon'), 'szone', { faceUp: false });
+    place(0, cardByName('Dust Tornado'), 'szone', { faceUp: false });
+    eq(g.getActivations(1, { open: false }).some((a) => a.card === mst), true, 'MST can be activated before');
+    const b = place(0, T.brute, 'mzone');
+    await g.conductAttack(0, b);
+    eq(fig.location, 'grave', 'Cursed Fig destroyed');
+    eq(g.getActivations(1, { open: false }).some((a) => a.card === mst), false, 'MST is locked');
+  });
+
+  await test('CSOC: Mark of the Rose — control, End Phase return, Standby retake, returns when it leaves', async () => {
+    const { g, place } = csocSetup();
+    place(0, cardByName('Botanical Girl'), 'grave');
+    const v = place(1, T.brute, 'mzone');
+    const mark = place(0, cardByName('Mark of the Rose'), 'hand');
+    await activateCard(g, 0, mark);
+    eq(v.controller, 0, 'control taken');
+    await (g as any).setPhase('end');
+    eq(v.controller, 1, 'returned in the End Phase');
+    g.turn += 2;
+    await (g as any).setPhase('standby');
+    eq(v.controller, 0, 'taken again in the Standby Phase');
+    await g.destroy([mark], 'effect', 1);
+    eq(v.controller, 1, 'control returns when Mark of the Rose leaves the field');
+  });
+
+  await test('CSOC: Zombie Mammoth is destroyed with no Zombie in the GY and burns its controller', async () => {
+    const { g, place } = csocSetup();
+    const m = place(0, cardByName('Zombie Mammoth'), 'mzone');
+    await g.ruleCleanup();
+    await g.processTriggers(false);
+    eq(m.location, 'grave', 'destroyed');
+    eq(g.players[0].lp, 8000 - 1900, 'its controller takes 1900');
+  });
+
+  await test('CSOC: Urgent Tuning Synchro Summons during the Battle Phase', async () => {
+    const { g, place } = csocSetup();
+    place(0, tuner, 'mzone');
+    place(0, T.brute, 'mzone');
+    const ut = place(0, cardByName('Urgent Tuning'), 'szone', { faceUp: false });
+    g.phase = 'battle';
+    await activateCard(g, 0, ut);
+    eq(g.monsters(0).some((c) => c.name === 'Goyo Guardian'), true, 'Goyo Guardian Synchro Summoned');
+  });
+
+  await test('CSOC: Gozen Match — one Attribute per player', async () => {
+    const { g, place } = csocSetup();
+    place(1, T.brute, 'mzone');
+    place(1, T.dark, 'mzone');
+    const gm = place(0, cardByName('Gozen Match'), 'szone', { faceUp: false });
+    place(0, T.brute, 'mzone');
+    await activateCard(g, 0, gm);
+    eq(g.monsters(1).length, 1, 'the other Attribute was sent to the GY');
+    eq(g.canNormalSummon(0, place(0, T.dark, 'hand')), false, 'cannot Summon another Attribute');
+    eq(g.canNormalSummon(0, place(0, T.wall, 'hand')), true, 'same Attribute is fine');
+  });
+
+  await test('CSOC: Queen of Thorns — 1000 LP per non-Plant monster Summoned from the hand', async () => {
+    const { g, place } = csocSetup();
+    place(1, cardByName('Queen of Thorns'), 'mzone');
+    await g.performAction(0, { type: 'summon', card: place(0, T.brute, 'hand') });
+    eq(g.players[0].lp, 7000, 'paid 1000');
+    g.players[0].normalSummonsLeft = 1;
+    await g.performAction(0, { type: 'summon', card: place(0, cardByName('Botanical Girl'), 'hand') });
+    eq(g.players[0].lp, 7000, 'Plant-Type monsters are free');
+  });
+
+  await test('CSOC: Search Striker destroys a face-down monster without damage calculation, then goes to Defense', async () => {
+    const { g, place } = csocSetup();
+    const s = place(0, cardByName('Search Striker'), 'mzone');
+    const w = place(1, T.wall, 'mzone', { faceUp: false, pos: 'def' });
+    await g.conductAttack(0, s);
+    eq(w.location, 'grave', 'destroyed');
+    eq(g.players[0].lp, 8000, 'no damage calculation');
+    await battleEnd(g);
+    eq(s.pos, 'def', 'changed to Defense Position');
+    eq(g.queryCard(s, 'cannotChangePos'), true, 'position locked');
+  });
+
+  await test('CSOC: Iron Chain Snake — -800 ATK, mills Level cards when the monster is destroyed by battle', async () => {
+    const { g, place } = csocSetup();
+    const snake = place(0, cardByName('Iron Chain Snake'), 'mzone');
+    const v = place(1, T.brute, 'mzone');
+    await activateCard(g, 0, snake);
+    eq(snake.location, 'szone', 'equipped');
+    eq(g.getAtk(v), 1000, '-800 ATK');
+    const before = g.players[1].deck.length;
+    const giant = place(0, T.giant, 'mzone');
+    await g.conductAttack(0, giant);
+    eq(v.location, 'grave', 'destroyed');
+    eq(g.players[1].deck.length, before - 4, '4 cards sent from the Deck');
+  });
+
+  await test('CSOC: Jade Knight protects low-ATK Machines from Trap effects only', async () => {
+    const { g, place } = csocSetup();
+    place(0, cardByName('Jade Knight'), 'mzone');
+    const hw = place(0, cardByName('Healing Wave Generator'), 'mzone');
+    const tr = place(1, cardByName('Dust Tornado'), 'szone');
+    await g.destroy([hw], 'effect', 1, tr);
+    eq(hw.location, 'mzone', 'not destroyed by a Trap');
+    const sp = place(1, cardByName('Mystical Space Typhoon'), 'szone');
+    await g.destroy([hw], 'effect', 1, sp);
+    eq(hw.location, 'grave', 'destroyed by a Spell');
+  });
+
+  await test('CSOC: Pollinosis Tributes a Plant to negate a Summon', async () => {
+    const { g, c1, place } = csocSetup();
+    const plant = place(1, cardByName('Botanical Girl'), 'mzone');
+    place(1, cardByName('Pollinosis'), 'szone', { faceUp: false });
+    c1.respond = respondWith('Pollinosis');
+    const b = place(0, T.brute, 'hand');
+    await g.performAction(0, { type: 'summon', card: b });
+    eq(b.location, 'grave', 'Summon negated');
+    eq(plant.location, 'grave', 'Plant Tributed');
   });
 }
