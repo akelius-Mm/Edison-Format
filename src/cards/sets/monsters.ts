@@ -1402,6 +1402,8 @@ monster('Totem Dragon', {
   text: 'Can be treated as 2 Tributes for the Tribute Summon of a Dragon monster. Once per turn, during your Standby Phase, if this card is in your GY, all monsters in your GY are Dragons, and you control no monsters: You can Special Summon this card in Attack Position, but banish it when it leaves the field.',
   aiValue: 200,
   effects: [
+    // CRMS: "Can be treated as 2 Tributes for the Tribute Summon of a Dragon monster" (ABPF altTribute hook).
+    { kind: 'continuous', altTribute: (ctx, summoned, tribute) => tribute === ctx.self && summoned.data.race === 'Dragon' },
     {
       kind: 'trigger',
       event: 'phaseStart',
