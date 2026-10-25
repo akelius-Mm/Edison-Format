@@ -54,11 +54,14 @@ export function playScreen(): Screen {
     modeTile('exhibition', 'Watch AI vs AI', 'Spectate two AI duelists', 'Cyber Dragon'),
   );
 
+  // Play a friend: online duel with a room code (src/net, screens/friend.ts)
+  const friend = h('section', { class: 'home-tiles play-tiles play-tiles--friend' }, modeTile('friend', 'Play a friend', 'Online with a room code · on their own phone', 'Elemental HERO Stratos'));
+
   const el = h(
     'div',
     { class: 'home play', tabindex: '-1' },
     head,
-    h('div', { class: 'home-body' }, duelCard, resume, quick, h('h2', { class: 'home-h' }, 'Compete'), tiles),
+    h('div', { class: 'home-body' }, duelCard, resume, quick, friend, h('h2', { class: 'home-h' }, 'Compete'), tiles),
   );
   return { el };
 }
