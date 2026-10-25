@@ -3,7 +3,7 @@ import { h, icon, ICONS } from './dom';
 import { go, parseHash } from './nav';
 
 const TABS: { route: string; label: string; icon: keyof typeof ICONS; match: string[] }[] = [
-  { route: 'title', label: 'Home', icon: 'home', match: ['title', ''] },
+  { route: 'title', label: 'Home', icon: 'home', match: ['title', '', 'packs', 'binder', 'locals'] },
   { route: 'duel', label: 'Duel', icon: 'swords', match: ['duel', 'exhibition'] },
   { route: 'draft', label: 'Draft', icon: 'cards', match: ['draft'] },
   { route: 'deck-builder', label: 'Decks', icon: 'edit', match: ['deck-builder', 'database'] },

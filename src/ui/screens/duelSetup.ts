@@ -6,7 +6,9 @@ import { getSettings, loadJSON, saveJSON } from '../settings';
 import { ctaButton, deckArt, deckCarousel, deckGroups, deckShelf, linkButton, lobbySection, newPersona, opponentEditor, randomAvatar, stickyBar, type PersonaState } from './components';
 import { confirmDialog, h, icon, segmented, toast } from './dom';
 import { SLEEVES } from './ext';
+import { rewardForDuel } from '../../collection';
 import { runMatch, type MatchSetup } from './match';
+import { announceReward } from './rewards';
 import { frame, go, scrollToTop, type Screen } from './nav';
 import { showResults } from './results';
 import { allDeckInfos, premadeInfo, recordMatch, resolveDeck, toDeckList, type DeckInfo } from './store';
@@ -242,6 +244,7 @@ export async function playVsAI(mine: DeckInfo, opp: DeckInfo, persona: PersonaSt
       { label: 'Home', icon: 'home', onClick: () => go('title') },
     ],
   });
+  announceReward(rewardForDuel({ won: res === 'W', mode: bestOf > 1 ? 'match' : 'duel' }));
 }
 
 // ------------------------------------------------------------------ exhibition

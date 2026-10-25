@@ -5,6 +5,7 @@ import { h, icon, ICONS, type Child } from './dom';
 import { renderAvatar, sleevePreview } from './ext';
 import { go, type Screen } from './nav';
 import { getOfficialImage } from '../cards/officialArt';
+import { dp, totalUnopened } from '../../collection';
 import { getProfile, tournamentSummary, ordinal } from './store';
 
 interface MenuItem {
@@ -69,6 +70,7 @@ export function titleScreen(): Screen {
   const profile = getProfile();
   const ts = tournamentSummary();
   const active = loadActiveTournament();
+  const unopened = totalUnopened();
   const gp = profile.games.w + profile.games.l + profile.games.d;
 
   // ---- hero: full-bleed Dark Armed Dragon artwork with the main call to action
@@ -120,10 +122,12 @@ export function titleScreen(): Screen {
   const tiles = h(
     'section',
     { class: 'home-tiles' },
-    tile('draft', 'Draft', 'Open packs, build a deck', 'Gold Sarcophagus', 'New'),
+    tile('packs', 'Packs', unopened ? `${unopened} to open · ${dp()} DP` : `Shop · ${dp()} DP`, 'Pot of Avarice', unopened ? String(unopened) : undefined),
+    tile('locals', 'Locals Night', 'Friday at the card shop', 'Black Rose Dragon', 'New'),
+    tile('draft', 'Draft', 'Draft and Sealed', 'Gold Sarcophagus'),
     tile('tournament', 'Tournament', 'Swiss + Top 8', 'Judgment Dragon'),
-    tile('exhibition', 'Watch', 'AI vs AI', 'Stardust Dragon'),
     tile('deck-builder', 'Decks', 'Build and edit', 'Brionac, Dragon of the Ice Barrier'),
+    tile('binder', 'Binder', 'Your collection', 'Stardust Dragon'),
   );
 
   const row = (route: string, label: string, ic: keyof typeof ICONS) =>
@@ -131,6 +135,7 @@ export function titleScreen(): Screen {
   const more = h(
     'section',
     { class: 'home-more' },
+    row('exhibition', 'Watch AI vs AI', 'eye'),
     row('database', 'Card Database', 'search'),
     row('customize', 'Sleeves & Playmat', 'palette'),
     row('rules', 'How to Play & Banlist', 'book'),

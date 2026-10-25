@@ -329,7 +329,9 @@ export function selectDialog(d: Dialogs, ctx: PromptCtx, req: SelectRequest): { 
 
 export function optionDialog(d: Dialogs, req: OptionRequest): Promise<number> {
   return new Promise((resolve) => {
-    const body = h('div', 'opt-list');
+    // Short choices (amounts, levels, attributes) read best as a grid of chips.
+    const chips = req.options.length >= 3 && req.options.every((o) => o.length <= 12);
+    const body = h('div', chips ? 'opt-list opt-list--chips' : 'opt-list');
     let m: ModalHandle;
     req.options.forEach((o, i) => {
       const b = h('button', 'btn btn--option', `<span>${esc(o)}</span>`) as HTMLButtonElement;
