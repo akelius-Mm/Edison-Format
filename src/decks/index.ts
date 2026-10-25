@@ -1,5 +1,6 @@
 import '../cards';
 import { CARDS, cardByName, findCard } from '../cards';
+import { isPostEdison } from '../cards/banlist';
 import type { CardData } from '../engine/card';
 import type { DeckList } from '../engine/game';
 import { DECKS as A } from './group-a';
@@ -34,7 +35,10 @@ export function buildDeckList(def: Pick<DeckDef, 'main' | 'extra'>): DeckList & 
   return { main: expand(def.main), extra: expand(def.extra), missing };
 }
 
-/** Validate a deck against Edison construction rules. Returns a list of problems. */
+/**
+ * Validate a deck against Edison construction rules. Returns a list of problems.
+ * `ignoreLimits` (Draft / Sealed) waives copy limits, the banlist and the post-Edison release check.
+ */
 export function validateDeck(
   def: Pick<DeckDef, 'main' | 'extra'> & { side?: [string, number][] },
   opts: { ignoreLimits?: boolean } = {},
@@ -55,6 +59,7 @@ export function validateDeck(
       continue;
     }
     if (opts.ignoreLimits) continue;
+    if (isPostEdison(c.name)) errs.push(`${c.name} was released after April 2010 (not Edison legal).`);
     const lim = c.limit ?? 3;
     if (n > lim) errs.push(`${name}: ${n} copies (limit ${lim === 0 ? 'Forbidden' : lim}).`);
   }
