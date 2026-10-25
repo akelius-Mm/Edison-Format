@@ -1,0 +1,95 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Realistic Mat Sample</title>
+<style>
+  html,body{margin:0;height:100%;background:#1a120c;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text",Inter,sans-serif}
+  .table{position:relative;width:390px;height:844px;overflow:hidden;
+    background:
+      radial-gradient(120% 70% at 50% 45%, rgba(255,214,160,.10), rgba(0,0,0,.55) 75%),
+      repeating-linear-gradient(92deg, rgba(0,0,0,.10) 0 2px, rgba(255,255,255,.025) 2px 5px, rgba(0,0,0,.06) 5px 9px),
+      repeating-linear-gradient(90deg, #4a2f1c 0 38px, #553722 38px 41px, #4d321e 41px 90px, #3f2817 90px 93px),
+      #4a2f1c;}
+  .woodgrain{position:absolute;inset:0;pointer-events:none;filter:url(#woodgrain);opacity:.18;mix-blend-mode:overlay;background:#808080;z-index:0}
+  .lamp{position:absolute;inset:0;pointer-events:none;background:radial-gradient(60% 40% at 50% 58%, rgba(255,236,200,.16), transparent 70%)}
+  .opp{position:absolute;left:14px;right:14px;top:150px;height:206px;border-radius:14px;background:rgba(0,0,0,.18);box-shadow:inset 0 0 0 1px rgba(255,255,255,.04)}
+  /* the mat */
+  .mat{position:absolute;z-index:1;left:8px;right:8px;top:520px;height:206px;border-radius:16px;overflow:hidden;
+    box-shadow:0 1px 0 rgba(255,255,255,.06) inset, 0 18px 30px -10px rgba(0,0,0,.75), 0 4px 8px rgba(0,0,0,.5);
+    transform:perspective(900px) rotateX(4deg);transform-origin:50% 100%;}
+  .art{position:absolute;inset:0;
+    background:
+      radial-gradient(40% 55% at 50% 48%, rgba(255,214,120,.55), rgba(255,170,60,.18) 40%, transparent 70%),
+      conic-gradient(from 200deg at 50% 50%, #0b1a3a, #1d3f8a, #0b1a3a, #2a1658, #0b1a3a),
+      #0b1a3a;}
+  .art svg{position:absolute;inset:0;width:100%;height:100%}
+  /* neoprene grain */
+  .grain{position:absolute;inset:0;filter:url(#grain);opacity:.22;mix-blend-mode:overlay;background:#808080}
+  .sheen{position:absolute;inset:0;background:linear-gradient(115deg, rgba(255,255,255,0) 30%, rgba(255,255,255,.07) 45%, rgba(255,255,255,0) 60%), radial-gradient(90% 80% at 50% 0%, rgba(255,255,255,.06), transparent 60%)}
+  .vignette{position:absolute;inset:0;box-shadow:inset 0 0 40px 10px rgba(0,0,0,.55)}
+  /* stitched edge */
+  .stitch{position:absolute;inset:5px;border-radius:12px;border:2px dashed rgba(230,210,170,.55);filter:blur(.2px)}
+  .edge{position:absolute;inset:0;border-radius:16px;box-shadow:inset 0 0 0 4px #0d0d10, inset 0 0 0 5px rgba(255,255,255,.05)}
+  /* printed zones */
+  .zones{position:absolute;left:50%;top:50%;transform:translate(-50%,-54%);display:grid;grid-template-columns:repeat(7,44px);grid-template-rows:repeat(2,64px);gap:9px 6px}
+  .z{border:1.6px solid rgba(255,236,190,.62);border-radius:5px;position:relative;filter:blur(.25px);
+     background:rgba(0,0,0,.14);box-shadow:inset 0 0 6px rgba(0,0,0,.35)}
+  .z span{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;text-align:center;
+     font:700 6.5px/1.15 "Times New Roman",Georgia,serif;letter-spacing:.06em;color:rgba(255,236,190,.62);padding:2px;text-transform:uppercase}
+  .z.round{border-radius:50%/40%}
+  .brand{position:absolute;left:0;right:0;bottom:9px;text-align:center;font:700 9px Georgia,serif;letter-spacing:.42em;color:rgba(255,226,160,.55)}
+  /* cards */
+  .card{position:absolute;left:0;top:0;width:44px;height:64px;border-radius:3px;transform:translateZ(0)}
+  .card.back{background:radial-gradient(circle at 50% 50%, #e9873a 0 11px, #6a2b0f 12px 13px, transparent 14px), linear-gradient(135deg,#5a3418,#2b1708);box-shadow:0 0 0 2px #1c0f06 inset, 0 6px 10px rgba(0,0,0,.55), 0 2px 3px rgba(0,0,0,.6)}
+  .card.face{background:linear-gradient(#c87633,#a85a21);box-shadow:0 7px 12px rgba(0,0,0,.6), 0 2px 3px rgba(0,0,0,.6)}
+  .card.face::before{content:"";position:absolute;left:5px;right:5px;top:11px;height:26px;background:linear-gradient(135deg,#f4e3b0,#c9a54a 40%,#6b4a1c);border:1px solid #3a2410}
+  .card.face::after{content:"";position:absolute;left:5px;right:5px;bottom:5px;height:17px;background:#f1e2c2;border:1px solid #6b4a1c}
+  .card.def{transform:rotate(90deg)}
+  .lift{transform:translateY(-6px) scale(1.06);box-shadow:0 16px 18px rgba(0,0,0,.55),0 4px 6px rgba(0,0,0,.5)!important}
+  .label{position:absolute;left:0;right:0;top:30px;text-align:center;color:#f2efe8;font:600 13px -apple-system,Inter,sans-serif;letter-spacing:.08em;opacity:.8;text-transform:uppercase}
+  .hand{position:absolute;left:0;right:0;bottom:-14px;display:flex;justify-content:center;gap:-10px}
+</style></head>
+<body>
+<svg width="0" height="0" style="position:absolute">
+  <filter id="grain"><feTurbulence type="fractalNoise" baseFrequency="1.6" numOctaves="2" stitchTiles="stitch"/><feColorMatrix type="saturate" values="0"/></filter>
+  <filter id="woodgrain"><feTurbulence type="fractalNoise" baseFrequency="0.012 0.6" numOctaves="3" seed="4"/><feColorMatrix type="saturate" values="0"/></filter>
+</svg>
+<div class="table">
+  <div class="woodgrain"></div>
+  <div class="lamp"></div>
+  <div class="label">Sample · neoprene mat on a wood table</div><div class="label" style="top:120px;font-size:11px;opacity:.55">opponent's side</div>
+  <div class="opp"></div>
+  <div class="mat">
+    <div class="art">
+      <svg viewBox="0 0 370 330" preserveAspectRatio="xMidYMid slice">
+        <defs><radialGradient id="g" cx="50%" cy="50%" r="50%"><stop offset="0" stop-color="#ffe6a6"/><stop offset=".5" stop-color="#e2a83c"/><stop offset="1" stop-color="#7a4c12"/></radialGradient></defs>
+        <g opacity=".55" fill="none" stroke="url(#g)" stroke-width="1.2">
+          <circle cx="185" cy="160" r="118"/><circle cx="185" cy="160" r="96" stroke-dasharray="3 6"/>
+          <polygon points="185,52 214,128 296,128 230,175 254,252 185,205 116,252 140,175 74,128 156,128"/>
+        </g>
+        <g opacity=".22" stroke="#9fd0ff" stroke-width=".6" fill="none">
+          <path d="M0,250 C80,200 140,290 230,240 S330,180 370,220"/><path d="M0,90 C90,40 160,130 240,80 S330,30 370,60"/>
+        </g>
+      </svg>
+    </div>
+    <div class="grain"></div>
+    <div class="zones">
+      <div class="z round"><span>Field<br>Card<br>Zone</span></div>
+      <div class="z"><span>Monster<br>Card<br>Zone</span></div><div class="z"><span>Monster<br>Card<br>Zone</span><div class="card face"></div></div><div class="z"><span>Monster<br>Card<br>Zone</span></div><div class="z"><span>Monster<br>Card<br>Zone</span><div class="card back def"></div></div><div class="z"><span>Monster<br>Card<br>Zone</span></div>
+      <div class="z"><span>Grave<br>yard</span><div class="card face" style="top:-2px"></div></div>
+      <div class="z"><span>Extra<br>Deck</span></div>
+      <div class="z"><span>Spell<br>&amp;<br>Trap</span><div class="card back"></div></div><div class="z"><span>Spell<br>&amp;<br>Trap</span><div class="card back"></div></div><div class="z"><span>Spell<br>&amp;<br>Trap</span></div><div class="z"><span>Spell<br>&amp;<br>Trap</span></div><div class="z"><span>Spell<br>&amp;<br>Trap</span></div>
+      <div class="z"><span>Deck</span><div class="card back" style="top:-3px;left:1px"></div><div class="card back" style="top:-6px;left:2px"></div></div>
+    </div>
+    <div class="sheen"></div>
+    <div class="vignette"></div>
+    <div class="edge"></div>
+    <div class="stitch"></div>
+    <div class="brand">EDISON · APRIL 2010</div>
+  </div>
+  <div style="position:absolute;left:0;right:0;bottom:30px;display:flex;justify-content:center">
+    <div class="card face lift" style="position:relative;width:62px;height:90px;margin:0 -6px"></div>
+    <div class="card face" style="position:relative;width:62px;height:90px;margin:0 -6px;transform:rotate(4deg)"></div>
+    <div class="card face" style="position:relative;width:62px;height:90px;margin:0 -6px;transform:rotate(8deg)"></div>
+  </div>
+</div>
+</body></html>
