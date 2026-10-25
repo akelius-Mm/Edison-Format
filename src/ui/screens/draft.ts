@@ -16,6 +16,7 @@ import {
   humanMatch,
   humanPack,
   humanRecord,
+  humanSideIds,
   isExtraDeck,
   isFoilRarity,
   makePick,
@@ -491,7 +492,7 @@ function homeView(ctl: Ctl, opts: { customize?: boolean } = {}) {
     const saved = savedPresets();
     const savedOn = saved.find((p) => sameSetup(p.setup, x));
     const cur = savedOn ? null : presetOf(x.plan);
-    presetRow.classList.toggle('scroll', saved.length > 0);
+    presetRow.classList.toggle('scroll', saved.length + PRESETS.length > 3);
     presetRow.replaceChildren(
       ...PRESETS.map((p) => {
         const ready = p.sets.every((c) => packOption(c, dev).ready);
@@ -1471,7 +1472,7 @@ function hubView(ctl: Ctl, s: DraftState, autoResume = false) {
     const me = s.players[0];
     const deckName = deckNameOf(s);
     const sides: [DuelSide, DuelSide] = [
-      { name: me.name, deck: myDeck, avatar: st.avatar, sleeve: st.sleeve, control: 'human', title: deckName },
+      { name: me.name, deck: { ...myDeck, side: humanSideIds(s).map(card) }, avatar: st.avatar, sleeve: st.sleeve, control: 'human', title: deckName },
       { name: opp.name, deck: oppDeck, avatar: opp.avatar, sleeve: opp.sleeve, control: optsOf(s).ai, title: describeDeck(oppDeck) },
     ];
     const out = await runMatch({
@@ -1480,6 +1481,7 @@ function hubView(ctl: Ctl, s: DraftState, autoResume = false) {
       caption: `Draft · Round ${n} – vs ${opp.name}`,
       stats: s.savedDeckId ? { deckKey: `custom:${s.savedDeckId}`, deckName } : undefined,
       resume: { kind: 'draft', key: duelKey(s, n), route: 'draft', params: { view: 'hub' } },
+      limited: true,
     });
     const token = ctl.token;
     actions.style.display = 'none';

@@ -5,7 +5,13 @@
 //  D: a saved log that no longer fits shows "Couldn't restore this duel exactly".
 // Playwright is not a project dependency: run with a globally installed copy, e.g.
 //   npx vite --port 5179 &  NODE_PATH=$(npm root -g) node scripts/resume-e2e.cjs http://localhost:5179/ /tmp/shots
-const { chromium, devices } = require('playwright');
+const { chromium, devices } = (() => {
+  try {
+    return require('playwright');
+  } catch {
+    return require(require('child_process').execSync('npm root -g').toString().trim() + '/playwright');
+  }
+})();
 const fs = require('fs');
 
 const BASE = process.argv[2] || 'http://localhost:5179/';
@@ -142,6 +148,13 @@ async function oneMove(page) {
   return 'none';
 }
 
+/** Between games: once premade decks have Side Decks the siding screen comes first; keep the deck. */
+async function skipSiding(page) {
+  await page.waitForSelector('.inter, .sd');
+  if (await page.locator('.sd').count()) await page.locator('.sd-skip').click();
+  await page.waitForSelector('.inter');
+}
+
 async function waitRestored(page) {
   await page.waitForSelector('.duel-root');
   await page.waitForFunction(() => !document.querySelector('.duel-restoring:not(.is-gone)'), null, { timeout: 30000 });
@@ -254,7 +267,7 @@ async function waitRestored(page) {
     await page.locator('.dlg--leave .btn', { hasText: 'Concede' }).click();
     await page.waitForSelector('.result.is-open');
     await page.locator('.result-continue').click();
-    await page.waitForSelector('.inter');
+    await skipSiding(page);
     const s1 = await page.evaluate(() => JSON.parse(localStorage.getItem('edison.duel.active.v1') || 'null'));
     ok(s1 && s1.games.length === 1 && s1.game === null, 'C: game 1 recorded, between games');
     await page.screenshot({ path: `${OUT}/c1-interstitial.png` });
@@ -263,7 +276,7 @@ async function waitRestored(page) {
     const card = (await page.locator('.home-resume--duel').innerText()).replace(/\s+/g, ' ');
     ok(/Game 2/.test(card), `C: Home card: ${card}`);
     await page.locator('.home-resume--duel').click();
-    await page.waitForSelector('.inter');
+    await skipSiding(page);
     const msg = await page.locator('.inter-msg').innerText();
     ok(/You lost the previous game/.test(msg), `C: interstitial offers the loser's choice: "${msg}"`);
     await page.locator('.inter .cta', { hasText: 'Go second' }).click();

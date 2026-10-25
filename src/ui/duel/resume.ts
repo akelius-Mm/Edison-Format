@@ -5,9 +5,16 @@
 // the match setup (decks as card ids), the finished games of the match, the current game's seed
 // and first player, and the decision log. Resuming rebuilds the game and replays the log instantly.
 //
+// Side decking: each game's actual decklists (both players, after siding) are kept in `played`
+// (finished games) and `game.decks` (the game in progress), so a resumed game is rebuilt from the
+// exact lists. A match left on the siding screen keeps the swaps made so far in `siding`.
+// Records saved before siding have none of these and resume with the original decks.
+//
 // One slot only: starting a new resumable match replaces whatever was saved before.
 import { CARDS } from '../../cards';
+import type { DeckIds } from '../../decks/siding';
 import type { CardData } from '../../engine/card';
+import type { DeckList } from '../../engine/game';
 import type { Decision } from '../../engine/replay';
 import type { PlayerId } from '../../engine/types';
 import type { GameResult } from '../../tournament/types';
@@ -38,6 +45,8 @@ export interface SavedSide {
   /** Card ids. */
   main: string[];
   extra: string[];
+  /** Side Deck card ids (missing in records saved before siding). */
+  side?: string[];
 }
 
 export interface SavedGame {
@@ -51,6 +60,23 @@ export interface SavedGame {
   log: Decision[];
   /** Turn number at the last decision (for the resume card). */
   turn: number;
+  /** The decks this game is played with, after siding (missing = the match's original decks). */
+  decks?: [DeckIds, DeckIds];
+}
+
+/** A finished game's decks, and the cards each player showed (public at the end of the game). */
+export interface PlayedGame {
+  decks: [DeckIds, DeckIds];
+  seen?: [string[], string[]];
+}
+
+/** The human is siding for game `index`: the deck as it stands so far. */
+export interface SavedSiding {
+  index: number;
+  player: PlayerId;
+  deck: DeckIds;
+  /** Siding is finished (the go-first choice is next). */
+  done?: boolean;
 }
 
 export interface SavedDuel {
@@ -64,7 +90,15 @@ export interface SavedDuel {
     caption: string;
     requireWinner?: boolean;
     stats?: { deckKey: string; deckName: string };
+    /** Draft / Sealed: siding moves cards freely between deck and pool. */
+    limited?: boolean;
   };
+  /** Match seed: AI siding derives from it, so a resumed match sides the same way. */
+  seed?: number;
+  /** Decks (and shown cards) of each finished game, by game index. */
+  played?: (PlayedGame | null)[];
+  /** Siding in progress between games. */
+  siding?: SavedSiding | null;
   /** Finished games of the match. */
   games: GameResult[];
   /** The game in progress; null between games (the next game has not started). */
@@ -132,24 +166,36 @@ export function toSavedSide(s: DuelSide): SavedSide {
     title: s.title,
     main: s.deck.main.map((c) => c.id),
     extra: s.deck.extra.map((c) => c.id),
+    ...(s.deck.side?.length ? { side: s.deck.side.map((c) => c.id) } : {}),
   };
 }
 
+const look = (ids: string[]) => {
+  const out: CardData[] = [];
+  for (const id of ids) {
+    const c = CARDS[id];
+    if (!c) return null;
+    out.push(c);
+  }
+  return out;
+};
+
+/** Card lists from ids; null when a card no longer exists. */
+export function deckFromIds(d: DeckIds): DeckList | null {
+  const main = look(d.main);
+  const extra = look(d.extra);
+  const side = look(d.side ?? []);
+  if (!main || !extra || !side) return null;
+  return side.length ? { main, extra, side } : { main, extra };
+}
+
+export const deckToIds = (d: DeckList): DeckIds => ({ main: d.main.map((c) => c.id), extra: d.extra.map((c) => c.id), side: (d.side ?? []).map((c) => c.id) });
+
 /** Rebuild a side; null when a card no longer exists. */
 export function fromSavedSide(s: SavedSide): DuelSide | null {
-  const look = (ids: string[]) => {
-    const out: CardData[] = [];
-    for (const id of ids) {
-      const c = CARDS[id];
-      if (!c) return null;
-      out.push(c);
-    }
-    return out;
-  };
-  const main = look(s.main);
-  const extra = look(s.extra);
-  if (!main || !extra) return null;
-  return { name: s.name, avatar: s.avatar, sleeve: s.sleeve, control: s.control, title: s.title, deck: { main, extra } };
+  const deck = deckFromIds({ main: s.main, extra: s.extra, side: s.side ?? [] });
+  if (!deck) return null;
+  return { name: s.name, avatar: s.avatar, sleeve: s.sleeve, control: s.control, title: s.title, deck };
 }
 
 /** "vs Rei Mori · Game 2 · Turn 7" */
@@ -160,6 +206,7 @@ export function duelSummary(d: SavedDuel): { opponent: string; line: string } {
   const gameNo = (d.game?.index ?? d.games.length) + 1;
   if (d.setup.bestOf === 3 || gameNo > 1) parts.push(`Game ${gameNo}`);
   if (d.game && d.game.turn > 0) parts.push(`Turn ${d.game.turn}`);
+  else if (!d.game && d.siding) parts.push('Siding');
   else if (!d.game && d.games.length) parts.push('Next game');
   return { opponent, line: parts.join(' · ') };
 }

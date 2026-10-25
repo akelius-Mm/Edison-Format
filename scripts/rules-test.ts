@@ -12,6 +12,10 @@ import { ensureRgbtPatches } from '../src/cards/sets/rgbt';
 import { ensureCrmsPatches } from '../src/cards/sets/crms';
 import { ensurePtdnPatches } from '../src/cards/sets/ptdn';
 import { ensureLodtPatches } from '../src/cards/sets/lodt';
+import { ensureGlasPatches } from '../src/cards/sets/glas';
+import { ensureCsocPatches } from '../src/cards/sets/csoc';
+import { PREMADE_DECKS, aiSideDeck, buildDeckList, canSwap, moveToDeck, moveToSide, sideSummary, sidedDeckProblems, swapCards, validateDeck, type DeckIds } from '../src/decks';
+import { ensureTdgsPatches } from '../src/cards/sets/tdgs';
 
 const T = {
   brute: findCard('Rules Test Brute') ?? normal('Rules Test Brute', 'EARTH', 'Warrior', 4, 1800, 1000),
@@ -867,6 +871,10 @@ function eq(a: unknown, b: unknown, msg: string) {
   await crmsTests();
   await ptdnTests();
   await lodtTests();
+  await glasTests();
+  await csocTests();
+  await sidingTests();
+  await tdgsTests();
 
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
@@ -2440,5 +2448,817 @@ async function lodtTests() {
     await (g as any).setPhase('standby');
     eq(dt.location, 'grave', 'Dice Try! used');
     eq(dmt.location, 'grave', 'Dangerous Machine Type-6 destroyed');
+  });
+}
+
+// ---------------------------------------------------------------- Side decking
+async function sidingTests() {
+  const id = (n: string) => cardByName(n).id;
+  const ids = (e: [string, number][]) => e.flatMap(([n, k]) => Array(k).fill(id(n)) as string[]);
+  const forty: [string, number][] = [
+    ['Card Trooper', 1],
+    ['Marauding Captain', 3],
+    ['Elemental HERO Stratos', 1],
+    ['Sangan', 1],
+    ['Cyber Dragon', 2],
+    ['Mystical Space Typhoon', 1],
+    ['Pot of Avarice', 2],
+    ['Bottomless Trap Hole', 2],
+    ['Solemn Judgment', 1],
+    ['Torrential Tribute', 1],
+    ['Mirror Force', 1],
+    ['Brain Control', 1],
+    ['Monster Reborn', 1],
+    ['Heavy Storm', 1],
+    ['Book of Moon', 2],
+    ['Dimensional Prison', 2],
+    ['Gold Sarcophagus', 1],
+    ['Smashing Ground', 2],
+    ['Trap Hole', 3],
+    ['Gemini Elf', 3],
+    ['Vorse Raider', 3],
+    ['Spirit Reaper', 1],
+    ['Morphing Jar', 1],
+    ['Exiled Force', 3],
+  ];
+  const side: [string, number][] = [
+    ['D.D. Crow', 2],
+    ['Royal Decree', 2],
+    ['Light-Imprisoning Mirror', 1],
+    ['Shadow-Imprisoning Mirror', 1],
+    ['Trap Stun', 2],
+    ['Macro Cosmos', 2],
+    ['Kycoo the Ghost Destroyer', 2],
+    ['Chimeratech Fortress Dragon', 1],
+    ['Thunder King Rai-Oh', 2],
+  ];
+  const extra: [string, number][] = [
+    ['Stardust Dragon', 1],
+    ['Goyo Guardian', 1],
+  ];
+  const count = (e: [string, number][]) => e.reduce((a, [, n]) => a + n, 0);
+
+  await test('Siding: validation enforces Side ≤15 (waived for Limited)', async () => {
+    eq(count(forty), 40, 'test deck has 40 cards');
+    eq(validateDeck({ main: forty, extra, side }).length, 0, `legal deck: ${validateDeck({ main: forty, extra, side }).join(' ')}`);
+    const big = [...side, ['Dust Tornado', 2] as [string, number]];
+    eq(count(big), 17, '17 side cards');
+    eq(validateDeck({ main: forty, extra, side: big }).some((e) => /Side Deck has 17 cards \(maximum 15\)/.test(e)), true, 'Side 17 is rejected');
+    eq(validateDeck({ main: forty, extra, side: big }, { ignoreLimits: true }).some((e) => /Side Deck/.test(e)), false, 'Limited has no side cap');
+  });
+
+  await test('Siding: card limits count Main + Extra + Side together', async () => {
+    const s2: [string, number][] = [['Gemini Elf', 1]];
+    eq(validateDeck({ main: forty, extra, side: s2 }).some((e) => /Gemini Elf: 4 copies/.test(e)), true, '3 main + 1 side Gemini Elf is over the limit');
+    const s3: [string, number][] = [['Stardust Dragon', 3]];
+    eq(validateDeck({ main: forty, extra, side: s3 }).some((e) => /Stardust Dragon: 4 copies/.test(e)), true, 'Extra + Side counted together');
+    const s4: [string, number][] = [['Brain Control', 1]];
+    eq(validateDeck({ main: forty, extra, side: s4 }).some((e) => /Brain Control: 2 copies \(limit 1\)/.test(e)), true, 'Limited card in main and side');
+  });
+
+  const deck: DeckIds = { main: ids(forty), extra: ids(extra), side: ids(side) };
+
+  await test('Siding: a one-for-one swap keeps every count', async () => {
+    const d1 = swapCards(deck, id('Trap Hole'), id('D.D. Crow'))!;
+    eq(!!d1, true, 'swap allowed');
+    eq(d1.main.length, 40, 'Main stays 40');
+    eq(d1.extra.length, 2, 'Extra stays 2');
+    eq(d1.side.length, 15, 'Side stays 15');
+    eq(d1.main.filter((x) => x === id('D.D. Crow')).length, 1, 'D.D. Crow in');
+    eq(d1.side.filter((x) => x === id('Trap Hole')).length, 1, 'Trap Hole to the side');
+    eq(d1.main.indexOf(id('D.D. Crow')), deck.main.lastIndexOf(id('Trap Hole')), 'the incoming card takes the outgoing card’s slot');
+    const d2 = swapCards(d1, id('Trap Hole'), id('D.D. Crow'))!;
+    eq(sideSummary(deck, d2), '+2 D.D. Crow, \u22122 Trap Hole', 'summary');
+    eq(sidedDeckProblems(d2, deck).length, 0, 'still legal');
+    eq(swapCards(deck, id('Trap Hole'), id('Dust Tornado')), null, 'a card that is not in the side cannot come in');
+    eq(deck.main.length + deck.side.length, 55, 'the original deck is untouched');
+  });
+
+  await test('Siding: Extra Deck monsters swap only with Extra-type cards', async () => {
+    eq(canSwap(cardByName('Stardust Dragon'), cardByName('Chimeratech Fortress Dragon')), true, 'Synchro ↔ Fusion');
+    eq(canSwap(cardByName('Stardust Dragon'), cardByName('D.D. Crow')), false, 'Synchro ↔ Main Deck monster');
+    eq(swapCards(deck, id('Stardust Dragon'), id('D.D. Crow')), null, 'Extra out, Main card in is refused');
+    eq(swapCards(deck, id('Card Trooper'), id('Chimeratech Fortress Dragon')), null, 'Main out, Fusion in is refused');
+    const d = swapCards(deck, id('Goyo Guardian'), id('Chimeratech Fortress Dragon'))!;
+    eq(d.extra.includes(id('Chimeratech Fortress Dragon')) && d.side.includes(id('Goyo Guardian')), true, 'Extra ↔ Extra works');
+    eq(d.extra.length, 2, 'Extra count kept');
+  });
+
+  await test('Siding: Limited moves keep the Main Deck at 40 or more', async () => {
+    eq(moveToSide(deck, id('Trap Hole')), null, 'cannot drop to 39');
+    const up = moveToDeck(deck, id('D.D. Crow'))!;
+    eq(up.main.length, 41, 'added to 41');
+    eq(up.side.length, 14, 'pool shrinks');
+    const down = moveToSide(up, id('Trap Hole'))!;
+    eq(down.main.length, 40, 'back to 40');
+    eq(moveToDeck(deck, id('Chimeratech Fortress Dragon'))!.extra.length, 3, 'Fusion goes to the Extra Deck');
+  });
+
+  await test('Siding: AI sides deterministically and sensibly', async () => {
+    const lightsworn = PREMADE_DECKS.find((d) => d.id === 'lightsworn')!;
+    const opp = buildDeckList(lightsworn);
+    const oppIds = { main: opp.main.map((c) => c.id), extra: opp.extra.map((c) => c.id) };
+    const a = aiSideDeck(deck, oppIds, 1234);
+    const b = aiSideDeck(deck, oppIds, 1234);
+    eq(JSON.stringify(a), JSON.stringify(b), 'same seed, same deck');
+    eq(a.main.length, 40, 'Main count kept');
+    eq(a.side.length, 15, 'Side count kept');
+    eq(a.main.filter((x) => x === id('D.D. Crow') || x === id('Macro Cosmos') || x === id('Kycoo the Ghost Destroyer')).length >= 2, true, `graveyard hate sided in vs Lightsworn (${sideSummary(deck, a)})`);
+    eq(a.main.includes(id('Royal Decree')), false, 'no Royal Decree vs a deck with few traps');
+    // every premade pairing keeps legal counts
+    for (const x of PREMADE_DECKS) {
+      if (!x.side?.length) continue;
+      const own = buildDeckList(x);
+      const mine: DeckIds = { main: own.main.map((c) => c.id), extra: own.extra.map((c) => c.id), side: (own.side ?? []).map((c) => c.id) };
+      for (const y of PREMADE_DECKS) {
+        const o = buildDeckList(y);
+        const r = aiSideDeck(mine, { main: o.main.map((c) => c.id), extra: o.extra.map((c) => c.id) }, 7);
+        const probs = sidedDeckProblems(r, mine);
+        if (probs.length) throw new Error(`${x.id} vs ${y.id}: ${probs.join(' ')}`);
+      }
+    }
+  });
+}
+
+// ---------------------------------------------------------------- The Duelist Genesis (TDGS)
+
+async function tdgsTests() {
+  const tdgsSetup = () => {
+    const s = setup();
+    ensureTdgsPatches(s.g);
+    return s;
+  };
+  const live = (c: CardInstance) => {
+    c.activeOnField = true;
+    return c;
+  };
+  const setPhase = (g: Game, ph: string) => (g as any).setPhase(ph);
+
+  await test('TDGS: Big Piece Golem — Normal Summon without Tributing only when you control no monsters', async () => {
+    const { g, place } = tdgsSetup();
+    const bpg = place(0, cardByName('Big Piece Golem'), 'hand');
+    eq(g.canNormalSummon(0, bpg), false, 'opponent controls no monster: needs a Tribute');
+    place(1, T.brute, 'mzone');
+    eq(g.canNormalSummon(0, bpg), true, 'opponent controls a monster, you control none');
+    eq(g.canNormalSummon(0, bpg, true), false, 'cannot be Set without Tributing');
+    await g.performAction(0, { type: 'summon', card: bpg });
+    eq(bpg.location, 'mzone', 'Normal Summoned with no Tribute');
+  });
+
+  await test('TDGS: Power Filter — monsters with 1000 or less ATK cannot be Special Summoned', async () => {
+    const { g, place } = tdgsSetup();
+    live(place(1, cardByName('Power Filter'), 'szone', { faceUp: true }));
+    const w = place(0, T.wall, 'grave');
+    eq((await g.specialSummon([w], 0, { pos: 'atk' })).length, 0, '500 ATK blocked');
+    const b = place(0, T.brute, 'grave');
+    eq((await g.specialSummon([b], 0, { pos: 'atk' })).length, 1, '1800 ATK allowed');
+  });
+
+  await test('TDGS: Quillbolt Hedgehog — revives with a Tuner, removed from play when it leaves the field', async () => {
+    const { g, place } = tdgsSetup();
+    const q = place(0, cardByName('Quillbolt Hedgehog'), 'grave');
+    eq(g.getActivations(0, { open: true }).some((a) => a.card === q), false, 'no Tuner: cannot activate');
+    place(0, tuner, 'mzone');
+    await activateCard(g, 0, q);
+    eq(q.location, 'mzone', 'Special Summoned');
+    await g.destroy([q], 'effect', 1);
+    eq(q.location, 'banished', 'removed from play');
+  });
+
+  await test('TDGS: Handcuffs Dragon — equips to its attacker (-1800 ATK), revives when that monster is destroyed', async () => {
+    const { g, c1, place } = tdgsSetup();
+    const hd = place(0, cardByName('Handcuffs Dragon'), 'mzone');
+    const a = place(1, T.giant, 'mzone');
+    g.turnPlayer = 1;
+    c1.chooseAttackTarget = async () => hd;
+    await g.conductAttack(1, a);
+    eq(hd.location, 'szone', 'equipped from the GY');
+    eq(g.getAtk(a), 1200, '3000 - 1800');
+    await g.destroy([a], 'effect', 0);
+    await g.processTriggers(false);
+    eq(hd.location, 'mzone', 'Special Summoned after the equipped monster was destroyed');
+  });
+
+  await test('TDGS: Montage Dragon — sends 3 monsters, ATK = their Levels x 300', async () => {
+    const { g, place } = tdgsSetup();
+    const md = place(0, cardByName('Montage Dragon'), 'hand');
+    const fodder = [place(0, T.giant, 'hand'), place(0, T.brute, 'hand'), place(0, tuner, 'hand')];
+    const proc = g.legalMainActions(0).find((a) => a.type === 'proc' && a.card === md);
+    if (!proc) throw new Error('no summoning procedure');
+    await g.performAction(0, proc);
+    eq(md.location, 'mzone', 'Special Summoned');
+    eq(fodder.every((c) => c.location === 'grave'), true, '3 monsters sent');
+    eq(g.getAtk(md), (8 + 4 + 2) * 300, 'ATK from the Levels');
+  });
+
+  await test('TDGS: Dharc the Dark Charmer — takes a DARK monster while face-up, control returns when it leaves', async () => {
+    const { g, place } = tdgsSetup();
+    const dh = place(0, cardByName('Dharc the Dark Charmer'), 'mzone', { faceUp: false, pos: 'def' });
+    const shade = place(1, T.dark, 'mzone');
+    await g.performAction(0, { type: 'flip', card: dh });
+    eq(shade.controller, 0, 'control taken');
+    await g.destroy([dh], 'effect', 1);
+    eq(shade.controller, 1, 'control returned');
+  });
+
+  await test('TDGS: Telekinetic Shocker — pays 500 and is destroyed instead of a Psychic', async () => {
+    const { g, place } = tdgsSetup();
+    const ts = place(0, cardByName('Telekinetic Shocker'), 'mzone');
+    const snail = place(0, cardByName('Psychic Snail'), 'mzone');
+    await g.destroy([snail], 'effect', 1);
+    eq(snail.location, 'mzone', 'Psychic saved');
+    eq(ts.location, 'grave', 'Shocker destroyed instead');
+    eq(g.players[0].lp, 7500, '500 LP paid');
+  });
+
+  await test('TDGS: Defense Draw — no battle damage from this battle, draw 1', async () => {
+    const { g, c0, place } = tdgsSetup();
+    const dd = place(0, cardByName('Defense Draw'), 'szone', { faceUp: false });
+    const a = place(1, T.brute, 'mzone');
+    g.turnPlayer = 1;
+    c0.respond = (_g, req) => (req.kind === 'damage' ? req.options.find((o) => o.card === dd) ?? null : null);
+    const hand = g.players[0].hand.length;
+    await g.conductAttack(1, a);
+    eq(dd.location, 'grave', 'Defense Draw used');
+    eq(g.players[0].lp, 8000, 'no battle damage');
+    eq(g.players[0].hand.length, hand + 1, 'drew 1');
+  });
+
+  await test("TDGS: Splendid Venus — Solemn Judgment cannot negate (or destroy) your Trap's activation", async () => {
+    const { g, c1, place } = tdgsSetup();
+    const venus = place(0, cardByName('Splendid Venus'), 'mzone');
+    const b = place(1, T.brute, 'mzone');
+    eq(g.getAtk(b), 1300, 'non-Fairy monsters lose 500 ATK');
+    eq(g.getAtk(venus), 2800, 'Fairy unaffected');
+    const nest = place(0, cardByName('Needlebug Nest'), 'szone', { faceUp: false });
+    const sj = place(1, cardByName('Solemn Judgment'), 'szone', { faceUp: false });
+    c1.respond = respondWith('Solemn Judgment');
+    const deck = g.players[0].deck.length;
+    await activateCard(g, 0, nest);
+    eq(sj.location, 'grave', 'Solemn Judgment was activated');
+    eq(g.players[1].lp, 4000, 'Solemn cost paid');
+    eq(g.players[0].deck.length, deck - 5, 'Needlebug Nest still resolved');
+  });
+
+  await test('TDGS: Kinka-byo — revives a Level 1; Izanagi lets it stay; without Izanagi it returns and the monster is removed', async () => {
+    const { g, place } = tdgsSetup();
+    const iz = place(0, cardByName('Izanagi'), 'mzone');
+    const kb = place(0, cardByName('Kinka-byo'), 'hand');
+    const dc = place(0, cardByName('Doctor Cranium'), 'grave');
+    await g.performAction(0, { type: 'summon', card: kb });
+    eq(dc.location, 'mzone', 'Level 1 monster Special Summoned');
+    await setPhase(g, 'end');
+    eq(kb.location, 'mzone', 'Izanagi: the Spirit stays');
+    await g.destroy([iz], 'effect', 1);
+    g.turn += 2;
+    kb.flags.spiritTurn = g.turn;
+    await setPhase(g, 'end');
+    eq(kb.location, 'hand', 'returned to the hand');
+    eq(dc.location, 'banished', 'the revived monster is removed from play');
+  });
+
+  await test('TDGS: Trap of Darkness — pays 1000, copies Needlebug Nest from the GY and removes it', async () => {
+    const { g, place } = tdgsSetup();
+    g.players[0].lp = 3000;
+    const nest = place(0, cardByName('Needlebug Nest'), 'grave');
+    const tod = place(0, cardByName('Trap of Darkness'), 'szone', { faceUp: false });
+    const deck = g.players[0].deck.length;
+    await activateCard(g, 0, tod);
+    eq(g.players[0].lp, 2000, '1000 LP paid');
+    eq(nest.location, 'banished', 'copied card removed from play');
+    eq(g.players[0].deck.length, deck - 5, 'the copied effect resolved');
+  });
+
+  await test('TDGS: Telekinetic Charging Cell — Destructotron activates without paying LP', async () => {
+    const { g, place } = tdgsSetup();
+    const d = place(0, cardByName('Destructotron'), 'mzone');
+    const cell = live(place(0, cardByName('Telekinetic Charging Cell'), 'szone', { faceUp: true }));
+    g.equip(cell, d);
+    const mf = place(1, cardByName('Mirror Force'), 'szone', { faceUp: false });
+    await activateCard(g, 0, d);
+    eq(mf.location, 'grave', 'face-down card destroyed');
+    eq(g.players[0].lp, 8000, 'no LP paid');
+  });
+
+  await test('TDGS: Ghost Gardna — takes the attack, then the attacker loses 1000 ATK', async () => {
+    const { g, c1, place } = tdgsSetup();
+    const gg = place(0, cardByName('Ghost Gardna'), 'mzone', { pos: 'def' });
+    const b = place(0, T.brute, 'mzone');
+    const a = place(1, T.giant, 'mzone');
+    g.turnPlayer = 1;
+    c1.chooseAttackTarget = async () => b;
+    await g.conductAttack(1, a);
+    eq(b.location, 'mzone', 'original target untouched');
+    eq(gg.location, 'grave', 'Ghost Gardna destroyed instead');
+    eq(g.getAtk(a), 2000, 'attacker lost 1000 ATK');
+  });
+
+  await test('TDGS: Toy Magician — Set as a Spell, destroyed by the opponent, Special Summoned in the End Phase', async () => {
+    const { g, place } = tdgsSetup();
+    const tm = place(0, cardByName('Toy Magician'), 'hand');
+    const set = g.legalMainActions(0).find((a) => a.type === 'setST' && a.card === tm);
+    if (!set) throw new Error('cannot be Set in the Spell & Trap Zone');
+    await g.performAction(0, set);
+    eq(tm.location, 'szone', 'Set as a Spell');
+    await g.destroy([tm], 'effect', 1);
+    eq(tm.location, 'grave', 'destroyed');
+    await setPhase(g, 'end');
+    eq(tm.location, 'mzone', 'Special Summoned during the End Phase');
+  });
+
+  await test('TDGS: De-Synchro — returns the Synchro Monster and Special Summons its materials', async () => {
+    const { g, place } = tdgsSetup();
+    const t = place(0, tuner, 'mzone');
+    const b = place(0, T.brute, 'mzone');
+    const goyo = g.players[0].extra.find((c) => c.name === 'Goyo Guardian')!;
+    await g.synchroSummon(0, goyo, [t, b]);
+    eq(goyo.location, 'mzone', 'Synchro Summoned');
+    await activateCard(g, 0, place(0, cardByName('De-Synchro'), 'hand'));
+    eq(goyo.location, 'extra', 'returned to the Extra Deck');
+    eq(t.location === 'mzone' && b.location === 'mzone', true, 'materials Special Summoned');
+  });
+
+  await test('TDGS: Geartown — "Ancient Gear" monsters need 1 less Tribute to Normal Summon', async () => {
+    const { g, place } = tdgsSetup();
+    const ag = findCard('Ancient Gear Golem');
+    if (!ag) return;
+    live(place(1, cardByName('Geartown'), 'fzone'));
+    const agg = place(0, ag, 'hand');
+    eq(g.tributesNeeded(agg), 1, 'Level 8: 1 Tribute');
+  });
+}
+
+// ---------------------------------------------------------------- Crossroads of Chaos (CSOC)
+
+async function csocTests() {
+  const csocSetup = () => {
+    const s = setup();
+    ensureCsocPatches(s.g);
+    return s;
+  };
+  const live = (c: CardInstance) => {
+    c.activeOnField = true;
+    return c;
+  };
+  const battleEnd = async (g: Game) => {
+    g.beginBatch();
+    g.emit({ type: 'battleEnd', player: g.turnPlayer, phase: 'battle' });
+    await g.processTriggers(true);
+  };
+
+  await test('CSOC: Black Garden halves a Summoned monster and gives the opponent a Rose Token', async () => {
+    const { g, place } = csocSetup();
+    live(place(0, cardByName('Black Garden'), 'fzone'));
+    const b = place(0, T.brute, 'hand');
+    await g.performAction(0, { type: 'summon', card: b });
+    eq(g.getAtk(b), 900, 'ATK halved');
+    const rose = g.monsters(1).find((c) => c.name === 'Rose Token');
+    eq(!!rose, true, "Rose Token on the opponent's field");
+    eq(rose && g.getAtk(rose), 800, 'the Rose Token is not halved');
+    eq(rose?.pos, 'atk', 'in Attack Position');
+  });
+
+  await test('CSOC: Machine Lord Ür attacks every monster once, no battle damage to the opponent', async () => {
+    const { g, place } = csocSetup();
+    const ur = place(0, cardByName('Machine Lord Ür'), 'mzone');
+    const w1 = place(1, T.wall, 'mzone');
+    const w2 = place(1, T.wall, 'mzone');
+    await g.conductAttack(0, ur);
+    eq([w1, w2].filter((w) => w.location === 'grave').length, 1, 'first monster destroyed');
+    eq(g.players[1].lp, 8000, 'no battle damage');
+    eq(g.canAttack(ur), true, 'can attack the other monster');
+    eq(g.attackTargets(ur).targets.length, 1, 'only the monster not attacked yet');
+    await g.conductAttack(0, ur);
+    eq([w1, w2].every((w) => w.location === 'grave'), true, 'second monster destroyed');
+    eq(g.canAttack(ur), false, 'no third attack');
+  });
+
+  await test('CSOC: Morphtronic Magnen — only the highest ATK target (Attack), must be attacked (Defense)', async () => {
+    const { g, place } = csocSetup();
+    const mag = place(0, cardByName('Morphtronic Magnen'), 'mzone');
+    const brute = place(1, T.brute, 'mzone');
+    place(1, T.wall, 'mzone');
+    const t = g.attackTargets(mag).targets;
+    eq(t.length === 1 && t[0] === brute, true, 'only the highest ATK monster');
+    const mag2 = place(1, cardByName('Morphtronic Magnen'), 'mzone', { pos: 'def' });
+    const a = place(0, T.giant, 'mzone');
+    const t2 = g.attackTargets(a).targets;
+    eq(t2.length === 1 && t2[0] === mag2, true, 'Defense Position Magnen must be attacked');
+  });
+
+  await test('CSOC: Storm Caller returns a monster destroyed by another Psychic to the top of the Deck', async () => {
+    const { g, place } = csocSetup();
+    place(0, cardByName('Storm Caller'), 'mzone');
+    const inj = place(0, cardByName('Power Injector'), 'mzone');
+    const w = place(1, T.wall, 'mzone');
+    await g.conductAttack(0, inj);
+    eq(w.location, 'deck', 'placed in the Deck');
+    const deck = g.players[1].deck;
+    eq(deck[deck.length - 1], w, 'on top');
+    eq(g.players[1].lp, 8000 - 800, 'battle damage still applies');
+  });
+
+  await test('CSOC: Revived King Ha Des negates the effect of a monster it destroys by battle', async () => {
+    const { g, place } = csocSetup();
+    const hd = place(0, cardByName('Revived King Ha Des'), 'mzone');
+    place(1, cardByName('Sangan'), 'mzone');
+    await g.conductAttack(0, hd);
+    eq(g.players[1].hand.length, 0, 'Sangan does not search');
+  });
+
+  await test('CSOC: Wall of Ivy gives the opponent an Ivy Token that burns its controller', async () => {
+    const { g, place } = csocSetup();
+    const ivy = place(0, cardByName('Wall of Ivy'), 'mzone', { faceUp: false, pos: 'def' });
+    await g.flipSummon(0, ivy);
+    const tok = g.monsters(1).find((c) => c.name === 'Ivy Token');
+    eq(!!tok, true, "Ivy Token on the opponent's field");
+    await g.destroy([tok!], 'effect', 0);
+    await g.processTriggers(false);
+    eq(g.players[1].lp, 7700, 'its controller takes 300');
+  });
+
+  await test('CSOC: Cursed Fig locks 2 Set Spell/Trap Cards while it is in the GY', async () => {
+    const { g, place } = csocSetup();
+    const fig = place(1, cardByName('Cursed Fig'), 'mzone');
+    const mst = place(1, cardByName('Mystical Space Typhoon'), 'szone', { faceUp: false });
+    place(0, cardByName('Dust Tornado'), 'szone', { faceUp: false });
+    eq(g.getActivations(1, { open: false }).some((a) => a.card === mst), true, 'MST can be activated before');
+    const b = place(0, T.brute, 'mzone');
+    await g.conductAttack(0, b);
+    eq(fig.location, 'grave', 'Cursed Fig destroyed');
+    eq(g.getActivations(1, { open: false }).some((a) => a.card === mst), false, 'MST is locked');
+  });
+
+  await test('CSOC: Mark of the Rose — control, End Phase return, Standby retake, returns when it leaves', async () => {
+    const { g, place } = csocSetup();
+    place(0, cardByName('Botanical Girl'), 'grave');
+    const v = place(1, T.brute, 'mzone');
+    const mark = place(0, cardByName('Mark of the Rose'), 'hand');
+    await activateCard(g, 0, mark);
+    eq(v.controller, 0, 'control taken');
+    await (g as any).setPhase('end');
+    eq(v.controller, 1, 'returned in the End Phase');
+    g.turn += 2;
+    await (g as any).setPhase('standby');
+    eq(v.controller, 0, 'taken again in the Standby Phase');
+    await g.destroy([mark], 'effect', 1);
+    eq(v.controller, 1, 'control returns when Mark of the Rose leaves the field');
+  });
+
+  await test('CSOC: Zombie Mammoth is destroyed with no Zombie in the GY and burns its controller', async () => {
+    const { g, place } = csocSetup();
+    const m = place(0, cardByName('Zombie Mammoth'), 'mzone');
+    await g.ruleCleanup();
+    await g.processTriggers(false);
+    eq(m.location, 'grave', 'destroyed');
+    eq(g.players[0].lp, 8000 - 1900, 'its controller takes 1900');
+  });
+
+  await test('CSOC: Urgent Tuning Synchro Summons during the Battle Phase', async () => {
+    const { g, place } = csocSetup();
+    place(0, tuner, 'mzone');
+    place(0, T.brute, 'mzone');
+    const ut = place(0, cardByName('Urgent Tuning'), 'szone', { faceUp: false });
+    g.phase = 'battle';
+    await activateCard(g, 0, ut);
+    eq(g.monsters(0).some((c) => c.name === 'Goyo Guardian'), true, 'Goyo Guardian Synchro Summoned');
+  });
+
+  await test('CSOC: Gozen Match — one Attribute per player', async () => {
+    const { g, place } = csocSetup();
+    place(1, T.brute, 'mzone');
+    place(1, T.dark, 'mzone');
+    const gm = place(0, cardByName('Gozen Match'), 'szone', { faceUp: false });
+    place(0, T.brute, 'mzone');
+    await activateCard(g, 0, gm);
+    eq(g.monsters(1).length, 1, 'the other Attribute was sent to the GY');
+    eq(g.canNormalSummon(0, place(0, T.dark, 'hand')), false, 'cannot Summon another Attribute');
+    eq(g.canNormalSummon(0, place(0, T.wall, 'hand')), true, 'same Attribute is fine');
+  });
+
+  await test('CSOC: Queen of Thorns — 1000 LP per non-Plant monster Summoned from the hand', async () => {
+    const { g, place } = csocSetup();
+    place(1, cardByName('Queen of Thorns'), 'mzone');
+    await g.performAction(0, { type: 'summon', card: place(0, T.brute, 'hand') });
+    eq(g.players[0].lp, 7000, 'paid 1000');
+    g.players[0].normalSummonsLeft = 1;
+    await g.performAction(0, { type: 'summon', card: place(0, cardByName('Botanical Girl'), 'hand') });
+    eq(g.players[0].lp, 7000, 'Plant-Type monsters are free');
+  });
+
+  await test('CSOC: Search Striker destroys a face-down monster without damage calculation, then goes to Defense', async () => {
+    const { g, place } = csocSetup();
+    const s = place(0, cardByName('Search Striker'), 'mzone');
+    const w = place(1, T.wall, 'mzone', { faceUp: false, pos: 'def' });
+    await g.conductAttack(0, s);
+    eq(w.location, 'grave', 'destroyed');
+    eq(g.players[0].lp, 8000, 'no damage calculation');
+    await battleEnd(g);
+    eq(s.pos, 'def', 'changed to Defense Position');
+    eq(g.queryCard(s, 'cannotChangePos'), true, 'position locked');
+  });
+
+  await test('CSOC: Iron Chain Snake — -800 ATK, mills Level cards when the monster is destroyed by battle', async () => {
+    const { g, place } = csocSetup();
+    const snake = place(0, cardByName('Iron Chain Snake'), 'mzone');
+    const v = place(1, T.brute, 'mzone');
+    await activateCard(g, 0, snake);
+    eq(snake.location, 'szone', 'equipped');
+    eq(g.getAtk(v), 1000, '-800 ATK');
+    const before = g.players[1].deck.length;
+    const giant = place(0, T.giant, 'mzone');
+    await g.conductAttack(0, giant);
+    eq(v.location, 'grave', 'destroyed');
+    eq(g.players[1].deck.length, before - 4, '4 cards sent from the Deck');
+  });
+
+  await test('CSOC: Jade Knight protects low-ATK Machines from Trap effects only', async () => {
+    const { g, place } = csocSetup();
+    place(0, cardByName('Jade Knight'), 'mzone');
+    const hw = place(0, cardByName('Healing Wave Generator'), 'mzone');
+    const tr = place(1, cardByName('Dust Tornado'), 'szone');
+    await g.destroy([hw], 'effect', 1, tr);
+    eq(hw.location, 'mzone', 'not destroyed by a Trap');
+    const sp = place(1, cardByName('Mystical Space Typhoon'), 'szone');
+    await g.destroy([hw], 'effect', 1, sp);
+    eq(hw.location, 'grave', 'destroyed by a Spell');
+  });
+
+  await test('CSOC: Pollinosis Tributes a Plant to negate a Summon', async () => {
+    const { g, c1, place } = csocSetup();
+    const plant = place(1, cardByName('Botanical Girl'), 'mzone');
+    place(1, cardByName('Pollinosis'), 'szone', { faceUp: false });
+    c1.respond = respondWith('Pollinosis');
+    const b = place(0, T.brute, 'hand');
+    await g.performAction(0, { type: 'summon', card: b });
+    eq(b.location, 'grave', 'Summon negated');
+    eq(plant.location, 'grave', 'Plant Tributed');
+  });
+}
+
+// ---------------------------------------------------------------- Gladiator's Assault (GLAS)
+
+async function glasTests() {
+  const glasSetup = () => {
+    const s = setup();
+    ensureGlasPatches(s.g);
+    return s;
+  };
+  const live = (c: CardInstance) => {
+    c.activeOnField = true;
+    return c;
+  };
+  const battleEnd = async (g: Game) => {
+    g.beginBatch();
+    g.emit({ type: 'battleEnd', player: g.turnPlayer, phase: 'battle' });
+    await g.processTriggers(true);
+  };
+  const deckCard = (g: Game, p: PlayerId, name: string) => {
+    const c = g.registerCard(new (g.allCards[0].constructor as any)(cardByName(name), p)) as CardInstance;
+    c.location = 'none';
+    g.rawMove(c, 'deck');
+    return c;
+  };
+
+  await test('GLAS: Gladiator Beast Octavius — destroys a face-down Spell/Trap, then returns to the Deck after battle', async () => {
+    const { g, place } = glasSetup();
+    const bestiari = place(0, cardByName('Gladiator Beast Bestiari'), 'grave');
+    const oct = deckCard(g, 0, 'Gladiator Beast Octavius');
+    const st = place(1, cardByName('Mirror Force'), 'szone', { faceUp: false });
+    await g.specialSummon([oct], 0, { pos: 'atk', reasonCard: bestiari });
+    await g.processTriggers(true);
+    eq(st.location, 'grave', 'face-down Spell/Trap destroyed');
+    oct.attackedThisTurnOrWasAttacked = true;
+    await battleEnd(g);
+    eq(oct.location, 'deck', 'no card to discard: shuffled into the Deck');
+  });
+
+  await test('GLAS: Alexander / Spartacus can only be Special Summoned by Dimacari / Hoplomus; Spartacus searches an equip', async () => {
+    const { g, place } = glasSetup();
+    const alex = deckCard(g, 0, 'Gladiator Beast Alexander');
+    const sp = deckCard(g, 0, 'Gladiator Beast Spartacus');
+    const gladius = deckCard(g, 0, "Gladiator Beast's Battle Gladius");
+    const dim = place(0, cardByName('Gladiator Beast Dimacari'), 'grave');
+    const hop = place(0, cardByName('Gladiator Beast Hoplomus'), 'grave');
+    eq((await g.specialSummon([alex], 0, { pos: 'atk', reasonCard: hop })).length, 0, 'Alexander by Hoplomus: no');
+    eq((await g.specialSummon([sp], 0, { pos: 'atk', reasonCard: dim })).length, 0, 'Spartacus by Dimacari: no');
+    eq((await g.specialSummon([alex], 0, { pos: 'atk', reasonCard: dim })).length, 1, 'Alexander by Dimacari');
+    eq(g.queryCard(alex, 'unaffectedBySpells'), true, 'Special Summoned Alexander is unaffected by Spells');
+    await g.specialSummon([sp], 0, { pos: 'atk', reasonCard: hop });
+    await g.processTriggers(true);
+    eq(sp.location, 'mzone', 'Spartacus by Hoplomus');
+    eq(gladius.location, 'hand', 'Gladiator Beast Equip Spell added');
+  });
+
+  await test('GLAS: Dimacari tags out into Alexander; Colosseum counts it, Witch Doctor of Sparta burns', async () => {
+    const { g, place } = glasSetup();
+    const alex = deckCard(g, 0, 'Gladiator Beast Alexander');
+    const dim = place(0, cardByName('Gladiator Beast Dimacari'), 'mzone');
+    const col = live(place(0, cardByName('Colosseum - Cage of the Gladiator Beasts'), 'fzone', { faceUp: true }));
+    place(1, cardByName('Witch Doctor of Sparta'), 'mzone');
+    dim.attackedThisTurnOrWasAttacked = true;
+    await battleEnd(g);
+    eq(dim.location, 'deck', 'Dimacari returned');
+    eq(alex.location, 'mzone', 'Alexander Special Summoned from the Deck');
+    eq(col.counters.colosseum, 1, 'Colosseum counter');
+    eq(g.getAtk(alex), 2500, 'Alexander +100');
+    eq(g.players[0].lp, 7500, 'Witch Doctor: 500 to its opponent');
+  });
+
+  await test("GLAS: Gladiator Beast's Battle Gladius returns to the hand when its monster tags out", async () => {
+    const { g, place } = glasSetup();
+    deckCard(g, 0, 'Gladiator Beast Laquari');
+    const b = place(0, cardByName('Gladiator Beast Bestiari'), 'mzone');
+    const gl = live(place(0, cardByName("Gladiator Beast's Battle Gladius"), 'szone', { faceUp: true }));
+    g.equip(gl, b);
+    eq(g.getAtk(b), 1800, '+300 ATK');
+    b.attackedThisTurnOrWasAttacked = true;
+    await battleEnd(g);
+    eq(b.location, 'deck', 'Bestiari tagged out');
+    eq(gl.location, 'hand', 'Gladius back in hand');
+  });
+
+  await test('GLAS: Gladiator Beast Gaiodiaz — contact fusion, burn equal to the DEF of the destroyed monster', async () => {
+    const { g, place } = glasSetup();
+    place(0, cardByName('Gladiator Beast Spartacus'), 'mzone');
+    place(0, cardByName('Gladiator Beast Laquari'), 'mzone');
+    const gaio = place(0, cardByName('Gladiator Beast Gaiodiaz'), 'extra');
+    const proc = g.legalMainActions(0).find((a) => a.type === 'proc' && a.card === gaio);
+    if (!proc) throw new Error('no contact fusion');
+    await g.performAction(0, proc);
+    eq(gaio.location, 'mzone', 'Gaiodiaz summoned');
+    eq(g.monsters(0).length, 1, 'materials returned');
+    const w = place(1, T.wall, 'mzone', { pos: 'def' });
+    await g.conductAttack(0, gaio);
+    await g.processTriggers(true);
+    eq(w.location, 'grave', 'wall destroyed');
+    eq(g.players[1].lp, 6000, '2000 burn');
+  });
+
+  await test('GLAS: Disarm returns a Gladiator Beast card to negate a Spell', async () => {
+    const { g, c0, place } = glasSetup();
+    const disarm = place(0, cardByName('Disarm'), 'szone', { faceUp: false });
+    const gb = place(0, cardByName('Gladiator Beast Secutor'), 'hand');
+    const mine = place(0, T.brute, 'mzone');
+    const dh = place(1, cardByName('Dark Hole'), 'hand');
+    g.turnPlayer = 1;
+    c0.respond = respondWith('Disarm');
+    await activateCard(g, 1, dh);
+    eq(disarm.location, 'grave', 'Disarm used');
+    eq(gb.location, 'deck', 'Gladiator Beast returned to the Deck');
+    eq(dh.location, 'grave', 'Dark Hole negated');
+    eq(mine.location, 'mzone', 'monster survived');
+  });
+
+  await test('GLAS: Cloudian - Nimbusman Tributes 2 WATER monsters; Updraft burns the Fog Counters away', async () => {
+    const { g, c0, place } = glasSetup();
+    place(0, cardByName('Cloudian - Smoke Ball'), 'mzone');
+    place(0, cardByName('Cloudian - Smoke Ball'), 'mzone');
+    const nim = place(0, cardByName('Cloudian - Nimbusman'), 'hand');
+    (c0 as any).chooseOption = async () => 1;
+    await g.performAction(0, { type: 'summon', card: nim });
+    eq(nim.location, 'mzone', 'summoned');
+    eq(g.monsters(0).length, 1, '2 Tributes');
+    eq(nim.counters.fog, 2, '2 Fog Counters');
+    eq(g.getAtk(nim), 2000, '+500 per Fog Counter');
+    const up = place(0, cardByName('Updraft'), 'szone', { faceUp: false });
+    await activateCard(g, 0, up);
+    eq(g.players[1].lp, 7400, '600 damage');
+    eq(g.getAtk(nim), 1000, 'counters removed');
+  });
+
+  await test('GLAS: Cloudian - Cirrostratus removes 2 Fog Counters to destroy a monster; Natural Disaster burns', async () => {
+    const { g, c0, place } = glasSetup();
+    place(0, cardByName('Cloudian - Smoke Ball'), 'mzone');
+    live(place(0, cardByName('Natural Disaster'), 'szone', { faceUp: true }));
+    const cs = place(0, cardByName('Cloudian - Cirrostratus'), 'hand');
+    const v = place(1, T.brute, 'mzone');
+    await g.performAction(0, { type: 'summon', card: cs });
+    eq(cs.counters.fog, 2, '2 Cloudians on the field');
+    c0.pick = (_g, req) => (req.candidates.includes(v) ? [v] : req.candidates.slice(0, req.min));
+    await activateCard(g, 0, cs);
+    eq(v.location, 'grave', 'destroyed');
+    eq(cs.counters.fog, 0, 'counters removed');
+    eq(g.players[1].lp, 7500, 'Natural Disaster: 500');
+  });
+
+  await test('GLAS: Sheep Cloud tokens only Tribute for Cloudians; Ghost Fog blocks damage and spreads Fog Counters', async () => {
+    const { g, place } = glasSetup();
+    const sheep = place(1, cardByName('Cloudian - Sheep Cloud'), 'mzone');
+    const a = place(0, T.brute, 'mzone');
+    await g.conductAttack(0, a);
+    await g.processTriggers(true);
+    eq(sheep.location, 'grave', 'Sheep Cloud destroyed');
+    eq(g.monsters(1).length, 2, '2 Cloudian Tokens');
+    eq(g.tributeCandidates(1, place(1, T.giant, 'hand')).length, 0, 'no Tribute for a non-Cloudian');
+    eq(g.tributeCandidates(1, place(1, cardByName('Cloudian - Nimbusman'), 'hand')).length, 2, 'Tribute for a Cloudian');
+
+    const s2 = glasSetup();
+    const fogC = s2.place(1, cardByName('Cloudian - Ghost Fog'), 'mzone');
+    const b = s2.place(0, T.brute, 'mzone');
+    await s2.g.conductAttack(0, b);
+    await s2.g.processTriggers(true);
+    eq(fogC.location, 'grave', 'Ghost Fog destroyed');
+    eq(s2.g.players[1].lp, 8000, 'no battle damage');
+    eq(b.counters.fog, 4, 'Fog Counters equal to the Level of the destroyer');
+    eq((await s2.g.specialSummon([fogC], 1, { pos: 'atk' })).length, 0, 'cannot be Special Summoned');
+  });
+
+  await test('GLAS: Truckroid equips the monster it destroyed and gains its ATK', async () => {
+    const { g, place } = glasSetup();
+    const tr = place(0, cardByName('Truckroid'), 'mzone');
+    const v = place(1, cardByName('Cloudian - Smoke Ball'), 'mzone');
+    await g.conductAttack(0, tr);
+    await g.processTriggers(true);
+    eq(v.location, 'szone', 'equipped');
+    eq(v.equippedTo, tr.uid, 'to Truckroid');
+    eq(g.getAtk(tr), 1200, '+200 ATK');
+  });
+
+  await test('GLAS: Dark Fusion summons Evil HERO Inferno Wing (Polymerization cannot); piercing + burn', async () => {
+    const { g, place } = glasSetup();
+    place(0, cardByName('Elemental Hero Avian'), 'hand');
+    place(0, cardByName('Elemental Hero Burstinatrix'), 'hand');
+    const iw = place(0, cardByName('Evil HERO Inferno Wing'), 'extra');
+    const poly = place(0, cardByName('Polymerization'), 'hand');
+    eq(g.getActivations(0, { open: true }).some((a) => a.card === poly), false, 'Polymerization cannot');
+    await activateCard(g, 0, place(0, cardByName('Dark Fusion'), 'hand'));
+    eq(iw.location, 'mzone', 'Inferno Wing Fusion Summoned');
+    eq(g.queryCard(iw, 'untargetable'), true, 'cannot be targeted this turn');
+    const w = place(1, T.wall, 'mzone', { pos: 'def' });
+    await g.conductAttack(0, iw);
+    await g.processTriggers(true);
+    eq(w.location, 'grave', 'destroyed');
+    eq(g.players[1].lp, 8000 - 100 - 2000, 'piercing 100 + burn 2000');
+  });
+
+  await test('GLAS: Elemental HERO Chaos Neos returns in the End Phase and Sets all face-up monsters', async () => {
+    const { g, place } = glasSetup();
+    const cn = place(0, cardByName('Elemental HERO Chaos Neos'), 'mzone');
+    const v = place(1, T.brute, 'mzone');
+    await (g as any).setPhase('end');
+    eq(cn.location, 'extra', 'back to the Extra Deck');
+    eq(v.faceUp, false, 'opponent monster Set');
+  });
+
+  await test('GLAS: Energy-Absorbing Monolith turns burn damage into a gain', async () => {
+    const { g, c0, place } = glasSetup();
+    place(0, cardByName('Energy-Absorbing Monolith'), 'szone', { faceUp: false });
+    const ok = place(1, cardByName('Ookazi'), 'hand');
+    g.turnPlayer = 1;
+    c0.respond = respondWith('Energy-Absorbing Monolith');
+    await activateCard(g, 1, ok);
+    eq(g.players[0].lp, 8800, 'gained 800');
+  });
+
+  await test('GLAS: Magical Reflect Slime reflects battle damage; Raptinus makes Gemini monsters Effect Monsters', async () => {
+    const { g, place } = glasSetup();
+    const slime = place(1, cardByName('Magical Reflect Slime'), 'mzone');
+    slime.flags.geminiSummoned = true;
+    const a = place(0, T.brute, 'mzone');
+    await g.conductAttack(0, a);
+    eq(g.players[1].lp, 8000, 'Slime controller takes nothing');
+    eq(g.players[0].lp, 8000 - 1100, 'attacker takes the damage');
+
+    const s2 = glasSetup();
+    const knight = s2.place(0, cardByName('Ancient Gear Knight'), 'mzone');
+    const rap = s2.place(0, cardByName('Superalloy Beast Raptinus'), 'mzone');
+    s2.g.update();
+    eq(!!knight.flags.geminiSummoned, true, 'Gemini is an Effect Monster');
+    await s2.g.destroy([rap], 'effect', 1);
+    eq(!!knight.flags.geminiSummoned, false, 'back to a Normal Monster');
+  });
+
+  await test('GLAS: "A" Cell Incubator gains an A-Counter when one is removed and spreads them when destroyed', async () => {
+    const { g, c0, place } = glasSetup();
+    const inc = live(place(0, cardByName('"A" Cell Incubator'), 'szone', { faceUp: true }));
+    const tel = place(0, cardByName('Alien Telepath'), 'mzone');
+    const v = place(1, T.brute, 'mzone');
+    v.counters.A = 1;
+    const st = place(1, cardByName('Mirror Force'), 'szone', { faceUp: false });
+    g.update();
+    c0.pick = (_g, req) => (req.candidates.includes(st) ? [st] : req.candidates.slice(0, req.min));
+    await activateCard(g, 0, tel);
+    eq(st.location, 'grave', 'Spell/Trap destroyed');
+    eq(v.counters.A ?? 0, 0, 'A-Counter removed');
+    eq(inc.counters.A, 1, 'Incubator got an A-Counter');
+    c0.pick = (_g, req) => (req.candidates.includes(v) ? [v] : req.candidates.slice(0, req.min));
+    await g.destroy([inc], 'effect', 1);
+    await g.processTriggers(true);
+    eq(v.counters.A, 1, 'counter placed on a face-up monster');
+  });
+
+  await test('GLAS: Defensive Tactics — no battle destruction or damage, then to the bottom of the Deck', async () => {
+    const { g, c0, place } = glasSetup();
+    const gb = place(0, cardByName('Gladiator Beast Hoplomus'), 'mzone');
+    const dt = place(0, cardByName('Defensive Tactics'), 'szone', { faceUp: false });
+    const a = place(1, T.giant, 'mzone');
+    g.turnPlayer = 1;
+    c0.respond = respondWith('Defensive Tactics');
+    await g.conductAttack(1, a);
+    eq(gb.location, 'mzone', 'not destroyed by battle');
+    eq(dt.location, 'deck', 'Defensive Tactics in the Deck');
+    eq(g.players[0].deck[0], dt, 'at the bottom');
+    eq(g.players[0].lp, 8000, 'no battle damage');
   });
 }

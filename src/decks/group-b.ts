@@ -54,9 +54,24 @@ export const DECKS: DeckDef[] = [
       ['Thought Ruler Archfiend', 1],
       ['Colossal Fighter', 1],
       ['Ally of Justice Catastor', 1],
-      ['Gaia Knight, the Force of Earth', 1],
+      ['Goyo Guardian', 1],
       ['Magical Android', 1],
       ['Mist Wurm', 1],
+    ],
+    side: [
+      // Graveyard hate: the deck barely uses its own GY, so Macro Cosmos is nearly free.
+      ['D.D. Crow', 2],
+      ['Macro Cosmos', 2],
+      // Clears Gladiator War Chariot / Bottomless walls for a swarm turn (unlike Royal Decree, keeps Icarus Attack live).
+      ['Trap Stun', 2],
+      // LIGHT floodgate for Lightsworn and Judgment Dragon (Blackwings are DARK, so it never hits you).
+      ['Light-Imprisoning Mirror', 2],
+      // Machine answers for Gadgets.
+      ['Cyber Dragon', 2],
+      // Treeborn Frog, set Gadgets and flip monsters.
+      ['Nobleman of Crossout', 2],
+      ['Dust Tornado', 2],
+      ['Starlight Road', 1],
     ],
   },
   {
@@ -115,6 +130,23 @@ export const DECKS: DeckDef[] = [
       ['Magical Android', 1],
       ['Gaia Knight, the Force of Earth', 1],
     ],
+    side: [
+      // Lightsworn and Zombie graveyard hate.
+      ['D.D. Crow', 2],
+      // Blocks the opposing Plant / Blackwing searches and synchro turns (the Saber engine does not search).
+      ['Thunder King Rai-Oh', 2],
+      // Anti-trap for Gladiator Beasts and control; Saber Slash / traps get sided out.
+      ['Royal Decree', 2],
+      // Machine answers for Gadgets.
+      ['Cyber Dragon', 2],
+      // LIGHT floodgate for Lightsworn and Judgment Dragon (Sabers are EARTH).
+      ['Light-Imprisoning Mirror', 2],
+      // Protects a Faultroll / Hyunlei board from Judgment Dragon and Heavy Storm.
+      ['Starlight Road', 1],
+      // Treeborn Frog and set monsters.
+      ['Nobleman of Crossout', 2],
+      ['Dust Tornado', 2],
+    ],
   },
   {
     id: 'gladiator-beasts',
@@ -159,6 +191,30 @@ export const DECKS: DeckDef[] = [
     extra: [
       ['Gladiator Beast Gyzarus', 3],
       ['Gladiator Beast Heraklinos', 2],
+      // Toolbox for stolen or sided monsters (Brain Control, sided Cyber Dragon), as in Jake Mattern's Prismadiators.
+      ['Chimeratech Fortress Dragon', 3],
+      ['Stardust Dragon', 2],
+      ['Goyo Guardian', 1],
+      ['Brionac, Dragon of the Ice Barrier', 1],
+      ['Colossal Fighter', 1],
+      ['Black Rose Dragon', 1],
+      ['Magical Android', 1],
+    ],
+    side: [
+      // Lightsworn and Zombie graveyard hate (Darius is the only own-GY card).
+      ['D.D. Crow', 2],
+      // Machine answers for Gadgets; also opens Chimeratech Fortress Dragon.
+      ['Cyber Dragon', 2],
+      // Extra Hoplomus for slower control matchups.
+      ['Gladiator Beast Hoplomus', 1],
+      // Treeborn Frog and set monsters.
+      ['Nobleman of Crossout', 2],
+      // Blocks Plant / Blackwing searches and synchro turns (tag-outs summon from the Deck, not search).
+      ['Thunder King Rai-Oh', 2],
+      ['Dust Tornado', 2],
+      // Attribute floodgates: LIGHT for Lightsworn, DARK for Blackwings / Tele-DAD (Gladiators are EARTH).
+      ['Light-Imprisoning Mirror', 2],
+      ['Shadow-Imprisoning Mirror', 2],
     ],
   },
 ];

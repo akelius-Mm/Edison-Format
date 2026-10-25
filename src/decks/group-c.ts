@@ -59,6 +59,28 @@ const FROG_MONARCHS: DeckDef = {
     ['Mist Wurm', 1],
     ['Ally of Justice Catastor', 1],
     ['Armory Arm', 1],
+    ['Chimeratech Fortress Dragon', 1],
+    ['Gaia Knight, the Force of Earth', 1],
+  ],
+  // Monster-heavy so Treeborn Frog stays live (no Spell/Trap floodgates).
+  side: [
+    // Lightsworn and Zombie graveyard hate (Kycoo banishes only the opponent's cards, so Treeborn is safe).
+    ['D.D. Crow', 2],
+    ['Kycoo the Ghost Destroyer', 2],
+    // Machine answers for Gadgets.
+    ['Cyber Dragon', 2],
+    // Extra Monarchs: Mobius for trap-heavy Gladiator / control, Zaborg and Thestalos for more removal.
+    ['Mobius the Frost Monarch', 2],
+    ['Zaborg the Thunder Monarch', 1],
+    ['Thestalos the Firestorm Monarch', 1],
+    // Set monsters, flip monsters and opposing Treeborn Frog.
+    ['Nobleman of Crossout', 2],
+    // Another Tribute steal for the mirror and big synchros.
+    ['Soul Exchange', 1],
+    // Flip removal that also works as Tribute fodder.
+    ['Tsukuyomi', 1],
+    // Stalls Blackwing and X-Saber beatdown.
+    ['Legendary Jujitsu Master', 1],
   ],
 };
 
@@ -123,6 +145,24 @@ const TELE_DAD: DeckDef = {
     ['Armory Arm', 1],
     ['Iron Chain Dragon', 1],
   ],
+  side: [
+    // Lightsworn, Zombie and mirror-DAD graveyard hate.
+    ['D.D. Crow', 2],
+    // Machine answers for Gadgets.
+    ['Cyber Dragon', 2],
+    // More Caius for the slower control and Monarch matchups.
+    ['Caius the Shadow Monarch', 2],
+    // Blocks Plant / Blackwing / Lightsworn searches (Emergency Teleport summons, so it still works).
+    ['Thunder King Rai-Oh', 2],
+    // Backrow answers for Gladiator Beasts and control.
+    ['Dust Tornado', 2],
+    // LIGHT floodgate for Lightsworn (Tele-DAD is DARK, so it never hits you).
+    ['Light-Imprisoning Mirror', 2],
+    // Treeborn Frog and set monsters.
+    ['Nobleman of Crossout', 2],
+    // Name the opposing engine card (Black Whirlwind, Solar Recharge, Swap Frog).
+    ['Prohibition', 1],
+  ],
 };
 
 const HERO_BEAT: DeckDef = {
@@ -182,6 +222,22 @@ const HERO_BEAT: DeckDef = {
     ['Colossal Fighter', 1],
     ['Black Rose Dragon', 1],
     ['Magical Android', 1],
+  ],
+  side: [
+    // Lightsworn and Zombie graveyard hate; Kycoo is a Level 4 beater that only banishes the opponent's cards.
+    ['D.D. Crow', 2],
+    ['Kycoo the Ghost Destroyer', 2],
+    // More D.D. Warrior Lady to trade with Judgment Dragon, Caius-backed Monarchs and synchros.
+    ['D.D. Warrior Lady', 2],
+    // Anti-trap that keeps Hero Signal usable (unlike Royal Decree).
+    ['Trap Stun', 2],
+    // LIGHT floodgate for Lightsworn and Judgment Dragon.
+    ['Light-Imprisoning Mirror', 2],
+    // Name the opposing engine card (Black Whirlwind, Solar Recharge, Swap Frog).
+    ['Prohibition', 1],
+    // Treeborn Frog and set monsters.
+    ['Nobleman of Crossout', 2],
+    ['Dust Tornado', 2],
   ],
 };
 
