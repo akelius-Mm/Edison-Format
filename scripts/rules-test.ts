@@ -3748,4 +3748,17 @@ async function fuzzRegressionTests() {
     const second = place(0, cardByName('Star Blast'), 'hand');
     eq(g.getActivations(0, { open: true }).some((a) => a.card === second), false, 'second Star Blast not offered');
   });
+
+  await test('D.D. Warrior Lady banishes a monster it destroys before it reaches the GY (no Sangan search)', async () => {
+    const { g, place } = setup();
+    const lady = place(0, cardByName('D.D. Warrior Lady'), 'mzone');
+    const sangan = place(1, cardByName('Sangan'), 'mzone');
+    place(1, T.dark, 'deck');
+    const hand = g.players[1].hand.length;
+    await g.conductAttack(0, lady);
+    await g.processTriggers(true);
+    eq(sangan.location, 'banished', 'Sangan banished');
+    eq(lady.location, 'banished', 'D.D. Warrior Lady banished');
+    eq(g.players[1].hand.length, hand, 'Sangan never reached the GY, so no search');
+  });
 }
