@@ -848,6 +848,7 @@ monster('Reptilianne Servant', {
   atk: 100,
   def: 100,
   sets: REP,
+  aiValue: -900, // self-destructs next to any face-up monster
   text: 'Destroy this card if there are face-up monsters on the field other than this card. Destroy this card when it is targeted by the effect of a Spell or Trap Card. Neither player can Normal Summon a monster while this card is face-up on the field.',
   effects: [
     { kind: 'continuous', mods: [{ q: 'cannotNormalSummon', to: 'players' }] },
@@ -2212,7 +2213,7 @@ monster('Skull Conductor', {
   level: 4,
   atk: 2000,
   def: 0,
-  aiValue: 300,
+  aiValue: -800, // a one-turn attacker: prefer its hand effect / other monsters,
   text: 'If this card is face-up on the field at the end of the Battle Phase: Destroy this face-up card. You can send this card from your hand to the Graveyard; Special Summon up to 2 Zombie-Type monsters from your hand whose combined ATK is exactly 2000.',
   effects: [
     {
