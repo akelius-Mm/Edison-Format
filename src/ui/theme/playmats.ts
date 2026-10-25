@@ -475,3 +475,23 @@ export function applyPlaymat(el: HTMLElement, id: string) {
   el.dataset.playmat = m.id;
   el.dataset.matLabels = m.printedZones ? '1' : '';
 }
+
+/** Set a mat's zone colours on an element and expose its picture as --mat-bg (for one player's half). */
+export function applyMatVars(el: HTMLElement, id: string) {
+  const m = playmatById(id);
+  el.style.setProperty('--mat-bg', m.css);
+  el.style.setProperty('--mat-accent', m.accent);
+  el.style.setProperty('--zone-line', m.zoneLine);
+  el.style.setProperty('--zone-fill', m.zoneFill);
+  el.style.setProperty('--mat-base', m.base);
+  el.dataset.playmat = m.id;
+  el.dataset.matLabels = m.printedZones ? '1' : '';
+}
+
+/** The opponent brings their own mat: a stable pick per opponent name, never the same as yours. */
+export function opponentMat(oppName: string, mine: string): string {
+  const pool = PLAYMATS.filter((m) => m.id !== mine && m.id !== 'green-felt' && m.id !== 'walnut-table');
+  let h = 0;
+  for (const ch of oppName) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  return (pool[h % pool.length] ?? PLAYMATS[0]).id;
+}

@@ -20,6 +20,8 @@ export interface DuelOptions {
   /** Index 0 is the bottom side of the screen (the human, or spectated AI). */
   sides: [DuelSide, DuelSide];
   playmat: string;
+  /** The opponent's own mat (top half). Defaults to a different mat picked from the opponent's name. */
+  oppPlaymat?: string;
   /** Who goes first; 'coin' = random. */
   firstPlayer?: PlayerId | 'coin';
   seed?: number;
