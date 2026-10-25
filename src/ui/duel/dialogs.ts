@@ -388,7 +388,8 @@ export function selectDialog(d: Dialogs, ctx: PromptCtx, req: SelectRequest): { 
     if (existing) {
       existing.cards.push(c);
       const n = existing.tile.querySelector('.tile-count') ?? existing.tile.appendChild(h('div', 'tile-count'));
-      n.textContent = `×${existing.cards.length}`;
+      n.textContent = `${existing.cards.length} copies`;
+      existing.tile.classList.add('is-stack');
       continue;
     }
     const tile = d.cardTile(c, ctx, { caption: locCaption(ctx.game, c, ctx.viewer), faceDown: !vis, readable: true });

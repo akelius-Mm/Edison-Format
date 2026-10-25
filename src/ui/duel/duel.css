@@ -2117,20 +2117,18 @@
 }
 .duel-root .tile-sel svg { width: 15px; height: 15px; }
 .duel-root .tile-count {
-  position: absolute;
-  z-index: 3;
-  left: 50%;
-  bottom: 24px;
-  transform: translateX(-50%);
-  padding: 2px 8px;
+  margin-top: -2px;
+  padding: 1px 8px;
   border-radius: 999px;
-  background: rgba(14, 15, 18, 0.92);
-  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.1);
   color: var(--dl-ink);
-  font: 700 12px/1.4 var(--dl-font);
+  font: 600 11px/1.5 var(--dl-font);
   font-variant-numeric: tabular-nums;
   pointer-events: none;
 }
+/* a stack of copies reads as a small pile */
+.duel-root .tile.is-stack .yc { box-shadow: 3px 3px 0 -1px #3a3b40, 6px 6px 0 -2px #2a2b2f; }
+.duel-root .tile.is-stack.is-selected .yc { box-shadow: 0 0 0 3px var(--dl-ink), 5px 5px 0 1px #3a3b40, 8px 8px 0 0 #2a2b2f; }
 .duel-root .tile-zoom,
 .duel-root .resp-read {
   display: grid;
@@ -2171,7 +2169,7 @@
 }
 .duel-root .dlg--attack .dlg-head { flex: 1; min-width: 0; padding: 8px 4px 8px 10px; gap: 10px; border: 0; }
 .duel-root .dlg--attack .dlg-src { width: 36px; height: 36px; border-radius: 8px; }
-.duel-root .dlg--attack .dlg-title { font-size: 15px; line-height: 1.25; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.duel-root .dlg--attack .dlg-title { font-size: 15px; line-height: 1.25; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
 .duel-root .dlg--attack .dlg-sub { margin-top: 1px; font-size: 12.5px; line-height: 1.25; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .duel-root .dlg--attack .dlg-actions { flex: none; gap: 6px; padding: 8px 10px 8px 4px; border: 0; }
 .duel-root .dlg--attack .dlg-actions .btn { flex: none; min-height: 36px; padding: 6px 12px; font-size: 14px; border-radius: 10px; }
@@ -2309,3 +2307,4 @@
 .ctx-item.is-disabled small { color: rgba(143, 144, 149, 0.85); }
 .ctx-item:disabled:hover,
 .ctx-item:disabled:active { background: none; }
+.duel-root .declare-input:focus-visible { outline: none; border-color: rgba(255, 255, 255, 0.3); }
