@@ -128,6 +128,8 @@ export interface GameOptions {
 export interface DeckList {
   main: CardData[];
   extra: CardData[];
+  /** Side Deck, for siding between games of a match. The game itself never uses it. */
+  side?: CardData[];
 }
 
 const MZONE_ORDER = [2, 1, 3, 0, 4];

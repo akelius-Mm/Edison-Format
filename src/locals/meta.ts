@@ -48,7 +48,7 @@ export function decksFor(k: MetaKey): DeckDef[] {
 }
 
 export function snapshot(d: DeckDef): DeckSnapshot {
-  return { id: d.id, name: d.name, archetype: d.archetype, tier: d.tier, color: d.color, main: d.main, extra: d.extra };
+  return { id: d.id, name: d.name, archetype: d.archetype, tier: d.tier, color: d.color, main: d.main, extra: d.extra, side: d.side ?? [] };
 }
 
 /** Real placing lists are preferred when a bucket has them (7 times in 10). */

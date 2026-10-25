@@ -260,7 +260,7 @@ export function deckBuilderScreen(params: Params): Screen {
       }
     }
     if (!n) grid.appendChild(h('div', { class: 'dk-empty' }, hint));
-    const target = s === 'main' ? '40–60' : '0–15';
+    const target = s === 'main' ? '40–60' : '15';
     const bad = s === 'main' ? n < 40 || n > 60 : n > 15;
     const sec = h(
       'div',
@@ -342,7 +342,7 @@ export function deckBuilderScreen(params: Params): Screen {
       [
         { value: 'main', label: `Main ${n('main')}` },
         { value: 'extra', label: `Extra ${n('extra')}` },
-        { value: 'side', label: `Side ${n('side')}` },
+        { value: 'side', label: `Side ${n('side')}/15` },
       ],
       shownSection,
       (v) => {
@@ -358,7 +358,7 @@ export function deckBuilderScreen(params: Params): Screen {
       { class: 'db-sections', dataset: { section: shownSection } },
       sectionEl('main', 'Main Deck', 'Tap cards in Add cards (or drag them here) to build your Main Deck.'),
       sectionEl('extra', 'Extra Deck', 'Synchro and Fusion monsters go here.'),
-      sectionEl('side', 'Side Deck', 'Add cards to the Side Deck from the card list or the selection bar.'),
+      sectionEl('side', 'Side Deck', 'Up to 15 cards to swap in between games of a best-of-3. Add them from the card list or the selection bar.'),
     );
     deckCol.append(
       h('div', { class: 'db-deckbar' }, h('div', { class: 'db-namewrap' }, nameIn), legal, saveState),

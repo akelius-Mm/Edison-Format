@@ -114,7 +114,7 @@ function createScreen(): Screen {
     if (info.problems.length) return toast(`${info.name} isn't tournament legal: ${info.problems[0]}`, 'error', 4000);
     if (!PREMADE_DECKS.length) return toast('No premade decks are available for AI entrants.', 'error');
     const s = getSettings();
-    const snap: DeckSnapshot = { id: info.key, name: info.name, archetype: info.archetype, tier: info.tier, color: info.color, main: info.main, extra: info.extra };
+    const snap: DeckSnapshot = { id: info.key, name: info.name, archetype: info.archetype, tier: info.tier, color: info.color, main: info.main, extra: info.extra, side: info.side };
     const t = createTournament({
       name: st.name.trim() || 'Edison Open',
       size: st.size,
