@@ -21,9 +21,10 @@ a Swiss + Top Cut tournament mode.
 - **AI opponents** — easy / normal / hard heuristic AI that summons, synchros, chains traps,
   plays around set cards and uses card-specific hints.
 - **Duel UI** — animated board with playmats, sleeves, card previews, chain display,
-  duel log, recorded card and impact sound effects, and lo-fi hip-hop music (menu, duel and
-  pinch tracks). All bundled audio is CC0; Settings → Audio credits lists every file and its
-  source. Settings → Your music plays your own audio files instead (stored on the device).
+  duel log, recorded card and impact sound effects, haptics, and shuffled lo-fi hip-hop
+  playlists for the menu, duels and the pinch (with Skip). All bundled audio is CC0; Settings →
+  Audio credits lists every file and its source. Settings → Your music plays your own audio
+  files instead (stored on the device).
 - **Deck builder** — searchable card database, live banlist validation, import/export.
 - **Tournament mode** — 8/16/32-player Swiss with OMW% tiebreakers, Top 8 single
   elimination, best-of-3 matches, simulated or fully played-out AI matches, saved progress.

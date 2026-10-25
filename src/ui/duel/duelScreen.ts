@@ -35,6 +35,7 @@ import { HumanController, type HumanUI, PacedController } from './human';
 import { ChainStack, LogPanel, PhaseBar, PlayerPanel, PreviewPanel } from './panels';
 import { Sfx } from './sound';
 import { music } from '../audio/music';
+import { haptic } from '../haptics';
 
 export async function startDuel(container: HTMLElement, opts: DuelOptions): Promise<DuelResult> {
   const screen = new DuelScreen(container, opts);
@@ -545,6 +546,7 @@ class DuelScreen implements HumanUI {
       }
       music.duelEnd();
       this.sfx.play(cls === 'is-lose' ? 'lose' : 'win');
+      haptic(cls === 'is-lose' ? 'error' : cls === 'is-draw' ? 'warning' : 'success');
       const lp = this.game.players.map((p) => p.lp);
       const o = h('div', `result ${cls}`);
       o.innerHTML = `<div class="result-rays"></div><div class="result-box">
@@ -562,6 +564,7 @@ class DuelScreen implements HumanUI {
       const btn = o.querySelector('.result-continue') as HTMLButtonElement;
       btn.onclick = () => {
         this.sfx.play('click');
+        haptic('selection');
         resolve();
       };
       window.setTimeout(() => btn.focus(), 300);
@@ -719,6 +722,8 @@ class DuelScreen implements HumanUI {
     this.phaseBar.el.classList.remove('is-active');
     this.root.classList.remove('awaiting-action');
     this.sfx.play('click');
+    // ending the turn gets a light tap; other choices a selection tick (the play itself follows)
+    haptic(a.type === 'phase' && a.to === 'end' ? 'light' : 'selection');
     st.resolve(a);
   }
 
@@ -783,6 +788,7 @@ class DuelScreen implements HumanUI {
   }
 
   private onCardClick(c: CardInstance, el: HTMLElement, ev: MouseEvent) {
+    haptic('selection');
     if (this.canSee(c)) this.preview.show(c.data, c);
     // attack targeting
     if (this.attackState) {

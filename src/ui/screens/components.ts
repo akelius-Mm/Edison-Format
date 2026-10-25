@@ -10,6 +10,7 @@ import { AVATAR_PRESETS, renderAvatar, renderCard } from './ext';
 import { getOfficialImage } from '../cards/officialArt';
 import { getSettings } from '../settings';
 import { coverCard, deckCount, getCustomDeck, getProfile, type DeckInfo } from './store';
+import { haptic } from '../haptics';
 
 // ------------------------------------------------------------------ deck tiles
 
@@ -610,7 +611,14 @@ export function iosRow(label: Child, desc: Child | null, control: Child, opts: {
 export function iosNav(label: Child, onClick: () => void, opts: { icon?: Parameters<typeof icon>[0]; detail?: Child; desc?: Child } = {}) {
   return h(
     'button',
-    { type: 'button', class: 'ios-row ios-row--nav', onclick: onClick },
+    {
+      type: 'button',
+      class: 'ios-row ios-row--nav',
+      onclick: () => {
+        haptic('selection');
+        onClick();
+      },
+    },
     opts.icon ? h('span', { class: 'ios-icon' }, icon(opts.icon)) : null,
     h('span', { class: 'ios-row-text' }, h('span', { class: 'ios-label' }, label), opts.desc ? h('span', { class: 'ios-desc' }, opts.desc) : null),
     opts.detail != null ? h('span', { class: 'ios-detail' }, opts.detail) : null,
@@ -620,7 +628,18 @@ export function iosNav(label: Child, onClick: () => void, opts: { icon?: Paramet
 
 /** Full-width text button row (iOS "Reset…" style). */
 export function iosAction(label: string, onClick: () => void, danger = false) {
-  return h('button', { type: 'button', class: ['ios-row', 'ios-row--action', danger && 'danger'], onclick: onClick }, h('span', { class: 'ios-label' }, label));
+  return h(
+    'button',
+    {
+      type: 'button',
+      class: ['ios-row', 'ios-row--action', danger && 'danger'],
+      onclick: () => {
+        haptic('selection');
+        onClick();
+      },
+    },
+    h('span', { class: 'ios-label' }, label),
+  );
 }
 
 // ------------------------------------------------------------------ card detail

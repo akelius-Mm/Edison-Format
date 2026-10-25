@@ -1721,6 +1721,41 @@ a.ios-row {
 .ym-name {
   color: var(--text-2);
 }
+.ym-slot {
+  display: contents;
+}
+.ym-slot + .ym-slot > .ios-row:first-child::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 16px;
+  height: 1px;
+  background: var(--sep);
+}
+.ym-file {
+  min-height: 44px;
+  padding-left: 32px;
+}
+.ym-file .ios-label {
+  font-size: 15px;
+}
+.ym-file-name {
+  display: block;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.np-row .ym-name {
+  color: var(--text);
+}
+.np-skip:disabled,
+.ym-add:disabled {
+  opacity: 0.45;
+}
+.bt-list .ios-group {
+  margin-bottom: 14px;
+}
 
 /* Audio credits sheet */
 .credits-list {
