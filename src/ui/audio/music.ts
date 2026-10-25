@@ -16,9 +16,9 @@
 // original.
 import { getSettings, onSettingsChange } from '../settings';
 import { type Ctx, audioContext, graphFor, installAudioUnlock, makeImpulse, onAudioReady, resumeAudio } from './core';
-import { MUSIC_LOOPS, type MusicSlot, decodeAudio, dropMusicLoop, loadMusicLoop } from './samples';
+import { MUSIC_TRACKS, type MusicSlot, type MusicTrack, decodeAudio, dropMusicTrack, loadMusicTrack, trackById } from './samples';
 import { type Send, driveCurve, envelope, fm, kRate, mtof, noise, route, tone } from './synth';
-import { type UserTrackMeta, onUserMusicChange, userTrackData, userTrackInfo } from './userMusic';
+import { type UserTrackMeta, onUserMusicChange, userTrackData, userTracks } from './userMusic';
 
 export type TrackId = 'menu' | 'duel';
 
@@ -515,13 +515,19 @@ class TrackPlayer {
   }
 }
 
-// ---------------------------------------------------------------- recorded / user loops
+// ---------------------------------------------------------------- recorded / user tracks
 /** RMS the recorded and user tracks are levelled to before the music volume (about -16 LUFS music). */
 const TARGET_RMS = 0.11;
-/** Built-in recorded loops relative to TARGET_RMS (balanced against the procedural tracks). */
+/** Built-in recordings relative to TARGET_RMS (balanced against the procedural tracks). */
 const RECORDED_DB = -2;
 /** Your music: commercial masters are dense, so a little lower again. */
 const USER_DB = -3;
+/** Crossfade between playlist tracks, seconds. */
+const TRACK_XF = 4;
+/** Start fetching / decoding the next track this long before the current one ends. */
+const PRELOAD_S = 30;
+/** Built-in tracks play their loop section this many times before the next track. */
+const PASSES = 2;
 
 /** Rough RMS of a buffer (every 4th sample of every channel). */
 function bufferRms(b: AudioBuffer): number {
@@ -566,8 +572,10 @@ interface Voice {
   pump(until: number, now: number): void;
   fadeOut(now: number, dur: number): void;
   setPinch(on: boolean): void;
-  /** Playback position inside the loop (seconds), for resuming. */
+  /** Playback position inside the track (seconds), for resuming. */
   position(now: number): number;
+  /** Seconds until the track has played through (Infinity when it loops for ever). */
+  remaining(now: number): number;
 }
 
 /** The procedural sequencer as a voice. */
@@ -594,18 +602,22 @@ class ProcVoice implements Voice {
   position() {
     return 0;
   }
+  remaining() {
+    return Infinity;
+  }
 }
 
 /**
- * A decoded track on a loop. Built-in loops have exact loop points and use the source node's own
- * sample-accurate looping. Your music loops the whole (silence-trimmed) file, overlapping each pass
- * with the next by a few seconds of crossfade.
+ * A decoded track. Built-in tracks have exact loop points and use the source node's own
+ * sample-accurate looping (`passes` times round, or for ever). Your music plays the whole
+ * (silence-trimmed) file; when it repeats, each pass overlaps the next with a crossfade.
  */
 class LoopVoice implements Voice {
   done = false;
   private out: GainNode;
   private srcs: { src: AudioBufferSourceNode; end: number }[] = [];
   private next = 0;
+  private left: number;
   private span: [number, number];
   private xf: number;
   private stopAt: number | null = null;
@@ -621,7 +633,9 @@ class LoopVoice implements Voice {
     fadeIn: number,
     level: number,
     private offset = 0,
+    private passes = Infinity,
   ) {
+    this.left = passes;
     this.out = ac.createGain();
     this.out.gain.setValueAtTime(0.0001, t0);
     this.out.gain.linearRampToValueAtTime(level, t0 + Math.max(0.02, fadeIn));
@@ -629,43 +643,53 @@ class LoopVoice implements Voice {
     if (loop) {
       this.span = [loop.loopStart, Math.min(loop.loopEnd, buf.duration)];
       this.xf = 0;
+      const len = this.span[1] - this.span[0];
+      this.offset = offset % (len * (Number.isFinite(passes) ? passes : 1));
       const src = ac.createBufferSource();
       src.buffer = buf;
       src.loop = true;
       src.loopStart = this.span[0];
       src.loopEnd = this.span[1];
       src.connect(this.out);
-      src.start(t0, this.span[0] + (offset % (this.span[1] - this.span[0])));
+      src.start(t0, this.span[0] + (this.offset % len));
       this.srcs.push({ src, end: Infinity });
     } else {
       this.span = audibleSpan(buf);
       const len = this.span[1] - this.span[0];
       this.xf = Math.max(0.05, Math.min(3, len / 4));
+      this.offset = offset % Math.max(0.1, len - this.xf);
       this.next = t0;
       this.queue(t0 + 1, true);
     }
   }
 
+  private get len() {
+    return this.span[1] - this.span[0];
+  }
+
   /** Your music: keep the next overlapping pass scheduled ahead of time. */
   private queue(until: number, first = false) {
-    const [a, z] = this.span;
-    const len = z - a;
-    while (this.next < until && this.stopAt === null) {
-      const off = first ? this.offset % Math.max(0.1, len - this.xf) : 0;
-      const dur = len - off;
+    const [a] = this.span;
+    while (this.next < until && this.stopAt === null && this.left > 0) {
+      const off = first ? this.offset : 0;
+      const dur = this.len - off;
       const src = this.ac.createBufferSource();
       src.buffer = this.buf;
       const g = this.ac.createGain();
       const t = this.next;
+      const last = this.left === 1;
       // each pass fades in over the previous pass's fade-out (the first one uses the voice fade)
       g.gain.setValueAtTime(first ? 1 : 0.0001, t);
       if (!first) g.gain.linearRampToValueAtTime(1, t + this.xf);
-      g.gain.setValueAtTime(1, t + dur - this.xf);
-      g.gain.linearRampToValueAtTime(0.0001, t + dur);
+      if (!last) {
+        g.gain.setValueAtTime(1, t + dur - this.xf);
+        g.gain.linearRampToValueAtTime(0.0001, t + dur);
+      }
       src.connect(g).connect(this.out);
       src.start(t, a + off, dur);
       this.srcs.push({ src, end: t + dur });
       this.next = t + dur - this.xf;
+      this.left--;
       first = false;
     }
     const now = this.ac.currentTime;
@@ -674,7 +698,7 @@ class LoopVoice implements Voice {
 
   pump(until: number, now: number) {
     if (this.done) return;
-    if (this.stopAt !== null && now >= this.stopAt) {
+    if ((this.stopAt !== null && now >= this.stopAt) || (!this.loop && this.left <= 0 && this.srcs.every((s) => s.end <= now))) {
       this.finish();
       return;
     }
@@ -686,9 +710,16 @@ class LoopVoice implements Voice {
   }
 
   position(now: number) {
-    const [a, z] = this.span;
-    const len = this.loop ? z - a : z - a - this.xf;
-    return len > 0 ? (Math.max(0, now - this.t0) + this.offset) % len : 0;
+    const el = Math.max(0, now - this.t0) + this.offset;
+    const period = this.loop ? this.len : this.len - this.xf;
+    return period > 0 ? el % (period * (Number.isFinite(this.passes) ? this.passes : 1)) : 0;
+  }
+
+  remaining(now: number) {
+    if (!Number.isFinite(this.passes)) return Infinity;
+    const el = Math.max(0, now - this.t0) + this.offset;
+    const total = this.loop ? this.passes * this.len : this.passes * (this.len - this.xf) + this.xf;
+    return total - el;
   }
 
   fadeOut(now: number, dur: number) {
@@ -718,28 +749,75 @@ class LoopVoice implements Voice {
   }
 }
 
-// ---------------------------------------------------------------- controller
+// ---------------------------------------------------------------- playlists
 type Scene = 'menu' | 'duel';
-const slotOfKey = (key: string) => key.split(':')[1] as MusicSlot;
 const groupOf = (slot: MusicSlot): Scene => (slot === 'menu' ? 'menu' : 'duel');
+
+/** A playable entry of a slot's playlist. */
+export interface PlaylistTrack {
+  key: string;
+  kind: 'user' | 'recorded';
+  slot: MusicSlot;
+  title: string;
+  artist: string;
+  track?: MusicTrack;
+  userId?: number;
+}
+
+export interface NowPlaying {
+  slot: MusicSlot;
+  kind: Kind;
+  title: string;
+  artist: string;
+  /** Another track is available to skip to. */
+  canSkip: boolean;
+}
+
+/** Fisher-Yates shuffle that never starts with `avoid` (when there is a choice). */
+function shuffled(keys: string[], avoid?: string): string[] {
+  const a = [...keys];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  if (a.length > 1 && a[0] === avoid) [a[0], a[1]] = [a[1], a[0]];
+  return a;
+}
+
+interface SlotState {
+  /** Shuffled play order (keys) and the position of the next one to take. */
+  order: string[];
+  pos: number;
+  /** The track this slot plays (or played last). */
+  current?: string;
+  /** The next track, chosen ahead so it can be preloaded. */
+  upcoming?: string;
+  /** The track to start with when the slot comes on (chosen ahead so it can be preloaded). */
+  entry?: string;
+}
 
 class MusicController {
   private scene: Scene | null = null;
   private cur: Voice | null = null;
+  private curSlot: MusicSlot | null = null;
   private old: Voice[] = [];
   private timer = 0;
   private pinch = false;
   private inited = false;
   private pending: { fade?: number; delay?: number } = {};
-  /** Decoded recorded / user tracks by key ('recorded:menu', 'user:pinch', …) with their level. */
+  /** Decoded tracks by key ('rec:first-snow', 'user:12') with their level. */
   private bufs = new Map<string, { buf: AudioBuffer; level: number }>();
   private loading = new Set<string>();
   private failed = new Set<string>();
-  private user: Partial<Record<MusicSlot, UserTrackMeta>> = {};
+  private user: UserTrackMeta[] = [];
   private userKnown = false;
-  /** Where each loop was when it last faded out, to pick up there (duel ↔ pinch). */
+  private slots = new Map<MusicSlot, SlotState>();
+  /** Where each track was when it last faded out, to pick up there (duel ↔ pinch). */
   private resume = new Map<string, { pos: number; at: number }>();
-  private dropTimer = 0;
+  private skipWanted = false;
+  private lastTidy = 0;
+  private npListeners = new Set<(np: NowPlaying | null) => void>();
+  private npLast = '';
 
   private init() {
     if (this.inited) return;
@@ -747,22 +825,30 @@ class MusicController {
     installAudioUnlock();
     onAudioReady(() => this.sync());
     onSettingsChange(() => {
+      // switched-off tracks drop out of the queue (the playing one finishes first)
+      for (const st of this.slots.values()) st.upcoming = undefined;
       this.preload();
       this.sync();
     });
     document.addEventListener('visibilitychange', () => this.sync());
+    // tracks that failed offline (not cached yet) get another chance once the network is back
+    window.addEventListener('online', () => {
+      for (const k of [...this.failed]) if (k.startsWith('rec:')) this.failed.delete(k);
+      this.sync();
+    });
     onUserMusicChange((slot) => {
-      this.bufs.delete(`user:${slot}`);
-      this.failed.delete(`user:${slot}`);
+      const st = this.slots.get(slot);
+      if (st) (st.order = []), (st.upcoming = undefined);
       this.refreshUser();
     });
     this.refreshUser();
   }
 
   private refreshUser() {
-    void userTrackInfo().then((m) => {
+    void userTracks().then((m) => {
       this.user = m;
       this.userKnown = true;
+      for (const [k] of this.bufs) if (k.startsWith('user:') && !m.some((t) => `user:${t.id}` === k)) this.bufs.delete(k);
       this.preload();
       this.sync();
     });
@@ -783,6 +869,7 @@ class MusicController {
   setPinch(on: boolean) {
     if (on === this.pinch) return;
     this.pinch = on;
+    this.preload();
     this.sync();
   }
 
@@ -791,37 +878,116 @@ class MusicController {
     this.setScene(null, { fade: 0.6 });
   }
 
-  /** What is playing now: 'recorded:duel', 'user:menu', 'proc:duel' … or null. */
+  /** What is playing now: 'rec:first-snow', 'user:3', 'proc:duel' … or null. */
   get playing(): string | null {
     return this.cur?.key ?? null;
   }
 
+  /** Title and artist of what is playing, or null. */
+  nowPlaying(): NowPlaying | null {
+    const v = this.cur;
+    if (!v || !this.curSlot) return null;
+    if (v.kind === 'proc') return { slot: this.curSlot, kind: 'proc', title: v.key === 'proc:menu' ? 'Menu theme' : 'Duel theme', artist: 'Generated in the app', canSkip: false };
+    const t = this.trackFor(v.key);
+    if (!t) return null;
+    return { slot: t.slot, kind: t.kind, title: t.title, artist: t.artist, canSkip: this.playlist(t.slot).length > 1 };
+  }
+
+  /** Called whenever the playing track changes. */
+  onNowPlaying(fn: (np: NowPlaying | null) => void) {
+    this.npListeners.add(fn);
+    return () => this.npListeners.delete(fn);
+  }
+
+  private notify() {
+    const np = this.nowPlaying();
+    const sig = JSON.stringify(np);
+    if (sig === this.npLast) return;
+    this.npLast = sig;
+    for (const f of [...this.npListeners]) f(np);
+  }
+
+  /** Move on to the next track of the playlist now. */
+  skip() {
+    if (!this.cur || !this.curSlot || this.cur.kind === 'proc') return;
+    if (this.playlist(this.curSlot).length < 2) return;
+    this.skipWanted = true;
+    this.advance(this.curSlot, true);
+  }
+
   /** Hand over a file Settings already decoded (to check it), so it isn't decoded twice. */
-  primeUser(slot: MusicSlot, buf: AudioBuffer) {
-    this.bufs.set(`user:${slot}`, { buf, level: levelFor(buf, USER_DB) });
-    this.failed.delete(`user:${slot}`);
+  primeUser(id: number, buf: AudioBuffer) {
+    this.bufs.set(`user:${id}`, { buf, level: levelFor(buf, USER_DB) });
+    this.failed.delete(`user:${id}`);
   }
 
-  private wantSlot(): MusicSlot | null {
-    if (!getSettings().music || !this.scene) return null;
-    return this.scene === 'duel' ? (this.pinch ? 'pinch' : 'duel') : 'menu';
+  // ------------------------------------------------------------ playlist bookkeeping
+  /** The tracks a slot can play: your files if there are any, else the switched-on built-in tracks. */
+  playlist(slot: MusicSlot): PlaylistTrack[] {
+    const mine = this.user.filter((t) => t.slot === slot);
+    let list: PlaylistTrack[];
+    if (mine.length) {
+      list = mine.map((t) => ({ key: `user:${t.id}`, kind: 'user' as const, slot, title: t.name.replace(/\.[a-z0-9]{2,5}$/i, ''), artist: 'Your music', userId: t.id }));
+    } else {
+      const off = new Set(getSettings().musicOff ?? []);
+      const all = MUSIC_TRACKS.filter((t) => t.slot === slot);
+      const on = all.filter((t) => !off.has(t.id));
+      list = (on.length ? on : all).map((t) => ({ key: `rec:${t.id}`, kind: 'recorded' as const, slot, title: t.title, artist: t.artist, track: t }));
+    }
+    return list.filter((t) => !this.failed.has(t.key));
   }
 
-  private load(key: string, slot: MusicSlot, kind: 'user' | 'recorded') {
+  private trackFor(key: string): PlaylistTrack | undefined {
+    if (key.startsWith('rec:')) {
+      const t = trackById(key.slice(4));
+      return t && { key, kind: 'recorded', slot: t.slot, title: t.title, artist: t.artist, track: t };
+    }
+    const u = this.user.find((t) => `user:${t.id}` === key);
+    return u && { key, kind: 'user', slot: u.slot, title: u.name.replace(/\.[a-z0-9]{2,5}$/i, ''), artist: 'Your music', userId: u.id };
+  }
+
+  private state(slot: MusicSlot): SlotState {
+    let st = this.slots.get(slot);
+    if (!st) this.slots.set(slot, (st = { order: [], pos: 0 }));
+    return st;
+  }
+
+  /** The next track of a slot after `after` (shuffled, never the same twice in a row). */
+  private peekNext(slot: MusicSlot, after?: string): string | undefined {
+    const keys = this.playlist(slot).map((t) => t.key);
+    if (!keys.length) return undefined;
+    if (keys.length === 1) return keys[0];
+    const st = this.state(slot);
+    if (st.upcoming && keys.includes(st.upcoming) && st.upcoming !== after) return st.upcoming;
+    for (let guard = 0; guard < 3; guard++) {
+      while (st.pos < st.order.length) {
+        const k = st.order[st.pos++];
+        if (keys.includes(k) && k !== after) return (st.upcoming = k);
+      }
+      st.order = shuffled(keys, after);
+      st.pos = 0;
+    }
+    return (st.upcoming = keys.find((k) => k !== after));
+  }
+
+  private load(key: string) {
     if (this.bufs.has(key) || this.loading.has(key) || this.failed.has(key)) return;
+    const t = this.trackFor(key);
+    if (!t) return;
     this.loading.add(key);
     void (async () => {
       try {
         let buf: AudioBuffer;
-        if (kind === 'user') {
-          const data = await userTrackData(slot);
+        if (t.kind === 'user') {
+          const data = await userTrackData(t.userId!);
           if (!data) throw new Error('missing');
           buf = await decodeAudio(data);
-        } else buf = await loadMusicLoop(slot);
-        // a slot's file may have been replaced while this one was decoding
-        if (kind === 'recorded' || this.user[slot]) this.bufs.set(key, { buf, level: levelFor(buf, kind === 'user' ? USER_DB : RECORDED_DB) });
+        } else buf = await loadMusicTrack(t.track!.id);
+        this.bufs.set(key, { buf, level: levelFor(buf, t.kind === 'user' ? USER_DB : RECORDED_DB) });
       } catch {
         this.failed.add(key);
+        const st = this.slots.get(t.slot);
+        if (st && st.upcoming === key) st.upcoming = undefined;
       } finally {
         this.loading.delete(key);
         this.sync();
@@ -829,50 +995,61 @@ class MusicController {
     })();
   }
 
-  /** Start fetching / decoding what the current scene needs, and free the other scene's tracks a bit later. */
-  private preload() {
-    if (!this.scene || !getSettings().music || typeof window === 'undefined') return;
-    const slots: MusicSlot[] = this.scene === 'duel' ? ['duel', 'pinch'] : ['menu'];
-    for (const slot of slots) this.pick(slot);
-    window.clearTimeout(this.dropTimer);
-    this.dropTimer = window.setTimeout(() => {
-      for (const k of [...this.bufs.keys()]) {
-        const slot = slotOfKey(k);
-        if (this.scene && groupOf(slot) !== this.scene && this.cur?.key !== k && !this.old.some((v) => v.key === k)) {
-          this.bufs.delete(k);
-          if (k.startsWith('recorded:')) dropMusicLoop(slot);
-        }
-      }
-    }, 6000);
-  }
-
-  /**
-   * The source for a slot: your file, else the built-in recording, else procedural. `wait` means
-   * the preferred source is still loading; `pinch` means the procedural duel's pinch variation
-   * stands in for a pinch track.
-   */
-  private pick(slot: MusicSlot): { key: string; kind: Kind; wait?: boolean; pinch?: boolean } {
-    if (!this.userKnown) return { key: '', kind: 'proc', wait: true };
-    const tries: ['user' | 'recorded', boolean][] = [
-      ['user', !!this.user[slot]],
-      ['recorded', true],
-    ];
-    for (const [kind, ok] of tries) {
-      const key = `${kind}:${slot}`;
-      if (!ok || this.failed.has(key)) continue;
-      if (this.bufs.has(key)) return { key, kind };
-      this.load(key, slot, kind);
-      if (!this.failed.has(key)) return { key, kind, wait: true };
+  /** The track a slot should play on (re)entry: its last one if it was cut short a moment ago. */
+  private entryTrack(slot: MusicSlot, now: number): string | undefined {
+    const st = this.state(slot);
+    const keys = this.playlist(slot).map((t) => t.key);
+    if (st.current && keys.includes(st.current)) {
+      const r = this.resume.get(st.current);
+      if (r && now - r.at < 60) return st.current;
     }
-    if (slot === 'pinch') return { ...this.pick('duel'), pinch: true };
-    return { key: `proc:${slot}`, kind: 'proc' };
+    if (!st.entry || !keys.includes(st.entry)) st.entry = this.peekNext(slot, st.current);
+    return st.entry;
   }
 
+  /** Start fetching / decoding what the scene needs next. */
+  private preload() {
+    if (!this.scene || !getSettings().music || typeof window === 'undefined' || !this.userKnown) return;
+    const ac = audioContext();
+    const now = ac?.currentTime ?? 0;
+    const slots: MusicSlot[] = this.scene === 'duel' ? ['duel', 'pinch'] : ['menu'];
+    for (const slot of slots) {
+      if (this.curSlot === slot && this.cur) continue;
+      const k = this.entryTrack(slot, now);
+      if (k) this.load(k);
+    }
+  }
+
+  /** Free decoded tracks nothing is about to play. */
+  private tidy(now: number) {
+    if (now - this.lastTidy < 5) return;
+    this.lastTidy = now;
+    const keep = new Set<string>();
+    if (this.cur) keep.add(this.cur.key);
+    for (const v of this.old) keep.add(v.key);
+    const slots: MusicSlot[] = this.scene === 'duel' ? ['duel', 'pinch'] : this.scene === 'menu' ? ['menu'] : [];
+    for (const s of slots) {
+      const st = this.state(s);
+      for (const k of [st.current, st.upcoming, st.entry]) if (k) keep.add(k);
+    }
+    for (const k of [...this.bufs.keys()]) {
+      if (keep.has(k) || this.loading.has(k)) continue;
+      this.bufs.delete(k);
+      if (k.startsWith('rec:')) dropMusicTrack(k.slice(4));
+    }
+  }
+
+  private wantSlot(): MusicSlot | null {
+    if (!getSettings().music || !this.scene) return null;
+    return this.scene === 'duel' ? (this.pinch ? 'pinch' : 'duel') : 'menu';
+  }
+
+  // ------------------------------------------------------------ playing
   private sync() {
     const s = getSettings();
     const ac = audioContext();
     if (!ac) return;
-    const slot = this.wantSlot();
+    let slot = this.wantSlot();
     if (ac.state !== 'running') {
       if (slot) resumeAudio();
       return;
@@ -885,37 +1062,100 @@ class MusicController {
       this.pending = {};
       this.retire(now, opts.fade ?? 1.4);
       this.ensureTimer();
+      this.notify();
       return;
     }
-    const want = this.pick(slot);
-    const sameScene = !!this.cur && groupOf(slotOfKey(this.cur.key)) === groupOf(slot);
-    if (want.wait) {
+    if (!this.userKnown) return;
+    // no pinch tracks left (all failed): the duel playlist carries on (procedural: its pinch layer)
+    let procPinch = false;
+    if (slot === 'pinch' && !this.playlist('pinch').length) {
+      slot = 'duel';
+      procPinch = true;
+    }
+    const sameScene = !!this.cur && !!this.curSlot && groupOf(this.curSlot) === groupOf(slot);
+    if (this.cur && this.curSlot === slot) {
+      // already on this slot: drop a track that left the playlist (file removed), else carry on
+      if (this.cur.kind === 'proc') {
+        if (!this.playlist(slot).length) {
+          this.cur.setPinch(this.wantSlot() === 'pinch');
+          this.ensureTimer();
+          this.notify();
+          return;
+        }
+      } else if (this.playlist(slot).some((t) => t.key === this.cur!.key)) {
+        this.ensureTimer();
+        this.notify();
+        return;
+      }
+    }
+    const list = this.playlist(slot);
+    if (!list.length) {
+      // nothing recorded can play: the procedural theme
+      this.pending = {};
+      const id: TrackId = slot === 'menu' ? 'menu' : 'duel';
+      if (this.cur?.key !== `proc:${id}`) {
+        this.retire(now, opts.fade ?? (sameScene ? 2 : 1.4));
+        this.cur = new ProcVoice(ac, chain, id, now + 0.06 + (opts.delay ?? 0), sameScene ? 1.6 : this.old.length ? 1.2 : 2.5);
+        this.curSlot = slot;
+      }
+      this.cur.setPinch(procPinch || this.wantSlot() === 'pinch');
+      this.ensureTimer();
+      this.notify();
+      return;
+    }
+    const key = this.entryTrack(slot, now);
+    if (!key) return;
+    if (!this.bufs.has(key)) {
+      this.load(key);
       // keep the duel going while the pinch track loads; otherwise clear the floor meanwhile
       if (this.cur && !sameScene) this.retire(now, opts.fade ?? 1.4);
       this.ensureTimer();
+      this.notify();
       return;
     }
     this.pending = {};
-    if (this.cur && this.cur.key === want.key) {
-      this.cur.setPinch(slot === 'pinch');
-      this.ensureTimer();
+    this.start(ac, chain, slot, key, now, opts.fade ?? (sameScene ? 2 : 1.4), sameScene ? 1.6 : this.old.length ? 1.2 : 2.5, opts.delay ?? 0);
+  }
+
+  private start(ac: Ctx, chain: Chain, slot: MusicSlot, key: string, now: number, fadeOut: number, fadeIn: number, delay = 0) {
+    const b = this.bufs.get(key)!;
+    const t = this.trackFor(key)!;
+    this.retire(now, fadeOut);
+    const st = this.state(slot);
+    if (st.entry === key) st.entry = undefined;
+    if (st.upcoming === key) st.upcoming = undefined;
+    st.current = key;
+    const r = this.resume.get(key);
+    const offset = r && now - r.at < 60 ? r.pos : 0;
+    this.resume.delete(key);
+    const single = this.playlist(slot).length < 2;
+    const passes = single ? Infinity : t.kind === 'recorded' ? PASSES : 1;
+    this.cur = new LoopVoice(ac, chain, key, t.kind, b.buf, t.track ?? null, now + 0.06 + delay, fadeIn, b.level, offset, passes);
+    this.curSlot = slot;
+    this.ensureTimer();
+    this.notify();
+  }
+
+  /** Crossfade to the slot's next track if it is ready (`now` = skip; otherwise near the end). */
+  private advance(slot: MusicSlot, now = false) {
+    const ac = audioContext();
+    if (!ac || ac.state !== 'running' || !this.cur) return;
+    const next = this.peekNext(slot, this.cur.key);
+    if (!next || next === this.cur.key) {
+      this.skipWanted = false;
       return;
     }
-    this.retire(now, opts.fade ?? (sameScene ? 2 : 1.4));
-    const t0 = now + 0.06 + (opts.delay ?? 0);
-    const fadeIn = sameScene ? 1.6 : this.old.length ? 1.2 : 2.5;
-    if (want.kind === 'proc') {
-      this.cur = new ProcVoice(ac, chain, slot === 'menu' ? 'menu' : 'duel', t0, fadeIn);
-      this.cur.setPinch(slot === 'pinch');
-    } else {
-      const b = this.bufs.get(want.key)!;
-      const loop = want.kind === 'recorded' ? MUSIC_LOOPS[slotOfKey(want.key)] : null;
-      // duel and pinch pick up where they left off when they come back within a minute
-      const r = this.resume.get(want.key);
-      const offset = r && groupOf(slot) === 'duel' && now - r.at < 60 ? r.pos : 0;
-      this.cur = new LoopVoice(ac, chain, want.key, want.kind, b.buf, loop, t0, fadeIn, b.level, offset);
+    if (!this.bufs.has(next)) {
+      this.load(next);
+      return;
     }
-    this.ensureTimer();
+    this.skipWanted = false;
+    const t = ac.currentTime;
+    const xf = now ? 1.5 : Math.max(0.5, Math.min(TRACK_XF, this.cur.remaining(t)));
+    this.resume.delete(this.cur.key);
+    const cur = this.cur;
+    this.start(ac, chainFor(ac), slot, next, t, xf, xf);
+    this.resume.delete(cur.key); // a finished track starts from the top next time
   }
 
   private retire(now: number, fade: number) {
@@ -939,11 +1179,21 @@ class MusicController {
     if (ac.state === 'running') {
       const now = ac.currentTime;
       const until = now + LOOKAHEAD;
+      const cur = this.cur;
+      if (cur && cur.kind !== 'proc' && this.curSlot) {
+        const left = cur.remaining(now);
+        if (left < PRELOAD_S) {
+          const next = this.peekNext(this.curSlot, cur.key);
+          if (next) this.load(next);
+        }
+        if (this.skipWanted || left <= TRACK_XF + LOOKAHEAD) this.advance(this.curSlot, this.skipWanted);
+      }
       this.cur?.pump(until, now);
       this.old = this.old.filter((p) => {
         p.pump(until, now);
         return !p.done;
       });
+      this.tidy(now);
     }
     if (this.cur || this.old.length) this.timer = window.setTimeout(this.tick, TICK_MS);
   };
@@ -964,16 +1214,17 @@ export function renderMusic(ac: BaseAudioContext, id: TrackId, seconds: number, 
 }
 
 /**
- * Schedule a built-in recorded loop (or, with `buffer`, a decoded file as "your music") into a
+ * Schedule a built-in track (by id), or with `buffer` a decoded file as "your music", into a
  * given (offline) context at the level it plays in the app. `offset` starts that many seconds into
- * the loop, e.g. just before the loop point to hear the seam.
+ * the track, e.g. just before the loop point to hear the seam.
  */
-export async function renderRecordedMusic(ac: BaseAudioContext, slot: MusicSlot, opts: { volume?: number; offset?: number; buffer?: AudioBuffer } = {}) {
+export async function renderRecordedMusic(ac: BaseAudioContext, id: string, opts: { volume?: number; offset?: number; buffer?: AudioBuffer } = {}) {
   const chain = chainFor(ac);
   chain.vol.gain.value = (opts.volume ?? 0.6) * MUSIC_LEVEL;
   const user = !!opts.buffer;
-  const buf = opts.buffer ?? (await loadMusicLoop(slot));
+  const buf = opts.buffer ?? (await loadMusicTrack(id));
   const kind: Kind = user ? 'user' : 'recorded';
-  const v = new LoopVoice(ac, chain, `${kind}:${slot}`, kind, buf, user ? null : MUSIC_LOOPS[slot], 0, 0.02, levelFor(buf, user ? USER_DB : RECORDED_DB), opts.offset ?? 0);
+  const t = trackById(id);
+  const v = new LoopVoice(ac, chain, `${user ? 'user' : 'rec'}:${id}`, kind, buf, user ? null : t ?? null, 0, 0.02, levelFor(buf, user ? USER_DB : RECORDED_DB), opts.offset ?? 0);
   v.pump((ac as OfflineAudioContext).length / ac.sampleRate, 0);
 }

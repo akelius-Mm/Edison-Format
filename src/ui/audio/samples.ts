@@ -14,17 +14,43 @@ export const SFX_SAMPLES = [
   'boom', 'crunch-1', 'crunch-2', 'energy-1', 'energy-2', 'barrier', 'swoosh',
   'woosh-1', 'woosh-2', 'woosh-3', 'woosh-4', 'shing-1', 'shing-2', 'shing-3',
   'chime-1', 'chime-2', 'sparkle', 'shimmer', 'select-1', 'select-2', 'switch-1', 'switch-2',
-  'click-1', 'click-2', 'error', 'tick-1', 'tick-2', 'sax-turn', 'sax-win', 'sax-lose',
+  'click-1', 'click-2', 'error', 'tick-1', 'tick-2', 'vibe-turn', 'vibe-win', 'vibe-lose',
 ] as const;
 export type SampleName = (typeof SFX_SAMPLES)[number];
 
-/** Built-in music loops (public/audio/music/*.m4a). Loop points are in seconds of the decoded file. */
-export const MUSIC_LOOPS = {
-  menu: { file: 'music/menu.m4a', loopStart: 0.5, loopEnd: 94.158458, bpm: 82 },
-  duel: { file: 'music/duel.m4a', loopStart: 0.5, loopEnd: 85.743719, bpm: 90.1 },
-  pinch: { file: 'music/pinch.m4a', loopStart: 0.5, loopEnd: 78.406281, bpm: 98.58 },
-} as const;
-export type MusicSlot = keyof typeof MUSIC_LOOPS;
+export type MusicSlot = 'menu' | 'duel' | 'pinch';
+export const MUSIC_SLOTS: MusicSlot[] = ['menu', 'duel', 'pinch'];
+
+export interface MusicTrack {
+  id: string;
+  slot: MusicSlot;
+  title: string;
+  artist: string;
+  file: string;
+  /** Loop points in seconds of the decoded file: a bar-aligned section that loops seamlessly. */
+  loopStart: number;
+  loopEnd: number;
+  bpm: number;
+}
+
+/**
+ * The built-in playlists (public/audio/music/*.m4a, credits in credits.ts). Each file is a
+ * 24-32 bar section of the original with a seamless loop point; the player plays it twice
+ * through (about three minutes) and then crossfades to the next track of the slot.
+ */
+export const MUSIC_TRACKS: MusicTrack[] = [
+  { id: 'first-snow', slot: 'menu', title: 'First Snow', artist: 'HoliznaCC0', file: 'music/first-snow.m4a', loopStart: 0.5, loopEnd: 94.158458, bpm: 82 },
+  { id: 'snow-drift', slot: 'menu', title: 'Snow Drift', artist: 'HoliznaCC0', file: 'music/snow-drift.m4a', loopStart: 0.5, loopEnd: 90.852902, bpm: 85 },
+  { id: 'two-hour-delay', slot: 'menu', title: '2 Hour Delay', artist: 'HoliznaCC0', file: 'music/two-hour-delay.m4a', loopStart: 0.5, loopEnd: 96.499955, bpm: 80 },
+  { id: 'chill-lofi', slot: 'menu', title: 'Chill Lofi Inspired', artist: 'omfgdude', file: 'music/chill-lofi.m4a', loopStart: 0.5, loopEnd: 73.418277, bpm: 79 },
+  { id: 'funky-lofi-jam', slot: 'duel', title: 'Funky Hip Hop Lofi Jam', artist: 'omfgdude', file: 'music/funky-lofi-jam.m4a', loopStart: 0.5, loopEnd: 85.743719, bpm: 90.1 },
+  { id: 'winter-blues', slot: 'duel', title: 'Winter Blues', artist: 'HoliznaCC0', file: 'music/winter-blues.m4a', loopStart: 0.5, loopEnd: 91.066077, bpm: 84.8 },
+  { id: 'lofi-hip-hop', slot: 'duel', title: 'Lofi Hip Hop', artist: 'omfgdude', file: 'music/lofi-hip-hop.m4a', loopStart: 0.5, loopEnd: 91.060181, bpm: 84.8 },
+  { id: 'autumn', slot: 'duel', title: 'Autumn', artist: 'HoliznaCC0', file: 'music/autumn.m4a', loopStart: 0.5, loopEnd: 84.099456, bpm: 91.9 },
+  { id: 'fire-place', slot: 'pinch', title: 'Fire Place', artist: 'HoliznaCC0', file: 'music/fire-place.m4a', loopStart: 0.5, loopEnd: 78.406281, bpm: 98.6 },
+  { id: 'a-little-shade', slot: 'pinch', title: 'A Little Shade', artist: 'HoliznaCC0', file: 'music/a-little-shade.m4a', loopStart: 0.5, loopEnd: 84.747234, bpm: 91.2 },
+];
+export const trackById = (id: string) => MUSIC_TRACKS.find((t) => t.id === id);
 
 const base = (): string => {
   try {
@@ -126,21 +152,22 @@ export function sampleStatus() {
   return { loaded: sfx.size, failed: [...failed], total: SFX_SAMPLES.length };
 }
 
-// ---------------------------------------------------------------- music loops
-const music = new Map<MusicSlot, Promise<AudioBuffer>>();
+// ---------------------------------------------------------------- music tracks
+const music = new Map<string, Promise<AudioBuffer>>();
 
-/** Fetch and decode a built-in music loop (cached until `dropMusicLoop`). */
-export function loadMusicLoop(slot: MusicSlot): Promise<AudioBuffer> {
-  let p = music.get(slot);
+/** Fetch and decode a built-in track (kept until `dropMusicTrack`; the service worker caches the file). */
+export function loadMusicTrack(id: string): Promise<AudioBuffer> {
+  let p = music.get(id);
   if (!p) {
-    p = fetchDecode(audioUrl(MUSIC_LOOPS[slot].file));
-    music.set(slot, p);
-    p.catch(() => music.delete(slot));
+    const t = trackById(id);
+    p = t ? fetchDecode(audioUrl(t.file)) : Promise.reject(new Error(`No track ${id}`));
+    music.set(id, p);
+    p.catch(() => music.delete(id));
   }
   return p;
 }
 
-/** Forget a decoded loop to free memory (about 35 MB each); it is fetched from cache again when needed. */
-export function dropMusicLoop(slot: MusicSlot) {
-  music.delete(slot);
+/** Forget a decoded track to free memory (about 35 MB each). */
+export function dropMusicTrack(id: string) {
+  music.delete(id);
 }

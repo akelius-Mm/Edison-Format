@@ -12,6 +12,8 @@ export interface Settings {
   /** 0.25 = very fast … 2 = slow. 1 is normal. 0 = instant. */
   animationSpeed: number;
   sound: boolean;
+  /** Vibration / iPhone haptic ticks for taps, plays, damage and results. */
+  haptics: boolean;
   volume: number;
   /** Background music: menu, duel and pinch tracks (built-in CC0 recordings or the player's own files). */
   music: boolean;
@@ -24,6 +26,8 @@ export interface Settings {
   confirmEndTurn: boolean;
   /** Opt-in: show official card artwork fetched from the YGOPRODeck database. */
   officialImages: boolean;
+  /** Built-in music tracks the player switched off (track ids). */
+  musicOff: string[];
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -33,6 +37,7 @@ export const DEFAULT_SETTINGS: Settings = {
   playmat: 'tournament-black',
   animationSpeed: 1,
   sound: true,
+  haptics: true,
   volume: 0.6,
   music: true,
   responsePrompts: 'smart',
@@ -42,6 +47,7 @@ export const DEFAULT_SETTINGS: Settings = {
   showLog: true,
   confirmEndTurn: false,
   officialImages: true,
+  musicOff: [],
 };
 
 const KEY = 'edison.settings.v1';

@@ -93,7 +93,8 @@ export function startUpdater() {
     navigator.serviceWorker.register('./sw.js').catch(() => {
       /* offline support unavailable; the app still works online */
     });
-    // Once a worker is active, have it fetch the recorded audio in the background for offline play.
+    // Once a worker is active, have it fetch the sound effects in the background for offline play
+    // (music is cached as each track is first played).
     void navigator.serviceWorker.ready.then((r) => r.active?.postMessage('precache-audio')).catch(() => {});
   });
 }

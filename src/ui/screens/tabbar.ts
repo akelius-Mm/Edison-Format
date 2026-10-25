@@ -1,6 +1,7 @@
 // App-style bottom tab bar (hidden during duels).
 import { h, icon, ICONS } from './dom';
 import { go, parseHash } from './nav';
+import { haptic } from '../haptics';
 
 const TABS: { route: string; label: string; icon: keyof typeof ICONS; match: string[] }[] = [
   { route: 'title', label: 'Home', icon: 'home', match: ['title', '', 'packs', 'binder', 'locals', 'events', 'profile'] },
@@ -15,7 +16,7 @@ export function mountTabBar() {
     'nav',
     { class: 'tabbar', 'aria-label': 'Main' },
     ...TABS.map((t) =>
-      h('button', { type: 'button', class: 'tab', 'data-route': t.route, onclick: () => go(t.route) }, icon(t.icon), h('span', null, t.label)),
+      h('button', { type: 'button', class: 'tab', 'data-route': t.route, onclick: () => (haptic('selection'), go(t.route)) }, icon(t.icon), h('span', null, t.label)),
     ),
   );
   document.body.appendChild(bar);

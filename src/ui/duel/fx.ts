@@ -6,6 +6,7 @@ import type { PlayerId } from '../../engine/types';
 import { renderCard } from '../cards/render';
 import type { BoardView, RenderOpts } from './board';
 import type { ChainStack, PlayerPanel } from './panels';
+import { type HapticKind, haptic } from '../haptics';
 import type { Sfx } from './sound';
 
 export interface FxHost {
@@ -45,6 +46,11 @@ function center(e: Element) {
 export class FxDirector {
   constructor(private h: FxHost) {}
 
+  /** Haptic for something the viewer did (never for the opponent or AI, never when spectating). */
+  private feel(kind: HapticKind, player: PlayerId | undefined | null) {
+    if (!this.h.spectator && player === this.h.me) haptic(kind);
+  }
+
   private async wait(ms: number) {
     const t = ms * this.h.speed();
     if (t > 0) await sleep(t);
@@ -82,6 +88,7 @@ export class FxDirector {
         const stagger = a.opening ? 110 : 90;
         h.flush({ stagger: stagger * h.speed() });
         h.sfx.play('draw');
+        if (!a.opening) this.feel('light', a.player as PlayerId);
         for (let i = 1; i < Math.min(n, 6); i++) window.setTimeout(() => h.sfx.play('draw'), i * stagger * h.speed());
         return this.wait(430 + stagger * (n - 1));
       }
@@ -89,6 +96,7 @@ export class FxDirector {
         h.flush();
         if (a.set) {
           h.sfx.play('set');
+          this.feel('light', (a.cards as { ctrl?: PlayerId }[])[0]?.ctrl);
           for (const m of a.cards as { uid: number }[]) this.pulse(m.uid, 'fx-set', 500);
           return this.wait(420);
         }
@@ -102,17 +110,21 @@ export class FxDirector {
         const uids = a.cards as number[];
         const first = h.game.card(uids[0]);
         if (first && first.faceUp) h.spotlight(first);
+        const who = first?.controller;
         if (method === 'set') {
           h.sfx.play('set');
+          this.feel('light', who);
           for (const u of uids) this.pulse(u, 'fx-set', 500);
           return this.wait(420);
         }
         if (method === 'synchro') {
           h.sfx.play('synchro');
+          this.feel('heavy', who);
           for (const u of uids) this.synchroBurst(u);
           return this.wait(1250);
         }
         h.sfx.play('summon');
+        this.feel('medium', who);
         for (const u of uids) {
           this.pulse(u, method === 'tribute' ? 'fx-summon fx-tribute' : 'fx-summon', 900);
           this.ring(u, method === 'tribute' ? 'ring--tribute' : 'ring--summon');
@@ -122,6 +134,7 @@ export class FxDirector {
       case 'activate': {
         h.flush();
         h.sfx.play('activate');
+        this.feel('medium', a.player as PlayerId);
         const c = h.game.card(a.card);
         if (c) {
           h.spotlight(c);
@@ -160,6 +173,7 @@ export class FxDirector {
       case 'attack': {
         h.flush();
         h.sfx.play('attack');
+        this.feel('medium', a.player as PlayerId);
         const at = h.board.elFor(a.attacker);
         const tgt = a.target != null ? h.board.elFor(a.target) : h.panels[h.game.opp(a.player as PlayerId)].avatarEl;
         if (at && tgt) {
@@ -189,6 +203,7 @@ export class FxDirector {
         const amt = a.amount as number;
         const big = amt >= 2000 && a.kind !== 'cost';
         h.sfx.play(big ? 'bigDamage' : 'damage');
+        this.feel(a.kind === 'cost' ? 'light' : 'heavy', a.player as PlayerId);
         this.floatNumber(a.player as PlayerId, `-${amt}`, a.kind === 'cost' ? 'num--cost' : 'num--dmg', big);
         if (big) this.shakeScreen();
         if (a.kind !== 'cost') this.flashSide(a.player as PlayerId, 'flash--dmg');

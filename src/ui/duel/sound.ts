@@ -169,7 +169,11 @@ const RECIPES: Partial<Record<SfxName | 'coinToss' | 'coinLand', Layer[]>> = {
     { s: ['crunch-1'], db: -7, rate: [1.1, 1.2] },
   ],
   phase: [{ s: ['switch-1', 'switch-2'], db: -10, rate: [0.97, 1.03] }],
-  turn: [{ s: ['sax-turn'], db: 0 }],
+  // a new turn: two soft vibraphone notes (a rising fifth) over a faint airy swish
+  turn: [
+    { s: ['vibe-turn'], db: -6, rate: [0.995, 1.005] },
+    { s: ['swoosh'], db: -20, rate: [1.3, 1.4] },
+  ],
   coinToss: [{ s: ['coin-flick'], db: -5, rate: [1.1, 1.2] }],
   coinLand: [
     { s: ['coin-land-1'], db: -5, rate: [1.05, 1.15] },
@@ -182,12 +186,13 @@ const RECIPES: Partial<Record<SfxName | 'coinToss' | 'coinLand', Layer[]>> = {
     { s: ['clang-2'], db: -8, rate: [0.7, 0.75] },
   ],
   target: [{ s: ['select-1', 'select-2'], db: -11, rate: [0.97, 1.05] }],
+  // victory: a warm rolled Fmaj9 on vibraphone with a soft shimmer on top
   win: [
-    { s: ['sax-win'], db: 5 },
-    { s: ['sparkle'], at: 0.5, db: -1 },
-    { s: ['shimmer'], at: 0.55, db: -4 },
+    { s: ['vibe-win'], db: 1 },
+    { s: ['shimmer'], at: 0.45, db: -12 },
   ],
-  lose: [{ s: ['sax-lose'], db: 4 }],
+  // defeat: a falling line that settles on a low D minor chord
+  lose: [{ s: ['vibe-lose'], db: 1 }],
   click: [{ s: ['click-1', 'click-2'], db: -15, rate: [0.95, 1.05] }],
   error: [{ s: ['error'], db: -10 }],
 };

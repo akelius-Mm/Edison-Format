@@ -1,101 +1,164 @@
-// Settings → "Your music" (pick a file from the device for the Menu, Duel and Pinch slots) and
-// the Audio credits sheet.
-import { AUDIO_CREDITS, MUSIC_CREDITS } from '../audio/credits';
-import { music } from '../audio/music';
-import type { MusicSlot } from '../audio/samples';
-import { decodeAudio } from '../audio/samples';
-import { MAX_USER_TRACK_BYTES, USER_SLOTS, removeUserTrack, setUserTrack, userTrackInfo } from '../audio/userMusic';
-import { iosGroup, iosRow } from './components';
-import { clear, h, modal, toast } from './dom';
+// Settings → Audio extras: "Now playing" with Skip, the built-in track switches, "Your music"
+// (files from the device for the Menu, Duel and Pinch playlists) and the Audio credits sheet.
+import { AUDIO_CREDITS } from '../audio/credits';
+import { type NowPlaying, music } from '../audio/music';
+import { MUSIC_SLOTS, MUSIC_TRACKS, type MusicSlot, decodeAudio } from '../audio/samples';
+import { MAX_USER_TRACKS, MAX_USER_TRACK_BYTES, USER_SLOTS, addUserTrack, removeUserTrack, userTracks } from '../audio/userMusic';
+import { getSettings, updateSettings } from '../settings';
+import { iosGroup, iosNav, iosRow } from './components';
+import { clear, h, modal, toast, toggle } from './dom';
 
 const SLOT_LABEL: Record<MusicSlot, string> = { menu: 'Menu', duel: 'Duel', pinch: 'Pinch' };
-const BUILT_IN: Record<MusicSlot, string> = {
-  menu: MUSIC_CREDITS[0].title.replace(/ \(.*/, ''),
-  duel: MUSIC_CREDITS[1].title.replace(/ \(.*/, ''),
-  pinch: MUSIC_CREDITS[2].title.replace(/ \(.*/, ''),
-};
-
 const mb = (n: number) => (n >= 1048576 ? `${(n / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`);
 
-function slotRow(slot: MusicSlot) {
-  const desc = h('span', { class: 'ym-desc' }, `Built-in: ${BUILT_IN[slot]}`);
-  const input = h('input', { type: 'file', accept: 'audio/*', class: 'sr-only', tabindex: '-1', 'aria-hidden': 'true', 'data-slot': slot });
-  const choose = h('button', { type: 'button', class: 'ios-inline-btn', 'aria-label': `Choose a file for ${SLOT_LABEL[slot]}` }, 'Choose');
-  const remove = h('button', { type: 'button', class: 'ios-inline-btn ym-remove', 'aria-label': `Remove the ${SLOT_LABEL[slot]} file`, hidden: true }, 'Remove');
+// ---------------------------------------------------------------- now playing
+/** "Now playing: title · artist" with a Skip button; follows the music as it changes. */
+export function nowPlayingRow() {
+  const desc = h('span', { class: 'ym-desc np-desc' }, 'Nothing playing');
+  const skip = h('button', { type: 'button', class: 'ios-inline-btn np-skip', disabled: true, 'aria-label': 'Skip to the next track' }, 'Skip');
+  const row = iosRow('Now playing', desc, skip, { cls: 'np-row' });
+  const paint = (np: NowPlaying | null) => {
+    clear(desc);
+    if (np) desc.append(h('span', { class: 'ym-name' }, np.title), ` · ${np.artist}`);
+    else desc.append(getSettings().music ? 'Starts with your first tap' : 'Music is off');
+    skip.disabled = !np?.canSkip;
+  };
+  skip.addEventListener('click', () => music.skip());
+  paint(music.nowPlaying());
+  const off = music.onNowPlaying((np) => {
+    if (row.dataset.mounted && !row.isConnected) return void off();
+    paint(np);
+  });
+  requestAnimationFrame(() => (row.dataset.mounted = '1'));
+  return row;
+}
+
+// ---------------------------------------------------------------- built-in tracks
+function builtInSummary() {
+  const off = new Set(getSettings().musicOff ?? []);
+  return `${MUSIC_TRACKS.filter((t) => !off.has(t.id)).length} of ${MUSIC_TRACKS.length}`;
+}
+
+/** Switches for the built-in tracks of each playlist (at least one stays on per slot). */
+export function showBuiltInTracks(onDone?: () => void) {
+  const groups = MUSIC_SLOTS.map((slot) =>
+    iosGroup(
+      `${SLOT_LABEL[slot]} playlist`,
+      MUSIC_TRACKS.filter((t) => t.slot === slot).map((t) => {
+        const on = !(getSettings().musicOff ?? []).includes(t.id);
+        const tg = toggle(
+          on,
+          (v) => {
+            const off = new Set(getSettings().musicOff ?? []);
+            if (v) off.delete(t.id);
+            else off.add(t.id);
+            const left = MUSIC_TRACKS.filter((x) => x.slot === slot && !off.has(x.id));
+            if (!left.length) {
+              toast(`Keep at least one ${SLOT_LABEL[slot]} track on.`, 'error');
+              (tg.querySelector('input') as HTMLInputElement).checked = true;
+              return;
+            }
+            updateSettings({ musicOff: [...off] });
+          },
+          `${t.title} by ${t.artist}`,
+        );
+        return iosRow(t.title, t.artist, tg);
+      }),
+    ),
+  );
+  modal('Built-in tracks', h('div', { class: 'credits-list bt-list' }, h('p', { class: 'credits-intro' }, 'Choose which built-in lo-fi tracks can play. Each playlist shuffles the tracks that are on. Your music, when added, plays instead.'), groups), [{ label: 'Done', variant: 'primary' }], {
+    onClose: onDone,
+  });
+}
+
+export function builtInTracksRow() {
+  const row = iosNav('Built-in tracks', () => showBuiltInTracks(() => detail && (detail.textContent = builtInSummary())), { icon: 'list', detail: builtInSummary() });
+  const detail = row.querySelector('.ios-detail');
+  return row;
+}
+
+// ---------------------------------------------------------------- your music
+function slotBlock(slot: MusicSlot) {
+  const wrap = h('div', { class: 'ym-slot', 'data-slot': slot });
+  const input = h('input', { type: 'file', accept: 'audio/*', multiple: true, class: 'sr-only', tabindex: '-1', 'aria-hidden': 'true', 'data-slot': slot });
+  const add = h('button', { type: 'button', class: 'ios-inline-btn ym-add', 'aria-label': `Add files to the ${SLOT_LABEL[slot]} playlist` }, 'Add');
+  const head = h('span', { class: 'ym-desc' }, '');
   let busy = false;
 
   const paint = async () => {
-    const info = (await userTrackInfo())[slot];
-    clear(desc);
-    if (info) {
-      desc.append(h('span', { class: 'ym-name' }, info.name), ` · ${mb(info.size)}`);
-      remove.hidden = false;
-      choose.textContent = 'Change';
-    } else {
-      desc.append(`Built-in: ${BUILT_IN[slot]}`);
-      remove.hidden = true;
-      choose.textContent = 'Choose';
-    }
+    const mine = (await userTracks()).filter((t) => t.slot === slot);
+    const builtIn = MUSIC_TRACKS.filter((t) => t.slot === slot).length;
+    clear(head);
+    head.append(mine.length ? `Your files (${mine.length})` : `Built-in playlist (${builtIn} tracks)`);
+    add.disabled = busy || mine.length >= MAX_USER_TRACKS;
+    clear(wrap);
+    wrap.append(
+      iosRow(SLOT_LABEL[slot], head, h('div', { class: 'ym-ctl' }, add, input), { cls: 'ym-row' }),
+      ...mine.map((t) => {
+        const rm = h('button', { type: 'button', class: 'ios-inline-btn ym-remove', 'aria-label': `Remove ${t.name}` }, 'Remove');
+        rm.addEventListener('click', async () => {
+          try {
+            await removeUserTrack(t.id);
+          } catch {
+            toast('Could not remove the file.', 'error');
+          }
+          await paint();
+        });
+        return iosRow(h('span', { class: 'ym-file-name' }, t.name), mb(t.size), rm, { cls: 'ym-file' });
+      }),
+    );
   };
 
-  choose.addEventListener('click', () => {
+  add.addEventListener('click', () => {
     if (busy) return;
     input.value = '';
     input.click();
   });
   input.addEventListener('change', async () => {
-    const file = input.files?.[0];
-    if (!file || busy) return;
-    if (file.size > MAX_USER_TRACK_BYTES) {
-      toast(`That file is ${mb(file.size)}. Pick one under ${mb(MAX_USER_TRACK_BYTES)}.`, 'error', 4000);
-      return;
-    }
+    const files = [...(input.files ?? [])];
+    if (!files.length || busy) return;
     busy = true;
-    choose.disabled = true;
-    clear(desc);
-    desc.append('Checking the file…');
-    try {
-      const bytes = await file.arrayBuffer();
-      let buf: AudioBuffer;
+    clear(head);
+    head.append(files.length > 1 ? `Checking ${files.length} files…` : 'Checking the file…');
+    add.disabled = true;
+    let added = 0;
+    for (const file of files) {
       try {
-        buf = await decodeAudio(bytes.slice(0));
-      } catch {
-        throw new Error("This file can't be played on this device. Try an MP3 or M4A file.");
+        if ((await userTracks()).filter((t) => t.slot === slot).length >= MAX_USER_TRACKS) throw new Error(`A playlist holds up to ${MAX_USER_TRACKS} files.`);
+        if (file.size > MAX_USER_TRACK_BYTES) throw new Error(`"${file.name}" is ${mb(file.size)}. Pick files under ${mb(MAX_USER_TRACK_BYTES)}.`);
+        const bytes = await file.arrayBuffer();
+        let buf: AudioBuffer;
+        try {
+          buf = await decodeAudio(bytes.slice(0));
+        } catch {
+          throw new Error(`"${file.name}" can't be played on this device. Try MP3 or M4A.`);
+        }
+        if (buf.duration < 2) throw new Error(`"${file.name}" is too short to play.`);
+        const id = await addUserTrack(slot, file, file.name, bytes);
+        music.primeUser(id, buf);
+        added++;
+      } catch (e) {
+        toast((e as Error)?.message || 'Could not save that file.', 'error', 4200);
       }
-      if (buf.duration < 2) throw new Error('That file is too short to loop. Pick a song.');
-      await setUserTrack(slot, file);
-      music.primeUser(slot, buf);
-      toast(`${SLOT_LABEL[slot]} music set to "${file.name}".`, 'success');
-    } catch (e) {
-      toast((e as Error)?.message || 'Could not save that file.', 'error', 4200);
-    } finally {
-      busy = false;
-      choose.disabled = false;
-      await paint();
     }
-  });
-  remove.addEventListener('click', async () => {
-    try {
-      await removeUserTrack(slot);
-      toast(`${SLOT_LABEL[slot]} uses the built-in music again.`, 'success');
-    } catch {
-      toast('Could not remove the file.', 'error');
-    }
+    if (added) toast(added === 1 ? `Added to the ${SLOT_LABEL[slot]} playlist.` : `${added} files added to the ${SLOT_LABEL[slot]} playlist.`, 'success');
+    busy = false;
     await paint();
   });
   void paint();
-  return iosRow(SLOT_LABEL[slot], desc, h('div', { class: 'ym-ctl' }, choose, remove, input), { cls: 'ym-row' });
+  return wrap;
 }
 
-/** The "Your music" group: three slots with Choose / Remove. */
+/** The "Your music" group: a playlist of your own files for each slot. */
 export function yourMusicGroup() {
   return iosGroup(
     'Your music',
-    USER_SLOTS.map(slotRow),
-    'Play your own audio files instead of the built-in tracks, for example music you own from the show. Files stay on this device and are never uploaded. Each one loops with a crossfade. Pinch plays when either duelist is at 2000 LP or less.',
+    USER_SLOTS.map(slotBlock),
+    'Add your own audio files, for example music you own from the show. A slot with files plays them as a shuffled playlist instead of the built-in tracks. Files stay on this device and are never uploaded. Pinch plays when either duelist is at 2000 LP or less.',
   );
 }
 
+// ---------------------------------------------------------------- credits
 /** The Audio credits sheet. */
 export function showAudioCredits() {
   const list = h(
