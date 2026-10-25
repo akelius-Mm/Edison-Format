@@ -278,7 +278,7 @@ function landing(body: HTMLElement, opts: { joining?: boolean; error?: string } 
       h(
         'p',
         { class: 'fr-foot' },
-        `Phones connect directly; ${describeServer(serverConfig())} only introduces them. Both phones keep the whole game, so play with people you trust.`,
+        `Your phones connect directly; a free connection service only introduces them. Both phones keep the whole game, so play with people you trust.`,
       ),
     ),
   );
