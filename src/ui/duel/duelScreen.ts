@@ -694,6 +694,12 @@ class DuelScreen implements HumanUI {
     }
     const st = this.actionState;
     const acts = st?.byCard.get(c.uid);
+    const pile = c.location === 'extra' || c.location === 'deck' ? c.location : null;
+    if (pile && !acts?.length) {
+      // a card drawn on top of a pile: the tap is for the pile
+      this.onPileClick(c.owner, pile, ev);
+      return;
+    }
     if (!acts?.length) {
       this.dialogs.closeMenu();
       // Nothing to do with this card: tap to enlarge it.
@@ -714,7 +720,9 @@ class DuelScreen implements HumanUI {
           const l = this.actionLabel(a);
           return { label: l.label, sub: l.sub, onClick: () => this.resolveAction(a), kind: a.type === 'attack' ? 'is-attack' : '' };
         }),
-        { label: 'View card', sub: 'Enlarge and read', onClick: () => zoomCard(c.data, { instance: c, game: this.game }), kind: 'is-view' },
+        pile === 'extra'
+          ? { label: 'View Extra Deck', sub: `${this.game.players[c.owner].extra.length} cards`, onClick: () => this.openPile(c.owner, 'extra'), kind: 'is-view' }
+          : { label: 'View card', sub: 'Enlarge and read', onClick: () => zoomCard(c.data, { instance: c, game: this.game }), kind: 'is-view' },
       ],
     );
     void ev;
@@ -735,7 +743,12 @@ class DuelScreen implements HumanUI {
     const names = { grave: 'Graveyard', banished: 'Banished', extra: 'Extra Deck' };
     const whose = this.spectator ? `${this.opts.sides[p].name}'s` : p === this.me ? 'Your' : "Opponent's";
     const st = this.actionState;
+    // The Graveyard and Banished viewers link to each other (the banished pile is hidden on small boards).
+    const other = loc === 'grave' ? 'banished' : loc === 'banished' ? 'grave' : null;
+    const otherCards = other === 'grave' ? g.players[p].grave : other === 'banished' ? g.players[p].banished : [];
+    const links = other && (other === 'grave' || otherCards.length) ? [{ label: `${names[other]} (${otherCards.length})`, onClick: () => this.openPile(p, other) }] : [];
     pileViewer(this.dialogs, this.promptCtx(), `${whose} ${names[loc]}`, cards, {
+      links,
       faceDown: (c) => !this.canSee(c),
       actions: (c) => {
         const acts = st && this.actionState === st ? st.byCard.get(c.uid) ?? [] : [];

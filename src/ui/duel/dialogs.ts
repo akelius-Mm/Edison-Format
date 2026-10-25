@@ -5,6 +5,8 @@ import type { Game } from '../../engine/game';
 import type { BattlePos, PlayerId } from '../../engine/types';
 import { artThumb, renderCard } from '../cards/render';
 import { ICONS } from '../cards/icons';
+import { zoomCard } from '../cards/zoom';
+import { findCard } from '../../cards/define';
 import { esc } from '../theme/util';
 import type { Sfx } from './sound';
 
@@ -73,6 +75,78 @@ function h<K extends keyof HTMLElementTagNameMap>(tag: K, cls = '', html = ''): 
   return e;
 }
 
+/** Hold a finger on `el` (about 400 ms) to run `fn`; the tap that ends the hold does nothing else. */
+export function onLongPress(el: HTMLElement, fn: () => void, ms = 400) {
+  let timer = 0;
+  let x = 0;
+  let y = 0;
+  let fired = false;
+  const cancel = () => {
+    window.clearTimeout(timer);
+    timer = 0;
+  };
+  el.addEventListener('pointerdown', (e) => {
+    if (e.button > 0) return;
+    fired = false;
+    x = e.clientX;
+    y = e.clientY;
+    cancel();
+    timer = window.setTimeout(() => {
+      timer = 0;
+      fired = true;
+      navigator.vibrate?.(8);
+      fn();
+    }, ms);
+  });
+  el.addEventListener('pointermove', (e) => {
+    if (timer && Math.hypot(e.clientX - x, e.clientY - y) > 10) cancel();
+  });
+  for (const t of ['pointerup', 'pointercancel', 'pointerleave'] as const) el.addEventListener(t, cancel);
+  el.addEventListener(
+    'click',
+    (e) => {
+      if (!fired) return;
+      fired = false;
+      e.stopImmediatePropagation();
+      e.preventDefault();
+    },
+    true,
+  );
+  el.addEventListener('contextmenu', (e) => e.preventDefault());
+}
+
+const CHECK_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+const READ_SVG =
+  '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6" fill="none" stroke="currentColor" stroke-width="2.2"/><path d="M15 15l5 5" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>';
+
+/** A small corner button that opens the card to read it, without triggering the tile. */
+function readButton(fn: () => void, cls = 'tile-zoom'): HTMLButtonElement {
+  const b = h('button', cls, READ_SVG) as HTMLButtonElement;
+  b.type = 'button';
+  b.title = 'Read card';
+  b.setAttribute('aria-label', 'Read card');
+  b.addEventListener('pointerdown', (e) => e.stopPropagation());
+  b.addEventListener('click', (e) => {
+    e.stopPropagation();
+    e.preventDefault();
+    fn();
+  });
+  return b;
+}
+
+/** Corner read button plus long-press on `el`, both opening the card enlarged. */
+function readable(el: HTMLElement, open: () => void, btnCls?: string) {
+  onLongPress(el, open);
+  const b = readButton(open, btnCls);
+  el.appendChild(b);
+  return b;
+}
+
+/** One-line hint above card choices, for touch screens. */
+function touchHint(text: string): HTMLElement | null {
+  return isTouchUI() ? h('div', 'dlg-hint', esc(text)) : null;
+}
+
 export class Dialogs {
   private open = new Set<ModalHandle>();
   private keyHandler: (e: KeyboardEvent) => void;
@@ -118,7 +192,11 @@ export class Dialogs {
     const box = h('div', 'dlg');
     const head = h('div', 'dlg-head');
     if (o.source) {
-      head.appendChild(artThumb(o.source, 'dlg-src'));
+      const src = artThumb(o.source, 'dlg-src');
+      const data = o.source;
+      src.title = 'Read card';
+      src.addEventListener('click', () => zoomCard(data));
+      head.appendChild(src);
     }
     const titles = h('div', 'dlg-titles');
     const t = h('div', 'dlg-title');
@@ -235,13 +313,14 @@ export class Dialogs {
   }
 
   // ------------------------------------------------------------ helpers
-  cardTile(c: CardInstance, ctx: PromptCtx, opts: { caption?: string; faceDown?: boolean } = {}): HTMLElement {
+  cardTile(c: CardInstance, ctx: PromptCtx, opts: { caption?: string; faceDown?: boolean; readable?: boolean } = {}): HTMLElement {
     const tile = h('div', 'tile');
     const visible = !opts.faceDown;
     const card = renderCard(c.data, { size: 'md', faceDown: !visible, sleeve: ctx.sleeves[c.owner], instance: c, game: ctx.game });
     tile.appendChild(card);
     if (opts.caption) tile.appendChild(h('div', 'tile-cap', esc(opts.caption)));
     if (visible) tile.addEventListener('pointerenter', () => ctx.preview(c));
+    if (visible && opts.readable) readable(tile, () => zoomCard(c.data, { instance: c, game: ctx.game }));
     return tile;
   }
 }
@@ -268,6 +347,8 @@ export function selectDialog(d: Dialogs, ctx: PromptCtx, req: SelectRequest): { 
   const promise = new Promise<CardInstance[]>((r) => (resolve = r));
   const body = h('div', 'sel');
   const grid = h('div', 'sel-grid');
+  const hint = touchHint('Tap to select · hold or tap the magnifier to read');
+  if (hint) body.appendChild(hint);
   body.appendChild(grid);
   // Copies of one card in the Deck, Extra Deck or your hand are interchangeable: show them as
   // one tile with a ×N badge. Cards on the field or in a GY stay separate.
@@ -282,7 +363,7 @@ export function selectDialog(d: Dialogs, ctx: PromptCtx, req: SelectRequest): { 
       const picked = g.cards.filter((c) => sel.includes(c));
       g.tile.classList.toggle('is-selected', picked.length > 0);
       const badge = g.tile.querySelector('.tile-sel') as HTMLElement;
-      badge.textContent = !picked.length ? '' : g.cards.length > 1 ? String(picked.length) : String(sel.indexOf(picked[0]) + 1);
+      badge.innerHTML = !picked.length ? '' : g.cards.length > 1 && picked.length > 1 ? `×${picked.length}` : CHECK_SVG;
     }
     m.setDisabled(0, !ok());
     m.setSubtitle(subtitle());
@@ -303,7 +384,7 @@ export function selectDialog(d: Dialogs, ctx: PromptCtx, req: SelectRequest): { 
       n.textContent = `×${existing.cards.length}`;
       continue;
     }
-    const tile = d.cardTile(c, ctx, { caption: locCaption(ctx.game, c, ctx.viewer), faceDown: !vis });
+    const tile = d.cardTile(c, ctx, { caption: locCaption(ctx.game, c, ctx.viewer), faceDown: !vis, readable: true });
     const g: Group = { cards: [c], tile };
     groups.push(g);
     if (key) byKey.set(key, g);
@@ -314,11 +395,13 @@ export function selectDialog(d: Dialogs, ctx: PromptCtx, req: SelectRequest): { 
       const picked = g.cards.filter((x) => sel.includes(x));
       const next = g.cards.find((x) => !sel.includes(x));
       if (req.max === 1) {
+        // tap toggles: tapping the chosen card again clears the choice
         const was = picked.length > 0;
         sel.length = 0;
         if (!was) sel.push(g.cards[0]);
       } else if (next && sel.length < req.max) sel.push(next);
-      else if (picked.length) for (const x of picked) sel.splice(sel.indexOf(x), 1);
+      // a full stack (or a full selection) gives back one copy per tap
+      else if (picked.length) sel.splice(sel.indexOf(picked[picked.length - 1]), 1);
       else return;
       refresh();
     });
@@ -394,6 +477,7 @@ export function positionDialog(d: Dialogs, ctx: PromptCtx, card: CardInstance, a
       const c = renderCard(card.data, { size: 'md', faceDown: a === 'set', sleeve: ctx.sleeves[card.owner] });
       holder.appendChild(c);
       opt.append(holder, h('div', 'pos-label', labels[a]));
+      if (a !== 'set') onLongPress(opt, () => zoomCard(card.data, { instance: card, game: ctx.game }));
       opt.onclick = () => {
         ctx.sfx.play('click');
         m.close();
@@ -413,6 +497,7 @@ export function responseDialog(d: Dialogs, ctx: PromptCtx, req: ResponseRequest,
     if (top && req.kind === 'chain') {
       const t = h('div', 'resp-top', `<div><small>Chain Link ${top.index}</small><b>${esc(top.card.name)}</b></div>`);
       t.prepend(artThumb(top.card.data));
+      readable(t, () => zoomCard(top.card.data, { instance: top.card, game: ctx.game }), 'resp-read');
       t.addEventListener('pointerenter', () => ctx.preview(top.card));
       body.appendChild(t);
     }
@@ -420,6 +505,9 @@ export function responseDialog(d: Dialogs, ctx: PromptCtx, req: ResponseRequest,
       const row = h('button', 'resp-opt') as HTMLButtonElement;
       row.innerHTML = `<div class="resp-txt"><b>${esc(o.card.name)}</b><small>${esc(o.label === 'Activate' || o.label === 'Use effect' ? describeLoc(o.card) : o.label)}</small></div><span class="resp-go">Activate</span>`;
       row.prepend(artThumb(o.card.data));
+      const read = readButton(() => zoomCard(o.card.data, { instance: o.card, game: ctx.game }), 'resp-read');
+      row.insertBefore(read, row.querySelector('.resp-go'));
+      onLongPress(row, () => zoomCard(o.card.data, { instance: o.card, game: ctx.game }));
       row.addEventListener('pointerenter', () => ctx.preview(o.card));
       row.onclick = () => {
         m.close();
@@ -475,6 +563,8 @@ export function declareDialog(d: Dialogs, prompt: string, names: string[]): Prom
       for (const n of sorted.filter((x) => x.toLowerCase().includes(q)).slice(0, 120)) {
         const b = h('button', 'declare-item') as HTMLButtonElement;
         b.textContent = n;
+        const data = findCard(n);
+        if (data) onLongPress(b, () => zoomCard(data));
         b.onclick = () => {
           m.close();
           resolve(n);
@@ -496,14 +586,46 @@ export function pileViewer(
   ctx: PromptCtx,
   title: string,
   cards: CardInstance[],
-  opts: { faceDown?: (c: CardInstance) => boolean; actions?: (c: CardInstance) => { label: string; onClick: () => void }[] } = {},
+  opts: {
+    faceDown?: (c: CardInstance) => boolean;
+    actions?: (c: CardInstance) => { label: string; onClick: () => void }[];
+    /** Other piles to jump to (e.g. Banished from the Graveyard). */
+    links?: { label: string; onClick: () => void }[];
+  } = {},
 ): ModalHandle {
   const body = h('div', 'viewer');
-  if (!cards.length) body.appendChild(h('div', 'viewer-empty', 'No cards.'));
-  const grid = h('div', 'sel-grid');
   let m: ModalHandle;
+  if (opts.links?.length) {
+    const bar = h('div', 'viewer-links');
+    for (const l of opts.links) {
+      const b = h('button', 'viewer-link', `<span>${esc(l.label)}</span>`) as HTMLButtonElement;
+      b.type = 'button';
+      b.onclick = () => {
+        m.close();
+        l.onClick();
+      };
+      bar.appendChild(b);
+    }
+    body.appendChild(bar);
+  }
+  if (!cards.length) body.appendChild(h('div', 'viewer-empty', 'No cards.'));
+  else if (cards.some((c) => !opts.faceDown?.(c))) {
+    const hint = touchHint('Tap a card to read it');
+    if (hint) body.appendChild(hint);
+  }
+  const grid = h('div', 'sel-grid');
   for (const c of [...cards].reverse()) {
-    const tile = d.cardTile(c, ctx, { faceDown: opts.faceDown?.(c) });
+    const hidden = !!opts.faceDown?.(c);
+    const tile = d.cardTile(c, ctx, { faceDown: hidden });
+    if (!hidden) {
+      // Tapping the card itself always opens it to read; actions sit underneath.
+      const face = tile.firstElementChild as HTMLElement;
+      face.classList.add('tile-face');
+      face.addEventListener('click', (e) => {
+        e.stopPropagation();
+        zoomCard(c.data, { instance: c, game: ctx.game });
+      });
+    }
     const acts = opts.actions?.(c) ?? [];
     if (acts.length) {
       tile.classList.add('tile--act');
