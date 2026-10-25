@@ -6,11 +6,12 @@ import { DECKS as A } from './group-a';
 import { DECKS as B } from './group-b';
 import { DECKS as C } from './group-c';
 import { DECKS as T } from './tournament';
+import { DECKS as T2 } from './tournament2';
 import type { DeckDef } from './types';
 
 export type { DeckDef };
 
-export const PREMADE_DECKS: DeckDef[] = [...A, ...B, ...C, ...T];
+export const PREMADE_DECKS: DeckDef[] = [...A, ...B, ...C, ...T, ...T2];
 
 export function deckById(id: string) {
   return PREMADE_DECKS.find((d) => d.id === id);
