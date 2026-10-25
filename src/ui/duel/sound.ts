@@ -1,6 +1,9 @@
-// Synthesized sound effects (Web Audio, no audio files). Every sound here is original.
-// Shares one AudioContext with the music (see ../audio/core.ts).
+// Sound effects. Recorded CC0 samples (public/audio/sfx/, credited in ../audio/credits.ts) are
+// layered and varied (random take, pitch and level) so repeats don't sound identical. Every sound
+// also has an original synthesized version (Web Audio) that is used until the samples have loaded,
+// or if they can't be. Shares one AudioContext with the music (see ../audio/core.ts).
 import { type Ctx, audioContext, duckMusic, graphFor, resumeAudio } from '../audio/core';
+import { type SampleName, loadSfxSamples, sample } from '../audio/samples';
 import { type Send, fm, mtof, noise, tone } from '../audio/synth';
 
 export type SfxName =
@@ -22,6 +25,7 @@ export type SfxName =
   | 'negate'
   | 'target'
   | 'flip'
+  | 'shuffle'
   | 'win'
   | 'lose'
   | 'click'
@@ -39,6 +43,7 @@ const GAP: Partial<Record<SfxName, number>> = {
   win: 1,
   lose: 1,
   turn: 0.3,
+  shuffle: 1,
 };
 /**
  * Per-sound level trim in dB, balanced by rendering every sound offline and measuring it
@@ -48,6 +53,7 @@ const TRIM_DB: Record<SfxName, number> = {
   draw: 13,
   set: 2,
   flip: 15,
+  shuffle: 6,
   summon: 4.5,
   synchro: 6,
   activate: 11,
@@ -74,6 +80,123 @@ const SLOT: Partial<Record<SfxName, string>> = { damage: 'hit', bigDamage: 'hit'
 
 const vary = (x: number, pct: number) => x * (1 + (Math.random() * 2 - 1) * pct);
 
+// ------------------------------------------------------------------ recorded samples
+interface Layer {
+  /** Takes to pick from at random (never the same take twice in a row when there are several). */
+  s: SampleName[];
+  /** Delay after the trigger, seconds. */
+  at?: number;
+  /** Level in dB (samples are normalised so their loudest 50 ms sit at -12 dBFS RMS). */
+  db?: number;
+  /** Playback-rate range: pitch and length vary together, like a slightly different hit. */
+  rate?: [number, number];
+  /** Random level variation, ± dB. */
+  jitter?: number;
+  pan?: number;
+}
+
+const SLIDES: SampleName[] = ['card-slide-1', 'card-slide-2', 'card-slide-3', 'card-slide-4', 'card-slide-5'];
+const PLACES: SampleName[] = ['card-place-1', 'card-place-2', 'card-place-3', 'card-place-4'];
+const PUNCHES: SampleName[] = ['punch-1', 'punch-2', 'punch-3'];
+const THUDS: SampleName[] = ['thud-1', 'thud-2'];
+const WOOSHES: SampleName[] = ['woosh-1', 'woosh-2', 'woosh-3', 'woosh-4'];
+const SHINGS: SampleName[] = ['shing-1', 'shing-2', 'shing-3'];
+const SHATTERS: SampleName[] = ['shatter-1', 'shatter-2', 'shatter-3'];
+
+/**
+ * What each sound is made of. Levels were balanced by rendering every sound offline and measuring
+ * it (see scripts/audio-check.cjs): at volume 0.6 heavy hits peak near -7 dBFS, medium -10,
+ * light -15 and UI ticks -25, the same targets as the synthesized set.
+ */
+const RECIPES: Partial<Record<SfxName | 'coinToss' | 'coinLand', Layer[]>> = {
+  // card sliding off the deck into the hand
+  draw: [{ s: SLIDES, db: -6, rate: [0.94, 1.08], jitter: 1.5 }],
+  // a card laid face-down: the slap, a little lower and softer
+  set: [{ s: PLACES, db: -1, rate: [0.86, 0.94], jitter: 1 }],
+  // flicked over
+  flip: [{ s: ['card-flip-1', 'card-flip-2'], db: -3, rate: [0.95, 1.1], jitter: 1 }],
+  shuffle: [{ s: ['card-shuffle'], db: -2, rate: [0.97, 1.03] }],
+  // slammed onto the field: card slap over a deep thud, a bright glint on top
+  summon: [
+    { s: PLACES, db: 4, rate: [0.95, 1.05] },
+    { s: THUDS, db: 0, rate: [0.9, 1.05] },
+    { s: ['chime-1'], at: 0.03, db: -10, rate: [0.98, 1.04] },
+  ],
+  // energy rising, a swoosh, then the slam: boom + slap + shing + sparkle
+  synchro: [
+    { s: ['energy-1', 'energy-2'], db: -1, rate: [0.75, 0.8] },
+    { s: ['swoosh'], at: 0.25, db: -3, rate: [0.9, 1] },
+    { s: ['boom'], at: 0.72, db: 3 },
+    { s: PLACES, at: 0.72, db: 3, rate: [0.9, 0.95] },
+    { s: SHINGS, at: 0.74, db: -3, rate: [0.8, 0.85] },
+    { s: ['sparkle'], at: 0.78, db: -4 },
+    { s: ['shimmer'], at: 0.8, db: -7 },
+  ],
+  // card flipped up with a metallic "shing"
+  activate: [
+    { s: SHINGS, db: 0, rate: [0.95, 1.08], jitter: 1 },
+    { s: ['card-flip-2'], db: -3, rate: [1, 1.1] },
+  ],
+  resolve: [{ s: ['chime-2', 'chime-1'], db: -5, rate: [0.97, 1.05], jitter: 1 }],
+  // the monster lunges: a long low whoosh doubled with a quick swish
+  attack: [
+    { s: ['swoosh'], db: 1, rate: [0.95, 1.1] },
+    { s: WOOSHES, at: 0.12, db: -1, rate: [0.65, 0.8] },
+  ],
+  // clash: punch + metal clang
+  battle: [
+    { s: PUNCHES, db: 6, rate: [0.9, 1.05] },
+    { s: ['clang-1', 'clang-2'], db: -1, rate: [0.85, 1] },
+  ],
+  damage: [
+    { s: PUNCHES, db: 4, rate: [0.8, 0.9] },
+    { s: THUDS, db: 2, rate: [0.95, 1.05] },
+  ],
+  bigDamage: [
+    { s: ['boom'], db: 5 },
+    { s: ['crunch-1', 'crunch-2'], db: 1, rate: [0.85, 0.95] },
+    { s: PUNCHES, db: 4, rate: [0.75, 0.82] },
+  ],
+  // healing: a bright rising sparkle with a soft shimmer
+  recover: [
+    { s: ['sparkle'], db: 2, rate: [0.98, 1.02] },
+    { s: ['shimmer'], at: 0.08, db: -3, rate: [0.95, 1] },
+  ],
+  // glass shatter: crack, shards and a low crunch
+  destroy: [
+    { s: SHATTERS, db: 4, rate: [0.9, 1.05] },
+    { s: ['shards'], at: 0.05, db: -3, rate: [0.9, 1.2] },
+    { s: ['crunch-1'], db: -7, rate: [1.1, 1.2] },
+  ],
+  phase: [{ s: ['switch-1', 'switch-2'], db: -10, rate: [0.97, 1.03] }],
+  turn: [{ s: ['sax-turn'], db: 0 }],
+  coinToss: [{ s: ['coin-flick'], db: -5, rate: [1.1, 1.2] }],
+  coinLand: [
+    { s: ['coin-land-1'], db: -5, rate: [1.05, 1.15] },
+    { s: ['coin-land-2'], at: 0.11, db: -13, rate: [1.1, 1.25] },
+  ],
+  // denied: a force-field burst with a heavy low clank
+  negate: [
+    { s: ['energy-1', 'energy-2'], db: -5, rate: [1.15, 1.25] },
+    { s: ['barrier'], db: -1, rate: [0.9, 1] },
+    { s: ['clang-2'], db: -8, rate: [0.7, 0.75] },
+  ],
+  target: [{ s: ['select-1', 'select-2'], db: -11, rate: [0.97, 1.05] }],
+  win: [
+    { s: ['sax-win'], db: 5 },
+    { s: ['sparkle'], at: 0.5, db: -1 },
+    { s: ['shimmer'], at: 0.55, db: -4 },
+  ],
+  lose: [{ s: ['sax-lose'], db: 4 }],
+  click: [{ s: ['click-1', 'click-2'], db: -15, rate: [0.95, 1.05] }],
+  error: [{ s: ['error'], db: -10 }],
+};
+
+/** Every take a recipe can use has loaded. */
+function ready(layers: Layer[]) {
+  return layers.every((l) => l.s.some((n) => sample(n)));
+}
+
 interface Ticker {
   bus: GainNode;
   end: number;
@@ -86,12 +209,14 @@ export class Sfx {
   private last = new Map<string, number>();
   private ticker: Ticker | null = null;
   private lastSpin = -10;
+  private coinLanding = false;
   enabled = true;
   volume = 0.6;
 
   /** `context` renders into a given (e.g. offline) context instead of the shared live one. */
   constructor(opts: { context?: BaseAudioContext } = {}) {
     this.fixed = opts.context ?? null;
+    void loadSfxSamples();
   }
 
   private ensure(): Ctx | null {
@@ -143,6 +268,38 @@ export class Sfx {
     const bus = ac.createGain();
     bus.connect(this.master);
 
+    const ticks = [sample('tick-1'), sample('tick-2')];
+    if (ticks[0] && ticks[1]) {
+      // recorded counter ticks: rapid at first, slowing as the number settles; down = a little
+      // brighter and falling, up = rising
+      let t = 0;
+      let n = 0;
+      while (t < dur - 0.028) {
+        const src = ac.createBufferSource();
+        src.buffer = ticks[n % 2]!;
+        const k = t / dur;
+        src.playbackRate.value = up ? 0.9 + 0.25 * k : 1.12 - 0.25 * k;
+        const g = ac.createGain();
+        g.gain.value = (n % 2 ? 0.8 : 1) * Math.pow(10, -21 / 20);
+        src.connect(g).connect(bus);
+        src.start(t0 + t);
+        t += 0.026 + 0.045 * Math.pow(t / dur, 1.5);
+        n++;
+      }
+      const te = t0 + dur;
+      const settle = sample(up ? 'chime-2' : 'select-2');
+      if (settle) {
+        const src = ac.createBufferSource();
+        src.buffer = settle;
+        src.playbackRate.value = up ? 1.1 : 0.9;
+        const g = ac.createGain();
+        g.gain.value = Math.pow(10, (up ? -16 : -15) / 20);
+        src.connect(g).connect(bus);
+        src.start(te);
+      }
+      this.ticker = { bus, end: te + 0.3 };
+      return;
+    }
     // One oscillator, gated into ticks by gain automation: cheap even for long rolls.
     const osc = ac.createOscillator();
     osc.type = 'square';
@@ -210,7 +367,67 @@ export class Sfx {
     const prev = this.last.get(slot) ?? -10;
     if (now - prev < (GAP[name] ?? 0.04)) return;
     this.last.set(slot, now);
-    this.voice(ac, name, now + 0.005);
+    const t = now + 0.005;
+    let key: keyof typeof RECIPES = name;
+    if (name === 'coin') {
+      // a toss is two calls: the flick (and spin), then the landing
+      this.coinLanding = t - this.lastSpin < 2.5;
+      this.lastSpin = this.coinLanding ? -10 : t;
+      key = this.coinLanding ? 'coinLand' : 'coinToss';
+    }
+    const layers = RECIPES[key];
+    if (layers && ready(layers)) this.layered(ac, name, layers, t);
+    else this.voice(ac, name, t);
+  }
+
+  private lastTake = new Map<string, SampleName>();
+  private layered(ac: Ctx, name: SfxName, layers: Layer[], t: number) {
+    const out = ac.createGain();
+    out.connect(this.master!);
+    let end = t;
+    layers.forEach((l, i) => {
+      const takes = l.s.filter((n) => sample(n));
+      const id = `${name}/${i}`;
+      const prev = this.lastTake.get(id);
+      const pool = takes.length > 1 ? takes.filter((n) => n !== prev) : takes;
+      const pick = pool[Math.floor(Math.random() * pool.length)];
+      this.lastTake.set(id, pick);
+      const buf = sample(pick)!;
+      const src = ac.createBufferSource();
+      src.buffer = buf;
+      const [r0, r1] = l.rate ?? [1, 1];
+      const rate = r0 + Math.random() * (r1 - r0);
+      src.playbackRate.value = rate;
+      const g = ac.createGain();
+      const db = (l.db ?? 0) + (l.jitter ? (Math.random() * 2 - 1) * l.jitter : 0);
+      g.gain.value = Math.pow(10, db / 20);
+      src.connect(g);
+      let last: AudioNode = g;
+      if (l.pan && (ac as any).createStereoPanner) {
+        const p = ac.createStereoPanner();
+        p.pan.value = l.pan;
+        last.connect(p);
+        last = p;
+      }
+      last.connect(out);
+      const at = t + (l.at ?? 0);
+      src.start(at);
+      end = Math.max(end, at + buf.duration / rate);
+    });
+    if (name === 'bigDamage') duckMusic(ac, 0.45, 0.4, 0.8);
+    else if (name === 'synchro') duckMusic(ac, 0.5, 1.2, 1);
+    else if (name === 'win') duckMusic(ac, 0.7, 2.2, 1.5);
+    else if (name === 'lose') duckMusic(ac, 0.75, 2.4, 1.5);
+    // unhook the layer bus once everything has played
+    if (typeof window !== 'undefined' && 'currentTime' in ac && !(ac as any).startRendering) {
+      window.setTimeout(() => {
+        try {
+          out.disconnect();
+        } catch {
+          /* ignore */
+        }
+      }, (end - ac.currentTime + 0.5) * 1000);
+    }
   }
 
   private brass(ac: Ctx, out: AudioNode, t: number, m: number, dur: number, vol: number, rv: Send, pan = 0) {
@@ -375,9 +592,8 @@ export class Sfx {
       }
       case 'coin': {
         const r = rv(0.3);
-        if (t - this.lastSpin < 2.5) {
+        if (this.coinLanding) {
           // second call of a toss: the coin lands with a ring and two small bounces
-          this.lastSpin = -10;
           fm(ac, o, t, 2637, 0.9, { ratio: 2.76, index: 1.2, indexEnd: 0.05, vol: 0.035, send: r });
           fm(ac, o, t + 0.11, 2637, 0.4, { ratio: 2.76, index: 0.8, vol: 0.016, send: r });
           fm(ac, o, t + 0.19, 2637, 0.25, { ratio: 2.76, index: 0.6, vol: 0.008, send: r });
@@ -427,6 +643,15 @@ export class Sfx {
         for (const m of [48, 55, 63]) this.brass(ac, o, t + 0.52, m, 1.5, 0.07, r);
         tone(ac, o, t + 0.52, 261.6, 1.4, { type: 'triangle', f1: 130.8, glide: 1.2, vol: 0.06 });
         fm(ac, o, t + 0.52, mtof(75), 1.6, { ratio: 2, index: 0.4, vol: 0.03, send: r });
+        break;
+      }
+      case 'shuffle': {
+        // a riffle: a run of tiny paper flicks, then the cards squared up
+        for (let i = 0; i < 22; i++) {
+          const dt = i * 0.028 + Math.random() * 0.008;
+          noise(ac, N, o, t + dt, 0.025, { type: 'bandpass', f0: 3200 + Math.random() * 1800, q: 1.5, vol: 0.06 + Math.random() * 0.03, pan: Math.random() * 0.4 - 0.2 });
+        }
+        noise(ac, N, o, t + 0.68, 0.08, { type: 'lowpass', f0: 1400, f1: 400, vol: 0.18 });
         break;
       }
       case 'click': {

@@ -418,6 +418,7 @@ class DuelScreen implements HumanUI {
   // ------------------------------------------------------------------ run
   async run(): Promise<DuelResult> {
     music.setScene('duel');
+    this.sfx.play('shuffle');
     this.flush();
     let res: { winner: PlayerId | null; reason: string; turns: number };
     try {
