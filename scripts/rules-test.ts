@@ -1563,6 +1563,32 @@ async function crmsTests() {
     eq(other.location, 'grave', 'other monster destroyed');
   });
 
+  await test('Ehren, Lightsworn Monk: a Defense Position monster it attacks goes back to the Deck, even one it destroys (no GY effects)', async () => {
+    const { g, place } = setup();
+    const ehren = place(0, cardByName('Ehren, Lightsworn Monk'), 'mzone');
+    const qd = place(1, cardByName('Quickdraw Synchron'), 'mzone', { pos: 'def' });
+    await g.conductAttack(0, ehren);
+    eq(qd.location, 'deck', 'Quickdraw Synchron (DEF 1400) shuffled into the Deck, not the GY');
+    eq(g.players[1].grave.includes(qd), false, 'not in the GY');
+    const { g: g2, place: place2 } = setup();
+    const e2 = place2(0, cardByName('Ehren, Lightsworn Monk'), 'mzone');
+    const sangan = place2(1, cardByName('Sangan'), 'mzone', { pos: 'def' });
+    const before = g2.players[1].hand.length;
+    await g2.conductAttack(0, e2);
+    eq(sangan.location, 'deck', 'Sangan back to the Deck');
+    eq(g2.players[1].hand.length, before, 'Sangan does not search (never sent to the GY)');
+    const { g: g3, place: place3 } = setup();
+    const e3 = place3(0, cardByName('Ehren, Lightsworn Monk'), 'mzone');
+    const wall = place3(1, T.wall, 'mzone', { pos: 'def' });
+    await g3.conductAttack(0, e3);
+    eq(wall.location, 'deck', 'a monster that survives the battle is returned too');
+    const { g: g4, place: place4 } = setup();
+    const e4 = place4(0, cardByName('Ehren, Lightsworn Monk'), 'mzone');
+    const atk = place4(1, T.wall, 'mzone');
+    await g4.conductAttack(0, e4);
+    eq(atk.location, 'grave', 'an Attack Position monster is destroyed, not returned');
+  });
+
   await test('Plaguespreader Zombie: offered in your Standby Phase only (a hand card goes on top of the Deck); not in the Main Phase', async () => {
     const { g, c0, place } = setup();
     const pz = place(0, cardByName('Plaguespreader Zombie'), 'grave');

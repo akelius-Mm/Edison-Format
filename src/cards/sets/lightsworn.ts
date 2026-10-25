@@ -217,21 +217,22 @@ monster('Ehren, Lightsworn Monk', {
   sets: LS,
   text: 'If this card attacks a Defense Position monster, return that monster to the Deck after damage calculation. During each of your End Phases: Send the top 3 cards of your Deck to the GY.',
   aiValue: 200,
-  // Approximation: resolves at the end of the Damage Step (if the monster survived the battle).
+  // Resolves right after damage calculation, before a monster it destroys by battle leaves the field, so that
+  // monster goes back to the Deck instead of the GY (no "destroyed" / "sent to the GY" effects). It does not target.
   effects: [
     {
       kind: 'trigger',
-      event: 'damageStepEnd',
+      event: 'damageCalculated',
       mandatory: true,
       label: 'Shuffle the attacked monster into the Deck',
       categories: ['toDeck'],
       eventFilter: (ctx, ev) => {
         const t = ev.other as CardInstance | undefined;
-        return ev.card === ctx.self && ctx.self.location === 'mzone' && !!t && t.location === 'mzone' && t.pos === 'def' && t.controller === ctx.opp;
+        return ev.card === ctx.self && ctx.self.location === 'mzone' && !!t && t.location === 'mzone' && ctx.game.battle?.calc?.targetPos === 'def';
       },
       resolve: async (ctx) => {
         const t = ctx.event!.other as CardInstance;
-        if (t && t.location === 'mzone' && ctx.canTarget(t)) await ctx.toDeck(t, 'shuffle');
+        if (t && t.location === 'mzone') await ctx.toDeck(t, 'shuffle');
       },
     },
     endPhaseMill(3),
