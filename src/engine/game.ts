@@ -2398,6 +2398,15 @@ export class Game {
         this.turnData.battleDamageTo[dmg.player] = true;
       }
     }
+    // "After damage calculation" triggers (Ehren) resolve before battle-destroyed monsters leave the field.
+    if (target) {
+      const held = this.pending;
+      this.pending = [];
+      this.beginBatch();
+      this.emit({ type: 'damageCalculated', card: attacker, other: target, player: p, minor: true });
+      if (this.pending.length) await this.processTriggers(true);
+      this.pending = [...held, ...this.pending];
+    }
     // Destroy losers
     let destroyGroup = losers.filter((l) => l.card.location === 'mzone' && this.canDestroy(l.card, 'battle'));
     // ANPR + ABPF: destruction replacement effects also apply to battle destruction.

@@ -115,6 +115,8 @@ export type EventType =
   | 'phaseEnd'
   | 'battleEnd'
   | 'damageStepEnd'
+  /** After damage calculation, before battle-destroyed monsters leave the field (Ehren, Lightsworn Monk). */
+  | 'damageCalculated'
   | 'chainActivated'
   | 'chainResolved'
   | 'positionChanged'
