@@ -266,9 +266,10 @@ function gozenAttr(g: Game, p: PlayerId): Attribute | null {
   return a.length ? a[0] : null;
 }
 const raiJinBlocks = (g: Game, c: C) => c.name === RAI_JIN && g.allFieldCards().some((x) => x !== c && x.name === RAI_JIN && faceUpOn(x));
-function summonBlocked(g: Game, c: C, ctrl: PlayerId, faceUp: boolean) {
+function summonBlocked(g: Game, c: C, ctrl: PlayerId, faceUp: boolean, skipGozen = false) {
   if (c.name === OVERDRIVE) return true;
   if (faceUp && raiJinBlocks(g, c)) return true;
+  if (skipGozen) return false;
   const a = gozenAttr(g, ctrl);
   if (faceUp && a && c.data.attribute !== a) return true;
   return false;
@@ -422,8 +423,17 @@ export function ensureCsocPatches(g: Game) {
     if (summonBlocked(g, card, p, true)) return false;
     return (origISS as any)(p, card, ...rest);
   };
+  // Gozen Match: only material combinations that leave face-up monsters of the Synchro Monster's Attribute (or none),
+  // so the Synchro Summon never ends with 2 Attributes (it was summoned, then sent to the GY by the state check).
+  const origCombos = g.synchroCombos.bind(g);
+  anyG.synchroCombos = (p: PlayerId, syn: C, mustInclude?: C) => {
+    const combos = origCombos(p, syn, mustInclude);
+    if (!liveCards(g, GOZEN).length) return combos;
+    return combos.filter((combo) => g.faceUpMonsters(p).every((m) => combo.includes(m) || m.data.attribute === syn.data.attribute));
+  };
   const origCanSyn = g.canSynchro.bind(g);
-  anyG.canSynchro = (p: PlayerId, syn: C) => origCanSyn(p, syn) && !summonBlocked(g, syn, p, true);
+  // (Gozen Match is checked per material combination by synchroCombos above.)
+  anyG.canSynchro = (p: PlayerId, syn: C) => origCanSyn(p, syn) && !summonBlocked(g, syn, p, true, true);
   const origLMA = g.legalMainActions.bind(g);
   anyG.legalMainActions = (p: PlayerId) =>
     origLMA(p).filter((a: Action) => {
@@ -841,10 +851,10 @@ M('Morphtronic Cameran', {
       },
     },
     {
-      // APPROX: the engine's "untargetable" only covers the opponent's card effects.
+      // "cannot be targeted by effects": either player's.
       kind: 'continuous',
       active: (ctx) => ctx.self.pos === 'def',
-      mods: [{ q: 'untargetable', to: 'cards', filter: (_ctx, c: C) => faceUpOn(c) && isMorphMon(c) }],
+      mods: [{ q: 'untargetableByAll', to: 'cards', filter: (_ctx, c: C) => faceUpOn(c) && isMorphMon(c) }],
     },
   ],
 });

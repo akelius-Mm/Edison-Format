@@ -322,11 +322,10 @@ monster('Aurkus, Lightsworn Druid', {
   sets: LS,
   text: 'Neither player can target "Lightsworn" monsters with card effects. During each of your End Phases: Send the top 2 cards of your Deck to the GY.',
   aiValue: 300,
-  // Approximation: the engine's 'untargetable' only stops the opponent's targeting.
   effects: [
     {
       kind: 'continuous',
-      mods: [{ q: 'untargetable', to: 'cards', filter: (_ctx, c: CardInstance) => c.faceUpMonster && c.inSet('lightsworn') }],
+      mods: [{ q: 'untargetableByAll', to: 'cards', filter: (_ctx, c: CardInstance) => c.faceUpMonster && c.inSet('lightsworn') }],
     },
     endPhaseMill(2),
   ],

@@ -9,6 +9,12 @@ import './ui/home.css';
 import './ui/polish.css';
 import './ui/motion.css';
 import { installPressFeedback } from './ui/press';
+import { installErrorCapture } from './ui/diag';
+import { installErrorToast } from './ui/screens/report';
+
+// first: errors from here on are kept for "Report a problem"
+installErrorCapture();
+installErrorToast();
 
 installPressFeedback();
 startApp(document.getElementById('app')!);

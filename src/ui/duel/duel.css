@@ -2346,6 +2346,12 @@
 .duel-restoring-box { display: flex; align-items: center; gap: 12px; padding: 14px 18px; border-radius: 14px; background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 255, 255, 0.1); color: var(--dl-ink, #fff); font: 600 15px var(--ef-font-ui, system-ui); }
 .duel-restoring .spinner { width: 18px; height: 18px; flex: none; border-radius: 50%; border: 2px solid rgba(255, 255, 255, 0.15); border-top-color: #d4af37; animation: duel-restore-spin 0.8s linear infinite; }
 @keyframes duel-restore-spin { to { transform: rotate(360deg); } }
+.duel-restoring.is-stalled { align-content: center; gap: 14px; }
+.duel-restoring-more { display: grid; gap: 12px; justify-items: center; max-width: min(340px, calc(100vw - 32px)); text-align: center; animation: duel-restore-in 0.25s var(--ease-out, ease-out); }
+.duel-restoring-hint { margin: 0; color: rgba(236, 235, 231, 0.78); font: 500 14px/1.35 var(--ef-font-ui, system-ui); }
+.duel-restoring-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+.duel-restoring-actions .btn { min-height: 44px; }
+@keyframes duel-restore-in { from { opacity: 0; transform: translateY(6px); } }
 /* Leave or concede: stacked choices on phones */
 .duel-root .dlg--leave .dlg-actions { flex-wrap: wrap; }
 @media (max-width: 600px) {
@@ -2407,3 +2413,11 @@
 
 /* Spectating (AI vs AI, Friends Locals): nobody here can change phase; say whose turn it is by name. */
 .phasebar.is-spectating .phasebar-btns { display: none; }
+/* target picker: whose card / which zone on two readable lines, and section headings */
+.tile-cap--2 { white-space: normal; display: grid; gap: 1px; line-height: 1.25; }
+.tile-cap--2 > span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tile-cap--2 > span:first-child { color: var(--ef-text, #ecebe7); font-weight: 600; }
+.sel-section { grid-column: 1 / -1; justify-self: stretch; margin: 6px 2px -4px; font-size: 12px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ef-text-dim, rgba(236, 235, 231, 0.6)); }
+.tile-zmap { display: flex; gap: 3px; justify-content: center; margin-top: 3px; }
+.tile-zmap > span { width: 10px; height: 13px; border-radius: 2px; border: 1px solid rgba(236, 235, 231, 0.35); }
+.tile-zmap > span.on { background: #f2efe8; border-color: #f2efe8; }

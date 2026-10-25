@@ -350,7 +350,6 @@ once('Phantom Dragon', () =>
     atk: 2300,
     def: 2200,
     aiValue: 300,
-    // APPROX: the engine has no zone-lock hook, so "2 of your Monster Card Zones cannot be used" is not enforced.
     text: 'When your opponent Special Summons a monster (except during the Damage Step): You can Special Summon this card from your hand. 2 of your Monster Card Zones cannot be used.',
     effects: [
       {
@@ -368,6 +367,11 @@ once('Phantom Dragon', () =>
         resolve: async (ctx) => {
           if (ctx.self.location === 'hand' && ctx.canSpecialSummon()) await ctx.specialSummon(ctx.self);
         },
+      },
+      {
+        // "2 of your Monster Card Zones cannot be used" while it is face-up on the field.
+        kind: 'continuous',
+        mods: [{ q: 'lockedMZones', to: 'players', filter: (ctx, p) => p === ctx.player, value: 2 }],
       },
     ],
   }),
@@ -494,26 +498,43 @@ once('Machina Fortress', () =>
         },
       },
       {
-        // APPROX: resolves as its own chain link right after the targeting effect is activated (before it resolves),
-        // instead of being applied at the moment that effect starts resolving.
+        // "Before resolving an opponent's monster effect that targets this face-up card": not a Chain Link. The
+        // targeting link's resolution is wrapped (like Spirit Reaper); the discard happens as that effect starts to
+        // resolve, if it still resolves and this card is still the same face-up target.
         kind: 'trigger',
         event: 'chainActivated',
-        mandatory: true,
         label: 'Look at the hand and discard 1',
         categories: ['discard'],
         eventFilter: (ctx, ev) => {
-          const link = ev.data?.link as ChainLink | undefined;
+          const link = ev.data?.link as (ChainLink & { fortressWatch?: Set<number> }) | undefined;
+          const me = ctx.self;
           if (!link || link.player !== ctx.opp || !link.card.isMonster || link.isCardActivation) return false;
-          return ctx.self.location === 'mzone' && ctx.self.faceUp && link.ctx.targets.includes(ctx.self);
-        },
-        resolve: async (ctx) => {
-          const hand = ctx.hand('opp');
-          if (!hand.length) return;
-          ctx.log(`${ctx.game.players[ctx.player].name} looks at the opponent's hand.`);
-          const sel = await ctx.select(hand, 1, 1, "Discard 1 card from your opponent's hand.", 'discard', {
-            aiScore: (c) => cardValue(ctx.game, c),
-          });
-          if (sel.length) await ctx.game.discard(sel, 'effect', ctx.player, ctx.self);
+          if (me.location !== 'mzone' || !me.faceUp || !link.ctx.targets.includes(me)) return false;
+          link.fortressWatch ??= new Set();
+          if (link.fortressWatch.has(me.uid)) return false;
+          link.fortressWatch.add(me.uid);
+          const moveId = me.moveId;
+          const game = ctx.game;
+          const owner = ctx.player;
+          const orig = link.effect;
+          link.effect = {
+            ...orig,
+            resolve: async (c2) => {
+              if (me.location === 'mzone' && me.faceUp && me.moveId === moveId && me.controller === owner && !game.isNegated(me)) {
+                const hand = game.players[game.opp(owner)].hand;
+                if (hand.length) {
+                  game.log(`${me.name}: ${game.players[owner].name} looks at the opponent's hand.`, 'action', owner);
+                  const sel = await game.select(owner, [...hand], 1, 1, "Discard 1 card from your opponent's hand.", 'discard', {
+                    aiScore: (c) => cardValue(game, c),
+                    source: me,
+                  });
+                  if (sel.length) await game.discard(sel, 'effect', owner, me);
+                }
+              }
+              if (orig.resolve) await orig.resolve(c2);
+            },
+          };
+          return false;
         },
       },
     ],
@@ -708,9 +729,10 @@ const NECROVALLEY_SAFE = ['Dandylion'];
 
 once('Necrovalley', () =>
   spell('Necrovalley', 'field', {
-    // APPROX: the GY lock negates (when activated) any effect that targets a card in a GY or that is activated by a card
-    // in the GY to move itself. Non-targeting effects that move GY cards and banishing from the GY as a cost
-    // (Dark Armed Dragon, Chaos Sorcerer...) are not stopped.
+    // The GY lock negates (when activated) any effect that targets a card in a GY or that is activated by a card in the
+    // GY to move itself; costs that banish from a GY (Dark Armed Dragon, Chaos Sorcerer, Necro Gardna... see
+    // src/cards/gy-costs.ts) cannot be paid, so those effects are not offered. APPROX: non-targeting effects that
+    // move GY cards are not stopped.
     text: 'All "Gravekeeper\'s" monsters on the field gain 500 ATK/DEF. Cards in the GY cannot be banished. Negate any card effect that would move a card in the GY to a different place. Negate any card effect that changes Types or Attributes in the GY.',
     aiValue: 600,
     effects: [
@@ -725,6 +747,7 @@ once('Necrovalley', () =>
         mods: [
           { q: 'atk', to: 'cards', filter: (_ctx, c: C) => c.location === 'mzone' && c.faceUp && c.inSet('gravekeeper'), value: 500 },
           { q: 'def', to: 'cards', filter: (_ctx, c: C) => c.location === 'mzone' && c.faceUp && c.inSet('gravekeeper'), value: 500 },
+          { q: 'cannotBanishFromGY', to: 'players', value: true },
         ],
       },
       {
@@ -824,8 +847,6 @@ once('Wave-Motion Cannon', () =>
 
 once('Dimensional Fissure', () =>
   spell('Dimensional Fissure', 'continuous', {
-    // APPROX: the engine's "banish instead of GY" switch is per player and covers every card, so while this card applies
-    // Spells and Traps sent to the GY are banished as well (not only monsters).
     text: 'Any monster sent to the GY is banished instead.',
     aiValue: 300,
     effects: [
@@ -841,7 +862,8 @@ once('Dimensional Fissure', () =>
         kind: 'continuous',
         range: ['szone'],
         active: stActive,
-        mods: [{ q: 'banishInsteadOfGrave', to: 'players', filter: () => true }],
+        // Monsters only (the card switch); Spells and Traps still go to the GY.
+        mods: [{ q: 'banishInsteadOfGrave', to: 'cards', filter: (_ctx, c: C) => c.isMonster }],
       },
     ],
   }),

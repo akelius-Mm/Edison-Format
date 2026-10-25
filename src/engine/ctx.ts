@@ -122,6 +122,7 @@ export class Ctx {
   /** Can the given card be Special Summoned by an effect right now (zone + restrictions + nomi). */
   canSummonCard(c: CardInstance, side: 'me' | 'opp' = 'me') {
     if (!this.canSpecialSummon(side)) return false;
+    if (this.game.queryCard(c, 'cannotBeSummoned')) return false;
     if (c.data.nomi && !c.properlySummoned && (c.location === 'grave' || c.location === 'banished')) return false;
     if (c.data.nomi && (c.location === 'hand' || c.location === 'deck')) return false;
     if (c.isExtra && c.location !== 'extra' && !c.properlySummoned) return false;
@@ -130,6 +131,8 @@ export class Ctx {
   /** Can the opponent's cards be affected/targeted by this effect. */
   canTarget(c: CardInstance) {
     if (c.onField && c.controller !== this.player && this.game.queryCard(c, 'untargetable')) return false;
+    if (c.onField && this.game.queryCard(c, 'untargetableByAll')) return false;
+    if (c.onField && c.faceUp && c.data.targetImmunity && !this.game.isNegated(c) && c.data.targetImmunity(c, this.self, this)) return false;
     if (this.game.isUnaffected(c, this.self, this.player)) return false;
     return true;
   }
@@ -322,6 +325,12 @@ export class Ctx {
   /** Grant an additional Normal Summon/Set this turn. */
   gainNormalSummon(n = 1) {
     this.game.players[this.player].normalSummonsLeft += n;
+  }
+  /** One extra Normal Summon this turn, usable only for monsters `allow` accepts (Swap Frog). */
+  gainRestrictedNormalSummon(allow: (card: CardInstance, set: boolean) => boolean) {
+    const ps = this.game.players[this.player];
+    ps.normalSummonsLeft += 1;
+    (ps.restrictedSummons ??= []).push({ allow });
   }
   /** Negate a face-up monster's effects while it stays on the field (or until end of turn). */
   negateEffects(card: CardInstance, until: TempMod['until'] = 'field') {

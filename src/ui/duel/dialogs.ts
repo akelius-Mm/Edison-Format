@@ -335,7 +335,11 @@ export class Dialogs {
     const visible = !opts.faceDown;
     const card = renderCard(c.data, { size: 'md', faceDown: !visible, sleeve: ctx.sleeves[c.owner], instance: c, game: ctx.game });
     tile.appendChild(card);
-    if (opts.caption) tile.appendChild(h('div', 'tile-cap', esc(opts.caption)));
+    if (opts.caption) {
+      // a two-line caption ("Theirs · Monster 2" / "Face-down") keeps both parts readable
+      const lines = opts.caption.split('\n');
+      tile.appendChild(lines.length > 1 ? h('div', 'tile-cap tile-cap--2', lines.map((l) => `<span>${esc(l)}</span>`).join('')) : h('div', 'tile-cap', esc(opts.caption)));
+    }
     if (visible) tile.addEventListener('pointerenter', () => ctx.preview(c));
     if (visible && opts.readable) readable(tile, () => zoomCard(c.data, { instance: c, game: ctx.game }));
     return tile;
@@ -355,6 +359,37 @@ export function locCaption(game: Game, c: CardInstance, viewer: PlayerId) {
   if (c.location === 'mzone') loc = c.faceUp ? (c.pos === 'atk' ? 'Field · ATK' : 'Field · DEF') : 'Field · Set';
   if (c.location === 'szone' && !c.faceUp) loc = 'Field · Set';
   return `${side} ${loc}`;
+}
+
+/** Column of a field card as it appears on the board, counted from the left (the opponent's row is mirrored). */
+function boardColumn(c: CardInstance, viewer: PlayerId) {
+  return c.controller === viewer ? c.seq + 1 : 5 - c.seq;
+}
+
+/** Two-line caption for picking a card: whose and which zone, then its state. */
+export function pickCaption(game: Game, c: CardInstance, viewer: PlayerId) {
+  const mine = (c.onField ? c.controller : c.owner) === viewer;
+  const who = mine ? 'Yours' : 'Theirs';
+  if (c.location === 'mzone') {
+    const state = !c.faceUp ? 'Face-down' : c.pos === 'atk' ? `ATK ${game.getAtk(c)}` : `DEF ${game.getDef(c)}`;
+    return `${who} · Monster\n${state}`;
+  }
+  if (c.location === 'szone') {
+    const state = c.faceUp ? (c.isSpell ? 'Spell' : 'Trap') : c.setTurn === game.turn ? 'Set this turn' : 'Set';
+    return `${who} · S/T\n${state}`;
+  }
+  if (c.location === 'fzone') return `${who} · Field Zone`;
+  return `${who} · ${LOC_NAMES[c.location] ?? c.location}`;
+}
+
+/** Order and section of a pick candidate: the opponent's field first (monsters, then Spells/Traps), then yours. */
+function pickSection(c: CardInstance, viewer: PlayerId): { rank: number; label: string } {
+  const mine = (c.onField ? c.controller : c.owner) === viewer;
+  const base = mine ? 10 : 0;
+  if (c.location === 'mzone') return { rank: base + 1, label: mine ? 'Your monsters' : 'Their monsters' };
+  if (c.location === 'szone') return { rank: base + 2, label: mine ? 'Your Spells & Traps' : 'Their Spells & Traps' };
+  if (c.location === 'fzone') return { rank: base + 3, label: mine ? 'Your Field Spell' : 'Their Field Spell' };
+  return { rank: 20, label: '' };
 }
 
 // ---------------------------------------------------------------- request dialogs
@@ -384,13 +419,29 @@ export function selectDialog(d: Dialogs, ctx: PromptCtx, req: SelectRequest): { 
     }
     m.setDisabled(0, !ok());
     m.setSubtitle(subtitle());
+    // the chosen field card is marked on the board too (visible with the eye / peek button)
+    ctx.clearHighlight('is-target');
+    ctx.highlight(sel.filter((c) => c.onField).map((c) => c.uid), 'is-target');
   };
   const finish = (v: CardInstance[]) => {
     ctx.clearHighlight('is-candidate');
+    ctx.clearHighlight('is-target');
     m.close();
     resolve(v);
   };
-  for (const c of req.candidates) {
+  // Field cards are grouped by side and zone, in board order, with a heading when there is more than one group.
+  const onlyField = req.candidates.every((c) => c.onField);
+  const ordered = onlyField
+    ? [...req.candidates].sort((a, b) => pickSection(a, ctx.viewer).rank - pickSection(b, ctx.viewer).rank || boardColumn(a, ctx.viewer) - boardColumn(b, ctx.viewer))
+    : req.candidates;
+  const sections = onlyField ? new Set(ordered.map((c) => pickSection(c, ctx.viewer).label)) : new Set<string>();
+  let lastSection = '';
+  for (const c of ordered) {
+    if (sections.size > 1) {
+      const sec = pickSection(c, ctx.viewer).label;
+      if (sec !== lastSection) grid.appendChild(h('div', 'sel-section', esc(sec)));
+      lastSection = sec;
+    }
     const vis = visibleTo(ctx.game, c, ctx.viewer);
     const stackable = vis && c.owner === ctx.viewer && (c.location === 'deck' || c.location === 'extra' || c.location === 'hand');
     const key = stackable ? `${c.location}:${c.data.id}` : '';
@@ -402,7 +453,13 @@ export function selectDialog(d: Dialogs, ctx: PromptCtx, req: SelectRequest): { 
       existing.tile.classList.add('is-stack');
       continue;
     }
-    const tile = d.cardTile(c, ctx, { caption: locCaption(ctx.game, c, ctx.viewer), faceDown: !vis, readable: true });
+    const tile = d.cardTile(c, ctx, { caption: c.onField ? pickCaption(ctx.game, c, ctx.viewer) : locCaption(ctx.game, c, ctx.viewer), faceDown: !vis, readable: true });
+    // which of the 5 zones it is, as the row looks on the board (left to right)
+    if (c.location === 'mzone' || c.location === 'szone') {
+      const col = boardColumn(c, ctx.viewer);
+      tile.appendChild(h('div', 'tile-zmap', Array.from({ length: 5 }, (_, i) => `<span${i + 1 === col ? ' class="on"' : ''}></span>`).join('')));
+      tile.setAttribute('aria-label', `${pickCaption(ctx.game, c, ctx.viewer).replace('\n', ', ')}, zone ${col} of 5 from the left`);
+    }
     const g: Group = { cards: [c], tile };
     groups.push(g);
     if (key) byKey.set(key, g);

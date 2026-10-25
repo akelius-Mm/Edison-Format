@@ -9,7 +9,8 @@ import { attr, bestTarget, cardValue, destroyTargets, flip, race, selfDestroysBy
 import type { CardInstance, EffectDef } from '../../engine/card';
 import type { Ctx } from '../../engine/ctx';
 import type { ChainLink, Game } from '../../engine/game';
-import type { GameEvent, Location } from '../../engine/types';
+import type { GameEvent, Location, PlayerId } from '../../engine/types';
+import type { Activation } from '../../engine/controller';
 
 type C = CardInstance;
 
@@ -94,6 +95,31 @@ function renameUntilEndPhase(game: Game, card: C, name: string) {
 
 // ============================================================ MAIN DECK MONSTERS
 
+/**
+ * Light and Darkness Dragon: after any activation, each face-up Light and Darkness Dragon (once per Chain, able to lose
+ * 500 ATK/DEF) adds its mandatory negation as the next Chain Link. Effect 1 of the card is that link.
+ */
+const LADD_PATCHED = new WeakSet<Game>();
+function ensureLaddPatch(g: Game) {
+  if (LADD_PATCHED.has(g)) return;
+  LADD_PATCHED.add(g);
+  const orig = g.activate.bind(g);
+  (g as any).activate = async (player: PlayerId, act: Activation) => {
+    const link = await orig(player, act);
+    if (!link || g.over || link.speed >= 3) return link;
+    for (const me of g.allFieldCards()) {
+      if (me.name !== 'Light and Darkness Dragon' || me === link.card || me.location !== 'mzone' || !me.faceUp || g.isNegated(me)) continue;
+      const first = g.chain[0];
+      if (me.flags.laddChain && me.flags.laddChain === first) continue;
+      if (g.getAtk(me) < 500 || g.getDef(me) < 500) continue;
+      me.flags.laddChain = first;
+      const ef = me.data.effects![1];
+      await g.activate(me.controller, { card: me, effect: ef, effectIndex: 1, label: ef.label ?? 'Negate activation', event: { type: 'chainActivated', seq: 0, batch: 0, card: link.card, data: { link } } });
+    }
+    return link;
+  };
+}
+
 monster('Light and Darkness Dragon', {
   attribute: 'LIGHT',
   race: 'Dragon',
@@ -106,25 +132,37 @@ monster('Light and Darkness Dragon', {
   text: 'Cannot be Special Summoned. While face-up on the field, this card is also DARK. Once per Chain, when a Spell/Trap Card or monster effect is activated: this card loses exactly 500 ATK and DEF, and if it does, negate that activation. When this card is destroyed and sent to the GY: You can target 1 monster in your GY; destroy all cards you control, then Special Summon that target.',
   effects: [
     {
-      // Approximation: the mandatory negation is applied the moment the activation happens (no separate chain link),
-      // and the card is not counted as DARK (the engine has one Attribute per card).
+      // Installs the per-game hook below (an inert listener from every location, like the sets' rule listeners).
       kind: 'trigger',
-      event: 'chainActivated',
+      event: 'phaseStart',
+      range: ['deck', 'hand', 'mzone', 'grave', 'banished', 'extra'],
+      label: '(rules)',
+      eventFilter: (ctx) => {
+        ensureLaddPatch(ctx.game);
+        return false;
+      },
+    },
+    {
+      // The mandatory negation: its own Chain Link (Spell Speed 2), added right after the activation by the hook.
+      // The ATK/DEF loss happens on resolution, so if this card is no longer face-up then (Book of Moon in response),
+      // or can't lose 500, nothing is negated. Not counted as DARK (the engine has one Attribute per card).
+      kind: 'trigger',
+      speed: 2,
+      damageStep: true,
+      mandatory: true,
       label: 'Negate activation',
       categories: ['negate'],
-      eventFilter: (ctx, ev) => {
+      activate: async (ctx) => {
+        ctx.data.link = (ctx.event?.data as { link?: ChainLink } | undefined)?.link;
+      },
+      resolve: async (ctx) => {
         const me = ctx.self;
-        const link = ev.data?.link as ChainLink | undefined;
-        if (!link || link.negated || link.card === me) return false;
-        if (me.location !== 'mzone' || !me.faceUp || ctx.game.isNegated(me)) return false;
-        const first = ctx.game.chain[0];
-        if (me.flags.laddChain && me.flags.laddChain === first) return false;
-        if (ctx.game.getAtk(me) < 500 || ctx.game.getDef(me) < 500) return false;
-        me.flags.laddChain = first;
+        const target = ctx.data.link as ChainLink | undefined;
+        if (me.location !== 'mzone' || !me.faceUp || ctx.game.isNegated(me)) return;
+        if (ctx.game.getAtk(me) < 500 || ctx.game.getDef(me) < 500) return;
         ctx.game.addTempMod(me, 'atk', -500, 'field', me);
         ctx.game.addTempMod(me, 'def', -500, 'field', me);
-        ctx.game.negateLink(link, false, me);
-        return false;
+        if (target && !target.negated && ctx.game.chain.includes(target)) ctx.game.negateLink(target, false, me);
       },
     },
     {
@@ -347,6 +385,38 @@ monster('Summoner Monk', {
   ],
 });
 
+/** Beast King Barbaros: a Tribute Summon with `n` Tributes (3: destroys all the opponent's cards). Never Special Summons. */
+async function barbarosTributeSummon(ctx: Ctx, n: number): Promise<boolean> {
+  const g = ctx.game;
+  const p = ctx.player;
+  const card = ctx.self;
+  const trib = await ctx.select(g.tributeCandidates(p, card), n, n, `Select ${n} monsters to Tribute for ${card.name}.`, 'tribute');
+  if (trib.length < n) return false;
+  g.log(`${g.players[p].name} Tributes ${trib.map(nameOf).join(', ')}.`, 'action', p);
+  await g.moveCards(trib, 'grave', { reason: 'tribute', reasons: ['tribute', 'cost'], reasonPlayer: p, reasonCard: card });
+  if (card.location !== 'hand' || g.freeMZones(p) <= 0) return false;
+  g.players[p].normalSummonsLeft--;
+  g.recentEvents = [];
+  g.beginBatch();
+  g.rawMove(card, 'mzone', { controller: p, faceUp: true, pos: 'atk' });
+  card.summonTurn = g.turn;
+  card.setTurn = -1;
+  card.summonMethod = 'tribute';
+  card.flags.tributeCount = trib.length;
+  card.flags.tributedMonsters = trib.map((t) => ({ uid: t.uid, attribute: t.data.attribute, name: t.name, race: t.data.race }));
+  g.log(`${g.players[p].name} Tribute Summons ${card.name}.`, 'action', p);
+  await g.anim({ type: 'summon', cards: [card.uid], method: 'tribute', from: ['hand'] });
+  if (await g.summonNegationWindow([card], p, 'tribute')) return false;
+  g.beginBatch();
+  const common = { card, player: p, from: 'hand' as Location, to: 'mzone' as Location, tributes: trib, method: 'tribute' as const };
+  g.emit({ type: 'normalSummoned', ...common });
+  g.emit({ type: 'tributeSummoned', ...common });
+  g.emit({ type: 'summoned', ...common });
+  await g.processTriggers(true);
+  // The summon is complete; tell the engine not to Special Summon anything.
+  return false;
+}
+
 monster('Beast King Barbaros', {
   attribute: 'EARTH',
   race: 'Beast-Warrior',
@@ -372,55 +442,28 @@ monster('Beast King Barbaros', {
       ],
     },
     {
-      // Approximation: "original ATK becomes 1900" is applied as a -1100 ATK modifier.
-      kind: 'continuous',
-      mods: [
-        {
-          q: 'atk',
-          value: (ctx) => ((ctx.self.summonMethod === 'normal' || ctx.self.summonMethod === 'set') && !ctx.self.flags.tributeCount ? -1100 : 0),
-        },
-      ],
+      // "Its original ATK becomes 1900": set the original ATK (flags.baseAtk) when Normal Summoned / Set without
+      // Tributes. Bookkeeping only, never builds a Chain Link; the flag clears when the card leaves the field.
+      kind: 'trigger',
+      event: ['normalSummoned', 'monsterSet'],
+      eventFilter: (ctx, ev) => {
+        if (ev.card === ctx.self && ctx.self.location === 'mzone' && !ctx.self.flags.tributeCount) ctx.self.flags.baseAtk = 1900;
+        return false;
+      },
     },
     {
-      // Approximation: the 2-Tribute Summon option is not offered; the 3-Tribute Summon is a separate hand action
-      // that performs a regular Tribute Summon (uses the Normal Summon, can be negated by Solemn Judgment).
+      // The Tribute Summons are hand actions (the plain Summon action is the no-Tribute one): a regular Tribute Summon
+      // that uses the Normal Summon and can be negated by Solemn Judgment.
       kind: 'proc',
       label: 'Tribute Summon (3 Tributes)',
       categories: ['destroy', 'destroyMulti'],
       condition: (ctx) =>
-        ctx.game.players[ctx.player].normalSummonsLeft > 0 &&
+        ctx.game.hasNormalSummonFor(ctx.player, ctx.self, false) &&
         !ctx.game.queryPlayer(ctx.player, 'cannotNormalSummon') &&
+        !ctx.game.queryCard(ctx.self, 'cannotBeSummoned') &&
+        !ctx.game.queryCard(ctx.self, 'cannotTributeSummon') &&
         ctx.game.tributeCandidates(ctx.player, ctx.self).length >= 3,
-      perform: async (ctx) => {
-        const g = ctx.game;
-        const p = ctx.player;
-        const card = ctx.self;
-        const trib = await ctx.select(g.tributeCandidates(p, card), 3, 3, `Select 3 monsters to Tribute for ${card.name}.`, 'tribute');
-        if (trib.length < 3) return false;
-        g.log(`${g.players[p].name} Tributes ${trib.map(nameOf).join(', ')}.`, 'action', p);
-        await g.moveCards(trib, 'grave', { reason: 'tribute', reasons: ['tribute', 'cost'], reasonPlayer: p, reasonCard: card });
-        if (card.location !== 'hand' || g.freeMZones(p) <= 0) return false;
-        g.players[p].normalSummonsLeft--;
-        g.recentEvents = [];
-        g.beginBatch();
-        g.rawMove(card, 'mzone', { controller: p, faceUp: true, pos: 'atk' });
-        card.summonTurn = g.turn;
-        card.setTurn = -1;
-        card.summonMethod = 'tribute';
-        card.flags.tributeCount = trib.length;
-        card.flags.tributedMonsters = trib.map((t) => ({ uid: t.uid, attribute: t.data.attribute, name: t.name, race: t.data.race }));
-        g.log(`${g.players[p].name} Tribute Summons ${card.name}.`, 'action', p);
-        await g.anim({ type: 'summon', cards: [card.uid], method: 'tribute', from: ['hand'] });
-        if (await g.summonNegationWindow([card], p, 'tribute')) return false;
-        g.beginBatch();
-        const common = { card, player: p, from: 'hand' as Location, to: 'mzone' as Location, tributes: trib, method: 'tribute' as const };
-        g.emit({ type: 'normalSummoned', ...common });
-        g.emit({ type: 'tributeSummoned', ...common });
-        g.emit({ type: 'summoned', ...common });
-        await g.processTriggers(true);
-        // The summon is complete; tell the engine not to Special Summon anything.
-        return false;
-      },
+      perform: (ctx) => barbarosTributeSummon(ctx, 3),
       ai: {
         score: (ctx) => {
           const opp = ctx.field('opp').reduce((a, c) => a + cardValue(ctx.game, c), 0);
@@ -444,6 +487,29 @@ monster('Beast King Barbaros', {
       resolve: async (ctx) => {
         const all = ctx.field('opp');
         if (all.length) await ctx.destroy(all);
+      },
+    },
+    {
+      // The standard 2-Tribute Tribute Summon of a Level 8 monster (3000 ATK, no destruction).
+      kind: 'proc',
+      label: 'Tribute Summon (2 Tributes)',
+      condition: (ctx) =>
+        ctx.game.hasNormalSummonFor(ctx.player, ctx.self, false) &&
+        !ctx.game.queryPlayer(ctx.player, 'cannotNormalSummon') &&
+        !ctx.game.queryCard(ctx.self, 'cannotBeSummoned') &&
+        !ctx.game.queryCard(ctx.self, 'cannotTributeSummon') &&
+        ctx.game.tributeCandidates(ctx.player, ctx.self).length >= 2,
+      perform: (ctx) => barbarosTributeSummon(ctx, 2),
+      ai: {
+        score: (ctx) => {
+          const cost = ctx.game
+            .tributeCandidates(ctx.player, ctx.self)
+            .map((c) => cardValue(ctx.game, c))
+            .sort((a, b) => a - b)
+            .slice(0, 2)
+            .reduce((a, b) => a + b, 0);
+          return cost < 1400 ? 45 : 0;
+        },
       },
     },
   ],
@@ -587,18 +653,26 @@ monster('Legendary Jujitsu Master', {
       },
     },
     {
-      // Approximation: resolves at the end of the Damage Step (also when this card was destroyed by the battle).
+      // "After damage calculation" (damageCalculated): resolves before battle-destroyed monsters leave the field, so
+      // it works even when this card is destroyed by the battle, and the attacker goes to the Deck before it could
+      // be destroyed (no GY effects). Index 1 kept for saved duel logs.
       kind: 'trigger',
-      event: 'damageStepEnd',
+      event: 'damageCalculated',
       mandatory: true,
       label: 'Return attacker to the Deck',
       categories: ['toDeck'],
       eventFilter: (ctx, ev) => {
-        const mark = jujitsuAttacked.get(ctx.self);
         const a = evc(ev);
-        if (!mark || !a || ev.other !== ctx.self || mark.turn !== ctx.turn || mark.attacker !== a.uid) return false;
         jujitsuAttacked.delete(ctx.self);
-        return a.location === 'mzone' && (ctx.self.location === 'grave' || (ctx.self.location === 'mzone' && ctx.self.faceUp));
+        return (
+          !!a &&
+          ev.other === ctx.self &&
+          a.location === 'mzone' &&
+          ctx.self.location === 'mzone' &&
+          ctx.self.faceUp &&
+          ctx.game.battle?.calc?.targetPos === 'def' &&
+          !ctx.game.isNegated(ctx.self)
+        );
       },
       resolve: async (ctx) => {
         const a = evc(ctx.event!);
@@ -1153,29 +1227,9 @@ monster('Consecrated Light', {
       ],
     },
     {
-      // Approximation (as summonLock): a DARK monster that still gets Normal/Special Summoned is returned at once.
-      kind: 'trigger',
-      event: 'summoned',
-      range: ['mzone'],
-      mandatory: true,
-      label: 'Consecrated Light (no DARK Summons)',
-      categories: ['toDeck'],
-      eventFilter: (ctx, ev) => {
-        const c = evc(ev);
-        return !!c && ev.method !== 'flip' && c !== ctx.self && c.location === 'mzone' && c.faceUp && c.data.attribute === 'DARK' && consecratedActive(ctx);
-      },
-      activate: async (ctx) => {
-        const c = evc(ctx.event!)!;
-        ctx.data.mon = c;
-        ctx.data.mid = c.moveId;
-      },
-      resolve: async (ctx) => {
-        const c = ctx.data.mon as C;
-        if (!c || c.location !== 'mzone' || c.moveId !== ctx.data.mid) return;
-        ctx.log(`${c.name} cannot be Summoned while ${ctx.self.name} applies.`);
-        if (c.isExtra) await ctx.game.toDeck([c], 'rule', 'shuffle', ctx.player, ctx.self);
-        else await ctx.game.moveCards([c], 'grave', { reason: 'rule', reasonPlayer: ctx.player, reasonCard: ctx.self });
-      },
+      // "Neither player can Normal or Special Summon DARK monsters": the Summons are not allowed at all (Sets are).
+      kind: 'continuous',
+      mods: [{ q: 'cannotBeSummoned', to: 'cards', filter: (_ctx, c: C) => c.isMonster && c.data.attribute === 'DARK' }],
     },
   ],
 });
@@ -1286,12 +1340,40 @@ function rugTrap(name: string, methods: string[], what: string) {
 rugTrap('Pulling the Rug', ['normal'], 'Normal Summoned');
 rugTrap('Swallow Flip', ['special'], 'Special Summoned');
 
+/**
+ * Light-Imprisoning Mirror watches a chain link: a LIGHT monster effect activated on the field or in the GY is
+ * negated when it resolves if a Mirror applies at that moment.
+ */
+function mirrorWatch(game: Game, link: ChainLink & { mirrorWatch?: boolean }) {
+  const c = link.card;
+  if (link.mirrorWatch || link.isCardActivation || !c.isMonster || c.data.attribute !== 'LIGHT') return;
+  if (!(link.fromLocation === 'mzone' || link.fromLocation === 'grave' || c.location === 'grave')) return;
+  link.mirrorWatch = true;
+  const orig = link.effect;
+  link.effect = {
+    ...orig,
+    resolve: async (c2) => {
+      const mirror = game.allFieldCards().find((m) => m.name === 'Light-Imprisoning Mirror' && m.faceUp && m.activeOnField && !game.isNegated(m));
+      if (mirror) {
+        game.log(`${c.name}'s effect is negated by ${mirror.name}.`, 'chain');
+        void game.anim({ type: 'negate', card: c.uid });
+        return;
+      }
+      if (orig.resolve) await orig.resolve(c2);
+    },
+  };
+}
+
 trap('Light-Imprisoning Mirror', 'continuous', {
   text: 'Negate the effects of LIGHT monsters that are activated on the field or in the GY.',
   effects: [
     {
       kind: 'activate',
       categories: ['lockdown', 'negate'],
+      // Chained to a LIGHT monster effect: that effect is negated when it resolves after this card.
+      resolve: async (ctx) => {
+        for (const l of ctx.game.chain) if (l !== ctx.link) mirrorWatch(ctx.game, l);
+      },
       ai: {
         score: (ctx) => {
           if (ctx.spellTraps('me', (c) => c !== ctx.self && c.name === ctx.self.name && c.faceUp).length) return 0;
@@ -1304,17 +1386,15 @@ trap('Light-Imprisoning Mirror', 'continuous', {
       },
     },
     {
-      // Approximation: applied the moment the effect is activated (no chain link of its own).
+      // A continuous effect, not a chain link: a LIGHT monster effect activated on the field or in the GY is negated
+      // when it resolves, if a Light-Imprisoning Mirror still applies then (destroying the Mirror in response lets it
+      // resolve). The link's resolve is wrapped once, the way Spirit Reaper watches targeting links.
       kind: 'trigger',
       event: 'chainActivated',
       label: 'Light-Imprisoning Mirror (negate)',
       eventFilter: (ctx, ev) => {
         const link = ev.data?.link as ChainLink | undefined;
-        if (!link || link.negated || !stActive(ctx)) return false;
-        const c = link.card;
-        if (c.isMonster && !link.isCardActivation && c.data.attribute === 'LIGHT' && (link.fromLocation === 'mzone' || c.location === 'mzone' || c.location === 'grave')) {
-          ctx.game.negateLink(link, false, ctx.self);
-        }
+        if (link && stActive(ctx)) mirrorWatch(ctx.game, link);
         return false;
       },
     },

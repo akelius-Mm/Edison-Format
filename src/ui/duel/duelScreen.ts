@@ -37,6 +37,8 @@ import { ChainStack, LogPanel, PhaseBar, PlayerPanel, PreviewPanel } from './pan
 import { Sfx } from './sound';
 import { music } from '../audio/music';
 import { haptic } from '../haptics';
+import { duelLogLine, reportError, setDuelDiag } from '../diag';
+import { openReportSheet } from '../screens/report';
 
 export async function startDuel(container: HTMLElement, opts: DuelOptions): Promise<DuelResult> {
   const screen = new DuelScreen(container, opts);
@@ -125,7 +127,7 @@ class DuelScreen implements HumanUI {
       // Friends Locals spectating: both seats come from the players' decision logs.
       if (opts.spectate) return this.spectateSeat(opts.spectate.controllers[i]);
       // Play a friend: the friend's seat is driven from the network.
-      if (opts.remote && side.control !== 'human') return opts.remote;
+      if (opts.remote && side.control !== 'human') return this.remoteSeat(opts.remote);
       if (side.control === 'human') {
         const rec = new RecordingController(opts.localDriver ?? new HumanController(this), {
           replay: opts.replay,
@@ -145,6 +147,9 @@ class DuelScreen implements HumanUI {
       firstPlayer: typeof opts.firstPlayer === 'number' ? opts.firstPlayer : undefined,
       skipFirstDraw: opts.skipFirstDraw ?? s.skipFirstDraw,
     });
+
+    // "Report a problem" carries this duel: seed, decks and decisions replay it exactly
+    setDuelDiag({ opts, seed, me: this.me, log: () => this.recorder?.log ?? [], turn: () => this.game.turn });
 
     // ---- DOM
     this.root = h('div', `duel-root${this.spectator ? ' is-spectator' : ''}${s.showLog ? '' : ' hide-log'}`);
@@ -224,6 +229,7 @@ class DuelScreen implements HumanUI {
         if (!this.replaying) this.scheduleRender();
       },
       log: (e) => {
+        duelLogLine(e.turn, e.text);
         if (this.replaying) this.replayLog.push(e);
         else this.log.add(e);
       },
@@ -260,6 +266,7 @@ class DuelScreen implements HumanUI {
         root: this.root,
         me: this.me,
         abort: (winner, reason) => this.abort(new GameOver(winner, reason)),
+        leave: () => this.leaveSaved(),
         onAbort: (fn) => this.externalAbort.push(fn),
         get restoring() {
           return self.replaying;
@@ -496,6 +503,7 @@ class DuelScreen implements HumanUI {
       if (e instanceof GameOver) res = { winner: e.winner, reason: e.reason, turns: this.game.turn };
       else {
         console.error('Duel crashed', e);
+        reportError(e, 'duel crashed');
         res = { winner: null, reason: `Engine error: ${(e as Error)?.message ?? e}`, turns: this.game.turn };
       }
     }
@@ -541,6 +549,37 @@ class DuelScreen implements HumanUI {
     });
   }
 
+  /**
+   * The friend's seat (Play a friend). While a saved duel is being restored, the friend's
+   * decisions that are already on this phone are fed instantly; once the friend's seat has to
+   * wait for the network (the friend is offline, or simply still thinking), the restore is over:
+   * show the board as it stands instead of keeping "Restoring your duel…" up until the friend
+   * returns (a real report: a guest who reloaded while the host was away saw the cover forever).
+   */
+  private remoteSeat(c: PlayerController): PlayerController {
+    return new Proxy(c, {
+      get: (t, k) => {
+        const v = (t as any)[k];
+        if (typeof v !== 'function' || !CONTROLLER_METHODS.has(k as string)) return v;
+        return (...a: unknown[]) => {
+          const p = v.apply(t, a) as Promise<unknown>;
+          if (this.replaying && !this.opts.spectate) {
+            let settled = false;
+            p.then(
+              () => (settled = true),
+              () => (settled = true),
+            );
+            // an entry that is already here resolves within microtasks; anything slower is the network
+            window.setTimeout(() => {
+              if (!settled && this.replaying && !this.aborted) this.endReplay();
+            }, 0);
+          }
+          return p;
+        };
+      },
+    });
+  }
+
   /** Spectating: the decisions made before we joined are in; show the board live. */
   endCatchUp() {
     if (this.opts.spectate) this.endReplay();
@@ -552,6 +591,36 @@ class DuelScreen implements HumanUI {
     this.root.classList.add('is-restoring');
     this.restoringEl = h('div', 'duel-restoring', `<div class="duel-restoring-box"><span class="spinner"></span><b>${this.opts.spectate ? 'Catching up…' : 'Restoring your duel…'}</b></div>`);
     this.root.appendChild(this.restoringEl);
+    this.armRestoreStall();
+  }
+
+  /** Nothing should sit on a full-screen spinner forever: after a while, offer a way out. */
+  private armRestoreStall() {
+    const cover = this.restoringEl;
+    if (!cover) return;
+    window.setTimeout(() => {
+      if (this.restoringEl !== cover || this.aborted) return;
+      const box = cover.querySelector('.duel-restoring-box')!;
+      cover.classList.add('is-stalled');
+      const more = h('div', 'duel-restoring-more');
+      const hint = this.opts.remote || this.opts.spectate ? 'Your friend needs to reopen the app where they started this duel.' : 'This is taking longer than usual.';
+      more.append(h('p', 'duel-restoring-hint', esc(hint)));
+      const acts = h('div', 'duel-restoring-actions');
+      const wait = h('button', 'btn btn--ghost', 'Keep waiting') as HTMLButtonElement;
+      wait.type = 'button';
+      wait.onclick = () => {
+        more.remove();
+        cover.classList.remove('is-stalled');
+        this.armRestoreStall();
+      };
+      const leave = h('button', 'btn btn--primary', this.spectator ? 'Stop watching' : 'Leave (duel stays saved)') as HTMLButtonElement;
+      leave.type = 'button';
+      leave.dataset.test = 'restore-leave';
+      leave.onclick = () => (this.spectator ? !this.aborted && this.abort(new GameOver(null, 'Spectating stopped')) : this.leaveSaved());
+      acts.append(wait, leave);
+      more.append(acts);
+      box.after(more);
+    }, STALL_MS);
   }
 
   /** The saved decisions ran out: render the board as it stands and hand over to the player. */
@@ -588,6 +657,7 @@ class DuelScreen implements HumanUI {
   }
 
   private teardown() {
+    setDuelDiag(null);
     this.unsubSettings();
     this.dialogs.dispose();
     this.board.destroy();
@@ -661,25 +731,29 @@ class DuelScreen implements HumanUI {
             { label: 'Leave and save', kind: 'primary', onClick: () => (m.close(), resolve('leave')) },
             { label: 'Concede', kind: 'danger', onClick: () => (m.close(), resolve('concede')) },
             { label: 'Keep playing', kind: 'ghost', hotkey: 'Escape', onClick: () => (m.close(), resolve(null)) },
+            { label: 'Report a problem', kind: 'ghost', onClick: () => (m.close(), resolve(null), openReportSheet()) },
           ],
         });
       });
       if (!choice || this.aborted) return;
-      if (choice === 'leave') {
-        this.left = true;
-        this.abort(new GameOver(null, 'Left'));
-        return;
-      }
+      if (choice === 'leave') return this.leaveSaved();
       this.surrendered = true;
       this.abort(new GameOver(this.game.opp(this.me), 'Surrender'));
       return;
     }
-    const yes = await confirmDialog(
-      this.dialogs,
-      { prompt: this.spectator ? 'Stop watching this duel?' : 'Surrender this duel?' },
-      this.spectator ? 'Stop' : 'Surrender',
-      'Keep playing',
-    );
+    const yes = await new Promise<boolean>((resolve) => {
+      const m = this.dialogs.modal({
+        title: this.spectator ? 'Stop watching this duel?' : 'Surrender this duel?',
+        className: 'dlg--leave',
+        dismissible: true,
+        onDismiss: () => resolve(false),
+        actions: [
+          { label: this.spectator ? 'Stop' : 'Surrender', kind: this.spectator ? 'primary' : 'danger', hotkey: 'Enter', onClick: () => (m.close(), resolve(true)) },
+          { label: 'Keep playing', kind: 'ghost', hotkey: 'Escape', onClick: () => (m.close(), resolve(false)) },
+          { label: 'Report a problem', kind: 'ghost', onClick: () => (m.close(), resolve(false), openReportSheet()) },
+        ],
+      });
+    });
     if (!yes || this.aborted) return;
     if (this.spectator) {
       this.abort(new GameOver(null, 'Spectating stopped'));
@@ -687,6 +761,13 @@ class DuelScreen implements HumanUI {
     }
     this.surrendered = true;
     this.abort(new GameOver(this.game.opp(this.me), 'Surrender'));
+  }
+
+  /** Leave without deciding the game; the caller keeps the duel saved. */
+  private leaveSaved() {
+    if (this.aborted) return;
+    this.left = true;
+    this.abort(new GameOver(null, 'Left'));
   }
 
   private abort(e: GameOver) {
@@ -1054,7 +1135,8 @@ class DuelScreen implements HumanUI {
   private pileEffectNote(c: CardInstance): string | null {
     if (this.spectator || c.owner !== this.me || (c.location !== 'grave' && c.location !== 'banished')) return null;
     const g = this.game;
-    const effs = (c.data.effects ?? []).filter((ef) => ef.kind !== 'continuous' && ef.kind !== 'activate' && (ef.range ?? []).includes(c.location));
+    // rules listeners that watch every zone (their range includes 'deck') are not Graveyard effects
+    const effs = (c.data.effects ?? []).filter((ef) => ef.kind !== 'continuous' && ef.kind !== 'activate' && (ef.range ?? []).includes(c.location) && !(ef.range ?? []).includes('deck'));
     if (!effs.length) return null;
     const ef = effs[0];
     if (effs.every((e) => e.opt && g.isOptUsed(g.optKey(c, e, (c.data.effects ?? []).indexOf(e), this.me)))) return 'Already used this turn.';
@@ -1219,6 +1301,12 @@ class DuelScreen implements HumanUI {
     return this.guard(declareDialog(this.dialogs, prompt, names));
   }
 }
+
+/** PlayerController's request methods (the friend's seat is wrapped per request). */
+const CONTROLLER_METHODS = new Set(['chooseAction', 'chooseResponse', 'selectCards', 'chooseOption', 'confirm', 'choosePosition', 'chooseAttackTarget', 'confirmTrigger', 'declareCard']);
+
+/** A full-screen cover with no progress for this long offers a way out. */
+const STALL_MS = 10000;
 
 function isPhonePortrait() {
   return typeof matchMedia === 'function' && matchMedia('(max-width: 600px) and (orientation: portrait)').matches;

@@ -52,6 +52,7 @@ interface MonsterOpts {
   aiValue?: number;
   setCode?: string;
   synchroMaterialCheck?: CardData['synchroMaterialCheck'];
+  targetImmunity?: CardData['targetImmunity'];
 }
 
 /** Define an effect / normal / extra deck monster. */
@@ -80,6 +81,7 @@ export function monster(name: string, o: MonsterOpts): CardData {
     aiValue: o.aiValue,
     setCode: o.setCode,
     synchroMaterialCheck: o.synchroMaterialCheck,
+    targetImmunity: o.targetImmunity,
   });
 }
 
