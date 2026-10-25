@@ -1,0 +1,464 @@
+{
+  "base": "http://localhost:5301/",
+  "cpu": 4,
+  "at": "2026-10-25T15:20:24.131Z",
+  "screens": {
+    "Home": {
+      "ready": 37,
+      "settled": 37,
+      "coldSettled": 37,
+      "paint": 27,
+      "transition": 220,
+      "longTasks": 0,
+      "maxLongTask": 0
+    },
+    "Duel hub": {
+      "ready": 35,
+      "settled": 35,
+      "coldSettled": 36,
+      "paint": 25,
+      "transition": 220,
+      "longTasks": 0,
+      "maxLongTask": 0
+    },
+    "Draft": {
+      "ready": 243,
+      "settled": 243,
+      "coldSettled": 306,
+      "paint": 192,
+      "transition": 220,
+      "longTasks": 1,
+      "maxLongTask": 198
+    },
+    "Deck Builder": {
+      "ready": 59,
+      "settled": 59,
+      "coldSettled": 106,
+      "paint": 49,
+      "transition": 220,
+      "longTasks": 0,
+      "maxLongTask": 86
+    },
+    "Packs": {
+      "ready": 66,
+      "settled": 66,
+      "coldSettled": 88,
+      "paint": 48,
+      "transition": 220,
+      "longTasks": 0,
+      "maxLongTask": 55
+    },
+    "Binder": {
+      "ready": 298,
+      "settled": 335,
+      "coldSettled": 335,
+      "paint": 137,
+      "transition": 220,
+      "longTasks": 2,
+      "maxLongTask": 204
+    },
+    "Events": {
+      "ready": 44,
+      "settled": 44,
+      "coldSettled": 44,
+      "paint": 33,
+      "transition": 220,
+      "longTasks": 0,
+      "maxLongTask": 0
+    },
+    "Settings": {
+      "ready": 42,
+      "settled": 42,
+      "coldSettled": 38,
+      "paint": 27,
+      "transition": 220,
+      "longTasks": 0,
+      "maxLongTask": 0
+    },
+    "Database": {
+      "ready": 133,
+      "settled": 133,
+      "coldSettled": 319,
+      "paint": 90,
+      "transition": 220,
+      "longTasks": 1,
+      "maxLongTask": 91
+    }
+  },
+  "taps": {
+    "home: tab bar": {
+      "ms": 30,
+      "via": "dom"
+    },
+    "home: tile": {
+      "ms": 32,
+      "via": "dom"
+    },
+    "home: row": {
+      "ms": 32,
+      "via": "dom"
+    },
+    "home: CTA": {
+      "ms": 18,
+      "via": "dom"
+    },
+    "duel hub: tile": {
+      "ms": 18,
+      "via": "dom"
+    },
+    "settings: segmented": {
+      "ms": 19,
+      "via": "dom"
+    },
+    "settings: list row": {
+      "ms": 34,
+      "via": "dom"
+    },
+    "database: card": {
+      "ms": 200,
+      "via": "dom"
+    },
+    "database: chip": {
+      "ms": 22,
+      "via": "dom"
+    },
+    "binder: card cell": {
+      "ms": 70,
+      "via": "dom"
+    },
+    "packs: primary button": {
+      "ms": 31,
+      "via": "dom"
+    },
+    "draft: preset": {
+      "ms": 32,
+      "via": "dom"
+    },
+    "events: row": {
+      "ms": 19,
+      "via": "dom"
+    }
+  },
+  "scroll": {
+    "Binder": {
+      "seconds": 2.9,
+      "frames": 156,
+      "fps": 53.8,
+      "p95FrameMs": 16.7,
+      "jankFrames": 2,
+      "jankPct": 1.3,
+      "longTasks": 1,
+      "longTaskMs": 274,
+      "maxLongTaskMs": 274,
+      "longTasksPerMin": 20.7,
+      "images": {
+        "total": 27,
+        "lazy": 9,
+        "asyncDecode": 27
+      }
+    },
+    "Database": {
+      "seconds": 2.4,
+      "frames": 147,
+      "fps": 60.2,
+      "p95FrameMs": 16.8,
+      "jankFrames": 0,
+      "jankPct": 0,
+      "longTasks": 0,
+      "longTaskMs": 0,
+      "maxLongTaskMs": 0,
+      "longTasksPerMin": 0,
+      "images": {
+        "total": 24,
+        "lazy": 24,
+        "asyncDecode": 24
+      }
+    },
+    "Deck Builder": {
+      "seconds": 2.4,
+      "frames": 147,
+      "fps": 60,
+      "p95FrameMs": 16.8,
+      "jankFrames": 0,
+      "jankPct": 0,
+      "longTasks": 0,
+      "longTaskMs": 0,
+      "maxLongTaskMs": 0,
+      "longTasksPerMin": 0,
+      "images": {
+        "total": 24,
+        "lazy": 24,
+        "asyncDecode": 24
+      }
+    }
+  },
+  "packs": {
+    "seconds": 6.4,
+    "frames": 373,
+    "fps": 58.5,
+    "p95FrameMs": 16.8,
+    "jankFrames": 1,
+    "jankPct": 0.3,
+    "longTasks": 1,
+    "longTaskMs": 142,
+    "maxLongTaskMs": 142,
+    "longTasksPerMin": 9.4
+  },
+  "duel": {
+    "aiTurnsMeasured": 5,
+    "aiTurnAvgMs": 3979,
+    "aiTurnMedianMs": 3848,
+    "aiTurnFxShare": 85,
+    "aiTurnPaceShare": 14,
+    "aiTurns": [
+      {
+        "wall": 2173,
+        "fx": 1847,
+        "pace": 303,
+        "other": 22,
+        "steps": 8,
+        "gapsOver120": 0,
+        "top": [
+          "turn 628",
+          "phase 427",
+          "move 275",
+          "summon 271"
+        ]
+      },
+      {
+        "wall": 1781,
+        "fx": 1564,
+        "pace": 201,
+        "other": 17,
+        "steps": 7,
+        "gapsOver120": 0,
+        "top": [
+          "turn 628",
+          "phase 425",
+          "summon 272",
+          "draw 239"
+        ]
+      },
+      {
+        "wall": 7123,
+        "fx": 6102,
+        "pace": 926,
+        "other": 95,
+        "steps": 21,
+        "gapsOver120": 3,
+        "top": [
+          "phase 915",
+          "destroy 791",
+          "turn 631",
+          "activate 622"
+        ]
+      },
+      {
+        "wall": 4971,
+        "fx": 4180,
+        "pace": 730,
+        "other": 61,
+        "steps": 15,
+        "gapsOver120": 2,
+        "top": [
+          "phase 919",
+          "turn 629",
+          "move 528",
+          "summon 477"
+        ]
+      },
+      {
+        "wall": 3848,
+        "fx": 3195,
+        "pace": 622,
+        "other": 31,
+        "steps": 12,
+        "gapsOver120": 2,
+        "top": [
+          "phase 914",
+          "turn 629",
+          "damage 528",
+          "attack 385"
+        ]
+      }
+    ],
+    "animCount": 83,
+    "animAvgMs": 354,
+    "animMedianMs": 255,
+    "animOver600": 14,
+    "fxByType": {
+      "coin": {
+        "n": 1,
+        "avg": 1965,
+        "max": 1965
+      },
+      "draw": {
+        "n": 13,
+        "avg": 302,
+        "max": 645
+      },
+      "turn": {
+        "n": 11,
+        "avg": 628,
+        "max": 631
+      },
+      "phase": {
+        "n": 49,
+        "avg": 122,
+        "max": 246
+      },
+      "summon": {
+        "n": 7,
+        "avg": 382,
+        "max": 477
+      },
+      "move": {
+        "n": 8,
+        "avg": 270,
+        "max": 287
+      },
+      "flip": {
+        "n": 1,
+        "avg": 274,
+        "max": 274
+      },
+      "activate": {
+        "n": 1,
+        "avg": 622,
+        "max": 622
+      },
+      "target": {
+        "n": 1,
+        "avg": 372,
+        "max": 372
+      },
+      "resolve": {
+        "n": 1,
+        "avg": 270,
+        "max": 270
+      },
+      "destroy": {
+        "n": 3,
+        "avg": 394,
+        "max": 398
+      },
+      "chainEnd": {
+        "n": 1,
+        "avg": 4,
+        "max": 4
+      },
+      "attack": {
+        "n": 3,
+        "avg": 386,
+        "max": 387
+      },
+      "battle": {
+        "n": 3,
+        "avg": 225,
+        "max": 227
+      },
+      "damage": {
+        "n": 3,
+        "avg": 433,
+        "max": 528
+      }
+    },
+    "gapsOver120": 7,
+    "gapTotalMs": 3223,
+    "biggestGaps": [
+      {
+        "ms": 208,
+        "pace": 200,
+        "before": "fx:move"
+      },
+      {
+        "ms": 207,
+        "pace": 201,
+        "before": "fx:attack"
+      },
+      {
+        "ms": 205,
+        "pace": 201,
+        "before": "fx:attack"
+      },
+      {
+        "ms": 204,
+        "pace": 201,
+        "before": "fx:attack"
+      },
+      {
+        "ms": 137,
+        "pace": 122,
+        "before": "fx:phase"
+      },
+      {
+        "ms": 130,
+        "pace": 127,
+        "before": "fx:phase"
+      }
+    ],
+    "frames": {
+      "seconds": 35.6,
+      "frames": 2093,
+      "fps": 58.7,
+      "p95FrameMs": 16.8,
+      "jankFrames": 12,
+      "jankPct": 0.6,
+      "longTasks": 5,
+      "longTaskMs": 342,
+      "maxLongTaskMs": 105,
+      "longTasksPerMin": 8.4
+    },
+    "taps": {
+      "duel: hand card": {
+        "ms": 53,
+        "via": "dom"
+      },
+      "duel: phase button": {
+        "ms": 33,
+        "via": "dom"
+      }
+    },
+    "fastForward": {
+      "tapToHurry": {
+        "taps": 6,
+        "hitAnimation": 5,
+        "avgFinishAfterTapMs": 1,
+        "hits": [
+          {
+            "type": "turn",
+            "finishedAfterTapMs": 2,
+            "ranBeforeTapMs": 582
+          },
+          {
+            "type": "phase",
+            "finishedAfterTapMs": 0,
+            "ranBeforeTapMs": 39
+          },
+          {
+            "type": "attack",
+            "finishedAfterTapMs": 1,
+            "ranBeforeTapMs": 278
+          },
+          {
+            "type": "damage",
+            "finishedAfterTapMs": 1,
+            "ranBeforeTapMs": 304
+          },
+          {
+            "type": "phase",
+            "finishedAfterTapMs": 1,
+            "ranBeforeTapMs": 42
+          }
+        ]
+      },
+      "fastForward": {
+        "result": "over",
+        "aiTurnMs": 622,
+        "steps": 10,
+        "ffStillOnAfter": false
+      }
+    }
+  },
+  "errors": []
+}

@@ -99,13 +99,17 @@ export function foilCard(name: string, rarity: Rarity, opts: { live?: boolean; c
   );
 }
 
+// Formatters made once (toLocale*String builds a new one on every call).
+const RELEASE_FMT = new Intl.DateTimeFormat('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' });
+const NUM_FMT = new Intl.NumberFormat('en-US');
+
 export function dpChip(n: number) {
-  return h('span', { class: 'dp-chip', title: 'Duel Points' }, h('span', { class: 'dp-coin', 'aria-hidden': 'true' }), h('b', null, n.toLocaleString('en-US')), h('span', { class: 'dp-unit' }, 'DP'));
+  return h('span', { class: 'dp-chip', title: 'Duel Points' }, h('span', { class: 'dp-coin', 'aria-hidden': 'true' }), h('b', null, NUM_FMT.format(n)), h('span', { class: 'dp-unit' }, 'DP'));
 }
 
-export const fmtDP = (n: number) => `${n.toLocaleString('en-US')} DP`;
+export const fmtDP = (n: number) => `${NUM_FMT.format(n)} DP`;
 
 export function releaseLabel(iso: string) {
   const d = new Date(iso + 'T12:00:00Z');
-  return d.toLocaleDateString('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' });
+  return RELEASE_FMT.format(d);
 }

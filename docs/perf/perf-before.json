@@ -4,85 +4,85 @@
   "at": "2026-10-25T14:26:29.079Z",
   "screens": {
     "Home": {
-      "ready": 35,
-      "settled": 35,
-      "coldSettled": 36,
+      "ready": 31,
+      "settled": 31,
+      "coldSettled": 31,
       "paint": 23,
       "transition": 280,
       "longTasks": 0,
       "maxLongTask": 0
     },
     "Duel hub": {
-      "ready": 32,
-      "settled": 32,
-      "coldSettled": 34,
-      "paint": 19,
+      "ready": 36,
+      "settled": 36,
+      "coldSettled": 36,
+      "paint": 21,
       "transition": 280,
       "longTasks": 0,
       "maxLongTask": 0
     },
     "Draft": {
-      "ready": 224,
-      "settled": 224,
-      "coldSettled": 286,
-      "paint": 180,
+      "ready": 248,
+      "settled": 248,
+      "coldSettled": 280,
+      "paint": 208,
       "transition": 280,
       "longTasks": 1,
-      "maxLongTask": 205
+      "maxLongTask": 199
     },
     "Deck Builder": {
-      "ready": 91,
-      "settled": 91,
-      "coldSettled": 432,
-      "paint": 82,
+      "ready": 83,
+      "settled": 83,
+      "coldSettled": 453,
+      "paint": 71,
       "transition": 280,
       "longTasks": 1,
-      "maxLongTask": 376
+      "maxLongTask": 394
     },
     "Packs": {
-      "ready": 70,
-      "settled": 70,
-      "coldSettled": 92,
-      "paint": 56,
+      "ready": 67,
+      "settled": 67,
+      "coldSettled": 85,
+      "paint": 46,
       "transition": 280,
       "longTasks": 0,
-      "maxLongTask": 63
+      "maxLongTask": 61
     },
     "Binder": {
-      "ready": 408,
-      "settled": 408,
-      "coldSettled": 484,
-      "paint": 166,
+      "ready": 393,
+      "settled": 393,
+      "coldSettled": 436,
+      "paint": 162,
       "transition": 280,
       "longTasks": 2,
-      "maxLongTask": 219
+      "maxLongTask": 238
     },
     "Events": {
-      "ready": 39,
-      "settled": 39,
-      "coldSettled": 45,
+      "ready": 36,
+      "settled": 36,
+      "coldSettled": 37,
       "paint": 24,
       "transition": 280,
       "longTasks": 0,
       "maxLongTask": 0
     },
     "Settings": {
-      "ready": 38,
-      "settled": 38,
-      "coldSettled": 38,
-      "paint": 23,
+      "ready": 41,
+      "settled": 41,
+      "coldSettled": 43,
+      "paint": 24,
       "transition": 280,
       "longTasks": 0,
       "maxLongTask": 0
     },
     "Database": {
-      "ready": 199,
-      "settled": 199,
-      "coldSettled": 321,
-      "paint": 158,
+      "ready": 218,
+      "settled": 218,
+      "coldSettled": 336,
+      "paint": 179,
       "transition": 280,
-      "longTasks": 1,
-      "maxLongTask": 130
+      "longTasks": 2,
+      "maxLongTask": 138
     }
   },
   "taps": {
@@ -141,16 +141,16 @@
   },
   "scroll": {
     "Binder": {
-      "seconds": 3.7,
-      "frames": 182,
-      "fps": 49,
+      "seconds": 3,
+      "frames": 162,
+      "fps": 54.7,
       "p95FrameMs": 16.8,
-      "jankFrames": 5,
-      "jankPct": 2.7,
-      "longTasks": 3,
-      "longTaskMs": 539,
-      "maxLongTaskMs": 310,
-      "longTasksPerMin": 48.4,
+      "jankFrames": 1,
+      "jankPct": 0.6,
+      "longTasks": 2,
+      "longTaskMs": 306,
+      "maxLongTaskMs": 252,
+      "longTasksPerMin": 40.5,
       "images": {
         "total": 27,
         "lazy": 0,
@@ -158,10 +158,10 @@
       }
     },
     "Database": {
-      "seconds": 2.8,
-      "frames": 165,
+      "seconds": 2.5,
+      "frames": 148,
       "fps": 60,
-      "p95FrameMs": 16.7,
+      "p95FrameMs": 16.8,
       "jankFrames": 0,
       "jankPct": 0,
       "longTasks": 0,
@@ -175,8 +175,8 @@
       }
     },
     "Deck Builder": {
-      "seconds": 2.9,
-      "frames": 175,
+      "seconds": 2.5,
+      "frames": 149,
       "fps": 60,
       "p95FrameMs": 16.8,
       "jankFrames": 0,
@@ -411,8 +411,8 @@
     },
     "taps": {
       "duel: hand card": {
-        "ms": 800,
-        "via": "none"
+        "ms": 39,
+        "via": "dom"
       },
       "duel: phase button": {
         "ms": 800,

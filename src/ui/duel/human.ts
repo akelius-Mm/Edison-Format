@@ -99,7 +99,7 @@ export class PacedController implements PlayerController {
   }
 
   async chooseAction(g: Game, p: PlayerId, actions: Action[]) {
-    await this.pacer.pace(g.phase === 'battle' ? 170 : 140);
+    await this.pacer.pace(g.phase === 'battle' ? 120 : 100);
     const a = await this.ai.chooseAction(g, p, actions);
     return a;
   }

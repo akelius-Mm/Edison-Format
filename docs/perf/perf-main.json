@@ -1,0 +1,208 @@
+{
+  "base": "http://localhost:5303/",
+  "cpu": 4,
+  "at": "2026-10-25T15:02:26.912Z",
+  "screens": {
+    "Home": {
+      "ready": 36,
+      "settled": 36,
+      "coldSettled": 37,
+      "paint": 26,
+      "transition": 280,
+      "longTasks": 0,
+      "maxLongTask": 0
+    },
+    "Duel hub": {
+      "ready": 31,
+      "settled": 31,
+      "coldSettled": 31,
+      "paint": 20,
+      "transition": 280,
+      "longTasks": 0,
+      "maxLongTask": 0
+    },
+    "Draft": {
+      "ready": 234,
+      "settled": 234,
+      "coldSettled": 324,
+      "paint": 195,
+      "transition": 280,
+      "longTasks": 1,
+      "maxLongTask": 191
+    },
+    "Deck Builder": {
+      "ready": 149,
+      "settled": 149,
+      "coldSettled": 469,
+      "paint": 143,
+      "transition": 280,
+      "longTasks": 1,
+      "maxLongTask": 405
+    },
+    "Packs": {
+      "ready": 73,
+      "settled": 73,
+      "coldSettled": 95,
+      "paint": 51,
+      "transition": 280,
+      "longTasks": 0,
+      "maxLongTask": 64
+    },
+    "Binder": {
+      "ready": 324,
+      "settled": 324,
+      "coldSettled": 433,
+      "paint": 122,
+      "transition": 280,
+      "longTasks": 2,
+      "maxLongTask": 239
+    },
+    "Events": {
+      "ready": 38,
+      "settled": 38,
+      "coldSettled": 46,
+      "paint": 25,
+      "transition": 280,
+      "longTasks": 0,
+      "maxLongTask": 0
+    },
+    "Settings": {
+      "ready": 39,
+      "settled": 39,
+      "coldSettled": 39,
+      "paint": 25,
+      "transition": 280,
+      "longTasks": 0,
+      "maxLongTask": 0
+    },
+    "Database": {
+      "ready": 289,
+      "settled": 289,
+      "coldSettled": 329,
+      "paint": 234,
+      "transition": 280,
+      "longTasks": 2,
+      "maxLongTask": 164
+    }
+  },
+  "taps": {
+    "home: tab bar": {
+      "ms": 313,
+      "via": "style"
+    },
+    "home: tile": {
+      "ms": 164,
+      "via": "style"
+    },
+    "home: row": {
+      "ms": 152,
+      "via": "style"
+    },
+    "home: CTA": {
+      "ms": 166,
+      "via": "style"
+    },
+    "duel hub: tile": {
+      "ms": 161,
+      "via": "style"
+    },
+    "settings: segmented": {
+      "ms": 151,
+      "via": "dom"
+    },
+    "settings: list row": {
+      "ms": 237,
+      "via": "dom"
+    },
+    "database: card": {
+      "ms": 210,
+      "via": "dom"
+    },
+    "database: chip": {
+      "ms": 289,
+      "via": "dom"
+    },
+    "binder: card cell": {
+      "ms": 174,
+      "via": "dom"
+    },
+    "packs: primary button": {
+      "ms": 176,
+      "via": "dom"
+    },
+    "draft: preset": {
+      "ms": 191,
+      "via": "dom"
+    },
+    "events: row": {
+      "ms": 223,
+      "via": "dom"
+    }
+  },
+  "scroll": {
+    "Binder": {
+      "seconds": 2.9,
+      "frames": 156,
+      "fps": 54.2,
+      "p95FrameMs": 16.8,
+      "jankFrames": 1,
+      "jankPct": 0.6,
+      "longTasks": 2,
+      "longTaskMs": 302,
+      "maxLongTaskMs": 249,
+      "longTasksPerMin": 41.7,
+      "images": {
+        "total": 27,
+        "lazy": 0,
+        "asyncDecode": 27
+      }
+    },
+    "Database": {
+      "seconds": 2.5,
+      "frames": 149,
+      "fps": 59.7,
+      "p95FrameMs": 16.7,
+      "jankFrames": 0,
+      "jankPct": 0,
+      "longTasks": 0,
+      "longTaskMs": 0,
+      "maxLongTaskMs": 0,
+      "longTasksPerMin": 0,
+      "images": {
+        "total": 48,
+        "lazy": 0,
+        "asyncDecode": 48
+      }
+    },
+    "Deck Builder": {
+      "seconds": 2.6,
+      "frames": 154,
+      "fps": 60,
+      "p95FrameMs": 16.8,
+      "jankFrames": 0,
+      "jankPct": 0,
+      "longTasks": 0,
+      "longTaskMs": 0,
+      "maxLongTaskMs": 0,
+      "longTasksPerMin": 0,
+      "images": {
+        "total": 48,
+        "lazy": 0,
+        "asyncDecode": 48
+      }
+    }
+  },
+  "packs": {
+    "seconds": 6.4,
+    "frames": 372,
+    "fps": 58.5,
+    "p95FrameMs": 16.8,
+    "jankFrames": 1,
+    "jankPct": 0.3,
+    "longTasks": 1,
+    "longTaskMs": 123,
+    "maxLongTaskMs": 123,
+    "longTasksPerMin": 9.4
+  },
+  "errors": []
+}

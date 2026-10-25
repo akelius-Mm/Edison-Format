@@ -517,6 +517,7 @@ class DuelScreen implements HumanUI {
     } catch (e) {
       console.error(e);
     }
+    this.setFastForward(false);
     await this.showResult(res);
     this.teardown();
     return out;

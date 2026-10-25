@@ -314,7 +314,8 @@ export function cardBrowser(o: BrowserOptions): CardBrowser {
 
   let list: CardData[] = [];
   let shown = 0;
-  const PAGE = 48;
+  // small pages: the first screenful paints fast, the rest streams in as you scroll (IntersectionObserver below)
+  const PAGE = 24;
 
   /** Rendered result elements, for in-place count updates. */
   const rendered: { c: CardData; el: HTMLElement }[] = [];
@@ -398,7 +399,7 @@ export function cardBrowser(o: BrowserOptions): CardBrowser {
     (ents) => {
       if (ents.some((e) => e.isIntersecting) && shown < list.length) more();
     },
-    { root: scroller, rootMargin: '400px' },
+    { root: scroller, rootMargin: '250px' },
   );
   io.observe(sentinel);
 

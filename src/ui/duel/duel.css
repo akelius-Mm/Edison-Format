@@ -2357,8 +2357,9 @@
 /* ---------------------------------------------------------------- fast-forward (hurry.ts) */
 .duel-ff {
   position: absolute;
+  /* top-right corner of the board: clear of both fields and the opponent's (centred) hand */
   right: max(8px, env(safe-area-inset-right, 0px));
-  top: 50%;
+  top: 8px;
   z-index: 45;
   display: none;
   align-items: center;
@@ -2370,7 +2371,6 @@
   background: rgba(20, 21, 24, 0.9);
   color: var(--dl-ink, #f2efe8);
   font: 600 13px var(--dl-font, system-ui);
-  transform: translateY(-50%);
   touch-action: manipulation;
   -webkit-user-select: none;
   user-select: none;
@@ -2379,6 +2379,11 @@
 }
 .duel-root.is-opp-turn:not(.awaiting-action) .duel-ff { display: inline-flex; }
 
+/* phones held sideways: only a narrow strip right of the board, so the icon alone */
+@media (orientation: landscape) and (max-height: 500px) {
+  .duel-ff { padding: 0 10px; right: 6px; }
+  .duel-ff span { display: none; }
+}
 .duel-root.is-ff .duel-ff { background: var(--dl-ink, #f2efe8); color: #111; border-color: transparent; }
 
 @media (prefers-reduced-motion: reduce) {

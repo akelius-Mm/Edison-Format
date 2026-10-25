@@ -96,6 +96,8 @@ async function newPage(browser, viewport) {
   });
   await page.reload();
   await page.waitForSelector('.screen');
+  // the app loads its sound samples 1.5 s after launch (once per launch): keep that out of the numbers
+  await page.waitForTimeout(2500);
   const cdp = await ctx.newCDPSession(page);
   await cdp.send('Emulation.setCPUThrottlingRate', { rate: CPU });
   return { ctx, page, cdp };
@@ -337,7 +339,9 @@ async function measureHurry(page, me) {
   await page.evaluate(() => {
     window.__fxTrace.length = 0;
     window.__taps = [];
-    document.querySelector('.duel-center')?.addEventListener('pointerdown', () => window.__taps.push(performance.now()), true);
+    // window capture runs before the board's own handlers (microtasks run between listeners, so a
+    // later listener would already see the next step started)
+    window.addEventListener('pointerdown', (e) => e.target.closest?.('.duel-center') && window.__taps.push(performance.now()), true);
   });
   if (!(await endTurn())) return null;
   const cdp = await page.context().newCDPSession(page);
@@ -377,7 +381,12 @@ async function measureHurry(page, me) {
   await page.mouse.up();
   const tr = await page.evaluate(() => window.__fxTrace.slice());
   const a = analyseTrace(tr, me);
-  out.fastForward = { result: r, aiTurnMs: a.aiTurns[0]?.wall ?? null, steps: a.aiTurns[0]?.steps ?? null, ffStillOnAfter: await page.evaluate(() => document.querySelector('.duel-root').classList.contains('is-ff')) };
+  // the duel may end during this turn: then the turn runs to its last step
+  const start = tr.find((x) => x.k === 'fx' && x.type === 'turn' && x.player !== me);
+  const fxIn = start ? tr.filter((x) => x.k === 'fx' && x.t0 >= start.t0) : [];
+  const humanIn = start ? tr.filter((x) => x.k === 'human' && x.t0 >= start.t0).reduce((s, x) => s + (x.t1 - x.t0), 0) : 0;
+  const wall = a.aiTurns[0]?.wall ?? (fxIn.length ? Math.round(fxIn[fxIn.length - 1].t1 - start.t0 - humanIn) : null);
+  out.fastForward = { result: r, aiTurnMs: wall, steps: a.aiTurns[0]?.steps ?? fxIn.length, ffStillOnAfter: await page.evaluate(() => document.querySelector('.duel-root').classList.contains('is-ff')) };
   return out;
 }
 
