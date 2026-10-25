@@ -17,20 +17,40 @@ export interface VoiceOpts {
   attack?: number;
   /** Seconds held at full level before the decay. */
   hold?: number;
+  /** Decay steepness (default 4.5; higher = snappier). */
+  shape?: number;
   /** -1 (left) … 1 (right). */
   pan?: number;
   send?: Send | Send[] | null;
 }
 
-/** Percussive envelope: fast exponential attack, optional hold, exponential decay to silence at t+dur. */
-export function envelope(ac: Ctx, t: number, dur: number, v: number, attack = 0.005, hold = 0): GainNode {
+const decayCurves = new Map<number, Float32Array>();
+/** Normalised exponential decay from 1 that lands exactly on 0 (steepness k: 4.5 ≈ -40 dB before the end). */
+function decayCurve(k: number): Float32Array {
+  let c = decayCurves.get(k);
+  if (!c) {
+    c = new Float32Array(32);
+    const end = Math.exp(-k);
+    for (let i = 0; i < c.length; i++) c[i] = (Math.exp((-k * i) / (c.length - 1)) - end) / (1 - end);
+    decayCurves.set(k, c);
+  }
+  return c;
+}
+
+/**
+ * Percussive envelope: fast attack, optional hold, then a smooth exponential decay that reaches
+ * silence exactly at t+dur. `shape` sets how steep the decay is (higher = snappier).
+ */
+export function envelope(ac: Ctx, t: number, dur: number, v: number, attack = 0.005, hold = 0, shape = 4.5): GainNode {
   const g = ac.createGain();
-  const a = Math.min(attack, dur * 0.5);
+  const a = Math.max(0.001, Math.min(attack, dur * 0.5));
   const h = Math.min(hold, Math.max(0, dur - a - 0.01));
+  const peak = Math.max(EPS * 2, v);
   g.gain.setValueAtTime(EPS, t);
-  g.gain.exponentialRampToValueAtTime(Math.max(EPS * 2, v), t + a);
-  if (h > 0) g.gain.setValueAtTime(Math.max(EPS * 2, v), t + a + h);
-  g.gain.exponentialRampToValueAtTime(EPS, t + dur);
+  g.gain.exponentialRampToValueAtTime(peak, t + a);
+  const d0 = t + a + h + 0.0005;
+  const curve = decayCurve(shape).map((x) => x * peak);
+  g.gain.setValueCurveAtTime(curve, d0, Math.max(0.005, t + dur - d0));
   return g;
 }
 
@@ -81,7 +101,7 @@ export function tone(ac: Ctx, out: AudioNode, t: number, f0: number, dur: number
     node.connect(f);
     node = f;
   }
-  const g = envelope(ac, t, dur, o.vol ?? 0.2, o.attack ?? 0.005, o.hold ?? 0);
+  const g = envelope(ac, t, dur, o.vol ?? 0.2, o.attack ?? 0.005, o.hold ?? 0, o.shape);
   node.connect(g);
   route(ac, g, out, o.pan, o.send);
   osc.start(t);
@@ -114,7 +134,7 @@ export function noise(ac: Ctx, buf: AudioBuffer, out: AudioNode, t: number, dur:
     h2.frequency.value = o.hp;
     node = node.connect(h2);
   }
-  const g = envelope(ac, t, dur, o.vol ?? 0.2, o.attack ?? 0.003, o.hold ?? 0);
+  const g = envelope(ac, t, dur, o.vol ?? 0.2, o.attack ?? 0.003, o.hold ?? 0, o.shape);
   node.connect(g);
   route(ac, g, out, o.pan, o.send);
   const off = Math.random() * Math.max(0, buf.duration - dur - 0.1);
@@ -148,7 +168,7 @@ export function fm(ac: Ctx, out: AudioNode, t: number, freq: number, dur: number
   depth.gain.setValueAtTime(i0, t);
   depth.gain.exponentialRampToValueAtTime(i1, t + dur);
   mod.connect(depth).connect(car.frequency);
-  const g = envelope(ac, t, dur, o.vol ?? 0.15, o.attack ?? 0.002, o.hold ?? 0);
+  const g = envelope(ac, t, dur, o.vol ?? 0.15, o.attack ?? 0.002, o.hold ?? 0, o.shape);
   car.connect(g);
   route(ac, g, out, o.pan, o.send);
   car.start(t);

@@ -204,7 +204,7 @@ export function cardBrowser(o: BrowserOptions): CardBrowser {
           'button',
           {
             type: 'button',
-            class: ['cb-kind', `k-${v || 'all'}`, f.kind === v && 'on'],
+            class: ['cb-kind', 'chip', `k-${v || 'all'}`, f.kind === v && 'on'],
             role: 'radio',
             'aria-checked': String(f.kind === v),
             onclick: () => {
@@ -274,7 +274,7 @@ export function cardBrowser(o: BrowserOptions): CardBrowser {
   const advOpen = sessionStorage.getItem('edison.cb.adv') === '1';
   adv.hidden = !advOpen;
   const filtersBtn = button(
-    'Filters',
+    'More filters',
     () => {
       adv.hidden = !adv.hidden;
       filtersBtn.classList.toggle('on', !adv.hidden);
@@ -284,7 +284,7 @@ export function cardBrowser(o: BrowserOptions): CardBrowser {
         /* ignore */
       }
     },
-    { variant: 'ghost', small: true, icon: 'sort', cls: advOpen ? 'on' : '' },
+    { variant: 'ghost', small: true, icon: 'sort', cls: ['chip', 'cb-filters', advOpen ? 'on' : ''].join(' ') },
   );
   const sortSel = h('select', { class: 'select cb-sort', 'aria-label': 'Sort by' });
   for (const [v, l] of [
@@ -402,7 +402,14 @@ export function cardBrowser(o: BrowserOptions): CardBrowser {
   );
   io.observe(sentinel);
 
-  const head = h('div', { class: 'cb-head' }, h('div', { class: 'cb-searchrow' }, h('span', { class: 'cb-search-wrap' }, icon('search'), search), filtersBtn), kindSeg, adv, h('div', { class: 'cb-toolbar' }, countEl, h('span', { class: 'cb-spacer' }), sortSel, viewBtn));
+  const head = h(
+    'div',
+    { class: 'cb-head' },
+    h('div', { class: 'cb-searchrow' }, h('span', { class: 'cb-search-wrap' }, icon('search'), search)),
+    h('div', { class: 'cb-chiprow' }, kindSeg, filtersBtn),
+    adv,
+    h('div', { class: 'cb-toolbar' }, countEl, h('span', { class: 'cb-spacer' }), sortSel, viewBtn),
+  );
   const el = h('div', { class: 'card-browser' }, head, scroller);
 
   function rebuild() {
