@@ -1,4 +1,5 @@
 // Minimal DOM helpers and shared UI widgets for the app shell (no framework).
+import { haptic } from '../haptics';
 
 export type Child = Node | string | number | null | undefined | false | Child[];
 type Handler = (ev: any) => void;
@@ -135,6 +136,7 @@ export function button(
       'aria-label': opts.title,
       onclick: (e: MouseEvent) => {
         if (b.disabled) return;
+        haptic('selection');
         onClick(e);
       },
     },
@@ -162,7 +164,10 @@ export function segmented<T extends string | number>(
         class: 'seg-btn',
         role: 'radio',
         title: o.hint,
-        onclick: () => set(o.value, true),
+        onclick: () => {
+          haptic('selection');
+          set(o.value, true);
+        },
         onkeydown: (e: KeyboardEvent) => {
           const i = options.findIndex((x) => x.value === cur);
           let ni = -1;
@@ -197,7 +202,10 @@ export function segmented<T extends string | number>(
 export function toggle(checked: boolean, onChange: (v: boolean) => void, label = '') {
   const input = h('input', { type: 'checkbox', class: 'toggle-input', 'aria-label': label });
   input.checked = checked;
-  input.addEventListener('change', () => onChange(input.checked));
+  input.addEventListener('change', () => {
+    haptic('selection');
+    onChange(input.checked);
+  });
   return h('label', { class: 'toggle' }, input, h('span', { class: 'toggle-track' }, h('span', { class: 'toggle-thumb' })));
 }
 

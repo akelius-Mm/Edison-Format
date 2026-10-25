@@ -29,6 +29,7 @@ import { getSettings, loadJSON, saveJSON } from '../settings';
 import { button, clear, h, icon, modal, segmented, toast } from './dom';
 import { dpChip, foilCard, fmtDP, packArt, rarityPill, releaseLabel } from './collectionUi';
 import { frame, go, type Params, type Screen } from './nav';
+import { haptic } from '../haptics';
 
 const SEEN_KEY = 'edison.packs.seenGrant.v1';
 const SEL_KEY = 'edison.packs.selected.v1';
@@ -598,6 +599,7 @@ class Stage {
     this.opened++;
     this.updateSub();
     this.sfx.play('draw');
+    haptic('medium'); // the rip
     hint.classList.add('gone');
     pack.classList.add('torn');
     const rm = reduceMotion();
@@ -691,6 +693,7 @@ class Stage {
     c.el.classList.add('is-flipped');
     c.el.setAttribute('aria-label', `${c.pull.name}, ${RARITY_NAMES[c.pull.rarity]}${c.pull.isNew ? ', new' : ''}. Tap to enlarge.`);
     this.sfx.play('flip');
+    haptic(isHit(c.pull.rarity) ? 'medium' : 'light');
     const rf = c.el.querySelector('.rf');
     setTimeout(() => rf?.classList.add('is-live'), 260);
     if (isHit(c.pull.rarity)) {
@@ -731,6 +734,7 @@ class Stage {
       );
       this.el.appendChild(ov);
       this.sfx.play(pull.rarity === 'ScR' || pull.rarity === 'GR' ? 'synchro' : 'summon');
+      haptic(pull.rarity === 'ScR' || pull.rarity === 'GR' ? 'heavy' : 'success');
       const rm = reduceMotion();
       if (!rm) {
         const cr = card.getBoundingClientRect();

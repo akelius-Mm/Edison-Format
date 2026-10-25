@@ -9,6 +9,7 @@ import { zoomCard } from '../cards/zoom';
 import { findCard } from '../../cards/define';
 import { esc } from '../theme/util';
 import type { Sfx } from './sound';
+import { haptic } from '../haptics';
 
 export interface ActionBtn {
   label: string;
@@ -246,6 +247,7 @@ export class Dialogs {
         b.disabled = !!a.disabled;
         b.onclick = () => {
           this.sfx.play('click');
+          haptic('selection');
           a.onClick();
         };
         buttons.push(b);
@@ -297,6 +299,7 @@ export class Dialogs {
       b.onclick = (e) => {
         e.stopPropagation();
         this.sfx.play('click');
+        haptic('selection');
         this.closeMenu();
         it.onClick();
       };
@@ -407,6 +410,7 @@ export function selectDialog(d: Dialogs, ctx: PromptCtx, req: SelectRequest): { 
     tile.appendChild(h('div', 'tile-sel'));
     tile.addEventListener('click', () => {
       ctx.sfx.play('click');
+      haptic('selection');
       const picked = g.cards.filter((x) => sel.includes(x));
       const next = g.cards.find((x) => !sel.includes(x));
       if (req.max === 1) {
@@ -497,6 +501,7 @@ export function positionDialog(d: Dialogs, ctx: PromptCtx, card: CardInstance, a
       if (a !== 'set') onLongPress(opt, () => zoomCard(card.data, { instance: card, game: ctx.game }));
       opt.onclick = () => {
         ctx.sfx.play('click');
+        haptic('selection');
         m.close();
         resolve(a);
       };

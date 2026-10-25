@@ -2,7 +2,8 @@
 import type { Difficulty } from '../../ai/ai';
 import { clearOfficialArtCache } from '../cards/officialArt';
 import { DEFAULT_SETTINGS, getSettings, updateSettings, type Settings } from '../settings';
-import { showAudioCredits, yourMusicGroup } from './audioSettings';
+import { builtInTracksRow, nowPlayingRow, showAudioCredits, yourMusicGroup } from './audioSettings';
+import { haptic } from '../haptics';
 import { iosAction, iosGroup, iosNav, iosRow } from './components';
 import { packsDraftSettingsGroup } from './draftSetup';
 import { confirmDialog, h, segmented, toast, toggle } from './dom';
@@ -93,8 +94,22 @@ export function settingsScreen(): Screen {
     ),
     iosGroup('Audio', [
       iosRow('Sound effects', null, toggle(s.sound, (v) => set({ sound: v }), 'Sound effects')),
+      iosRow(
+        'Haptics',
+        'Taps you can feel for plays, damage and results.',
+        toggle(
+          s.haptics,
+          (v) => {
+            set({ haptics: v });
+            if (v) haptic('selection');
+          },
+          'Haptics',
+        ),
+      ),
       iosRow('Music', null, toggle(s.music, (v) => set({ music: v }), 'Music')),
       iosRow('Volume', null, h('div', { class: 'ios-range-wrap' }, vol, volOut), { stack: true }),
+      nowPlayingRow(),
+      builtInTracksRow(),
       iosNav('Audio credits', showAudioCredits, { icon: 'music' }),
     ]),
     yourMusicGroup(),

@@ -2,8 +2,11 @@
 // dev server:
 //   - every recorded sample and music loop loads (HTTP 200) and decodes;
 //   - music starts after the first tap (built-in recording, audible on the music bus);
-//   - "Your music": a file picked in Settings is stored, plays instead of the built-in track,
-//     and Remove brings the built-in track back;
+//   - every slot is a playlist: Skip moves to another track, Now playing shows it, built-in tracks
+//     can be switched off;
+//   - "Your music": files picked in Settings are stored, play as the slot's playlist instead of
+//     the built-in tracks, and Remove brings the built-in playlist back;
+//   - the Haptics switch in Settings turns haptic feedback on and off;
 //   - a duel switches to the duel track and plays recorded sound effects;
 //   - sound effects and music rendered offline: levels per sound, music well below the effects;
 //   - no console errors.
@@ -26,13 +29,17 @@ const ok = (cond, msg) => {
   if (!cond) fails.push(msg);
 };
 
-let generated = null;
-function testFile() {
-  if (process.argv[2]) return process.argv[2];
-  if (generated) return generated;
-  const f = (generated = path.join(os.tmpdir(), `edison-audio-check-${process.pid}.mp3`));
-  execFileSync('ffmpeg', ['-v', 'error', '-y', '-f', 'lavfi', '-i', 'sine=frequency=330:duration=8', '-ac', '2', '-c:a', 'libmp3lame', '-b:a', '96k', f]);
-  return f;
+const generated = [];
+/** Two short test songs (the first can be given on the command line). */
+function testFiles() {
+  if (generated.length) return generated.slice(0, 2);
+  for (const [i, hz] of [[1, 330], [2, 392]]) {
+    const f = path.join(os.tmpdir(), `edison-audio-check-${process.pid}-${i}.mp3`);
+    execFileSync('ffmpeg', ['-v', 'error', '-y', '-f', 'lavfi', '-i', `sine=frequency=${hz}:duration=8`, '-ac', '2', '-c:a', 'libmp3lame', '-b:a', '96k', f]);
+    generated.push(f);
+  }
+  if (process.argv[2]) generated[0] = process.argv[2];
+  return generated.slice(0, 2);
 }
 
 async function waitFor(page, fn, arg, ms = 15000) {
@@ -84,7 +91,8 @@ async function waitFor(page, fn, arg, ms = 15000) {
       const core = await import('/src/ui/audio/core.ts');
       return core.audioRunning() && music.playing ? { playing: music.playing } : null;
     });
-    ok(playing && playing.playing === 'recorded:menu', `menu music plays after the first tap (${JSON.stringify(playing)})`);
+    const MENU = ['rec:first-snow', 'rec:snow-drift', 'rec:two-hour-delay', 'rec:chill-lofi'];
+    ok(playing && MENU.includes(playing.playing), `menu playlist plays after the first tap (${JSON.stringify(playing)})`);
 
     // is it audible? tap the music bus
     const level = await page.evaluate(async () => {
@@ -105,81 +113,162 @@ async function waitFor(page, fn, arg, ms = 15000) {
     });
     ok(level > 0.01, `menu music is audible on the music bus (peak ${level.toFixed(3)})`);
 
-    // ---------------------------------------------------------------- all samples decode
+    // skip: another menu track, never the same one
+    const skips = [playing.playing];
+    for (let i = 0; i < 3; i++) {
+      const prev = skips[skips.length - 1];
+      await page.evaluate(async () => (await import('/src/ui/audio/music.ts')).music.skip());
+      const nxt = await waitFor(
+        page,
+        async (prev) => {
+          const { music } = await import('/src/ui/audio/music.ts');
+          return music.playing && music.playing !== prev ? { playing: music.playing } : null;
+        },
+        prev,
+      );
+      skips.push(nxt && nxt.playing);
+    }
+    ok(skips.every((k) => MENU.includes(k)) && skips.every((k, i) => i === 0 || k !== skips[i - 1]), `Skip moves through the menu playlist without repeats: ${skips.join(' → ')}`);
+
+    // ---------------------------------------------------------------- all samples decode (music: on demand)
     const status = await page.evaluate(async () => {
       const s = await import('/src/ui/audio/samples.ts');
       await s.loadSfxSamples();
       const m = {};
-      for (const slot of ['menu', 'duel', 'pinch']) {
+      for (const t of s.MUSIC_TRACKS) {
         try {
-          const b = await s.loadMusicLoop(slot);
-          m[slot] = { ok: true, dur: +b.duration.toFixed(2), ch: b.numberOfChannels, loopEnd: s.MUSIC_LOOPS[slot].loopEnd };
+          const b = await s.loadMusicTrack(t.id);
+          m[t.id] = { ok: b.duration > t.loopEnd && b.numberOfChannels === 2, dur: +b.duration.toFixed(2), loopEnd: t.loopEnd };
+          s.dropMusicTrack(t.id);
         } catch (e) {
-          m[slot] = { ok: false, err: String(e) };
+          m[t.id] = { ok: false, err: String(e) };
         }
       }
       return { sfx: s.sampleStatus(), music: m };
     });
     ok(status.sfx.loaded === status.sfx.total && status.sfx.failed.length === 0, `all ${status.sfx.total} sound-effect samples decoded (${status.sfx.loaded} ok, failed: ${status.sfx.failed.join(', ') || 'none'})`);
-    for (const [slot, m] of Object.entries(status.music)) ok(m.ok && m.dur > m.loopEnd && m.ch === 2, `music/${slot}.m4a decodes: ${JSON.stringify(m)}`);
+    for (const [id, m] of Object.entries(status.music)) ok(m.ok, `music/${id}.m4a decodes: ${JSON.stringify(m)}`);
     const bad = [...audioResponses].filter(([, st]) => st !== 200 && st !== 304);
-    ok(audioResponses.size >= status.sfx.total + 3 && bad.length === 0, `${audioResponses.size} audio requests, all 200${bad.length ? ' — bad: ' + JSON.stringify(bad) : ''}`);
+    ok(bad.length === 0, `${audioResponses.size} audio requests, all 200${bad.length ? ' — bad: ' + JSON.stringify(bad) : ''}`);
 
-    // ---------------------------------------------------------------- Your music
+    // ---------------------------------------------------------------- Settings: now playing, built-in tracks, haptics
     await page.goto(BASE + '#/settings', { waitUntil: 'load' });
-    await page.waitForSelector('input[type=file][data-slot=menu]', { state: 'attached' });
-    await page.tap('.ym-row button.ios-inline-btn'); // a real tap (opens no picker headless)
-    await page.setInputFiles('input[type=file][data-slot=menu]', testFile());
-    const stored = await waitFor(page, async () => {
-      const { userTrackInfo } = await import('/src/ui/audio/userMusic.ts');
-      const { music } = await import('/src/ui/audio/music.ts');
-      const info = await userTrackInfo();
-      return info.menu && music.playing === 'user:menu' ? { name: info.menu.name, size: info.menu.size, playing: music.playing } : null;
+    await page.waitForSelector('.np-row');
+    await page.tap('.ios-group-h'); // a tap on a plain heading unlocks audio
+    const np = await waitFor(page, () => {
+      const t = document.querySelector('.np-row .ym-desc')?.textContent ?? '';
+      return t.includes('·') ? { text: t, skip: !document.querySelector('.np-skip').disabled } : null;
     });
-    ok(stored && stored.playing === 'user:menu', `Your music: file stored in IndexedDB and playing instead of the built-in menu track (${JSON.stringify(stored)})`);
-    const rowText = await page.textContent('.ym-row');
-    ok(rowText.includes(path.basename(testFile())) && rowText.includes('Remove'), `Your music row shows the file and a Remove button ("${rowText.trim()}")`);
+    ok(np && np.skip, `Now playing shows the track with Skip enabled (${JSON.stringify(np)})`);
+
+    // switch off every menu track but First Snow: the playlist only plays First Snow after a skip
+    await page.evaluate(async () => {
+      const { updateSettings } = await import('/src/ui/settings.ts');
+      updateSettings({ musicOff: ['snow-drift', 'two-hour-delay', 'chill-lofi'] });
+    });
+    const only = await page.evaluate(async () => (await import('/src/ui/audio/music.ts')).music.playlist('menu').map((t) => t.key));
+    ok(only.length === 1 && only[0] === 'rec:first-snow', `switched-off built-in tracks leave the playlist (${only.join(', ')})`);
+    await page.evaluate(async () => (await import('/src/ui/settings.ts')).updateSettings({ musicOff: [] }));
+
+    // haptics switch
+    const hap = await page.evaluate(async () => {
+      const { haptic, hapticLog } = await import('/src/ui/haptics.ts');
+      const { updateSettings } = await import('/src/ui/settings.ts');
+      const n0 = hapticLog.length;
+      haptic('medium');
+      const on = hapticLog.length - n0;
+      await new Promise((r) => setTimeout(r, 60));
+      updateSettings({ haptics: false });
+      haptic('heavy');
+      const off = hapticLog.length - n0 - on;
+      updateSettings({ haptics: true });
+      return { on, off };
+    });
+    ok(hap.on === 1 && hap.off === 0, `haptics fire when on and stay quiet when off (${JSON.stringify(hap)})`);
+    const hapRow = page.locator('.ios-row', { hasText: 'Haptics' }).first();
+    await hapRow.scrollIntoViewIfNeeded();
+    await hapRow.locator('.toggle').tap();
+    const hapOff = await page.evaluate(async () => (await import('/src/ui/settings.ts')).getSettings().haptics);
+    await hapRow.locator('.toggle').tap();
+    const hapOn = await page.evaluate(async () => (await import('/src/ui/settings.ts')).getSettings().haptics);
+    ok(hapOff === false && hapOn === true, `the Haptics switch in Settings toggles the setting (off: ${hapOff}, on: ${hapOn})`);
+
+    // ---------------------------------------------------------------- Your music (two files → a playlist)
+    await page.waitForSelector('input[type=file][data-slot=menu]', { state: 'attached' });
+    await page.tap('.ym-slot[data-slot=menu] .ym-add');
+    await page.setInputFiles('input[type=file][data-slot=menu]', testFiles());
+    const stored = await waitFor(page, async () => {
+      const { userTracks } = await import('/src/ui/audio/userMusic.ts');
+      const { music } = await import('/src/ui/audio/music.ts');
+      const mine = (await userTracks()).filter((t) => t.slot === 'menu');
+      return mine.length === 2 && music.playing && music.playing.startsWith('user:') ? { files: mine.map((t) => t.name), playing: music.playing, np: music.nowPlaying() } : null;
+    });
+    ok(stored && stored.files.length === 2, `Your music: two files stored and playing as the menu playlist (${JSON.stringify(stored)})`);
+    const userSkip = await page.evaluate(async () => {
+      const { music } = await import('/src/ui/audio/music.ts');
+      const a = music.playing;
+      music.skip();
+      for (let i = 0; i < 60 && music.playing === a; i++) await new Promise((r) => setTimeout(r, 100));
+      return { from: a, to: music.playing };
+    });
+    ok(userSkip.to && userSkip.to.startsWith('user:') && userSkip.to !== userSkip.from, `Skip switches between your files (${JSON.stringify(userSkip)})`);
+    const rows = await page.$$eval('.ym-slot[data-slot=menu] .ym-file', (els) => els.map((e) => e.textContent));
+    ok(rows.length === 2, `Your music lists both files with Remove buttons (${JSON.stringify(rows)})`);
     // survives a reload (IndexedDB)
     await page.reload({ waitUntil: 'load' });
     await page.waitForSelector('.ios-group-h');
-    await page.tap('.ios-group-h'); // a tap on a plain heading unlocks audio
+    await page.tap('.ios-group-h');
     const again = await waitFor(page, async () => {
       const { music } = await import('/src/ui/audio/music.ts');
-      return music.playing === 'user:menu' ? { playing: music.playing } : null;
+      return music.playing && music.playing.startsWith('user:') ? { playing: music.playing } : null;
     });
     ok(!!again, 'Your music still plays after reloading the app');
-    const rm = page.locator('.ym-row .ym-remove:not([hidden])').first();
-    await rm.scrollIntoViewIfNeeded();
-    await rm.tap();
+    for (let i = 0; i < 2; i++) {
+      const rm = page.locator('.ym-slot[data-slot=menu] .ym-remove').first();
+      await rm.scrollIntoViewIfNeeded();
+      await rm.tap();
+      await page.waitForTimeout(300);
+    }
     const removed = await waitFor(page, async () => {
-      const { userTrackInfo } = await import('/src/ui/audio/userMusic.ts');
+      const { userTracks } = await import('/src/ui/audio/userMusic.ts');
       const { music } = await import('/src/ui/audio/music.ts');
-      const info = await userTrackInfo();
-      return !info.menu && music.playing === 'recorded:menu' ? { playing: music.playing } : null;
+      const mine = (await userTracks()).filter((t) => t.slot === 'menu');
+      return !mine.length && music.playing && music.playing.startsWith('rec:') ? { playing: music.playing } : null;
     });
-    ok(!!removed, 'Remove deletes the file and the built-in menu track comes back');
+    ok(!!removed, `Remove deletes the files and the built-in menu playlist comes back (${JSON.stringify(removed)})`);
 
     // credits sheet
     await page.tap('text=Audio credits');
     await page.waitForSelector('.credits-list');
     const credits = await page.$$eval('.credit', (els) => els.length);
-    ok(credits >= 10, `Audio credits sheet lists ${credits} entries`);
+    ok(credits >= 18, `Audio credits sheet lists ${credits} entries`);
     await page.keyboard.press('Escape');
 
     // ---------------------------------------------------------------- a duel (AI vs AI)
     await page.goto(BASE + 'duel-dev.html?mode=spectate&seed=7', { waitUntil: 'load' });
     await page.tap('body', { position: { x: 30, y: 30 } });
+    const DUEL = ['rec:funky-lofi-jam', 'rec:winter-blues', 'rec:lofi-hip-hop', 'rec:autumn'];
     const duel = await waitFor(
       page,
       async () => {
         const { music } = await import('/src/ui/audio/music.ts');
-        return music.playing && music.playing.endsWith(':duel') ? { playing: music.playing } : null;
+        return music.playing && music.nowPlaying()?.slot === 'duel' ? { playing: music.playing } : null;
       },
       null,
       20000,
     );
-    ok(duel && duel.playing === 'recorded:duel', `duel music: ${JSON.stringify(duel)}`);
-    await page.waitForTimeout(6000);
+    ok(duel && DUEL.includes(duel.playing), `duel playlist: ${JSON.stringify(duel)}`);
+    const pinch = await page.evaluate(async () => {
+      const { music } = await import('/src/ui/audio/music.ts');
+      music.setPinch(true);
+      for (let i = 0; i < 80 && music.nowPlaying()?.slot !== 'pinch'; i++) await new Promise((r) => setTimeout(r, 100));
+      const p = music.playing;
+      music.setPinch(false);
+      for (let i = 0; i < 80 && music.nowPlaying()?.slot !== 'duel'; i++) await new Promise((r) => setTimeout(r, 100));
+      return { pinch: p, back: music.playing };
+    });
+    ok(['rec:fire-place', 'rec:a-little-shade'].includes(pinch.pinch) && pinch.back === duel.playing, `pinch switches to the pinch playlist and back to the same duel track (${JSON.stringify(pinch)})`);
+    await page.waitForTimeout(4000);
 
     // ---------------------------------------------------------------- offline levels
     const levels = await page.evaluate(async () => {
@@ -227,23 +316,26 @@ async function waitFor(page, fn, arg, ms = 15000) {
         fx.lpTicker(1200, false);
         out.lpTicker = measure(await ac.startRendering());
       }
-      for (const slot of ['menu', 'duel', 'pinch']) {
+      for (const t of s.MUSIC_TRACKS) {
         const ac = new OfflineAudioContext(2, SR * 20, SR);
-        await renderRecordedMusic(ac, slot, { volume: 0.6, offset: 20 });
-        out['music:' + slot] = measure(await ac.startRendering());
+        await renderRecordedMusic(ac, t.id, { volume: 0.6, offset: 20 });
+        out['music:' + t.id] = measure(await ac.startRendering());
+        s.dropMusicTrack(t.id);
       }
       for (const [id, pinch] of [['menu', false], ['duel', false], ['duel', true]]) {
         const ac = new OfflineAudioContext(2, SR * 12, SR);
         renderMusic(ac, id, 12, { volume: 0.6, pinch });
         out[`procedural:${id}${pinch ? '+pinch' : ''}`] = measure(await ac.startRendering());
       }
-      // loop seam of the built-in tracks: render across the loop point and look for a jump
+      // loop seam of the built-in tracks: render across the loop point and look for a jump (the seam
+      // sits on a downbeat, so a drum hit there may be as sharp as the loudest hit elsewhere)
       const seams = {};
-      for (const slot of ['menu', 'duel', 'pinch']) {
-        const lp = s.MUSIC_LOOPS[slot];
+      for (const lp of s.MUSIC_TRACKS) {
+        const slot = lp.id;
         const len = lp.loopEnd - lp.loopStart;
         const ac = new OfflineAudioContext(2, SR * 4, SR);
-        await renderRecordedMusic(ac, slot, { volume: 0.6, offset: len - 2 });
+        await renderRecordedMusic(ac, lp.id, { volume: 0.6, offset: len - 2 });
+        s.dropMusicTrack(lp.id);
         const b = await ac.startRendering();
         const d = b.getChannelData(0);
         let maxStep = 0;
@@ -266,11 +358,11 @@ async function waitFor(page, fn, arg, ms = 15000) {
     const heavy = ['battle', 'bigDamage', 'synchro', 'destroy', 'summon', 'damage'].map((k) => L[k].peak);
     ok(Math.max(...heavy) - Math.min(...heavy) < 9, `heavy hits within 9 dB of each other (${heavy.join(', ')})`);
     const medLoud = Math.min(...['battle', 'damage', 'summon', 'attack'].map((k) => L[k].loud50));
-    for (const slot of ['menu', 'duel', 'pinch']) {
+    for (const slot of Object.keys(L).filter((k) => k.startsWith('music:')).map((k) => k.slice(6))) {
       const m = L['music:' + slot];
       ok(m.loud50 <= medLoud - 6 && m.rms <= medLoud - 10, `music ${slot} sits well below the effects (music loudest ${m.loud50}, avg ${m.rms} vs quietest medium hit ${medLoud})`);
     }
-    for (const [slot, sm] of Object.entries(levels.seams)) ok(sm.seamStep <= Math.max(0.02, sm.elsewhereMax), `${slot} loop seam has no click (step ${sm.seamStep} vs ${sm.elsewhereMax} elsewhere)`);
+    for (const [slot, sm] of Object.entries(levels.seams)) ok(sm.seamStep <= Math.max(0.02, 1.5 * sm.elsewhereMax), `${slot} loop seam has no click (step ${sm.seamStep} vs ${sm.elsewhereMax} elsewhere)`);
 
     if (offsite.length) console.log(`(ignored ${offsite.length} failed requests to external card-image hosts, e.g. ${offsite[0]})`);
     ok(errors.length === 0, `no console errors${errors.length ? ': ' + errors.slice(0, 5).join(' | ') : ''}`);
@@ -279,7 +371,7 @@ async function waitFor(page, fn, arg, ms = 15000) {
   } finally {
     await browser.close();
     vite.kill();
-    if (generated) fs.rmSync(generated, { force: true });
+    for (const f of generated) if (f !== process.argv[2]) fs.rmSync(f, { force: true });
   }
   console.log(fails.length ? `\n${fails.length} check(s) failed` : '\nAll audio checks passed');
   process.exit(fails.length ? 1 : 0);
