@@ -252,6 +252,7 @@ class EventSession {
   private watching: { stop: () => void; mid: string; spec: SpectateClient } | null = null;
   private timerTick = 0;
   private closed = false;
+  private renderQueued = false;
   private error: string | null = null;
   private autoStarted = new Set<string>();
   private resumeWanted = false;
@@ -734,7 +735,22 @@ class EventSession {
 
   render() {
     const body = this.body;
-    if (!body || this.closed || !body.isConnected) return;
+    if (!body || this.closed) return;
+    if (!body.isConnected) {
+      // attach() runs while the router is still building the screen; draw once it is on the page
+      if (!this.renderQueued) {
+        this.renderQueued = true;
+        let tries = 0;
+        const retry = () => {
+          if (this.body !== body || this.closed) return void (this.renderQueued = false);
+          if (body.isConnected) return void ((this.renderQueued = false), this.render());
+          if (++tries < 40) requestAnimationFrame(retry);
+          else this.renderQueued = false;
+        };
+        requestAnimationFrame(retry);
+      }
+      return;
+    }
     const v = this.client.view;
     if (!v) {
       busy(body, this.client.connected ? 'Joining…' : 'Connecting to the organiser…', () => this.leave());
