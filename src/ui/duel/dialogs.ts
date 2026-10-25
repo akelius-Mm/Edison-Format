@@ -613,6 +613,8 @@ export function pileViewer(
     actions?: (c: CardInstance) => { label: string; onClick: () => void }[];
     /** Other piles to jump to (e.g. Banished from the Graveyard). */
     links?: { label: string; onClick: () => void }[];
+    /** Short note under a card with no action right now, e.g. when its Graveyard effect can be used. */
+    notes?: (c: CardInstance) => string | null;
   } = {},
 ): ModalHandle {
   const body = h('div', 'viewer');
@@ -662,6 +664,9 @@ export function pileViewer(
         bar.appendChild(b);
       }
       tile.appendChild(bar);
+    } else if (!hidden) {
+      const note = opts.notes?.(c);
+      if (note) tile.appendChild(h('div', 'tile-note', esc(note)));
     }
     grid.appendChild(tile);
   }
