@@ -56,7 +56,7 @@ function lsReviveValue(ctx: Ctx, c: CardInstance) {
 monster('Ryko, Lightsworn Hunter', {
   attribute: 'LIGHT',
   race: 'Beast',
-  level: 4,
+  level: 2, // LODT: Level 2 per YGOJSON (was 4)
   atk: 200,
   def: 100,
   types: ['flip'],
@@ -133,7 +133,7 @@ monster('Lumina, Lightsworn Summoner', {
 
 monster('Wulf, Lightsworn Beast', {
   attribute: 'LIGHT',
-  race: 'Beast',
+  race: 'Beast-Warrior', // LODT: Beast-Warrior per YGOJSON (was Beast)
   level: 4,
   atk: 2100,
   def: 300,
@@ -164,12 +164,13 @@ monster('Jain, Lightsworn Paladin', {
   atk: 1800,
   def: 1200,
   sets: LS,
-  text: 'If this card attacks, it gains 300 ATK during the Damage Step only. During each of your End Phases: Send the top 2 cards of your Deck to the GY.',
+  text: "If this card attacks an opponent's monster, it gains 300 ATK during the Damage Step only. During each of your End Phases: Send the top 2 cards of your Deck to the GY.",
   aiValue: 200,
   effects: [
     {
       kind: 'continuous',
-      mods: [{ q: 'atk', value: (ctx) => (ctx.battle && ctx.battle.inDamageStep && ctx.battle.attacker === ctx.self ? 300 : 0) }],
+      // LODT: only when attacking a monster (YGOJSON), not on direct attacks.
+      mods: [{ q: 'atk', value: (ctx) => (ctx.battle && ctx.battle.inDamageStep && ctx.battle.attacker === ctx.self && !!ctx.battle.target ? 300 : 0) }],
     },
     endPhaseMill(2),
   ],
@@ -182,7 +183,7 @@ monster('Garoth, Lightsworn Warrior', {
   atk: 1850,
   def: 1300,
   sets: LS,
-  text: 'Each time a card(s) is sent from your Deck to the GY by the effect of a "Lightsworn" monster, except "Garoth, Lightsworn Warrior": Send the top 5 cards of your Deck to the GY, then draw 1 card for each "Lightsworn" monster sent to the GY by this effect.',
+  text: 'If a card(s) is sent from your Deck to the GY by the effect of a "Lightsworn" monster you control, except "Garoth, Lightsworn Warrior": Send the top 2 cards of your Deck to the GY, then draw 1 card for each "Lightsworn" monster sent to the GY by this effect.',
   aiValue: 400,
   effects: [
     {
@@ -190,15 +191,16 @@ monster('Garoth, Lightsworn Warrior', {
       event: 'milled',
       range: ['mzone'],
       mandatory: true,
-      label: 'Send top 5, draw per Lightsworn',
+      label: 'Send top 2, draw per Lightsworn',
       categories: ['mill', 'draw'],
       eventFilter: (ctx, ev) => {
         const rc = ev.reasonCard as CardInstance | undefined;
         const c = ev.card as CardInstance;
-        return ctx.self.faceUp && c.owner === ctx.player && !!rc && rc.isMonster && rc.inSet('lightsworn') && rc.name !== 'Garoth, Lightsworn Warrior';
+        // LODT: the Lightsworn monster must be one you control (YGOJSON).
+        return ctx.self.faceUp && c.owner === ctx.player && !!rc && rc.isMonster && rc.inSet('lightsworn') && rc.name !== 'Garoth, Lightsworn Warrior' && rc.controller === ctx.player;
       },
       resolve: async (ctx) => {
-        const sent = await ctx.mill(5);
+        const sent = await ctx.mill(2); // LODT: top 2 per YGOJSON (was 5)
         const n = sent.filter((c) => c.location === 'grave' && isLS(c)).length;
         if (n) await ctx.draw(n);
       },
@@ -236,35 +238,36 @@ monster('Ehren, Lightsworn Monk', {
   ],
 });
 
+// LODT: corrected against YGOJSON — Level 5 (was 7), the effect needs a "Lightsworn" Tribute, sending the top
+// 4 cards is the cost, only the opponent's cards can be targeted, and there is no End Phase mill.
 monster('Celestia, Lightsworn Angel', {
   attribute: 'LIGHT',
   race: 'Fairy',
-  level: 7,
+  level: 5,
   atk: 2300,
   def: 200,
   sets: LS,
-  text: 'When this card is Tribute Summoned: You can target up to 2 cards on the field; send the top 4 cards of your Deck to the GY, and if you do, destroy those targets. During each of your End Phases: Send the top 4 cards of your Deck to the GY.',
+  text: 'When you Tribute Summon this card by Tributing a "Lightsworn" monster: You can send the top 4 cards of your Deck to the GY, then target up to 2 cards your opponent controls; destroy those targets.',
   aiValue: 300,
   effects: [
     {
       kind: 'trigger',
       event: 'tributeSummoned',
+      when: true,
       label: 'Send top 4: destroy up to 2 cards',
       categories: ['destroy', 'mill'],
-      eventFilter: (ctx, ev) => ev.card === ctx.self,
-      condition: (ctx) => ctx.deck().length >= 4 && ctx.field('both', (c) => c !== ctx.self && ctx.canTarget(c)).length > 0,
+      eventFilter: (ctx, ev) => ev.card === ctx.self && (ev.tributes ?? []).some((t) => isLS(t as CardInstance)),
+      condition: (ctx) => ctx.deck().length >= 4 && ctx.field('opp', (c) => ctx.canTarget(c)).length > 0,
       activate: async (ctx) => {
-        await ctx.selectTargets(ctx.field('both', (c) => c !== ctx.self), 1, 2, 'Target up to 2 cards on the field.', 'destroy');
+        await ctx.game.mill(ctx.player, 4, 'cost', ctx.self);
+        await ctx.selectTargets(ctx.field('opp'), 1, 2, 'Target up to 2 cards your opponent controls.', 'destroy');
       },
       resolve: async (ctx) => {
-        const sent = await ctx.mill(4);
-        if (sent.length < 4) return;
         const t = ctx.validTargets((c) => c.onField);
         if (t.length) await ctx.destroy(t);
       },
       ai: { score: (ctx) => (ctx.field('opp').length > 0 && ctx.deck().length > 12 ? 1 : 0) },
     },
-    endPhaseMill(4),
   ],
 });
 
@@ -513,24 +516,25 @@ spell('Lightsworn Sabre', 'equip', {
 });
 
 spell('Realm of Light', 'field', {
-  text: 'Each time a card(s) is sent from your Deck to the GY by the effect of a "Lightsworn" monster, place 1 Light Counter on this card. "Lightsworn" monsters you control gain 100 ATK for each Light Counter on this card. If this card would be destroyed, you can remove 2 Light Counters from it instead.',
+  // LODT: corrected against YGOJSON — counters for every card sent from your Deck to the GY (not only by
+  // "Lightsworn" effects), the boost applies to all "Lightsworn" monsters, and the 2-counter destruction
+  // replacement (card effects only) uses the ANPR replaceDestroy hook.
+  text: 'Each time a card(s) is sent from your Deck to the Graveyard, place 1 Shine Counter on this card. All "Lightsworn" monsters gain 100 ATK for each Shine Counter on this card. If this card would be destroyed by a card effect, remove 2 Shine Counters from this card instead.',
   sets: LS,
   aiValue: 200,
-  // Approximations: counters are placed without using the chain (via the event filter), and the
-  // destruction-replacement clause is not implemented (no replacement hook in the engine).
+  // Approximation: counters are placed without using the chain (via the event filter).
   effects: [
     { kind: 'activate', categories: ['atkChange'], ai: { score: (ctx) => (ctx.faceUpMonsters('me', isLS).length ? 25 : 12) } },
     {
       kind: 'trigger',
       event: 'milled',
       range: ['fzone'],
-      label: 'Light Counter',
+      label: 'Shine Counter',
       eventFilter: (ctx, ev) => {
         const self = ctx.self;
-        if (!self.faceUp || !self.activeOnField) return false;
-        const rc = ev.reasonCard as CardInstance | undefined;
+        if (!self.faceUp || !self.activeOnField || ctx.game.isNegated(self)) return false;
         const c = ev.card as CardInstance;
-        if (c.owner !== self.controller || !rc || !rc.isMonster || !rc.inSet('lightsworn')) return false;
+        if (c.owner !== self.controller) return false;
         if (self.flags.realmBatch !== ev.batch) {
           self.flags.realmBatch = ev.batch;
           self.counters.light = (self.counters.light ?? 0) + 1;
@@ -544,10 +548,21 @@ spell('Realm of Light', 'field', {
         {
           q: 'atk',
           to: 'cards',
-          filter: (ctx, c: CardInstance) => c.faceUpMonster && c.controller === ctx.player && c.inSet('lightsworn'),
+          filter: (_ctx, c: CardInstance) => c.faceUpMonster && c.inSet('lightsworn'),
           value: (ctx) => 100 * (ctx.self.counters.light ?? 0),
         },
       ],
+    },
+    {
+      kind: 'continuous',
+      range: ['fzone'],
+      replaceDestroy: async (ctx, cards, reason) => {
+        const self = ctx.self;
+        if (reason !== 'effect' || !cards.includes(self) || (self.counters.light ?? 0) < 2) return [];
+        self.counters.light = (self.counters.light ?? 0) - 2;
+        ctx.log(`${self.name}: 2 Shine Counters are removed instead of destroying it.`);
+        return [self];
+      },
     },
   ],
 });
