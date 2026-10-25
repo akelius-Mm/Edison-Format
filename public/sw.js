@@ -1,9 +1,14 @@
 // Offline support: the app shell is cached on first visit; card images are cached as they load.
-const VERSION = 'edison-v4';
+const VERSION = 'edison-v5';
 const SHELL = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './apple-touch-icon.png'];
 
 self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(VERSION).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));
+  e.waitUntil(
+    caches
+      .open(VERSION)
+      .then((c) => c.addAll(SHELL.map((u) => new Request(u, { cache: 'reload' }))))
+      .then(() => self.skipWaiting()),
+  );
 });
 
 self.addEventListener('activate', (e) => {
@@ -20,10 +25,13 @@ self.addEventListener('fetch', (e) => {
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
 
-  // Pages: network first so updates arrive, cache as fallback for offline play.
+  // The version check must always reach the network.
+  if (url.origin === self.location.origin && url.pathname.endsWith('/version.json')) return;
+
+  // Pages: network first (skipping the browser cache) so updates arrive; cache as fallback offline.
   if (req.mode === 'navigate') {
     e.respondWith(
-      fetch(req)
+      fetch(req.url, { cache: 'no-cache', credentials: 'same-origin' })
         .then((res) => {
           const copy = res.clone();
           caches.open(VERSION).then((c) => c.put('./index.html', copy));
