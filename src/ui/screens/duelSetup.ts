@@ -129,7 +129,7 @@ export function duelSetupScreen(): Screen {
     ),
   );
 
-  const startBtn = button('Duel!', () => void start(), { variant: 'primary', icon: 'swords', cls: 'ui-btn-lg start-btn' });
+  const startBtn = button('Start duel', () => void start(), { variant: 'primary', icon: 'swords', cls: 'ui-btn-lg start-btn' });
   const formatSeg = segmented<1 | 3>(
     [
       { value: 1, label: 'Single game' },
