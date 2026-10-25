@@ -238,8 +238,8 @@ export async function playVsAI(mine: DeckInfo, opp: DeckInfo, persona: PersonaSt
     context: `Duel vs AI · ${persona.difficulty[0].toUpperCase() + persona.difficulty.slice(1)}`,
     actions: [
       { label: 'Rematch', variant: 'primary', icon: 'refresh', onClick: () => void playVsAI(mine, opp, persona, bestOf) },
-      { label: 'Change setup', icon: 'swords', onClick: () => go('duel') },
-      { label: 'Main menu', icon: 'back', onClick: () => go('title') },
+      { label: 'New duel', icon: 'swords', onClick: () => go('duel') },
+      { label: 'Home', icon: 'home', onClick: () => go('title') },
     ],
   });
 }
@@ -288,8 +288,8 @@ export function exhibitionScreen(): Screen {
       context: 'Exhibition match',
       actions: [
         { label: 'Watch again', variant: 'primary', icon: 'refresh', onClick: () => void watch(a, b) },
-        { label: 'New exhibition', icon: 'eye', onClick: () => go('exhibition') },
-        { label: 'Main menu', icon: 'back', onClick: () => go('title') },
+        { label: 'New match', icon: 'eye', onClick: () => go('exhibition') },
+        { label: 'Home', icon: 'home', onClick: () => go('title') },
       ],
     });
   }

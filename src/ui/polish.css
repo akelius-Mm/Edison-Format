@@ -1052,7 +1052,7 @@ button.mu-side:active {
 }
 .res-hero {
   position: relative;
-  height: clamp(250px, 40vh, 380px);
+  height: clamp(220px, 34vh, 380px);
   overflow: hidden;
   background: radial-gradient(120% 90% at 50% 10%, #24262c 0%, #0e0f12 70%);
 }
