@@ -10,12 +10,6 @@
   "theme_color": "#0b0c0e",
   "icons": [
     {
-      "src": "https://images.ygoprodeck.com/images/cards_cropped/65192027.jpg",
-      "sizes": "624x624",
-      "type": "image/jpeg",
-      "purpose": "any"
-    },
-    {
       "src": "icon-192.png",
       "sizes": "192x192",
       "type": "image/png"
