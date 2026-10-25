@@ -97,6 +97,8 @@ export interface RoomOptions {
   snapshot?: RoomSnapshot;
   heartbeatMs?: number;
   timeoutMs?: number;
+  /** Only this clientId may join (Friends Locals: the paired opponent). */
+  expectPeer?: string;
 }
 
 const sid = () => Math.random().toString(36).slice(2, 10);
@@ -156,6 +158,7 @@ export class Room {
       accept: (h) => {
         if (h.proto !== PROTOCOL_VERSION || h.build !== o.build) return 'version';
         if (h.role === this.role) return 'busy';
+        if (o.expectPeer && h.player.clientId !== o.expectPeer) return 'busy';
         // a different phone while the friend is connected: the room is taken
         if (this.peer && h.player.clientId !== this.peer.clientId && this.session.connected) return 'busy';
         return true;
@@ -204,10 +207,10 @@ export class Room {
   }
 
   /** Host: start the match. `seed` and `skipFirstDraw` come from the host. */
-  startMatch(opts: { seed?: number; skipFirstDraw: boolean }) {
+  startMatch(opts: { seed?: number; skipFirstDraw: boolean; id?: string }) {
     if (!this.canStart) return false;
     const start: MatchStart = {
-      id: `${this.code}-${Date.now().toString(36)}`,
+      id: opts.id ?? `${this.code}-${Date.now().toString(36)}`,
       seed: opts.seed ?? Math.floor(Math.random() * 2 ** 31),
       bestOf: this.bestOf,
       skipFirstDraw: opts.skipFirstDraw,

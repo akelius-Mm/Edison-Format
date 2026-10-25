@@ -4,7 +4,7 @@ import '../cards/cards.css';
 import './duel.css';
 import { createAI } from '../../ai/ai';
 import type { CardData, CardInstance, EffectDef } from '../../engine/card';
-import type { Action, Activation, ConfirmRequest, OptionRequest, ResponseRequest, SelectRequest } from '../../engine/controller';
+import type { Action, Activation, ConfirmRequest, OptionRequest, PlayerController, ResponseRequest, SelectRequest } from '../../engine/controller';
 import { Ctx } from '../../engine/ctx';
 import { Game, GameOver, phaseName, type LogEntry } from '../../engine/game';
 import { RecordingController } from '../../engine/replay';
@@ -120,8 +120,10 @@ class DuelScreen implements HumanUI {
     // One seed drives the shuffle, coin toss, card effects and the AI, so a duel is reproducible
     // from its seed, decks and the human's decisions (see engine/replay.ts).
     const seed = opts.seed ?? Math.floor(Math.random() * 2 ** 31);
-    this.replaying = !!opts.replay?.length;
+    this.replaying = !!opts.replay?.length || !!opts.spectate?.catchUp;
     const controllers = opts.sides.map((side, i) => {
+      // Friends Locals spectating: both seats come from the players' decision logs.
+      if (opts.spectate) return this.spectateSeat(opts.spectate.controllers[i]);
       // Play a friend: the friend's seat is driven from the network.
       if (opts.remote && side.control !== 'human') return opts.remote;
       if (side.control === 'human') {
@@ -159,6 +161,7 @@ class DuelScreen implements HumanUI {
     this.panels = [p0, p1];
     for (const p of this.panels) p.onLpRoll = (ms, up) => this.sfx.lpTicker(ms, up);
     this.phaseBar = new PhaseBar(this.me);
+    if (this.spectator) this.phaseBar.setSpectatorLabels([opts.sides[0].name, opts.sides[1].name]);
     this.chain = new ChainStack(this.me);
     this.log = new LogPanel(this.me);
     this.preview = new PreviewPanel(this.game);
@@ -261,6 +264,7 @@ class DuelScreen implements HumanUI {
         get restoring() {
           return self.replaying;
         },
+        endCatchUp: () => this.endCatchUp(),
       });
     }
   }
@@ -523,11 +527,30 @@ class DuelScreen implements HumanUI {
     return out;
   }
 
+  /** A watched seat: paced like the AI (so pause and speed work), still reporting human. */
+  private spectateSeat(c: PlayerController): PlayerController {
+    return new Proxy(c, {
+      get: (t, k) => {
+        const v = (t as any)[k];
+        if (typeof v !== 'function') return v;
+        return async (...a: unknown[]) => {
+          await this.aiPace(k === 'chooseAction' ? 90 : 40);
+          return v.apply(t, a);
+        };
+      },
+    });
+  }
+
+  /** Spectating: the decisions made before we joined are in; show the board live. */
+  endCatchUp() {
+    if (this.opts.spectate) this.endReplay();
+  }
+
   /** Resuming: hide the board while the saved decisions are fed back. */
   private beginReplay() {
     this.sfx.enabled = false;
     this.root.classList.add('is-restoring');
-    this.restoringEl = h('div', 'duel-restoring', '<div class="duel-restoring-box"><span class="spinner"></span><b>Restoring your duel…</b></div>');
+    this.restoringEl = h('div', 'duel-restoring', `<div class="duel-restoring-box"><span class="spinner"></span><b>${this.opts.spectate ? 'Catching up…' : 'Restoring your duel…'}</b></div>`);
     this.root.appendChild(this.restoringEl);
   }
 

@@ -19,8 +19,9 @@ function triedFor(id: string) {
   }
 }
 
-// a duel, or an online room (reloading would drop the connection to the friend)
-const busy = () => document.body.classList.contains('in-duel') || /^#\/?friend\b/.test(location.hash);
+// a duel, an online room (reloading would drop the connection to the friend), or a Friends Locals
+// event in progress anywhere in the app (the organiser's phone runs it; players are in rounds)
+const busy = () => document.body.classList.contains('in-duel') || document.body.classList.contains('in-online') || /^#\/?friend(-locals)?\b/.test(location.hash);
 
 function reloadNow() {
   if (reloading) return;

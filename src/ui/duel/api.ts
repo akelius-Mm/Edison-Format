@@ -52,6 +52,12 @@ export interface DuelOptions {
   localDriver?: PlayerController;
   /** Called once the screen is built: lets the caller end the game and decorate the board. */
   onMount?: (ctl: DuelControl) => void;
+  /**
+   * Friends Locals spectating: both seats are played from the network (the two players' decision
+   * logs); the board shows public information only. With `catchUp` the decisions already made are
+   * fed instantly behind a "Catching up" cover until the caller calls `endCatchUp()`.
+   */
+  spectate?: { controllers: [PlayerController, PlayerController]; catchUp?: boolean };
   /** Overrides the result screen title (e.g. "Out of sync"). */
   resultTitle?: (res: { winner: PlayerId | null; reason: string }) => string | undefined;
 }
@@ -67,6 +73,8 @@ export interface DuelControl {
   onAbort(fn: (winner: PlayerId | null, reason: string) => void): void;
   /** The duel is replaying saved decisions (no animation yet). */
   readonly restoring: boolean;
+  /** Spectating: the stream caught up with the live game; start showing it. */
+  endCatchUp(): void;
 }
 
 export interface DuelResult {

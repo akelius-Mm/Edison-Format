@@ -124,6 +124,8 @@ export class PhaseBar {
   readonly el: HTMLElement;
   private items = new Map<Phase, HTMLElement>();
   private turnEl: HTMLElement;
+  /** Spectating: whose turn by name instead of "Your turn". */
+  private names: [string, string] | null = null;
   readonly btnBattle: HTMLButtonElement;
   readonly btnMain2: HTMLButtonElement;
   readonly btnEnd: HTMLButtonElement;
@@ -150,7 +152,8 @@ export class PhaseBar {
   update(game: Game) {
     const mine = game.turnPlayer === this.me;
     this.el.classList.toggle('is-opp-turn', !mine);
-    const t = game.turn ? `Turn ${game.turn} · <span>${mine ? 'Your turn' : "Opponent's turn"}</span>` : 'Preparing…';
+    const whose = this.names ? `${esc(this.names[game.turnPlayer])}'s turn` : mine ? 'Your turn' : "Opponent's turn";
+    const t = game.turn ? `Turn ${game.turn} · <span>${whose}</span>` : 'Preparing…';
     if (this.turnEl.innerHTML !== t) this.turnEl.innerHTML = t;
     const idx = PHASES.findIndex(([p]) => p === game.phase);
     PHASES.forEach(([p], i) => {
@@ -161,7 +164,8 @@ export class PhaseBar {
   }
 
   setSpectatorLabels(names: [string, string]) {
-    void names;
+    this.names = names;
+    this.el.classList.add('is-spectating');
   }
 }
 

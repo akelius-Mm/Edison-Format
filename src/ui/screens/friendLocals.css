@@ -1,0 +1,597 @@
+/* Friends Locals: landing, lobby, the event hub (round, standings, bracket, organiser), the
+   ceremony, and the spectator overlay. Builds on friend.css (fr-*) and locals.css (lx-*). */
+
+.fl-pane,
+.fl-event,
+.fl-lobby {
+  min-width: 0;
+}
+
+/* ---------------------------------------------------------------- landing */
+.fl-link {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 64px;
+  padding: 12px 14px;
+  border: 1px solid var(--gold-line);
+  border-radius: 16px;
+  background: var(--grp, #17181b);
+  color: var(--text);
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+.fl-link > .icon {
+  width: 16px;
+  height: 16px;
+  color: var(--muted);
+  flex: none;
+}
+.fl-link-ic,
+.fl-how-ic {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  flex: none;
+  border-radius: 10px;
+  background: rgba(201, 182, 142, 0.12);
+  color: var(--gold-hi);
+}
+.fl-link-ic .icon,
+.fl-how-ic .icon {
+  width: 18px;
+  height: 18px;
+}
+.fl-link-text {
+  flex: 1;
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.fl-link-text b {
+  font-weight: 600;
+}
+.fl-link-text span {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.3;
+}
+
+.fl-how {
+  display: grid;
+  gap: 1px;
+  border-radius: 16px;
+  overflow: hidden;
+  background: var(--line);
+}
+.fl-how-row {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 12px 14px;
+  background: var(--grp, #17181b);
+}
+.fl-how-row > span:last-child {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.fl-how-row b {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+}
+.fl-how-row span span {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.fl-hist {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 56px;
+}
+.fl-hist-place {
+  flex: none;
+  width: 42px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  background: var(--fill);
+  color: var(--text-2);
+  font: 700 14px var(--font);
+  font-variant-numeric: tabular-nums;
+}
+.fl-hist-place.is-first {
+  background: rgba(201, 182, 142, 0.18);
+  color: var(--gold-hi);
+}
+.fl-hist-text {
+  flex: 1;
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.fl-hist-text b,
+.fl-hist-text span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fl-hist-text b {
+  font-weight: 600;
+  font-size: 15px;
+}
+.fl-hist-text span {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+/* ---------------------------------------------------------------- banners and small pieces */
+.fl-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: rgba(217, 185, 111, 0.12);
+  border: 1px solid rgba(217, 185, 111, 0.25);
+}
+.fl-banner > span:last-child {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.fl-banner b {
+  color: #ecd9a8;
+  font-weight: 600;
+}
+.fl-banner small {
+  color: var(--text-2);
+  font-size: 13px;
+  line-height: 1.35;
+}
+.fl-banner .spinner,
+.fl-wait .spinner,
+.fl-watch-wait .spinner {
+  display: inline-block;
+  width: 18px;
+  height: 18px;
+  flex: none;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.15);
+  border-top-color: var(--gold, #c9b68e);
+  animation: fr-spin 0.8s linear infinite;
+}
+.fl-tag {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 7px;
+  border-radius: 99px;
+  background: rgba(201, 182, 142, 0.16);
+  color: var(--gold-hi);
+  font-size: 11px;
+  font-weight: 600;
+  vertical-align: 2px;
+}
+.fl-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  padding: 0 12px;
+  border-radius: 99px;
+  background: var(--fill);
+  color: var(--text-2);
+  font-size: 13px;
+  font-weight: 500;
+}
+.fl-format-ro {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.fl-kick {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  margin-right: -6px;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+}
+.fl-kick .icon {
+  width: 14px;
+  height: 14px;
+}
+.fr-seat.is-away {
+  opacity: 0.7;
+}
+.fl-players .fr-seat-text b {
+  display: flex;
+  align-items: center;
+}
+
+/* settings rows (organiser) */
+.fl-settings {
+  display: grid;
+  gap: 1px;
+  border-radius: 16px;
+  overflow: hidden;
+  background: var(--line);
+}
+.fl-set-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  padding: 12px 14px;
+  background: var(--grp, #17181b);
+  min-width: 0;
+}
+.fl-set-k {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  flex: 1 1 140px;
+}
+.fl-set-k b {
+  font-weight: 600;
+  font-size: 15px;
+}
+.fl-set-k small {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.3;
+}
+.fl-set-row .seg {
+  flex: 0 1 auto;
+  max-width: 100%;
+}
+.fl-set-row .seg-btn {
+  padding-left: 10px;
+  padding-right: 10px;
+  white-space: nowrap;
+}
+
+/* ---------------------------------------------------------------- event header and tabs */
+.fl-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+}
+.fl-head > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+.fl-head .home-eyebrow {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fl-head-title {
+  margin: 0;
+  font: 700 26px/1.1 var(--font-display);
+  letter-spacing: -0.02em;
+  color: var(--text);
+}
+.fl-timer {
+  flex: none;
+  padding: 6px 12px;
+  border-radius: 99px;
+  background: var(--fill);
+  font: 600 15px ui-monospace, 'SF Mono', Menlo, monospace;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+.fl-timer.is-over {
+  background: rgba(217, 143, 143, 0.18);
+  color: #f0c4c4;
+}
+.fl-tabs .seg {
+  width: 100%;
+}
+.fl-tabs .seg-btn {
+  flex: 1;
+  padding-left: 6px;
+  padding-right: 6px;
+  white-space: nowrap;
+}
+
+/* ---------------------------------------------------------------- your match */
+.fl-round {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+.fl-card {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border-radius: 18px;
+  background: var(--grp, #17181b);
+  border: 1px solid var(--line-2);
+  min-width: 0;
+}
+.fl-card.is-live {
+  border-color: var(--gold-line);
+}
+.fl-card.is-win {
+  border-color: rgba(127, 191, 143, 0.35);
+}
+.fl-card p {
+  margin: 0;
+  color: var(--text-2);
+  font-size: 14px;
+  line-height: 1.4;
+}
+.fl-card-title {
+  display: block;
+  font: 700 20px/1.2 var(--font-display);
+  color: var(--text);
+}
+.fl-card-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+.fl-card-head > span:last-child {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.fl-card-head small {
+  color: var(--muted);
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fl-card-res {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+}
+.fl-card-res b {
+  font: 700 22px var(--font-display);
+  color: var(--text);
+}
+.fl-card-res span {
+  font: 700 22px var(--font-display);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-2);
+}
+.fl-card-res small {
+  color: var(--muted);
+  font-size: 13px;
+}
+.fl-card.is-win .fl-card-res b {
+  color: #a9dcb5;
+}
+.fl-card-actions {
+  display: grid;
+  gap: 8px;
+}
+.fl-wait {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text-2);
+  font-size: 14px;
+  line-height: 1.35;
+}
+.fl-match-pane:empty {
+  display: none;
+}
+.fl-id {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 44px;
+  border: 0;
+  border-radius: 14px;
+  background: var(--fill);
+  color: var(--text-2);
+  font: 500 14px var(--font);
+  cursor: pointer;
+}
+.fl-id .icon {
+  width: 16px;
+  height: 16px;
+}
+.fl-id.is-on {
+  background: rgba(201, 182, 142, 0.16);
+  color: var(--gold-hi);
+}
+
+/* pairings sheet: the watch button sits in the middle column */
+.fl-sheet .fl-watch {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 28px;
+  margin: 0 auto;
+  border: 0;
+  border-radius: 8px;
+  background: var(--lx-ink, #1d1d1f);
+  color: var(--lx-paper, #efede6);
+  cursor: pointer;
+}
+.fl-sheet .fl-watch .icon {
+  width: 16px;
+  height: 16px;
+}
+.fl-sheet .lx-mid.is-dispute {
+  color: #b5553f;
+}
+
+/* ---------------------------------------------------------------- organiser */
+.fl-org {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+.fl-org-list,
+.fl-org-players {
+  display: grid;
+  gap: 1px;
+  border-radius: 16px;
+  overflow: hidden;
+  background: var(--line);
+}
+.fl-org-row {
+  display: grid;
+  gap: 6px;
+  padding: 12px 14px;
+  background: var(--grp, #17181b);
+  min-width: 0;
+}
+.fl-org-row.is-dispute {
+  box-shadow: inset 3px 0 0 #d98f8f;
+}
+.fl-org-top {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+.fl-org-top b {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fl-org-tbl {
+  flex: none;
+  color: var(--muted);
+  font: 600 12px ui-monospace, 'SF Mono', Menlo, monospace;
+}
+.fl-org-status {
+  color: var(--text-2);
+  font-size: 13px;
+  line-height: 1.35;
+}
+.fl-org-row.is-dispute .fl-org-status {
+  color: #f0c4c4;
+  font-weight: 600;
+}
+.fl-org-detail {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+.fl-org-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 2px;
+}
+.fl-org-next {
+  display: grid;
+  gap: 8px;
+}
+.fl-org-next .fr-hint,
+.fl-org-foot,
+.fl-cer-foot {
+  text-align: center;
+}
+.fl-org-player {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 52px;
+  padding: 8px 14px;
+  background: var(--grp, #17181b);
+}
+.fl-org-player b {
+  font-weight: 600;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fl-org-player small {
+  flex: 1;
+  color: var(--muted);
+  font-size: 13px;
+  white-space: nowrap;
+}
+.fl-org-player.is-drop {
+  opacity: 0.6;
+}
+.fl-dot {
+  width: 8px;
+  height: 8px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--faint);
+}
+.fl-dot.on {
+  background: #7fbf8f;
+}
+
+/* ---------------------------------------------------------------- ceremony */
+.fl-ceremony {
+  min-width: 0;
+}
+
+/* ---------------------------------------------------------------- spectating */
+.fl-watch-wait {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 10px;
+  padding: 24px;
+  text-align: center;
+  background: var(--bg, #0e0f11);
+  color: var(--text-2);
+}
+.fl-watch-wait b {
+  color: var(--text);
+  font: 600 18px var(--font-display);
+}
+.fl-watch-wait span {
+  font-size: 14px;
+}
+
+/* the waiting line FriendSession renders into the match card */
+.fl-match-pane .fl-wait {
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--fill);
+}
+
+@media (max-width: 380px) {
+  .fl-set-row .seg-btn {
+    padding-left: 7px;
+    padding-right: 7px;
+    font-size: 13px;
+  }
+  .fl-head-title {
+    font-size: 22px;
+  }
+}
+
+/* "Watching · Table 2" on the spectator board */
+.fl-watch-chip .icon {
+  width: 14px;
+  height: 14px;
+}
