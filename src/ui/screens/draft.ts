@@ -361,14 +361,11 @@ function homeView(ctl: Ctl) {
     'div',
     { class: 'dr-home' },
     resumeCard,
-    h(
-      'section',
-      { class: 'dr-card' },
-      h('div', { class: 'dr-hero' }, packArt(0, 'Booster Pack', '15 cards'), h('div', null, heroTitle, heroText)),
-    ),
+    resumeCard ? h('div', { class: 'dr-section-title', style: { margin: '6px 0 -6px' } }, h('span', null, 'New event')) : null,
     h(
       'section',
       { class: 'dr-card dr-opts' },
+      h('div', { class: 'dr-hero' }, packArt(0, 'Booster Pack', '15 cards'), h('div', null, heroTitle, heroText)),
       h('div', { class: 'dr-opt' }, h('span', { class: 'dr-opt-label' }, 'Format'), segmented([{ value: 'draft', label: 'Draft' }, { value: 'sealed', label: 'Sealed' }], form.mode, (v) => ((form.mode = v as DraftForm['mode']), saveForm(), sync()), 'Format')),
       packsOpt,
       h('div', { class: 'dr-opt' }, h('span', { class: 'dr-opt-label' }, 'Matches'), segmented<number>([{ value: 1, label: 'Best of 1' }, { value: 3, label: 'Best of 3' }], form.bestOf, (v) => ((form.bestOf = v as 1 | 3), saveForm()), 'Matches')),
@@ -638,6 +635,7 @@ function pickView(ctl: Ctl, s: DraftState) {
         t.style.setProperty('--t-pass', `${ms(360)}ms`);
       });
     }
+    if (enterDir && window.scrollY > 0) window.scrollTo({ top: 0, behavior: speed() > 0 ? 'smooth' : 'auto' });
     grid.replaceChildren(...tiles);
     select(null);
     updateHeader();
@@ -1026,7 +1024,7 @@ function hubView(ctl: Ctl, s: DraftState) {
   const matchCard = h(
     'section',
     { class: 'dr-match' },
-    h('div', { class: 'dr-eyebrow' }, `Round ${n} of ${TOURNEY_ROUNDS} · ${s.bestOf === 3 ? 'Best of 3' : 'Best of 1'}`),
+    h('div', { class: 'dr-eyebrow' }, `Your match · ${s.bestOf === 3 ? 'Best of 3' : 'Best of 1'}`),
     h(
       'div',
       { class: 'dr-vs' },
@@ -1066,7 +1064,7 @@ function hubView(ctl: Ctl, s: DraftState) {
     h('div', { class: 'dr-section-title' }, h('span', null, 'Standings'), h('b', null, `You ${rec.text}`)),
     standingsList(s),
   );
-  ctl.show(frame(`Round ${n} of ${TOURNEY_ROUNDS}`, { subtitle: `${modeLabel(s)} · ${deckNameOf(s)}`, ...backToHome(ctl) }, body), 'hub');
+  ctl.show(frame(`Round ${n}`, { eyebrow: `${modeLabel(s)} · Round ${n} of ${TOURNEY_ROUNDS}`, subtitle: `Playing “${deckNameOf(s)}” · ${rec.text}`, ...backToHome(ctl) }, body), 'hub');
 
   async function play() {
     if (!m || !m.b) return;

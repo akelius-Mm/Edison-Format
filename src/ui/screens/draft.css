@@ -169,20 +169,25 @@ body.dr-immersive.has-tabbar .dr-root .frame {
 }
 .dr-hero {
   display: grid;
-  grid-template-columns: 112px 1fr;
-  gap: 18px;
+  grid-template-columns: 84px 1fr;
+  gap: 16px;
   align-items: center;
-  padding: 6px 2px 0;
+  padding: 0 0 4px;
 }
 .dr-hero p {
-  margin: 6px 0 0;
+  margin: 4px 0 0;
   color: var(--text-2);
-  font-size: 14.5px;
-  line-height: 1.45;
+  font-size: 13.5px;
+  line-height: 1.42;
+}
+.dr-hero .dr-h2 {
+  font-size: 19px;
 }
 .dr-hero .dr-pack {
-  width: 112px;
+  --pw: 84px;
+  width: 84px;
   transform: rotate(-4deg);
+  filter: drop-shadow(0 8px 14px rgba(0, 0, 0, 0.5));
 }
 .dr-opts {
   display: grid;
@@ -281,7 +286,7 @@ body.dr-immersive.has-tabbar .dr-root .frame {
 .dr-pack-mark {
   font-family: var(--font-display);
   font-weight: 700;
-  font-size: clamp(11px, calc(var(--pw, 200px) * 0.085), 22px);
+  font-size: clamp(7px, calc(var(--pw, 200px) * 0.085), 22px);
   letter-spacing: 0.32em;
   color: var(--gold-hi);
   text-align: center;
@@ -310,7 +315,7 @@ body.dr-immersive.has-tabbar .dr-root .frame {
   background: linear-gradient(180deg, transparent 55%, rgba(0, 0, 0, 0.45));
 }
 .dr-pack-name {
-  font-size: clamp(9px, calc(var(--pw, 200px) * 0.06), 14px);
+  font-size: clamp(6.5px, calc(var(--pw, 200px) * 0.06), 14px);
   font-weight: 600;
   color: var(--text);
   text-align: center;
@@ -318,7 +323,7 @@ body.dr-immersive.has-tabbar .dr-root .frame {
 }
 .dr-pack-sub {
   margin-top: 3px;
-  font-size: clamp(8px, calc(var(--pw, 200px) * 0.046), 11.5px);
+  font-size: clamp(5.5px, calc(var(--pw, 200px) * 0.046), 11.5px);
   color: var(--muted);
   text-align: center;
 }
@@ -1177,6 +1182,9 @@ body.dr-immersive.has-tabbar .dr-root .frame {
 }
 .dr-pair > span:last-child {
   text-align: right;
+}
+.dr-pair.me {
+  background: rgba(201, 182, 142, 0.07);
 }
 .dr-pair > span.won {
   color: var(--text);
