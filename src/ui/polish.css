@@ -48,8 +48,8 @@ a,
 /* Screens transition: short slide, no blur */
 .screen {
   transition:
-    opacity 0.28s var(--ease-out),
-    transform 0.28s var(--ease-out) !important;
+    opacity var(--dur-slow) var(--ease-out),
+    transform var(--dur-slow) var(--ease-out) !important;
   filter: none !important;
 }
 .screen-enter {
@@ -83,8 +83,8 @@ body.has-tabbar .frame {
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
   transition:
-    background 0.2s ease,
-    border-color 0.2s ease;
+    background var(--dur-base) var(--ease-out),
+    border-color var(--dur-base) var(--ease-out);
 }
 .frame.is-scrolled .frame-head,
 .frame--compact .frame-head {
@@ -116,9 +116,7 @@ body.has-tabbar .frame {
 .frame-back .icon svg {
   stroke-width: 2.2;
 }
-.frame-back:active {
-  opacity: 0.55;
-}
+
 .frame-titles {
   min-width: 0;
   max-width: 56vw;
@@ -131,7 +129,7 @@ body.has-tabbar .frame {
   overflow: hidden;
   text-overflow: ellipsis;
   margin: 0;
-  transition: opacity 0.2s ease;
+  transition: opacity var(--dur-base) var(--ease-out);
 }
 .frame--large .frame-head .frame-title {
   opacity: 0;
@@ -204,16 +202,14 @@ body.has-tabbar .frame {
   color: var(--text);
   box-shadow: none !important;
   transition:
-    transform 0.12s ease,
-    background 0.15s ease,
-    opacity 0.15s ease;
+    transform var(--dur-fast) var(--ease-out),
+    background var(--dur-fast) var(--ease-out),
+    opacity var(--dur-fast) var(--ease-out);
 }
 .ui-btn:hover {
   background: #2a2b30;
 }
-.ui-btn:active {
-  transform: scale(0.97);
-}
+
 .ui-btn-sm {
   min-height: 36px;
   border-radius: 10px !important;
@@ -274,9 +270,9 @@ body.has-tabbar .frame {
   letter-spacing: -0.01em;
   cursor: pointer;
   transition:
-    transform 0.15s ease,
-    background 0.2s ease,
-    opacity 0.2s ease;
+    transform var(--dur-fast) var(--ease-out),
+    background var(--dur-base) var(--ease-out),
+    opacity var(--dur-base) var(--ease-out);
 }
 .cta .icon {
   width: 20px;
@@ -285,9 +281,7 @@ body.has-tabbar .frame {
 .cta:hover {
   background: #fff;
 }
-.cta:active {
-  transform: scale(0.97);
-}
+
 .cta:disabled {
   opacity: 0.4;
   cursor: not-allowed;
@@ -330,7 +324,7 @@ body.has-tabbar .frame {
   text-overflow: ellipsis;
   box-shadow: none !important;
   cursor: pointer;
-  transition: background 0.18s ease;
+  transition: background var(--dur-base) var(--ease-out);
 }
 .seg-btn:hover {
   background: rgba(255, 255, 255, 0.04) !important;
@@ -358,12 +352,12 @@ body.has-tabbar .frame {
 .toggle-track {
   width: 51px !important;
   height: 31px !important;
-  border-radius: 99px !important;
+  border-radius: 999px !important;
   background: var(--fill-2) !important;
   border: 0 !important;
   box-shadow: none !important;
   position: relative;
-  transition: background 0.2s ease;
+  transition: background var(--dur-base) var(--ease-out);
 }
 .toggle-thumb {
   position: absolute;
@@ -375,7 +369,7 @@ body.has-tabbar .frame {
   background: #fff !important;
   box-shadow: 0 3px 8px rgba(0, 0, 0, 0.3) !important;
   transform: none;
-  transition: transform 0.22s var(--ease-out) !important;
+  transition: transform var(--dur-base) var(--ease-out) !important;
 }
 .toggle-input:checked + .toggle-track {
   background: #30a46c !important;
@@ -468,9 +462,7 @@ body.has-tabbar .frame {
   width: 14px;
   height: 14px;
 }
-.lob-link:active {
-  opacity: 0.55;
-}
+
 .lob-note {
   margin: 0;
   display: -webkit-box;
@@ -602,12 +594,10 @@ body.has-tabbar .frame {
   cursor: pointer;
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.07);
   transition:
-    transform 0.18s var(--ease-out),
-    box-shadow 0.18s ease;
+    transform var(--dur-base) var(--ease-out),
+    box-shadow var(--dur-base) var(--ease-out);
 }
-.dkc-box:active {
-  transform: scale(0.97);
-}
+
 .dkc-box.on {
   box-shadow:
     inset 0 0 0 2px var(--cta),
@@ -689,7 +679,7 @@ body.has-tabbar .frame {
   top: 8px;
   left: 8px;
   padding: 3px 8px;
-  border-radius: 99px;
+  border-radius: 999px;
   background: rgba(10, 10, 12, 0.55);
   -webkit-backdrop-filter: blur(8px);
   backdrop-filter: blur(8px);
@@ -711,8 +701,8 @@ body.has-tabbar .frame {
   opacity: 0;
   transform: scale(0.6);
   transition:
-    opacity 0.18s ease,
-    transform 0.25s var(--ease-out);
+    opacity var(--dur-base) var(--ease-out),
+    transform var(--dur-base) var(--ease-out);
 }
 .dkc-check .icon {
   width: 14px;
@@ -847,7 +837,7 @@ body.has-tabbar .frame:has(.lob-bar) {
   color: var(--faint);
   font: 600 15px var(--font);
   cursor: pointer;
-  transition: color 0.2s ease;
+  transition: color var(--dur-base) var(--ease-out);
 }
 .flow-num {
   display: grid;
@@ -859,8 +849,8 @@ body.has-tabbar .frame:has(.lob-bar) {
   color: var(--muted);
   font: 700 13px var(--font);
   transition:
-    background 0.2s ease,
-    color 0.2s ease;
+    background var(--dur-base) var(--ease-out),
+    color var(--dur-base) var(--ease-out);
 }
 .flow-step-btn.on {
   color: var(--text);
@@ -930,7 +920,7 @@ body.has-tabbar .frame:has(.lob-bar) {
   gap: 8px;
   margin: 2px 0 18px;
   padding: 10px;
-  border-radius: 18px;
+  border-radius: 20px;
   background: var(--grp);
 }
 .mu-side {
@@ -954,9 +944,7 @@ button.mu-side {
   cursor: pointer;
   border-radius: 12px;
 }
-button.mu-side:active {
-  opacity: 0.6;
-}
+
 .mu-art {
   --deck: #555;
   flex: none;
@@ -1086,8 +1074,8 @@ button.mu-side:active {
   opacity: 0;
   transform: scale(1.08);
   transition:
-    opacity 0.8s ease,
-    transform 5s ease-out;
+    opacity 0.8s var(--ease-out),
+    transform 5s var(--ease-out);
 }
 .res-art.has-art {
   opacity: 0.85;
@@ -1162,7 +1150,7 @@ button.mu-side:active {
   align-items: center;
   gap: 12px;
   padding: 16px;
-  border-radius: 18px;
+  border-radius: 20px;
   background: var(--grp);
 }
 .res-side {
@@ -1390,7 +1378,7 @@ button.mu-side:active {
   gap: 12px !important;
   margin: 18px 0 8px !important;
   padding: 16px;
-  border-radius: 18px;
+  border-radius: 20px;
   background: rgba(22, 23, 26, 0.82);
   -webkit-backdrop-filter: blur(16px);
   backdrop-filter: blur(16px);
@@ -1567,7 +1555,7 @@ button.mu-side:active {
 .ios-row--nav,
 .ios-row--action {
   cursor: pointer;
-  transition: background 0.12s ease;
+  transition: background var(--dur-fast) var(--ease-out);
 }
 .ios-row--nav:active,
 .ios-row--action:active {
@@ -1682,7 +1670,7 @@ button.mu-side:active {
   min-height: 36px;
   padding: 0 14px;
   border: 0;
-  border-radius: 99px;
+  border-radius: 999px;
   background: var(--fill-2);
   color: var(--text);
   font: 600 14px var(--font);
@@ -1774,7 +1762,7 @@ a.ios-row {
 }
 .credit {
   display: grid;
-  gap: 3px;
+  gap: 4px;
   padding-top: 12px;
   border-top: 1px solid var(--sep);
   min-width: 0;
@@ -1910,7 +1898,7 @@ a.ios-row {
 .cz-matsw,
 .cz-sleeve {
   border-radius: 10px;
-  transition: box-shadow 0.18s ease;
+  transition: box-shadow var(--dur-base) var(--ease-out);
 }
 .cz-sleeve {
   display: block;
@@ -2045,15 +2033,15 @@ a.ios-row {
   min-height: 36px;
   padding: 0 14px;
   border: 0;
-  border-radius: 99px;
+  border-radius: 999px;
   background: var(--fill);
   color: var(--text-2);
   font: 500 14px var(--font);
   white-space: nowrap;
   cursor: pointer;
   transition:
-    background 0.15s ease,
-    color 0.15s ease;
+    background var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out);
   position: relative;
 }
 .chip-tab::after,
@@ -2308,7 +2296,7 @@ a.ios-row {
   display: inline-block;
   margin-left: 6px;
   padding: 1px 6px;
-  border-radius: 5px;
+  border-radius: 6px;
   background: rgba(201, 182, 142, 0.18);
   color: var(--gold-hi);
   font: 600 11px/1.5 var(--font);
@@ -2317,7 +2305,7 @@ a.ios-row {
 .diff-tag {
   flex: none;
   padding: 3px 8px;
-  border-radius: 99px;
+  border-radius: 999px;
   font: 600 12px var(--font);
   background: var(--fill);
   color: var(--text-2);
@@ -2412,7 +2400,7 @@ a.ios-row {
   display: grid;
   gap: 14px;
   padding: 16px;
-  border-radius: 22px;
+  border-radius: 20px;
   background: #15161a;
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.07);
 }
@@ -2425,7 +2413,7 @@ a.ios-row {
   background-size: cover;
   background-position: center 30%;
   opacity: 0;
-  transition: opacity 0.6s ease;
+  transition: opacity 0.6s var(--ease-out);
 }
 .mm2-bg.has-art {
   opacity: 0.35;
@@ -2460,7 +2448,7 @@ a.ios-row {
   width: 72px;
   height: 72px;
   margin-bottom: 8px;
-  border-radius: 18px;
+  border-radius: 20px;
   background: linear-gradient(160deg, color-mix(in srgb, var(--deck) 60%, #222), #141518);
   background-size: cover;
   background-position: center 30%;
@@ -2725,7 +2713,7 @@ a.ios-row {
   overflow: hidden;
   padding: 0 !important;
   border: 0 !important;
-  border-radius: 22px !important;
+  border-radius: 20px !important;
   background: #15161a !important;
   min-height: 300px;
   display: grid;
@@ -2979,9 +2967,7 @@ a.ios-row {
   width: 24px;
   height: 24px;
 }
-.head-icon-btn:active {
-  opacity: 0.55;
-}
+
 .head-count {
   font-size: 13px;
   color: var(--muted);
@@ -2995,7 +2981,7 @@ a.ios-row {
   max-width: 34vw;
   min-height: 36px !important;
   padding: 0 28px 0 12px !important;
-  border-radius: 99px !important;
+  border-radius: 999px !important;
   font: 600 14px var(--font) !important;
   background-color: var(--fill) !important;
   text-overflow: ellipsis;
@@ -3026,7 +3012,7 @@ body.has-tabbar .database.frame {
 .dbx-browser,
 .dbx-detail {
   border: 0 !important;
-  border-radius: 18px !important;
+  border-radius: 20px !important;
   background: var(--grp) !important;
   box-shadow: none !important;
 }
@@ -3071,7 +3057,7 @@ body.has-tabbar .database.frame {
   flex: none;
   height: 26px !important;
   border: 0 !important;
-  border-radius: 99px !important;
+  border-radius: 999px !important;
   font: 600 12px var(--font) !important;
 }
 .db-legal .icon {
@@ -3110,7 +3096,7 @@ body.has-tabbar .database.frame {
   min-height: 36px;
   padding: 0 12px;
   border: 0;
-  border-radius: 99px;
+  border-radius: 999px;
   background: var(--fill);
   color: var(--text-2);
   font: 500 13.5px var(--font);
@@ -3398,7 +3384,7 @@ body.has-tabbar .database.frame {
   min-height: 34px !important;
   padding: 0 14px !important;
   border: 0 !important;
-  border-radius: 99px !important;
+  border-radius: 999px !important;
   font: 500 14px var(--font) !important;
   background: var(--fill) !important;
   color: var(--text-2) !important;
@@ -3411,7 +3397,7 @@ body.has-tabbar .database.frame {
 .cb-filters.ui-btn {
   flex: none;
   min-height: 34px !important;
-  border-radius: 99px !important;
+  border-radius: 999px !important;
   padding: 0 14px !important;
   font: 500 14px var(--font) !important;
   background: var(--fill) !important;
@@ -3443,14 +3429,14 @@ body.has-tabbar .database.frame {
 .cb-sort {
   min-height: 34px !important;
   width: auto !important;
-  border-radius: 99px !important;
+  border-radius: 999px !important;
   font: 500 13.5px var(--font) !important;
   padding: 0 28px 0 12px !important;
 }
 .cb-toolbar .ui-btn {
   min-height: 34px !important;
   min-width: 40px;
-  border-radius: 99px !important;
+  border-radius: 999px !important;
   background: var(--fill) !important;
 }
 .cb-results.view-grid {
@@ -3527,7 +3513,7 @@ body.has-tabbar .database.frame {
 .dbx-deck {
   min-height: 36px;
   border: 0 !important;
-  border-radius: 99px !important;
+  border-radius: 999px !important;
   background: var(--fill) !important;
   padding: 0 12px 0 10px !important;
 }
@@ -3551,7 +3537,7 @@ body.has-tabbar .database.frame {
 }
 .modal {
   border: 0 !important;
-  border-radius: 22px !important;
+  border-radius: 20px !important;
   background: #1a1b1f !important;
   box-shadow: 0 30px 80px rgba(0, 0, 0, 0.6) !important;
 }
@@ -3580,7 +3566,7 @@ body.has-tabbar .database.frame {
     border-radius: 22px 22px 0 0 !important;
     padding-bottom: env(safe-area-inset-bottom, 0px) !important;
     transform: translateY(24px);
-    transition: transform 0.28s var(--ease-out) !important;
+    transition: transform var(--dur-slow) var(--ease-out) !important;
   }
   .modal-backdrop.in .modal {
     transform: none !important;
@@ -4041,7 +4027,7 @@ body.in-duel .ui-toast-host {
   height: 22px;
   padding: 0 8px;
   border: 0;
-  border-radius: 7px;
+  border-radius: 8px;
   background: rgba(255, 255, 255, 0.08);
   color: var(--text-2);
   font: 600 12px/1 var(--font);

@@ -19,7 +19,7 @@
   background-position: center 30%;
   opacity: 0;
   transform: scale(1.06);
-  transition: opacity 0.8s ease, transform 6s ease-out;
+  transition: opacity 0.8s var(--ease-out), transform 6s var(--ease-out);
 }
 .home-hero-art.has-art {
   opacity: 1;
@@ -71,15 +71,13 @@
   font: 700 18px var(--font);
   letter-spacing: -0.01em;
   cursor: pointer;
-  transition: transform 0.15s ease, background 0.2s ease;
+  transition: transform var(--dur-fast) var(--ease-out), background var(--dur-base) var(--ease-out);
 }
 .home-cta .icon {
   width: 20px;
   height: 20px;
 }
-.home-cta:active {
-  transform: scale(0.97);
-}
+
 .home-cta:hover {
   background: #fff;
 }
@@ -155,7 +153,7 @@
 .home-tile {
   position: relative;
   aspect-ratio: 1 / 1.05;
-  border-radius: 18px;
+  border-radius: 20px;
   overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.07);
   background: var(--bg-2);
@@ -164,18 +162,16 @@
   padding: 0;
   font: inherit;
   color: var(--text);
-  transition: transform 0.15s ease;
+  transition: transform var(--dur-fast) var(--ease-out);
 }
-.home-tile:active {
-  transform: scale(0.97);
-}
+
 .home-tile-art {
   position: absolute;
   inset: 0;
   background-size: cover;
   background-position: center 25%;
   opacity: 0;
-  transition: opacity 0.6s ease;
+  transition: opacity 0.6s var(--ease-out);
 }
 .home-tile-art.has-art {
   opacity: 1;
@@ -206,7 +202,7 @@
   top: 10px;
   left: 10px;
   padding: 4px 9px;
-  border-radius: 99px;
+  border-radius: 999px;
   background: #f2efe8;
   color: #111;
   font: 700 11px var(--font);
@@ -293,7 +289,7 @@
 .tab {
   display: grid;
   justify-items: center;
-  gap: 3px;
+  gap: 4px;
   padding: 6px 0 2px;
   border: 0;
   background: none;
@@ -336,7 +332,7 @@ body.has-tabbar .frame {
   align-items: center;
   gap: 8px;
   padding: 5px 12px 5px 5px;
-  border-radius: 99px;
+  border-radius: 999px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   background: var(--bg-2);
   color: var(--text);
@@ -370,18 +366,16 @@ body.has-tabbar .frame {
   display: flex;
   flex-direction: column;
   justify-content: flex-end;
-  transition: transform 0.15s ease;
+  transition: transform var(--dur-fast) var(--ease-out);
 }
-.play-quick:active {
-  transform: scale(0.98);
-}
+
 .play-quick .home-tile-art {
   background-position: center 20%;
 }
 .play-quick-text {
   position: relative;
   display: grid;
-  gap: 3px;
+  gap: 4px;
   padding: 0 16px;
 }
 .play-quick-text b {
@@ -400,7 +394,7 @@ body.has-tabbar .frame {
   gap: 8px;
   margin: 12px 16px 16px;
   padding: 10px 18px;
-  border-radius: 99px;
+  border-radius: 999px;
   background: #f2efe8;
   color: #111;
   font: 700 15px var(--font);

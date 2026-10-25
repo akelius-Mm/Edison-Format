@@ -88,9 +88,9 @@ export function rarityPill(r: Rarity, opts: { long?: boolean } = {}) {
  * A card face with its rarity treatment (silver/gold name, holo art, secret sparkle…).
  * `live` starts the sheen animation (used right after a flip).
  */
-export function foilCard(name: string, rarity: Rarity, opts: { live?: boolean; cls?: string } = {}): HTMLElement {
+export function foilCard(name: string, rarity: Rarity, opts: { live?: boolean; cls?: string; lazy?: boolean } = {}): HTMLElement {
   const data = findCard(name);
-  const card = data ? renderCard(data, { size: 'md' }) : h('div', { class: 'yc yc--md rf-missing' }, name);
+  const card = data ? renderCard(data, { size: 'md', lazy: opts.lazy }) : h('div', { class: 'yc yc--md rf-missing' }, name);
   return h(
     'div',
     { class: ['rf', opts.live && 'is-live', opts.cls], dataset: { r: rarity } },

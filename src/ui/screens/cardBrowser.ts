@@ -358,7 +358,7 @@ export function cardBrowser(o: BrowserOptions): CardBrowser {
       },
     };
     if (view === 'grid') {
-      return h('div', { class: ['cb-cell', c.limit === 0 && 'forbidden'], ...common }, renderCard(c, { size: o.gridSize ?? 'sm', showLimit: true }));
+      return h('div', { class: ['cb-cell', c.limit === 0 && 'forbidden'], ...common }, renderCard(c, { size: o.gridSize ?? 'sm', showLimit: true, lazy: true }));
     }
     const stats =
       c.kind === 'monster'
@@ -367,7 +367,7 @@ export function cardBrowser(o: BrowserOptions): CardBrowser {
     return h(
       'div',
       { class: ['cb-row', `kind-${c.kind}`, c.limit === 0 && 'forbidden'], ...common },
-      h('span', { class: 'cb-thumb' }, renderCard(c, { size: 'xs' })),
+      h('span', { class: 'cb-thumb' }, renderCard(c, { size: 'xs', lazy: true })),
       h('span', { class: 'cb-row-text' }, h('span', { class: 'cb-name' }, c.name), h('span', { class: 'cb-type' }, c.kind === 'monster' ? `${c.attribute ?? ''} · ${typeLine(c)}` : typeLine(c))),
       stats,
       h('span', { class: 'cb-badges' }, limitBadge(c)),

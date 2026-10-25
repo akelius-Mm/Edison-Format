@@ -126,9 +126,9 @@
   cursor: pointer;
   text-align: left;
   transition:
-    border-color 0.2s,
-    background 0.2s,
-    transform 0.2s;
+    border-color var(--dur-base),
+    background var(--dur-base),
+    transform var(--dur-base);
   animation: rise 0.9s var(--ease) 0.4s both;
 }
 .player-plate:hover {
@@ -173,10 +173,10 @@
   cursor: pointer;
   overflow: hidden;
   transition:
-    transform 0.22s var(--ease),
-    border-color 0.22s,
-    background 0.22s,
-    box-shadow 0.22s;
+    transform var(--dur-base) var(--ease-out),
+    border-color var(--dur-base),
+    background var(--dur-base),
+    box-shadow var(--dur-base);
   animation: menu-in 0.6s var(--ease) both;
   animation-delay: calc(0.25s + var(--i) * 0.05s);
 }
@@ -192,7 +192,7 @@
   inset: 0;
   background: linear-gradient(90deg, rgba(212, 175, 55, 0.18), transparent 70%);
   opacity: 0;
-  transition: opacity 0.25s;
+  transition: opacity var(--dur-base);
 }
 .menu-item::after {
   content: '';
@@ -201,10 +201,10 @@
   top: 14%;
   bottom: 14%;
   width: 3px;
-  border-radius: 3px;
+  border-radius: 4px;
   background: var(--gold-grad);
   transform: scaleY(0);
-  transition: transform 0.25s var(--ease);
+  transition: transform var(--dur-base) var(--ease-out);
 }
 .menu-item:hover,
 .menu-item:focus-visible {
@@ -325,7 +325,7 @@
 .title-keys {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: 6px;
 }
 .title-floaters {
   position: absolute;
@@ -469,9 +469,9 @@
   text-align: left;
   cursor: pointer;
   transition:
-    border-color 0.18s,
-    background 0.18s,
-    transform 0.18s;
+    border-color var(--dur-base),
+    background var(--dur-base),
+    transform var(--dur-base);
 }
 .deck-tile:hover {
   border-color: color-mix(in srgb, var(--deck) 60%, transparent);
@@ -546,7 +546,7 @@
 .deck-tile-warn {
   display: inline-flex;
   align-items: center;
-  gap: 3px;
+  gap: 4px;
   font-size: 11.5px;
   color: var(--orange);
 }
@@ -584,9 +584,9 @@
   cursor: pointer;
   aspect-ratio: 1;
   transition:
-    border-color 0.18s,
-    transform 0.18s,
-    box-shadow 0.18s;
+    border-color var(--dur-base),
+    transform var(--dur-base),
+    box-shadow var(--dur-base);
 }
 .avatar-opt > * {
   border-radius: 50%;
@@ -608,7 +608,7 @@
 .persona-avatar {
   border: 0;
   cursor: pointer;
-  transition: transform 0.18s;
+  transition: transform var(--dur-base);
 }
 .persona-avatar:hover {
   transform: scale(1.04);
@@ -650,7 +650,7 @@
   gap: 12px;
   min-height: 0;
   padding: 18px;
-  border-radius: 18px;
+  border-radius: 20px;
   border: 1px solid var(--line);
   background: var(--panel);
   box-shadow: var(--shadow-sm);
@@ -795,7 +795,7 @@ body.in-duel {
 }
 .duel-host.closing {
   opacity: 0;
-  transition: opacity 0.28s;
+  transition: opacity var(--dur-slow);
 }
 @keyframes host-in {
   from {
@@ -1330,8 +1330,8 @@ body.in-duel {
   background: rgba(255, 255, 255, 0.025);
   cursor: pointer;
   transition:
-    background 0.15s,
-    border-color 0.15s;
+    background var(--dur-fast),
+    border-color var(--dur-fast);
   user-select: none;
 }
 .cb-row:hover,
@@ -1415,7 +1415,7 @@ body.in-duel {
   position: relative;
   cursor: pointer;
   border-radius: 6px;
-  transition: transform 0.18s var(--ease);
+  transition: transform var(--dur-base) var(--ease-out);
 }
 .cb-cell:hover,
 .cb-cell:focus-visible {
@@ -1528,7 +1528,7 @@ body.in-duel {
   display: block;
   height: 100%;
   border-radius: inherit;
-  transition: width 0.3s var(--ease);
+  /* rebuilt on every render: no width transition (it only cost layout) */
 }
 i.k-monster,
 .st-track .k-monster {
@@ -1558,7 +1558,7 @@ i.k-monster,
 .st-curve {
   display: grid;
   grid-template-columns: repeat(8, 1fr);
-  gap: 5px;
+  gap: 6px;
   height: 92px;
   align-items: end;
 }
@@ -1575,7 +1575,7 @@ i.k-monster,
   border-radius: 4px 4px 2px 2px;
   background: linear-gradient(180deg, var(--gold-hi), var(--gold-lo));
   min-height: 2px;
-  transition: height 0.3s var(--ease);
+  /* rebuilt on every render: no height transition */
 }
 .st-n {
   font-size: 11px;
@@ -1604,7 +1604,7 @@ i.k-monster,
   font-size: 12.5px;
   color: #ffd2a6;
   display: grid;
-  gap: 3px;
+  gap: 4px;
 }
 .st-ok {
   display: flex;
@@ -1644,7 +1644,7 @@ i.k-monster,
 .db-legal {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: 6px;
   height: 28px;
   padding: 0 10px;
   border-radius: 8px;
@@ -1664,7 +1664,7 @@ i.k-monster,
 .db-saved {
   font-size: 11.5px;
   color: var(--faint);
-  transition: color 0.3s;
+  transition: color var(--dur-slow);
 }
 .db-saved.flash {
   color: var(--gold-hi);
@@ -1690,8 +1690,8 @@ i.k-monster,
   background: rgba(0, 0, 0, 0.18);
   padding: 8px 10px 10px;
   transition:
-    border-color 0.15s,
-    background 0.15s;
+    border-color var(--dur-fast),
+    background var(--dur-fast);
 }
 .dk-section.drop {
   border-color: rgba(212, 175, 55, 0.7);
@@ -1751,7 +1751,7 @@ i.k-monster,
   overflow: visible;
   cursor: grab;
   border-radius: 4px;
-  transition: transform 0.15s var(--ease);
+  transition: transform var(--dur-fast) var(--ease-out);
 }
 .dk-slot > .yc {
   --yc-w: 100%;
@@ -2088,9 +2088,9 @@ i.k-monster,
   font-size: 12.5px;
   cursor: pointer;
   transition:
-    border-color 0.18s,
-    transform 0.18s,
-    background 0.18s;
+    border-color var(--dur-base),
+    transform var(--dur-base),
+    background var(--dur-base);
 }
 .cz-opt:hover {
   transform: translateY(-2px);
@@ -2170,7 +2170,7 @@ i.k-monster,
   rotate: calc((var(--i) - 1) * 9deg);
   transform-origin: bottom center;
   filter: drop-shadow(0 10px 20px rgba(0, 0, 0, 0.6));
-  transition: all 0.3s var(--ease);
+  transition: all var(--dur-slow) var(--ease-out);
 }
 
 /* ---------------------------------------------------------------- settings */
@@ -2230,7 +2230,7 @@ i.k-monster,
 .rule-hero {
   grid-column: 1 / -1;
   padding: 26px 28px;
-  border-radius: 18px;
+  border-radius: 20px;
   border: 1px solid var(--gold-line);
   background:
     radial-gradient(600px 200px at 0% 0%, rgba(212, 175, 55, 0.14), transparent 70%),
@@ -2268,7 +2268,7 @@ i.k-monster,
   margin: 0;
   padding-left: 18px;
   display: grid;
-  gap: 7px;
+  gap: 8px;
   color: var(--text-2);
   font-size: 14px;
 }
@@ -2413,7 +2413,7 @@ i.k-monster,
   display: grid;
   place-items: center;
   overflow: hidden;
-  border-radius: 3px;
+  border-radius: 4px;
 }
 .ban-thumb .yc {
   --yc-w: 26px;
@@ -2726,7 +2726,7 @@ i.k-monster,
 .my-match {
   position: relative;
   padding: 18px 22px;
-  border-radius: 18px;
+  border-radius: 20px;
   border: 1px solid rgba(212, 175, 55, 0.45);
   background:
     radial-gradient(500px 160px at 50% 0%, rgba(212, 175, 55, 0.14), transparent 70%),
@@ -2816,7 +2816,7 @@ i.k-monster,
   min-width: 0;
   white-space: nowrap;
   align-items: center;
-  gap: 7px;
+  gap: 8px;
   font-size: 13px;
   color: var(--text-2);
   font-weight: 600;
@@ -3016,7 +3016,7 @@ tr.pending .pt-score {
 }
 .lobby-hero {
   padding: 26px;
-  border-radius: 18px;
+  border-radius: 20px;
   border: 1px solid var(--gold-line);
   background:
     radial-gradient(500px 200px at 0% 0%, rgba(212, 175, 55, 0.14), transparent 70%),

@@ -36,7 +36,7 @@
   --shadow-sm: 0 6px 18px rgba(0, 0, 0, 0.4);
   --font: 'Inter', 'Segoe UI', system-ui, -apple-system, Roboto, 'Helvetica Neue', Arial, sans-serif;
   --font-display: 'Cinzel', 'Trajan Pro', 'Cormorant Garamond', 'Palatino Linotype', Palatino, 'Book Antiqua', Georgia, serif;
-  --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease: var(--ease-out);
   --head-h: 64px;
   color-scheme: dark;
 }
@@ -201,9 +201,9 @@ a {
   min-height: 100vh;
   min-height: 100dvh;
   transition:
-    opacity 0.34s var(--ease),
-    transform 0.34s var(--ease),
-    filter 0.34s var(--ease);
+    opacity var(--dur-slow) var(--ease-out),
+    transform var(--dur-slow) var(--ease-out),
+    filter var(--dur-slow) var(--ease-out);
 }
 .screen-enter {
   opacity: 0;
@@ -221,7 +221,7 @@ a {
   .screen,
   .screen-enter,
   .screen-leave {
-    transition: opacity 0.15s linear;
+    transition: opacity var(--dur-fast) linear;
     transform: none;
     filter: none;
   }
@@ -338,19 +338,17 @@ a {
   white-space: nowrap;
   user-select: none;
   transition:
-    background 0.18s,
-    border-color 0.18s,
-    transform 0.12s,
-    box-shadow 0.18s,
-    color 0.18s;
+    background var(--dur-base),
+    border-color var(--dur-base),
+    transform var(--dur-fast),
+    box-shadow var(--dur-base),
+    color var(--dur-base);
 }
 .ui-btn:hover {
   --b-bg: rgba(255, 255, 255, 0.09);
   --b-border: rgba(212, 175, 55, 0.4);
 }
-.ui-btn:active {
-  transform: translateY(1px) scale(0.985);
-}
+
 .ui-btn:disabled {
   opacity: 0.45;
   cursor: not-allowed;
@@ -429,8 +427,8 @@ a {
   font: inherit;
   font-size: 14px;
   transition:
-    border-color 0.15s,
-    box-shadow 0.15s;
+    border-color var(--dur-fast),
+    box-shadow var(--dur-fast);
 }
 .select {
   appearance: none;
@@ -485,8 +483,8 @@ input[type='range'] {
   display: inline-flex;
   flex-wrap: wrap;
   padding: 3px;
-  gap: 3px;
-  border-radius: 11px;
+  gap: 4px;
+  border-radius: 12px;
   background: rgba(0, 0, 0, 0.32);
   border: 1px solid var(--line);
 }
@@ -503,8 +501,8 @@ input[type='range'] {
   font-weight: 600;
   cursor: pointer;
   transition:
-    background 0.18s,
-    color 0.18s;
+    background var(--dur-base),
+    color var(--dur-base);
   white-space: nowrap;
 }
 .seg-btn:hover {
@@ -535,7 +533,7 @@ input[type='range'] {
   background: rgba(255, 255, 255, 0.1);
   border: 1px solid var(--line-2);
   position: relative;
-  transition: background 0.2s;
+  transition: background var(--dur-base);
 }
 .toggle-thumb {
   position: absolute;
@@ -546,8 +544,8 @@ input[type='range'] {
   border-radius: 50%;
   background: #d9d9de;
   transition:
-    transform 0.22s var(--ease),
-    background 0.2s;
+    transform var(--dur-base) var(--ease-out),
+    background var(--dur-base);
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.5);
 }
 .toggle-input:checked + .toggle-track {
@@ -693,7 +691,7 @@ input[type='range'] {
   text-align: center;
   opacity: 0;
   transform: translateY(12px);
-  transition: all 0.3s var(--ease);
+  transition: all var(--dur-slow) var(--ease-out);
 }
 .ui-toast.in {
   opacity: 1;
@@ -725,7 +723,7 @@ input[type='range'] {
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
   opacity: 0;
-  transition: opacity 0.22s;
+  transition: opacity var(--dur-base);
 }
 .modal-backdrop.in {
   opacity: 1;
@@ -740,13 +738,13 @@ input[type='range'] {
   flex-direction: column;
   background: linear-gradient(180deg, #171c2d, #10131f);
   border: 1px solid var(--gold-line);
-  border-radius: 18px;
+  border-radius: 20px;
   box-shadow:
     var(--shadow),
     0 0 0 1px rgba(0, 0, 0, 0.4),
     0 0 60px rgba(212, 175, 55, 0.08);
   transform: translateY(14px) scale(0.98);
-  transition: transform 0.28s var(--ease);
+  transition: transform var(--dur-slow) var(--ease-out);
 }
 .modal-backdrop.in .modal {
   transform: none;
@@ -806,7 +804,7 @@ input[type='range'] {
   display: inline-block;
   min-width: 22px;
   padding: 1px 6px;
-  border-radius: 5px;
+  border-radius: 6px;
   border: 1px solid var(--line-2);
   border-bottom-width: 2px;
   font-size: 11.5px;
@@ -848,7 +846,7 @@ input[type='range'] {
   width: 0;
   background: var(--gold-grad);
   border-radius: inherit;
-  transition: width 0.3s var(--ease);
+  /* rebuilt on every render: no width transition (it only cost layout) */
   box-shadow: 0 0 12px var(--gold-glow);
 }
 .tabs {

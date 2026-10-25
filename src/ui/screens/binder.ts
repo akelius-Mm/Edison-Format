@@ -303,7 +303,7 @@ export function binderScreen(_params: Params): Screen {
     return h(
       'button',
       { type: 'button', class: 'bd-cell', 'aria-label': `${name}: ${parts.join(', ')}`, title: parts.join(' · '), onclick: () => c && zoomCard(c) },
-      foilCard(name, best as Rarity),
+      foilCard(name, best as Rarity, { lazy: true }),
       h('div', { class: 'bd-badges' }, best !== 'C' ? rarityPill(best as Rarity) : h('span'), h('span', { class: 'bd-n' }, `×${have}`)),
     );
   }
