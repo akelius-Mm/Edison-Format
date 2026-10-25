@@ -103,7 +103,7 @@ function kindDesc(k: EventKind) {
   const rounds = [...new Set(sizes.map((n) => swissRoundsFor(k, n)))];
   const cuts = [...new Set(sizes.map((n) => topCutFor(k, n)))];
   // non-breaking spaces keep each fact on one line when the row wraps
-  return [`${s.sizeRange}\u00a0players`, `${rounds.join('–')}\u00a0rounds`, `Top\u00a0${cuts.join('/')}`].join(' · ');
+  return [`${s.sizeRange}\u00a0players`, `${rounds.join('–')}\u00a0rounds`, `Top\u00a0${cuts.join('/')}`].join('\u00a0· ');
 }
 
 function inviteTags(inv: { nationals?: string; worlds?: string } | undefined) {
@@ -157,7 +157,7 @@ function hubScreen(): Screen {
     iosGroup(
       'Events',
       [
-        eventRow('locals', 'Locals Night', 'Friday at the card shop · 16–32\u00a0players · Top\u00a04/8', () => go('locals'), night ? 'In progress' : undefined),
+        eventRow('locals', 'Locals Night', 'Friday at the card shop\u00a0· 16–32\u00a0players\u00a0· Top\u00a04/8', () => go('locals'), night ? 'In progress' : undefined),
         ...EVENT_KINDS.filter((k) => k !== 'locals').map((k) => eventRow(k, EVENT_SPECS[k].label, kindDesc(k), () => go('events', { view: 'checkin', kind: k }), run?.kind === k && !run.season ? 'In progress' : undefined)),
       ],
       'Every event is open any time as a one-off. Bigger events bring stronger fields: more real SJC lists, higher-tier decks and harder AI.',
@@ -225,7 +225,7 @@ function circuitCard(s: Season | null) {
       'section',
       { class: 'ev-circuit', 'aria-label': 'The Circuit' },
       h('div', { class: 'ev-circuit-eyebrow' }, `Season ${s.number} · Complete`),
-      h('h2', null, `Finished ${ordinal(s.summary.finalRank)} of ${s.summary.field}`),
+      h('h2', null, s.summary.score ? `Finished ${ordinal(s.summary.finalRank)} of ${s.summary.field}` : 'Finished unranked'),
       h('p', null, `${s.summary.score} circuit points · ${s.summary.trophies.length} trophies`),
       h('div', { class: 'ev-circuit-tags', style: { marginTop: '12px' } }, inviteTags(s.summary.invites)),
       h('div', { class: 'lx-bar-row' }, h('button', { type: 'button', class: 'lx-btn', onclick: () => go('events', { view: 'season' }) }, 'Season recap'), h('button', { type: 'button', class: 'lx-btn', onclick: () => void begin(true) }, 'New season')),
@@ -290,7 +290,7 @@ function checkInScreen(params: Record<string, string>): Screen {
   const flyer = h(
     'section',
     { class: 'lx-flyer', 'aria-label': 'The event' },
-    h('div', { class: 'lx-flyer-eyebrow' }, h('span', null, spec.label), h('span', { class: 'lx-dot' }), h('span', null, 'Edison Format')),
+    h('div', { class: 'lx-flyer-eyebrow' }, h('span', null, spec.label.length > 20 ? spec.short : spec.label), h('span', { class: 'lx-dot' }), h('span', null, 'Edison Format')),
     h('h2', { class: 'lx-flyer-shop' }, kind === 'sjc' || !venue.city ? venue.name : venue.city),
     h('div', { class: 'lx-flyer-where' }, venue.where),
     facts,
@@ -672,9 +672,9 @@ function seasonSummaryScreen(s: Season): Screen {
       { class: 'ev-summary' },
       icon(sum.finalRank === 1 ? 'crown' : sum.finalRank <= 16 ? 'trophy' : 'flag'),
       h('span', { class: 'lx-k' }, 'Final circuit rank'),
-      h('div', { class: 'ev-summary-rank' }, sum.score ? ordinal(sum.finalRank) : '—', h('small', null, ` of ${sum.field}`)),
+      sum.score ? h('div', { class: 'ev-summary-rank' }, ordinal(sum.finalRank), h('small', null, ` of ${sum.field}`)) : h('div', { class: 'ev-summary-rank is-none' }, 'Unranked'),
       h('p', null, `${sum.score} points in the final ${RANK_WINDOW} weeks · ${sum.totalPoints} all season · ${sum.played} events played`),
-      h('div', { class: 'ev-circuit-tags', style: { marginTop: '10px' } }, inviteTags(sum.invites)),
+      sum.invites.nationals || sum.invites.worlds ? h('div', { class: 'ev-circuit-tags', style: { marginTop: '10px' } }, inviteTags(sum.invites)) : null,
     ),
     iosGroup(
       'Trophies',

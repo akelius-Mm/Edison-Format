@@ -532,6 +532,11 @@
   letter-spacing: 0;
   color: var(--muted);
 }
+.ev-summary-rank.is-none {
+  font-size: 34px;
+  letter-spacing: -0.02em;
+  color: var(--text-2);
+}
 .ev-summary p {
   margin: 4px 0 0;
   font-size: 14px;
