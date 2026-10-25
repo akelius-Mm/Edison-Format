@@ -19,6 +19,8 @@ import { ensureTdgsPatches } from '../src/cards/sets/tdgs';
 import { ensureArchetypeExtrasPatches } from '../src/cards/sets/archetype-extras';
 import { ensureArchetypeExtras2Patches } from '../src/cards/sets/archetype-extras2';
 import { AIController } from '../src/ai/ai';
+import { Ctx } from '../src/engine/ctx';
+import { GY_BANISH_COST_PROBLEMS } from '../src/cards/gy-costs';
 
 const T = {
   brute: findCard('Rules Test Brute') ?? normal('Rules Test Brute', 'EARTH', 'Warrior', 4, 1800, 1000),
@@ -3760,5 +3762,183 @@ async function fuzzRegressionTests() {
     eq(sangan.location, 'banished', 'Sangan banished');
     eq(lady.location, 'banished', 'D.D. Warrior Lady banished');
     eq(g.players[1].hand.length, hand, 'Sangan never reached the GY, so no search');
+  });
+
+  // ---- approximation audit (premade cards)
+  const live = (c: CardInstance) => {
+    c.activeOnField = true;
+    return c;
+  };
+  const ctxOf = (g: Game, src: CardInstance, p: PlayerId) => new Ctx(g, src, src.data.effects?.[0] ?? { kind: 'ignition' }, p);
+
+  await test('Legendary Jujitsu Master returns the attacker to the top of the Deck even when it is destroyed by the battle', async () => {
+    const { g, place } = setup();
+    const giant = place(0, T.giant, 'mzone');
+    const jujitsu = place(1, cardByName('Legendary Jujitsu Master'), 'mzone', { pos: 'def' });
+    await g.conductAttack(0, giant);
+    await g.processTriggers(true);
+    eq(jujitsu.location, 'grave', 'Jujitsu Master destroyed');
+    eq(giant.location, 'deck', 'attacker returned to the Deck');
+    const deck = g.players[0].deck;
+    eq(deck[deck.length - 1], giant, 'on top');
+  });
+
+  await test('Light-Imprisoning Mirror negates a LIGHT monster effect when it resolves, not if the Mirror is gone by then', async () => {
+    for (const mst of [false, true]) {
+      const { g, c0, place } = setup();
+      place(0, T.wall, 'deck');
+      live(place(1, cardByName('Light-Imprisoning Mirror'), 'szone', { faceUp: true }));
+      const alch = place(0, cardByName('Dimensional Alchemist'), 'mzone');
+      if (mst) {
+        place(0, cardByName('Mystical Space Typhoon'), 'szone', { faceUp: false });
+        c0.respond = respondWith('Mystical Space Typhoon');
+      }
+      await activateCard(g, 0, alch);
+      eq(g.getAtk(alch), mst ? 1800 : 1300, mst ? 'Mirror destroyed in response: the effect resolves' : 'negated by the Mirror');
+    }
+  });
+
+  await test('Consecrated Light: DARK monsters cannot be Normal or Special Summoned (they can be Set)', async () => {
+    const { g, place } = setup();
+    place(1, cardByName('Consecrated Light'), 'mzone');
+    const dark = place(0, T.dark, 'hand');
+    const acts = g.legalMainActions(0).filter((a) => 'card' in a && a.card === dark).map((a) => a.type);
+    eq(acts.includes('summon'), false, 'no Normal Summon');
+    eq(acts.includes('set'), true, 'Set allowed');
+    const inGy = place(0, T.dark, 'grave');
+    eq((await g.specialSummon([inGy], 0)).length, 0, 'no Special Summon');
+    eq(inGy.location, 'grave', 'stays in the GY');
+  });
+
+  await test('Swap Frog: the extra Normal Summon is only for a Level 2 or lower WATER Aqua monster', async () => {
+    const { g, c0, place } = setup();
+    const frog = place(0, cardByName('Swap Frog'), 'mzone');
+    place(0, T.brute, 'mzone');
+    const raiza = place(0, cardByName('Raiza the Storm Monarch'), 'hand');
+    const treeborn = place(0, cardByName('Treeborn Frog'), 'hand');
+    g.players[0].normalSummonsLeft = 0;
+    c0.pick = (_g, req) => (req.candidates.includes(frog) ? [frog] : req.candidates.slice(0, req.min));
+    await activateCard(g, 0, frog, 'Bounce a monster: extra Normal Summon');
+    eq(frog.location, 'hand', 'Swap Frog returned to the hand');
+    eq(g.canNormalSummon(0, raiza, false), false, 'not a Monarch');
+    eq(g.canNormalSummon(0, treeborn, true), false, 'not a Set');
+    eq(g.canNormalSummon(0, treeborn, false), true, 'Treeborn Frog can be Normal Summoned');
+    await g.normalSummon(0, treeborn, false);
+    eq(treeborn.location, 'mzone', 'summoned');
+    eq(g.canNormalSummon(0, frog, false), false, 'the extra Summon is used up');
+  });
+
+  await test("Aurkus: neither player can target Lightsworn monsters; Turbo Warrior: no Level 6 or lower monster's effect can target it", async () => {
+    const { g, place } = setup();
+    place(0, cardByName('Aurkus, Lightsworn Druid'), 'mzone');
+    const lumina = place(0, cardByName('Lumina, Lightsworn Summoner'), 'mzone');
+    const mine = place(0, cardByName('Dimensional Alchemist'), 'mzone');
+    eq(ctxOf(g, mine, 0).canTarget(lumina), false, 'own effect cannot target a Lightsworn');
+    eq(ctxOf(g, place(1, T.brute, 'mzone'), 1).canTarget(lumina), false, "opponent's effect cannot target a Lightsworn");
+    const turbo = place(1, cardByName('Turbo Warrior'), 'mzone');
+    eq(ctxOf(g, mine, 0).canTarget(turbo), false, 'Level 4 monster effect');
+    eq(ctxOf(g, place(1, cardByName('Dimensional Alchemist'), 'mzone'), 1).canTarget(turbo), false, "its controller's Level 4 monster effect");
+    eq(ctxOf(g, place(0, cardByName('Dark Armed Dragon'), 'mzone'), 0).canTarget(turbo), true, 'Level 7 monster effect');
+    eq(ctxOf(g, place(0, cardByName('Book of Moon'), 'hand'), 0).canTarget(turbo), true, 'Spell');
+  });
+
+  await test('Light and Darkness Dragon negates as its own Chain Link: Book of Moon on it in response lets the activation resolve', async () => {
+    for (const book of [false, true]) {
+      const { g, c0, place } = setup();
+      const ladd = place(1, cardByName('Light and Darkness Dragon'), 'mzone');
+      g.emit({ type: 'phaseStart', phase: 'main1', player: 0 });
+      g.pending = [];
+      place(0, T.wall, 'deck');
+      place(0, T.wall, 'deck');
+      if (book) {
+        place(0, cardByName('Book of Moon'), 'szone', { faceUp: false });
+        c0.respond = respondWith('Book of Moon');
+      }
+      const hand = g.players[0].hand.length;
+      await activateCard(g, 0, place(0, cardByName('Upstart Goblin'), 'hand'));
+      if (book) {
+        eq(g.players[0].hand.length, hand + 1, 'Upstart Goblin resolved (drew 1)');
+        eq(ladd.faceUp, false, 'LaDD face-down');
+        eq(g.getAtk(ladd), 2800, 'no ATK lost');
+      } else {
+        eq(g.players[0].hand.length, hand, 'Upstart Goblin negated');
+        eq(g.getAtk(ladd), 2300, 'lost 500 ATK');
+      }
+    }
+  });
+
+  await test('Beast King Barbaros: 2-Tribute Summon keeps 3000 ATK; without Tributes its original ATK is 1900', async () => {
+    const a = setup();
+    const bk = a.place(0, cardByName('Beast King Barbaros'), 'hand');
+    a.place(0, T.brute, 'mzone');
+    a.place(0, T.brute, 'mzone');
+    const two = a.g.legalMainActions(0).find((x) => x.type === 'proc' && x.card === bk && x.act.effect.label === 'Tribute Summon (2 Tributes)');
+    if (!two) throw new Error('2-Tribute Summon not offered');
+    eq(a.g.legalMainActions(0).some((x) => x.type === 'proc' && x.card === bk && x.act.effect.label === 'Tribute Summon (3 Tributes)'), false, 'no 3-Tribute option with 2 monsters');
+    await a.g.performAction(0, two);
+    eq(bk.location, 'mzone', 'Tribute Summoned');
+    eq(a.g.getAtk(bk), 3000, '3000 ATK');
+    const b = setup();
+    const bk2 = b.place(0, cardByName('Beast King Barbaros'), 'hand');
+    const plain = b.g.legalMainActions(0).find((x) => x.type === 'summon' && x.card === bk2);
+    if (!plain) throw new Error('no-Tribute Normal Summon not offered');
+    await b.g.performAction(0, plain);
+    eq(bk2.location, 'mzone', 'Normal Summoned without Tributes');
+    eq(b.g.baseAtk(bk2), 1900, 'original ATK 1900');
+    eq(b.g.getAtk(bk2), 1900, 'ATK 1900');
+  });
+
+  await test('Dimensional Fissure banishes monsters only; Necrovalley stops GY-banish costs; Zombie World stops non-Zombie Tribute Summons; Phantom Dragon locks 2 zones', async () => {
+    const { g, place } = setup();
+    live(place(0, cardByName('Dimensional Fissure'), 'szone', { faceUp: true }));
+    const spellOnField = place(0, cardByName('Book of Moon'), 'szone', { faceUp: false });
+    const mon = place(1, T.brute, 'mzone');
+    await g.sendToGrave([spellOnField, mon], 'effect');
+    eq(spellOnField.location, 'grave', 'Spell goes to the GY');
+    eq(mon.location, 'banished', 'monster banished');
+
+    const n = setup();
+    const dad = n.place(0, cardByName('Dark Armed Dragon'), 'mzone');
+    for (let i = 0; i < 3; i++) n.place(0, T.dark, 'grave');
+    n.place(1, T.brute, 'mzone');
+    const dadOffered = () => n.g.getActivations(0, { open: true }).some((x) => x.card === dad);
+    eq(dadOffered(), true, 'offered without Necrovalley');
+    const valley = live(n.place(1, cardByName('Necrovalley'), 'fzone', { faceUp: true }));
+    eq(dadOffered(), false, 'not offered under Necrovalley');
+    await n.g.sendToGrave([valley], 'effect');
+    eq(dadOffered(), true, 'offered again');
+
+    const z = setup();
+    live(z.place(1, cardByName('Zombie World'), 'fzone', { faceUp: true }));
+    z.place(0, T.brute, 'mzone');
+    const raiza = z.place(0, cardByName('Raiza the Storm Monarch'), 'hand');
+    const vamp = z.place(0, cardByName('Vampire Lord'), 'hand');
+    eq(z.g.canNormalSummon(0, raiza, false), false, 'no Tribute Summon of a non-Zombie');
+    eq(z.g.canNormalSummon(0, raiza, true), true, 'Tribute Set allowed');
+    eq(z.g.canNormalSummon(0, vamp, false), true, 'Zombie can be Tribute Summoned');
+
+    const p = setup();
+    p.place(0, cardByName('Phantom Dragon'), 'mzone');
+    eq(p.g.freeMZones(0), 2, '5 zones - Phantom Dragon - 2 locked');
+    eq(p.g.freeMZones(1), 5, "opponent's zones not locked");
+  });
+
+  await test("Machina Fortress: the discard happens as the opponent's targeting monster effect resolves", async () => {
+    const { g, c1, place } = setup();
+    g.turnPlayer = 1;
+    const fortress = place(0, cardByName('Machina Fortress'), 'mzone');
+    const dad = place(1, cardByName('Dark Armed Dragon'), 'mzone');
+    for (let i = 0; i < 3; i++) place(1, T.dark, 'grave');
+    place(1, T.wall, 'hand');
+    place(1, T.wall, 'hand');
+    c1.pick = (_g, req) => (req.candidates.includes(fortress) ? [fortress] : req.candidates.slice(0, req.min));
+    const hand = g.players[1].hand.length;
+    await activateCard(g, 1, dad);
+    eq(fortress.location, 'grave', 'Fortress destroyed');
+    eq(g.players[1].hand.length, hand - 1, 'one card discarded from the hand');
+  });
+
+  await test('gy-costs table: every card and effect index resolves', async () => {
+    eq(GY_BANISH_COST_PROBLEMS.join('; '), '', 'problems');
   });
 }

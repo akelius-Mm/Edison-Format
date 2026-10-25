@@ -541,12 +541,17 @@ spell('Zombie World', 'field', {
   aiValue: 200,
   // Approximation: the engine has no Type-changing query. Zombie cards in this file treat every
   // monster on the field / in the GY as a Zombie while this card is face-up (see isZombie).
-  // The Tribute Summon restriction is not enforced. See docs/engine-requests/group-a.md.
+  // Monsters in the hand keep their Type, so only Zombies can be Tribute Summoned (Tribute Sets are allowed).
   effects: [
     {
       kind: 'activate',
       categories: [],
       ai: { score: (ctx) => (ctx.grave('opp', (c) => c.isMonster && c.data.race !== 'Zombie').length >= 2 ? 30 : 10) },
+    },
+    {
+      kind: 'continuous',
+      range: ['fzone'],
+      mods: [{ q: 'cannotTributeSummon', to: 'cards', filter: (_ctx, c: CardInstance) => c.isMonster && c.data.race !== 'Zombie' }],
     },
   ],
 });

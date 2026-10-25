@@ -45,6 +45,7 @@ export type QueryKey =
   | 'indestructibleBattle'
   | 'indestructibleEffect'
   | 'untargetable' // cannot be targeted by the opponent's card effects
+  | 'untargetableByAll' // cannot be targeted by any card effect, yours included (Aurkus, Lightsworn Druid)
   | 'cannotAttack'
   | 'cannotBeAttacked'
   | 'directAttack'
@@ -63,6 +64,11 @@ export type QueryKey =
   // SOVR: "If this face-up card would be sent from the field to the GY, place it on top of the
   // Deck instead" (Archlord Kristya). Read by Game.rawMove.
   | 'deckTopInsteadOfGrave'
+  // Card subject: this monster cannot be Normal Summoned (Setting is still allowed) or Special Summoned face-up,
+  // wherever it is (Consecrated Light: "Neither player can Normal or Special Summon DARK monsters").
+  | 'cannotBeSummoned'
+  // Card subject: this monster cannot be Tribute Summoned (a Tribute Set is still allowed) — Zombie World.
+  | 'cannotTributeSummon'
   // player subjects (boolean)
   | 'cannotSpecialSummon'
   | 'cannotNormalSummon'
@@ -76,7 +82,11 @@ export type QueryKey =
   | 'cannotAddFromDeck'
   | 'cannotSet'
   // ABPF: player subject — "you cannot Synchro Summon this turn" (Variety Comes Out). Checked in Game.canSynchro.
-  | 'cannotSynchroSummon';
+  | 'cannotSynchroSummon'
+  // player subject: cards in the GY cannot be banished (Necrovalley); effects with gyBanishCost are not offered.
+  | 'cannotBanishFromGY'
+  // player subject (numeric): Monster Zones of that player that cannot be used (Phantom Dragon: 2).
+  | 'lockedMZones';
 
 export interface Mod {
   q: QueryKey;
@@ -140,6 +150,8 @@ export interface EffectDef {
    * when on the field). Receives the cards about to be destroyed; returns the ones it saved.
    */
   replaceDestroy?: (ctx: Ctx, cards: CardInstance[], reason: Reason) => Promise<CardInstance[]>;
+  /** Its cost / Summon procedure banishes cards from a GY: not usable while 'cannotBanishFromGY' applies (src/cards/gy-costs.ts). */
+  gyBanishCost?: boolean;
   /** Effect may be activated while the card is face-down (e.g. hand traps don't need this). */
   ai?: AiHints;
   /**
@@ -215,6 +227,11 @@ export interface CardData {
    * Called with the Synchro monster being summoned and the full material list.
    */
   synchroMaterialCheck?: (synchro: CardInstance, materials: CardInstance[], self: CardInstance) => boolean;
+  /**
+   * While face-up on the field and not negated: true when this card cannot be targeted by the effect of `source`
+   * (checked by Ctx.canTarget with the targeting effect's Ctx), e.g. Turbo Warrior vs Level 6 or lower monsters.
+   */
+  targetImmunity?: (self: CardInstance, source: CardInstance, ctx: Ctx) => boolean;
 }
 
 // ---------------------------------------------------------------------------

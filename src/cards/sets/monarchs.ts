@@ -20,7 +20,7 @@ function monarchTrigger(e: Omit<EffectDef, 'kind' | 'event'>): EffectDef {
 function monarchReady(ctx: Ctx, extraBodies = 0) {
   if (ctx.game.players[ctx.player].normalSummonsLeft <= 0) return false;
   const bodies = ctx.game.tributeCandidates(ctx.player).length + extraBodies;
-  return ctx.hand('me', (c) => isMonarch(c) && bodies >= ctx.game.tributesNeeded(c)).length > 0;
+  return ctx.hand('me', (c) => isMonarch(c) && bodies >= ctx.game.tributesNeeded(c) && ctx.game.hasNormalSummonFor(ctx.player, c, false)).length > 0;
 }
 
 /**
@@ -244,7 +244,7 @@ monster('Swap Frog', {
   def: 500,
   sets: ['frog'],
   aiValue: 500,
-  text: 'You can Special Summon this card from your hand by sending 1 other WATER monster from your hand to the GY. When this card is Normal or Special Summoned: You can send 1 Level 2 or lower WATER Aqua monster from your Deck to the GY. Once per turn: You can return 1 monster you control to the hand; this turn you can Normal Summon 1 "Frog" monster (except "Swap Frog") in addition to your Normal Summon/Set (this extra Summon can only be gained once per turn).',
+  text: 'You can Special Summon this card from your hand by sending 1 other WATER monster from your hand to the GY. When this card is Normal or Special Summoned: You can send 1 Level 2 or lower WATER Aqua monster from your Deck to the GY. Once per turn: You can return 1 monster you control to the hand; this turn, you can Normal Summon 1 Level 2 or lower WATER Aqua-Type monster in addition to your Normal Summon or Set.',
   effects: [
     {
       kind: 'proc',
@@ -301,19 +301,19 @@ monster('Swap Frog', {
       resolve: async (ctx) => {
         if (ctx.usedThisTurn('swapFrogExtraSummon')) return;
         ctx.markUsed('swapFrogExtraSummon');
-        // Approximation: the engine has no restricted extra Normal Summon, so a generic one is granted.
-        ctx.gainNormalSummon();
-        ctx.log('You may conduct 1 additional Normal Summon this turn.');
+        // Only for a Level 2 or lower WATER Aqua monster, and only a Normal Summon (not a Set).
+        ctx.gainRestrictedNormalSummon((c, set) => !set && isLowAquaWater(c));
+        ctx.log('You may Normal Summon 1 additional Level 2 or lower WATER Aqua-Type monster this turn.');
       },
       ai: {
         score: (ctx) => {
           if (ctx.phase !== 'main1') return 0;
           if (ctx.game.players[ctx.player].normalSummonsLeft > 0) return 0;
           // Loop: bounce Swap Frog, then Special Summon it again by sending a WATER (another mill),
-          // and use the extra Normal Summon on a Monarch or Frog.
+          // and use the extra Normal Summon on a Level 2 or lower WATER Aqua (Frogs: Tribute fodder for a Monarch).
           const water = ctx.hand('me', (c) => attr('WATER')(c) && !isMonarch(c));
           const deckFodder = ctx.deck('me', isLowAquaWater).length;
-          if (water.length && deckFodder && (monarchReady(ctx, 0) || ctx.hand('me', isFrog).length)) return 48;
+          if (water.length && deckFodder && ctx.hand('me', isLowAquaWater).length) return 48;
           return 0;
         },
       },

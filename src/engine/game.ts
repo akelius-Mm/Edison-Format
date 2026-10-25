@@ -40,6 +40,11 @@ export interface PlayerState {
   szone: (CardInstance | null)[];
   fzone: CardInstance | null;
   normalSummonsLeft: number;
+  /**
+   * Extra Normal Summons this turn that only some monsters may use (Swap Frog: a Level 2 or lower WATER Aqua).
+   * Each is also counted in normalSummonsLeft; cleared at the start of the turn.
+   */
+  restrictedSummons?: { allow: (card: CardInstance, set: boolean) => boolean }[];
 }
 
 export interface ChainLink {
@@ -297,7 +302,11 @@ export class Game {
     return [...this.fieldCards(0), ...this.fieldCards(1)];
   }
   freeMZones(p: PlayerId) {
-    return this.players[p].mzone.filter((c) => !c).length;
+    const empty = this.players[p].mzone.filter((c) => !c).length;
+    if (!this.continuousSources.length) return empty;
+    // Zones that cannot be used (Phantom Dragon) count as occupied.
+    const locked = this.collectMods('lockedMZones', p).reduce<number>((a, v) => a + (typeof v === 'number' ? v : 0), 0);
+    return Math.max(0, empty - locked);
   }
   freeSZones(p: PlayerId) {
     return this.players[p].szone.filter((c) => !c).length;
@@ -381,6 +390,11 @@ export class Game {
   }
   queryPlayer(p: PlayerId, q: QueryKey): boolean {
     return this.collectMods(q, p).some((v) => !!v);
+  }
+
+  /** Cards in the GY cannot be banished (Necrovalley): costs that banish from a GY cannot be paid. */
+  gyBanishLocked(): boolean {
+    return this.queryPlayer(0, 'cannotBanishFromGY') || this.queryPlayer(1, 'cannotBanishFromGY');
   }
 
   isNegated(card: CardInstance): boolean {
@@ -548,7 +562,8 @@ export class Game {
     // SOVR: "would be sent from the field to the GY: place it on top of the Deck instead" (Archlord Kristya).
     if (dest === 'grave' && wasOnField && card.faceUp && this.queryCard(card, 'deckTopInsteadOfGrave')) dest = 'deck';
     const isBanishSource = !!card.data.effects?.some((e) => e.mods?.some((m) => m.q === 'banishInsteadOfGrave'));
-    if (dest === 'grave' && !isBanishSource && this.queryPlayer(card.owner, 'banishInsteadOfGrave')) dest = 'banished';
+    // Player switch: every card (Macro Cosmos); card switch: matching cards only (Dimensional Fissure: monsters).
+    if (dest === 'grave' && !isBanishSource && (this.queryPlayer(card.owner, 'banishInsteadOfGrave') || this.queryCard(card, 'banishInsteadOfGrave'))) dest = 'banished';
     if (dest === 'grave' && card.banishOnLeave && wasOnField) dest = 'banished';
     if (wasOnField && card.banishOnLeave && (dest === 'hand' || dest === 'deck')) dest = 'banished';
     if ((dest === 'deck' || dest === 'hand') && card.isExtra) dest = 'extra';
@@ -976,6 +991,7 @@ export class Game {
     for (const c of cards) {
       if (this.freeMZones(ctrl) - list.length <= 0) break;
       if (!opts.ignoreConditions && c.data.nomi && !c.properlySummoned && (c.location === 'grave' || c.location === 'banished')) continue;
+      if (!opts.faceDown && this.queryCard(c, 'cannotBeSummoned')) continue;
       list.push(c);
     }
     if (!list.length) return [];
@@ -1227,6 +1243,7 @@ export class Game {
     }
 
     if (ef.kind === 'proc') return null; // procs handled as actions
+    if (ef.gyBanishCost && this.gyBanishLocked()) return null;
 
     // Card state requirements
     if (ef.kind === 'activate') {
@@ -1568,6 +1585,7 @@ export class Game {
       if (ef.when && !ef.mandatory && t.event.batch !== this.lastBatch && !sameDamageStep) continue; // missed timing
       const player = t.player;
       if (ef.opt && this.isOptUsed(this.optKey(card, ef, idx, player))) continue;
+      if (ef.gyBanishCost && this.gyBanishLocked()) continue;
       // monster on field must still be face-up and not negated
       if (card.location === 'mzone' && !card.faceUp && t.event.type !== 'flipped') continue;
       if (card.location === 'mzone' && this.isNegated(card)) continue;
@@ -1650,12 +1668,22 @@ export class Game {
     if (card.location !== 'hand' || !card.isMonster) return false;
     if (card.isExtra || card.data.cannotNormalSummon) return false;
     if (this.players[p].normalSummonsLeft <= 0) return false;
+    if (!this.hasNormalSummonFor(p, card, set)) return false;
     if (!set && this.queryPlayer(p, 'cannotNormalSummon')) return false;
+    if (!set && this.queryCard(card, 'cannotBeSummoned')) return false;
     if (set && this.queryPlayer(p, 'cannotSet')) return false;
     const need = this.tributesNeeded(card);
     if (need === 0) return this.freeMZones(p) > 0;
+    if (!set && this.queryCard(card, 'cannotTributeSummon')) return false;
     const trib = this.tributeCandidates(p, card);
     return trib.length >= need || this.altTributeCandidates(p, card).length > 0; // ABPF: alternative Tribute rule
+  }
+
+  /** Is one of the player's remaining Normal Summons usable for `card` (unrestricted, or a restricted one it fits)? */
+  hasNormalSummonFor(p: PlayerId, card: CardInstance, set: boolean): boolean {
+    const ps = this.players[p];
+    const restricted = ps.restrictedSummons ?? [];
+    return ps.normalSummonsLeft > restricted.length || restricted.some((r) => r.allow(card, set));
   }
 
   /** Normal Summon or Set a monster (handles tributes). */
@@ -1681,6 +1709,11 @@ export class Game {
       await this.moveCards(tributes, 'grave', { reason: 'tribute', reasons: ['tribute', 'cost'], reasonPlayer: p, reasonCard: card });
     }
     this.players[p].normalSummonsLeft--;
+    // Use up a restricted extra Normal Summon this monster fits, keeping the unrestricted one for later.
+    const restricted = this.players[p].restrictedSummons ?? [];
+    const ri = restricted.findIndex((r) => r.allow(card, set));
+    if (ri >= 0) restricted.splice(ri, 1);
+    else if (restricted.length > this.players[p].normalSummonsLeft) restricted.splice(0, restricted.length - this.players[p].normalSummonsLeft);
     this.recentEvents = [];
     this.beginBatch();
     this.rawMove(card, 'mzone', { controller: p, faceUp: !set, pos: set ? 'def' : 'atk' });
@@ -1770,7 +1803,7 @@ export class Game {
      */
     legalityChecked = false,
   ) {
-    if (!legalityChecked && this.queryPlayer(p, 'cannotSpecialSummon')) return false;
+    if (!legalityChecked && (this.queryPlayer(p, 'cannotSpecialSummon') || this.queryCard(card, 'cannotBeSummoned'))) return false;
     let position: BattlePos = 'atk';
     if (pos === 'choose') {
       const r = await this.controllers[p].choosePosition(this, p, card, ['atk', 'def']);
@@ -1831,6 +1864,7 @@ export class Game {
     if (synchro.location !== 'extra' || !synchro.hasType('synchro')) return false;
     if (this.queryPlayer(p, 'cannotSpecialSummon')) return false;
     if (this.queryPlayer(p, 'cannotSynchroSummon')) return false; // ABPF
+    if (this.queryCard(synchro, 'cannotBeSummoned')) return false;
     return this.synchroCombos(p, synchro).length > 0;
   }
 
@@ -1868,7 +1902,7 @@ export class Game {
   }
 
   async synchroSummon(p: PlayerId, synchro: CardInstance, forced?: CardInstance[]): Promise<boolean> {
-    if (this.queryPlayer(p, 'cannotSpecialSummon') || this.queryPlayer(p, 'cannotSynchroSummon')) return false;
+    if (this.queryPlayer(p, 'cannotSpecialSummon') || this.queryPlayer(p, 'cannotSynchroSummon') || this.queryCard(synchro, 'cannotBeSummoned')) return false;
     const combos = this.synchroCombos(p, synchro);
     const mats = forced ?? (await this.pickCombo(p, combos, `Select Synchro Materials for ${synchro.name}`));
     if (!mats) return false;
@@ -1981,6 +2015,7 @@ export class Game {
     const tp = this.turnPlayer;
     this.turnData = {};
     this.players[tp].normalSummonsLeft = 1;
+    this.players[tp].restrictedSummons = [];
     this.actionCounter = 0;
     for (const c of this.allCards) {
       c.attacksThisTurn = 0;
@@ -2094,6 +2129,8 @@ export class Game {
     if (!range.includes(c.location)) return false;
     if (this.chain.length) return false;
     if (this.queryPlayer(p, 'cannotSpecialSummon')) return false;
+    if (this.queryCard(c, 'cannotBeSummoned')) return false;
+    if (ef.gyBanishCost && this.gyBanishLocked()) return false;
     if (c.location === 'mzone') {
       // e.g. contact fusion from field, handled via extra deck card; not supported here
       return false;

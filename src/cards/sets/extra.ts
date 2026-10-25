@@ -800,18 +800,11 @@ monster('Turbo Warrior', {
             }
           },
         },
-        {
-          // Approximation: the activating effect is on top of the chain while targets are picked.
-          q: 'untargetable',
-          value: (ctx) => {
-            const ch = ctx.game.chain;
-            const top = ch[ch.length - 1];
-            return !!top && top.card.isMonster && top.player !== ctx.player && ctx.level(top.card) <= 6;
-          },
-        },
       ],
     },
   ],
+  // "Cannot be targeted by the effects of Level 6 or lower monsters" (either player's).
+  targetImmunity: (_self, source, ctx) => source.isMonster && (source.onField ? ctx.level(source) : source.data.level ?? 0) <= 6,
 });
 
 monster('Iron Chain Dragon', {

@@ -28,6 +28,7 @@ import './sets/csoc';
 import './sets/tdgs';
 import './sets/archetype-extras';
 import './sets/archetype-extras2';
+import './gy-costs';
 import { applyBanlist } from './banlist';
 
 applyBanlist();
