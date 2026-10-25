@@ -4,6 +4,7 @@ import type { Game, LogEntry } from '../../engine/game';
 import type { Phase, PlayerId } from '../../engine/types';
 import { cardArtSrc } from '../cards/art';
 import { liveStats, renderCard, typeLine } from '../cards/render';
+import { zoomCard } from '../cards/zoom';
 import { renderAvatar } from '../theme/avatars';
 import { esc } from '../theme/util';
 import type { DuelSide } from './api';
@@ -235,7 +236,20 @@ export class PreviewPanel {
     this.cardHost = h('div', 'preview-card');
     this.details = h('div', 'preview-details');
     this.el.append(this.cardHost, this.details);
+    this.cardHost.title = 'Click to enlarge';
+    this.cardHost.style.cursor = 'zoom-in';
+    this.cardHost.addEventListener('click', (ev) => {
+      // On phones the sheet's own click handler decides; elsewhere enlarge directly.
+      if (this.el.closest('.show-preview-sheet')) return;
+      ev.stopPropagation();
+      this.zoom();
+    });
     this.showEmpty();
+  }
+
+  /** Enlarge the card currently shown. */
+  zoom() {
+    if (this.current) zoomCard(this.current.data, { instance: this.current.inst, game: this.game });
   }
 
   private showEmpty() {

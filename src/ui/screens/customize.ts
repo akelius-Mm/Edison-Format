@@ -1,5 +1,6 @@
 // Customize: sleeve, playmat, avatar and player name.
 import { getSettings, updateSettings } from '../settings';
+import { getCustomImage, pickCustomImage, type CustomKind } from '../theme/customImages';
 import { avatarGrid } from './components';
 import { clear, h, toast } from './dom';
 import { PLAYMATS, SLEEVES, applyPlaymat, renderAvatar, sleevePreview } from './ext';
@@ -52,11 +53,12 @@ export function customizeScreen(): Screen {
             class: ['cz-opt', cur === sl.id && 'on'],
             role: 'radio',
             'aria-checked': String(cur === sl.id),
-            onclick: () => {
-              updateSettings({ sleeve: sl.id });
-              drawSleeves();
-              drawPreview();
-            },
+            onclick: () =>
+              void chooseOrUpload('sleeve', sl.id, () => {
+                updateSettings({ sleeve: sl.id });
+                drawSleeves();
+                drawPreview();
+              }),
           },
           h('span', { class: 'cz-sleeve' }, sleevePreview(sl.id, 'sm')),
           h('span', { class: 'cz-label' }, sl.name),
@@ -81,11 +83,12 @@ export function customizeScreen(): Screen {
             role: 'radio',
             'aria-checked': String(cur === m.id),
             title: m.description,
-            onclick: () => {
-              updateSettings({ playmat: m.id });
-              drawMats();
-              drawPreview();
-            },
+            onclick: () =>
+              void chooseOrUpload('mat', m.id, () => {
+                updateSettings({ playmat: m.id });
+                drawMats();
+                drawPreview();
+              }),
           },
           sw,
           h('span', { class: 'cz-label' }, m.name),
@@ -118,8 +121,8 @@ export function customizeScreen(): Screen {
             h('div', { class: 'field' }, h('span', { class: 'field-label' }, 'Avatar'), avatarGrid(s.avatar, (id) => (updateSettings({ avatar: id }), drawPreview(), toast('Avatar updated.', 'success', 1200)), 64)),
           ),
         ),
-        section('Card sleeves', sleeveGrid),
-        section('Playmat', matGrid),
+        section('Card sleeves', uploadRow('sleeve', 'Upload a sleeve image', 'Use a photo of your real sleeves or any card-back image. It is cropped to card shape.', () => (updateSettings({ sleeve: 'custom' }), drawSleeves(), drawPreview())), sleeveGrid),
+        section('Playmat', uploadRow('mat', 'Upload a playmat image', 'Use a photo or scan of your own playmat. Landscape images work best.', () => (updateSettings({ playmat: 'custom' }), drawMats(), drawPreview())), matGrid),
         section('Profile & statistics', profileStats()),
       ),
       h('aside', { class: 'cz-side' }, h('div', { class: 'section-title' }, h('h2', null, 'Preview')), preview),
@@ -166,5 +169,44 @@ function profileStats() {
           : h('div', { class: 'pf-muted' }, 'No matches played yet.'),
       ),
     ),
+  );
+}
+
+/** Custom tiles open the file picker the first time; other tiles just select. */
+async function chooseOrUpload(kind: CustomKind, id: string, select: () => void) {
+  if (id !== 'custom' || getCustomImage(kind)) return select();
+  try {
+    if (await pickCustomImage(kind)) {
+      select();
+      toast(kind === 'mat' ? 'Playmat uploaded.' : 'Sleeve uploaded.', 'success', 1600);
+    }
+  } catch (e) {
+    toast((e as Error).message, 'error', 3500);
+  }
+}
+
+function uploadRow(kind: CustomKind, label: string, help: string, done: () => void) {
+  return h(
+    'div',
+    { class: 'cz-upload', style: { display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap', marginBottom: '14px' } },
+    h(
+      'button',
+      {
+        type: 'button',
+        class: 'ui-btn ui-btn-ghost',
+        onclick: async () => {
+          try {
+            if (await pickCustomImage(kind)) {
+              done();
+              toast(kind === 'mat' ? 'Playmat uploaded.' : 'Sleeve uploaded.', 'success', 1600);
+            }
+          } catch (e) {
+            toast((e as Error).message, 'error', 3500);
+          }
+        },
+      },
+      getCustomImage(kind) ? label.replace('Upload a', 'Replace your') : label,
+    ),
+    h('span', { class: 'field-help', style: { fontSize: '12px', opacity: '.75', flex: '1 1 220px' } }, help),
   );
 }

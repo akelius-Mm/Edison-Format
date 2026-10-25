@@ -1,4 +1,5 @@
 // Card-back (sleeve) designs. Pure SVG, rendered as CSS background images.
+import { getCustomImage } from './customImages';
 import { Rand, polyPoints, starPoints, svgUri } from './util';
 
 export interface Sleeve {
@@ -363,7 +364,42 @@ const DESIGNS: { id: string; name: string; color: string; svg: () => string }[] 
       );
     },
   },
+  ...matteSleeves(),
 ];
+
+/** Solid matte sleeves like the ones players actually sleeve their decks in. */
+function matteSleeves() {
+  const mk = (id: string, name: string, color: string, light: string, dark: string, foil = false) => ({
+    id,
+    name,
+    color,
+    svg: () => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
+<defs>
+<filter id="grain" x="0" y="0" width="100%" height="100%"><feTurbulence type="fractalNoise" baseFrequency="1.3" numOctaves="2" seed="${id.length * 7}" stitchTiles="stitch"/><feColorMatrix values="0 0 0 0 .5  0 0 0 0 .5  0 0 0 0 .5  0 0 0 .55 0"/></filter>
+<radialGradient id="body" cx="32%" cy="22%" r="95%"><stop offset="0" stop-color="${light}"/><stop offset=".55" stop-color="${color}"/><stop offset="1" stop-color="${dark}"/></radialGradient>
+<linearGradient id="sheen" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fff" stop-opacity="${foil ? 0.45 : 0.16}"/><stop offset=".32" stop-color="#fff" stop-opacity="0"/><stop offset=".55" stop-color="#fff" stop-opacity="${foil ? 0.22 : 0.05}"/><stop offset=".7" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".28"/></linearGradient>
+</defs>
+<rect width="${W}" height="${H}" rx="4" fill="url(#body)"/>
+<rect width="${W}" height="${H}" rx="4" filter="url(#grain)" opacity="${foil ? 0.35 : 0.6}"/>
+<g fill="none" stroke="#000" stroke-opacity=".22" stroke-width=".9" transform="translate(50 120)"><path d="M0 -7 L7 0 L0 7 L-7 0 Z"/><path d="M0 -3.5 L3.5 0 L0 3.5 L-3.5 0 Z"/></g>
+<g fill="none" stroke="#fff" stroke-opacity=".12" stroke-width=".9" transform="translate(50.4 120.4)"><path d="M0 -7 L7 0 L0 7 L-7 0 Z"/></g>
+<rect width="${W}" height="${H}" rx="4" fill="url(#sheen)"/>
+<rect x=".7" y=".7" width="${W - 1.4}" height="${H - 1.4}" rx="3.6" fill="none" stroke="#fff" stroke-opacity=".22" stroke-width="1.1"/>
+<rect x="2.2" y="2.2" width="${W - 4.4}" height="${H - 4.4}" rx="2.8" fill="none" stroke="#000" stroke-opacity=".25" stroke-width=".6"/>
+</svg>`,
+  });
+  return [
+    mk('matte-black', 'Matte Black', '#18181d', '#3a3a44', '#050507'),
+    mk('matte-red', 'Matte Red', '#9e1b22', '#d6454a', '#4a070c'),
+    mk('matte-blue', 'Matte Blue', '#1f448f', '#4e7fd6', '#0b1d47'),
+    mk('matte-white', 'Matte White', '#e4e1d8', '#ffffff', '#a9a59a'),
+    mk('matte-purple', 'Matte Purple', '#52307f', '#8a5fc4', '#22103c'),
+    mk('matte-green', 'Matte Green', '#1e6b3c', '#46a86a', '#0a2f19'),
+    mk('matte-sky', 'Matte Sky Blue', '#3b8fd1', '#7cc0f2', '#174a78'),
+    mk('gold-foil', 'Gold Foil', '#b8892b', '#f6dc8e', '#6a4810', true),
+    mk('silver-foil', 'Silver Foil', '#8d96a3', '#f1f4f8', '#3e4652', true),
+  ];
+}
 
 const uriCache = new Map<string, string>();
 
@@ -377,17 +413,34 @@ function sleeveUri(id: string): string {
   return u;
 }
 
-export const SLEEVES: Sleeve[] = DESIGNS.map((d) => ({
-  id: d.id,
-  name: d.name,
-  color: d.color,
-  get css() {
-    return `${sleeveUri(d.id)} center / 100% 100% no-repeat, ${d.color}`;
+export const CUSTOM_ID = 'custom';
+
+export const SLEEVES: Sleeve[] = [
+  ...DESIGNS.map((d) => ({
+    id: d.id,
+    name: d.name,
+    color: d.color,
+    get css() {
+      return `${sleeveUri(d.id)} center / 100% 100% no-repeat, ${d.color}`;
+    },
+    render(el: HTMLElement) {
+      applySleeve(el, d.id);
+    },
+  })),
+  {
+    id: CUSTOM_ID,
+    name: 'Your Upload',
+    color: '#333',
+    get css() {
+      const img = getCustomImage('sleeve');
+      if (!img) return `${sleeveUri(DESIGNS[0].id)} center / 100% 100% no-repeat, ${DESIGNS[0].color}`;
+      return `url("${img}") center / cover no-repeat, #222`;
+    },
+    render(el: HTMLElement) {
+      applySleeve(el, CUSTOM_ID);
+    },
   },
-  render(el: HTMLElement) {
-    applySleeve(el, d.id);
-  },
-}));
+];
 
 export function sleeveById(id: string): Sleeve {
   return SLEEVES.find((s) => s.id === id) ?? SLEEVES[0];

@@ -1,3 +1,4 @@
+import { zoomCard } from '../cards/zoom';
 // Reusable UI pieces: deck tiles & pickers, avatar picker, persona editor, card detail.
 import type { Difficulty } from '../../ai/ai';
 import type { CardData } from '../../engine/card';
@@ -253,7 +254,7 @@ export function cardDetail(c: CardData | null, opts: { actions?: Child; size?: '
   return h(
     'div',
     { class: 'card-detail' },
-    h('div', { class: 'cd-card' }, renderCard(c, { size: opts.size ?? 'lg', showLimit: true })),
+    h('div', { class: 'cd-card', title: 'Click to enlarge', style: { cursor: 'zoom-in' }, onclick: () => zoomCard(c) }, renderCard(c, { size: opts.size ?? 'lg', showLimit: true })),
     h(
       'div',
       { class: 'cd-info' },

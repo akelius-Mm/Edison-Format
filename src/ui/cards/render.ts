@@ -140,6 +140,8 @@ export function renderCard(data: CardData, opts: RenderCardOptions = {}): HTMLEl
   }
   const frame = frameOf(data);
   el.dataset.frame = frame;
+  el.dataset.cardId = data.id;
+  el.dataset.cardName = data.name;
   el.innerHTML = cardFaceHTML(data, opts);
   const art = el.querySelector('.yc-art') as HTMLElement | null;
   if (art) attachOfficialArt(art, data.name);

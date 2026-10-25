@@ -1,4 +1,5 @@
 // Themed playmats. Each provides a background (layered gradients + SVG ornament) and zone colours.
+import { getCustomImage } from './customImages';
 import { Rand, polyPoints, starPoints, svgUri } from './util';
 
 export interface Playmat {
@@ -255,11 +256,92 @@ const DEFS: Def[] = [
         ${seal(800, 500, 360, '#c06bff', 0.12)}`);
     },
   },
+  ...realMats(),
 ];
+
+/** Mats modelled on real-world play surfaces: neoprene, felt, wood. */
+function realMats(): Def[] {
+  const noise = (id: string, freq: string, alpha: number, octaves = 3, extra = '') =>
+    `<filter id="${id}" x="0" y="0" width="100%" height="100%"><feTurbulence type="fractalNoise" baseFrequency="${freq}" numOctaves="${octaves}" seed="7" stitchTiles="stitch"/>${extra || `<feColorMatrix values="0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 ${alpha} 0"/>`}</filter>`;
+  const grain = () => `<rect width="${VW}" height="${VH}" filter="url(#grain)"/>`;
+  return [
+    {
+      id: 'tournament-black',
+      name: 'Tournament Neoprene',
+      description: 'Black rubber-backed mat with crisp white zone printing.',
+      base: '#111215',
+      accent: '#e8e8e8',
+      zoneLine: 'rgba(240,240,240,.62)',
+      zoneFill: 'rgba(255,255,255,.03)',
+      gradient: 'radial-gradient(ellipse at 50% 45%, #24262c 0%, #131418 60%, #08090b 100%)',
+      svg: () =>
+        wrap(
+          `${grain()}
+          <g fill="none" stroke="#fff" opacity=".1" stroke-width="3"><circle cx="800" cy="500" r="300"/><circle cx="800" cy="500" r="280" stroke-dasharray="4 10"/></g>
+          <text x="800" y="512" text-anchor="middle" font-family="Georgia, serif" font-size="46" letter-spacing="18" fill="#fff" opacity=".1">DUEL FIELD</text>`,
+          noise('grain', '.85', 0.09),
+        ),
+    },
+    {
+      id: 'green-felt',
+      name: 'Green Felt',
+      description: 'Card-room felt with a soft woven nap.',
+      base: '#0f3d26',
+      accent: '#e9d9a6',
+      zoneLine: 'rgba(240,226,180,.5)',
+      zoneFill: 'rgba(0,0,0,.12)',
+      gradient: 'radial-gradient(ellipse at 50% 45%, #1d6b42 0%, #12472c 55%, #072316 100%)',
+      svg: () => wrap(`${grain()}`, noise('grain', '1.4 .9', 0.12, 4)),
+    },
+    {
+      id: 'walnut-table',
+      name: 'Walnut Table',
+      description: 'Duelling on a polished wooden kitchen table.',
+      base: '#3b2414',
+      accent: '#f0c98a',
+      zoneLine: 'rgba(255,226,170,.5)',
+      zoneFill: 'rgba(20,10,4,.28)',
+      gradient: 'linear-gradient(180deg, #5a361d 0%, #3d2412 50%, #4d2e17 100%)',
+      svg: () =>
+        wrap(
+          `<rect width="${VW}" height="${VH}" filter="url(#wood)"/>
+          <g stroke="#000" stroke-opacity=".28" stroke-width="3">${[0, 1, 2, 3, 4, 5].map((i) => `<line x1="0" y1="${i * 200 + 40}" x2="${VW}" y2="${i * 200 + 40}"/>`).join('')}</g>
+          <rect width="${VW}" height="${VH}" fill="url(#gloss)"/>`,
+          noise(
+            'wood',
+            '.0035 .09',
+            0,
+            4,
+            '<feColorMatrix values="0 0 0 .55 .2  0 0 0 .32 .11  0 0 0 .16 .05  0 0 0 0 .55"/>',
+          ) + '<linearGradient id="gloss" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".1"/><stop offset=".4" stop-color="#fff" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".25"/></linearGradient>',
+        ),
+    },
+    {
+      id: 'edison-2010',
+      name: 'Edison 2010',
+      description: 'Event-style navy mat with a gold championship crest.',
+      base: '#0a1530',
+      accent: '#e6c46a',
+      zoneLine: 'rgba(230,196,106,.6)',
+      zoneFill: 'rgba(6,12,30,.45)',
+      gradient: 'radial-gradient(ellipse at 50% 45%, #1b2f63 0%, #0d1a3c 55%, #040915 100%)',
+      svg: () =>
+        wrap(
+          `${grain()}
+          ${seal(800, 500, 330, '#e6c46a', 0.16)}
+          <text x="800" y="470" text-anchor="middle" font-family="Georgia, serif" font-weight="700" font-size="64" letter-spacing="14" fill="#e6c46a" opacity=".16">EDISON</text>
+          <text x="800" y="545" text-anchor="middle" font-family="Georgia, serif" font-size="30" letter-spacing="12" fill="#e6c46a" opacity=".16">APRIL · 2010</text>`,
+          noise('grain', '.9', 0.07),
+        ),
+    },
+  ];
+}
 
 const cache = new Map<string, string>();
 
-export const PLAYMATS: Playmat[] = DEFS.map((d) => ({
+export const CUSTOM_MAT_ID = 'custom';
+
+const BUILT_IN: Playmat[] = DEFS.map((d) => ({
   id: d.id,
   name: d.name,
   description: d.description,
@@ -276,6 +358,23 @@ export const PLAYMATS: Playmat[] = DEFS.map((d) => ({
     return c;
   },
 }));
+
+export const PLAYMATS: Playmat[] = [
+  ...BUILT_IN,
+  {
+    id: CUSTOM_MAT_ID,
+    name: 'Your Upload',
+    description: 'A photo of your own playmat.',
+    base: '#111',
+    accent: '#e8e8e8',
+    zoneLine: 'rgba(255,255,255,.6)',
+    zoneFill: 'rgba(0,0,0,.18)',
+    get css() {
+      const img = getCustomImage('mat');
+      return img ? `url("${img}") center / cover no-repeat, #111` : BUILT_IN[0].css;
+    },
+  },
+];
 
 export function playmatById(id: string): Playmat {
   return PLAYMATS.find((p) => p.id === id) ?? PLAYMATS[0];

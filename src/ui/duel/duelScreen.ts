@@ -9,6 +9,7 @@ import { Ctx } from '../../engine/ctx';
 import { Game, GameOver, phaseName } from '../../engine/game';
 import type { BattlePos, PlayerId } from '../../engine/types';
 import { ICONS } from '../cards/icons';
+import { zoomCard } from '../cards/zoom';
 import { getSettings, onSettingsChange, updateSettings } from '../settings';
 import { applyPlaymat } from '../theme/playmats';
 import { esc } from '../theme/util';
@@ -250,6 +251,7 @@ class DuelScreen implements HumanUI {
           if (this.root.classList.contains('show-preview-sheet') && t.closest('.preview')) {
             this.root.classList.remove('show-preview-sheet');
             ev.stopPropagation();
+            if (t.closest('.preview-card')) this.preview.zoom();
           } else if (!t.closest('.dc, .yc')) {
             this.root.classList.remove('show-preview-sheet', 'show-log-sheet');
           }
@@ -666,10 +668,11 @@ class DuelScreen implements HumanUI {
       return;
     }
     const st = this.actionState;
-    if (!st) return;
-    const acts = st.byCard.get(c.uid);
+    const acts = st?.byCard.get(c.uid);
     if (!acts?.length) {
       this.dialogs.closeMenu();
+      // Nothing to do with this card: tap to enlarge it.
+      if (this.canSee(c)) zoomCard(c.data, { instance: c, game: this.game });
       return;
     }
     if (acts.length === 1 && acts[0].type === 'attack') {
@@ -681,10 +684,13 @@ class DuelScreen implements HumanUI {
       r.left + r.width / 2,
       r.top,
       c.name,
-      acts.map((a) => {
-        const l = this.actionLabel(a);
-        return { label: l.label, sub: l.sub, onClick: () => this.resolveAction(a), kind: a.type === 'attack' ? 'is-attack' : '' };
-      }),
+      [
+        ...acts.map((a) => {
+          const l = this.actionLabel(a);
+          return { label: l.label, sub: l.sub, onClick: () => this.resolveAction(a), kind: a.type === 'attack' ? 'is-attack' : '' };
+        }),
+        { label: 'View card', sub: 'Enlarge and read', onClick: () => zoomCard(c.data, { instance: c, game: this.game }), kind: 'is-view' },
+      ],
     );
     void ev;
   }
