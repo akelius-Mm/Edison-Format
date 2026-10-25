@@ -12,6 +12,7 @@ import { ensureRgbtPatches } from '../src/cards/sets/rgbt';
 import { ensureCrmsPatches } from '../src/cards/sets/crms';
 import { ensurePtdnPatches } from '../src/cards/sets/ptdn';
 import { ensureLodtPatches } from '../src/cards/sets/lodt';
+import { ensureGlasPatches } from '../src/cards/sets/glas';
 import { ensureCsocPatches } from '../src/cards/sets/csoc';
 import { PREMADE_DECKS, aiSideDeck, buildDeckList, canSwap, moveToDeck, moveToSide, sideSummary, sidedDeckProblems, swapCards, validateDeck, type DeckIds } from '../src/decks';
 import { ensureTdgsPatches } from '../src/cards/sets/tdgs';
@@ -870,6 +871,7 @@ function eq(a: unknown, b: unknown, msg: string) {
   await crmsTests();
   await ptdnTests();
   await lodtTests();
+  await glasTests();
   await csocTests();
   await sidingTests();
   await tdgsTests();
@@ -2991,5 +2993,272 @@ async function csocTests() {
     await g.performAction(0, { type: 'summon', card: b });
     eq(b.location, 'grave', 'Summon negated');
     eq(plant.location, 'grave', 'Plant Tributed');
+  });
+}
+
+// ---------------------------------------------------------------- Gladiator's Assault (GLAS)
+
+async function glasTests() {
+  const glasSetup = () => {
+    const s = setup();
+    ensureGlasPatches(s.g);
+    return s;
+  };
+  const live = (c: CardInstance) => {
+    c.activeOnField = true;
+    return c;
+  };
+  const battleEnd = async (g: Game) => {
+    g.beginBatch();
+    g.emit({ type: 'battleEnd', player: g.turnPlayer, phase: 'battle' });
+    await g.processTriggers(true);
+  };
+  const deckCard = (g: Game, p: PlayerId, name: string) => {
+    const c = g.registerCard(new (g.allCards[0].constructor as any)(cardByName(name), p)) as CardInstance;
+    c.location = 'none';
+    g.rawMove(c, 'deck');
+    return c;
+  };
+
+  await test('GLAS: Gladiator Beast Octavius — destroys a face-down Spell/Trap, then returns to the Deck after battle', async () => {
+    const { g, place } = glasSetup();
+    const bestiari = place(0, cardByName('Gladiator Beast Bestiari'), 'grave');
+    const oct = deckCard(g, 0, 'Gladiator Beast Octavius');
+    const st = place(1, cardByName('Mirror Force'), 'szone', { faceUp: false });
+    await g.specialSummon([oct], 0, { pos: 'atk', reasonCard: bestiari });
+    await g.processTriggers(true);
+    eq(st.location, 'grave', 'face-down Spell/Trap destroyed');
+    oct.attackedThisTurnOrWasAttacked = true;
+    await battleEnd(g);
+    eq(oct.location, 'deck', 'no card to discard: shuffled into the Deck');
+  });
+
+  await test('GLAS: Alexander / Spartacus can only be Special Summoned by Dimacari / Hoplomus; Spartacus searches an equip', async () => {
+    const { g, place } = glasSetup();
+    const alex = deckCard(g, 0, 'Gladiator Beast Alexander');
+    const sp = deckCard(g, 0, 'Gladiator Beast Spartacus');
+    const gladius = deckCard(g, 0, "Gladiator Beast's Battle Gladius");
+    const dim = place(0, cardByName('Gladiator Beast Dimacari'), 'grave');
+    const hop = place(0, cardByName('Gladiator Beast Hoplomus'), 'grave');
+    eq((await g.specialSummon([alex], 0, { pos: 'atk', reasonCard: hop })).length, 0, 'Alexander by Hoplomus: no');
+    eq((await g.specialSummon([sp], 0, { pos: 'atk', reasonCard: dim })).length, 0, 'Spartacus by Dimacari: no');
+    eq((await g.specialSummon([alex], 0, { pos: 'atk', reasonCard: dim })).length, 1, 'Alexander by Dimacari');
+    eq(g.queryCard(alex, 'unaffectedBySpells'), true, 'Special Summoned Alexander is unaffected by Spells');
+    await g.specialSummon([sp], 0, { pos: 'atk', reasonCard: hop });
+    await g.processTriggers(true);
+    eq(sp.location, 'mzone', 'Spartacus by Hoplomus');
+    eq(gladius.location, 'hand', 'Gladiator Beast Equip Spell added');
+  });
+
+  await test('GLAS: Dimacari tags out into Alexander; Colosseum counts it, Witch Doctor of Sparta burns', async () => {
+    const { g, place } = glasSetup();
+    const alex = deckCard(g, 0, 'Gladiator Beast Alexander');
+    const dim = place(0, cardByName('Gladiator Beast Dimacari'), 'mzone');
+    const col = live(place(0, cardByName('Colosseum - Cage of the Gladiator Beasts'), 'fzone', { faceUp: true }));
+    place(1, cardByName('Witch Doctor of Sparta'), 'mzone');
+    dim.attackedThisTurnOrWasAttacked = true;
+    await battleEnd(g);
+    eq(dim.location, 'deck', 'Dimacari returned');
+    eq(alex.location, 'mzone', 'Alexander Special Summoned from the Deck');
+    eq(col.counters.colosseum, 1, 'Colosseum counter');
+    eq(g.getAtk(alex), 2500, 'Alexander +100');
+    eq(g.players[0].lp, 7500, 'Witch Doctor: 500 to its opponent');
+  });
+
+  await test("GLAS: Gladiator Beast's Battle Gladius returns to the hand when its monster tags out", async () => {
+    const { g, place } = glasSetup();
+    deckCard(g, 0, 'Gladiator Beast Laquari');
+    const b = place(0, cardByName('Gladiator Beast Bestiari'), 'mzone');
+    const gl = live(place(0, cardByName("Gladiator Beast's Battle Gladius"), 'szone', { faceUp: true }));
+    g.equip(gl, b);
+    eq(g.getAtk(b), 1800, '+300 ATK');
+    b.attackedThisTurnOrWasAttacked = true;
+    await battleEnd(g);
+    eq(b.location, 'deck', 'Bestiari tagged out');
+    eq(gl.location, 'hand', 'Gladius back in hand');
+  });
+
+  await test('GLAS: Gladiator Beast Gaiodiaz — contact fusion, burn equal to the DEF of the destroyed monster', async () => {
+    const { g, place } = glasSetup();
+    place(0, cardByName('Gladiator Beast Spartacus'), 'mzone');
+    place(0, cardByName('Gladiator Beast Laquari'), 'mzone');
+    const gaio = place(0, cardByName('Gladiator Beast Gaiodiaz'), 'extra');
+    const proc = g.legalMainActions(0).find((a) => a.type === 'proc' && a.card === gaio);
+    if (!proc) throw new Error('no contact fusion');
+    await g.performAction(0, proc);
+    eq(gaio.location, 'mzone', 'Gaiodiaz summoned');
+    eq(g.monsters(0).length, 1, 'materials returned');
+    const w = place(1, T.wall, 'mzone', { pos: 'def' });
+    await g.conductAttack(0, gaio);
+    await g.processTriggers(true);
+    eq(w.location, 'grave', 'wall destroyed');
+    eq(g.players[1].lp, 6000, '2000 burn');
+  });
+
+  await test('GLAS: Disarm returns a Gladiator Beast card to negate a Spell', async () => {
+    const { g, c0, place } = glasSetup();
+    const disarm = place(0, cardByName('Disarm'), 'szone', { faceUp: false });
+    const gb = place(0, cardByName('Gladiator Beast Secutor'), 'hand');
+    const mine = place(0, T.brute, 'mzone');
+    const dh = place(1, cardByName('Dark Hole'), 'hand');
+    g.turnPlayer = 1;
+    c0.respond = respondWith('Disarm');
+    await activateCard(g, 1, dh);
+    eq(disarm.location, 'grave', 'Disarm used');
+    eq(gb.location, 'deck', 'Gladiator Beast returned to the Deck');
+    eq(dh.location, 'grave', 'Dark Hole negated');
+    eq(mine.location, 'mzone', 'monster survived');
+  });
+
+  await test('GLAS: Cloudian - Nimbusman Tributes 2 WATER monsters; Updraft burns the Fog Counters away', async () => {
+    const { g, c0, place } = glasSetup();
+    place(0, cardByName('Cloudian - Smoke Ball'), 'mzone');
+    place(0, cardByName('Cloudian - Smoke Ball'), 'mzone');
+    const nim = place(0, cardByName('Cloudian - Nimbusman'), 'hand');
+    (c0 as any).chooseOption = async () => 1;
+    await g.performAction(0, { type: 'summon', card: nim });
+    eq(nim.location, 'mzone', 'summoned');
+    eq(g.monsters(0).length, 1, '2 Tributes');
+    eq(nim.counters.fog, 2, '2 Fog Counters');
+    eq(g.getAtk(nim), 2000, '+500 per Fog Counter');
+    const up = place(0, cardByName('Updraft'), 'szone', { faceUp: false });
+    await activateCard(g, 0, up);
+    eq(g.players[1].lp, 7400, '600 damage');
+    eq(g.getAtk(nim), 1000, 'counters removed');
+  });
+
+  await test('GLAS: Cloudian - Cirrostratus removes 2 Fog Counters to destroy a monster; Natural Disaster burns', async () => {
+    const { g, c0, place } = glasSetup();
+    place(0, cardByName('Cloudian - Smoke Ball'), 'mzone');
+    live(place(0, cardByName('Natural Disaster'), 'szone', { faceUp: true }));
+    const cs = place(0, cardByName('Cloudian - Cirrostratus'), 'hand');
+    const v = place(1, T.brute, 'mzone');
+    await g.performAction(0, { type: 'summon', card: cs });
+    eq(cs.counters.fog, 2, '2 Cloudians on the field');
+    c0.pick = (_g, req) => (req.candidates.includes(v) ? [v] : req.candidates.slice(0, req.min));
+    await activateCard(g, 0, cs);
+    eq(v.location, 'grave', 'destroyed');
+    eq(cs.counters.fog, 0, 'counters removed');
+    eq(g.players[1].lp, 7500, 'Natural Disaster: 500');
+  });
+
+  await test('GLAS: Sheep Cloud tokens only Tribute for Cloudians; Ghost Fog blocks damage and spreads Fog Counters', async () => {
+    const { g, place } = glasSetup();
+    const sheep = place(1, cardByName('Cloudian - Sheep Cloud'), 'mzone');
+    const a = place(0, T.brute, 'mzone');
+    await g.conductAttack(0, a);
+    await g.processTriggers(true);
+    eq(sheep.location, 'grave', 'Sheep Cloud destroyed');
+    eq(g.monsters(1).length, 2, '2 Cloudian Tokens');
+    eq(g.tributeCandidates(1, place(1, T.giant, 'hand')).length, 0, 'no Tribute for a non-Cloudian');
+    eq(g.tributeCandidates(1, place(1, cardByName('Cloudian - Nimbusman'), 'hand')).length, 2, 'Tribute for a Cloudian');
+
+    const s2 = glasSetup();
+    const fogC = s2.place(1, cardByName('Cloudian - Ghost Fog'), 'mzone');
+    const b = s2.place(0, T.brute, 'mzone');
+    await s2.g.conductAttack(0, b);
+    await s2.g.processTriggers(true);
+    eq(fogC.location, 'grave', 'Ghost Fog destroyed');
+    eq(s2.g.players[1].lp, 8000, 'no battle damage');
+    eq(b.counters.fog, 4, 'Fog Counters equal to the Level of the destroyer');
+    eq((await s2.g.specialSummon([fogC], 1, { pos: 'atk' })).length, 0, 'cannot be Special Summoned');
+  });
+
+  await test('GLAS: Truckroid equips the monster it destroyed and gains its ATK', async () => {
+    const { g, place } = glasSetup();
+    const tr = place(0, cardByName('Truckroid'), 'mzone');
+    const v = place(1, cardByName('Cloudian - Smoke Ball'), 'mzone');
+    await g.conductAttack(0, tr);
+    await g.processTriggers(true);
+    eq(v.location, 'szone', 'equipped');
+    eq(v.equippedTo, tr.uid, 'to Truckroid');
+    eq(g.getAtk(tr), 1200, '+200 ATK');
+  });
+
+  await test('GLAS: Dark Fusion summons Evil HERO Inferno Wing (Polymerization cannot); piercing + burn', async () => {
+    const { g, place } = glasSetup();
+    place(0, cardByName('Elemental Hero Avian'), 'hand');
+    place(0, cardByName('Elemental Hero Burstinatrix'), 'hand');
+    const iw = place(0, cardByName('Evil HERO Inferno Wing'), 'extra');
+    const poly = place(0, cardByName('Polymerization'), 'hand');
+    eq(g.getActivations(0, { open: true }).some((a) => a.card === poly), false, 'Polymerization cannot');
+    await activateCard(g, 0, place(0, cardByName('Dark Fusion'), 'hand'));
+    eq(iw.location, 'mzone', 'Inferno Wing Fusion Summoned');
+    eq(g.queryCard(iw, 'untargetable'), true, 'cannot be targeted this turn');
+    const w = place(1, T.wall, 'mzone', { pos: 'def' });
+    await g.conductAttack(0, iw);
+    await g.processTriggers(true);
+    eq(w.location, 'grave', 'destroyed');
+    eq(g.players[1].lp, 8000 - 100 - 2000, 'piercing 100 + burn 2000');
+  });
+
+  await test('GLAS: Elemental HERO Chaos Neos returns in the End Phase and Sets all face-up monsters', async () => {
+    const { g, place } = glasSetup();
+    const cn = place(0, cardByName('Elemental HERO Chaos Neos'), 'mzone');
+    const v = place(1, T.brute, 'mzone');
+    await (g as any).setPhase('end');
+    eq(cn.location, 'extra', 'back to the Extra Deck');
+    eq(v.faceUp, false, 'opponent monster Set');
+  });
+
+  await test('GLAS: Energy-Absorbing Monolith turns burn damage into a gain', async () => {
+    const { g, c0, place } = glasSetup();
+    place(0, cardByName('Energy-Absorbing Monolith'), 'szone', { faceUp: false });
+    const ok = place(1, cardByName('Ookazi'), 'hand');
+    g.turnPlayer = 1;
+    c0.respond = respondWith('Energy-Absorbing Monolith');
+    await activateCard(g, 1, ok);
+    eq(g.players[0].lp, 8800, 'gained 800');
+  });
+
+  await test('GLAS: Magical Reflect Slime reflects battle damage; Raptinus makes Gemini monsters Effect Monsters', async () => {
+    const { g, place } = glasSetup();
+    const slime = place(1, cardByName('Magical Reflect Slime'), 'mzone');
+    slime.flags.geminiSummoned = true;
+    const a = place(0, T.brute, 'mzone');
+    await g.conductAttack(0, a);
+    eq(g.players[1].lp, 8000, 'Slime controller takes nothing');
+    eq(g.players[0].lp, 8000 - 1100, 'attacker takes the damage');
+
+    const s2 = glasSetup();
+    const knight = s2.place(0, cardByName('Ancient Gear Knight'), 'mzone');
+    const rap = s2.place(0, cardByName('Superalloy Beast Raptinus'), 'mzone');
+    s2.g.update();
+    eq(!!knight.flags.geminiSummoned, true, 'Gemini is an Effect Monster');
+    await s2.g.destroy([rap], 'effect', 1);
+    eq(!!knight.flags.geminiSummoned, false, 'back to a Normal Monster');
+  });
+
+  await test('GLAS: "A" Cell Incubator gains an A-Counter when one is removed and spreads them when destroyed', async () => {
+    const { g, c0, place } = glasSetup();
+    const inc = live(place(0, cardByName('"A" Cell Incubator'), 'szone', { faceUp: true }));
+    const tel = place(0, cardByName('Alien Telepath'), 'mzone');
+    const v = place(1, T.brute, 'mzone');
+    v.counters.A = 1;
+    const st = place(1, cardByName('Mirror Force'), 'szone', { faceUp: false });
+    g.update();
+    c0.pick = (_g, req) => (req.candidates.includes(st) ? [st] : req.candidates.slice(0, req.min));
+    await activateCard(g, 0, tel);
+    eq(st.location, 'grave', 'Spell/Trap destroyed');
+    eq(v.counters.A ?? 0, 0, 'A-Counter removed');
+    eq(inc.counters.A, 1, 'Incubator got an A-Counter');
+    c0.pick = (_g, req) => (req.candidates.includes(v) ? [v] : req.candidates.slice(0, req.min));
+    await g.destroy([inc], 'effect', 1);
+    await g.processTriggers(true);
+    eq(v.counters.A, 1, 'counter placed on a face-up monster');
+  });
+
+  await test('GLAS: Defensive Tactics — no battle destruction or damage, then to the bottom of the Deck', async () => {
+    const { g, c0, place } = glasSetup();
+    const gb = place(0, cardByName('Gladiator Beast Hoplomus'), 'mzone');
+    const dt = place(0, cardByName('Defensive Tactics'), 'szone', { faceUp: false });
+    const a = place(1, T.giant, 'mzone');
+    g.turnPlayer = 1;
+    c0.respond = respondWith('Defensive Tactics');
+    await g.conductAttack(1, a);
+    eq(gb.location, 'mzone', 'not destroyed by battle');
+    eq(dt.location, 'deck', 'Defensive Tactics in the Deck');
+    eq(g.players[0].deck[0], dt, 'at the bottom');
+    eq(g.players[0].lp, 8000, 'no battle damage');
   });
 }
