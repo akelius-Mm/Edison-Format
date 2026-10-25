@@ -851,10 +851,10 @@ M('Morphtronic Cameran', {
       },
     },
     {
-      // APPROX: the engine's "untargetable" only covers the opponent's card effects.
+      // "cannot be targeted by effects": either player's.
       kind: 'continuous',
       active: (ctx) => ctx.self.pos === 'def',
-      mods: [{ q: 'untargetable', to: 'cards', filter: (_ctx, c: C) => faceUpOn(c) && isMorphMon(c) }],
+      mods: [{ q: 'untargetableByAll', to: 'cards', filter: (_ctx, c: C) => faceUpOn(c) && isMorphMon(c) }],
     },
   ],
 });
