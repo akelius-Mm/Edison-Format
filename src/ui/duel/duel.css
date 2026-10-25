@@ -2413,3 +2413,11 @@
 
 /* Spectating (AI vs AI, Friends Locals): nobody here can change phase; say whose turn it is by name. */
 .phasebar.is-spectating .phasebar-btns { display: none; }
+/* target picker: whose card / which zone on two readable lines, and section headings */
+.tile-cap--2 { white-space: normal; display: grid; gap: 1px; line-height: 1.25; }
+.tile-cap--2 > span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tile-cap--2 > span:first-child { color: var(--ef-text, #ecebe7); font-weight: 600; }
+.sel-section { grid-column: 1 / -1; justify-self: stretch; margin: 6px 2px -4px; font-size: 12px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ef-text-dim, rgba(236, 235, 231, 0.6)); }
+.tile-zmap { display: flex; gap: 3px; justify-content: center; margin-top: 3px; }
+.tile-zmap > span { width: 10px; height: 13px; border-radius: 2px; border: 1px solid rgba(236, 235, 231, 0.35); }
+.tile-zmap > span.on { background: #f2efe8; border-color: #f2efe8; }
