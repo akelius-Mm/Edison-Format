@@ -786,7 +786,7 @@ class DuelScreen implements HumanUI {
     // The Graveyard and Banished viewers link to each other (the banished pile is hidden on small boards).
     const other = loc === 'grave' ? 'banished' : loc === 'banished' ? 'grave' : null;
     const otherCards = other === 'grave' ? g.players[p].grave : other === 'banished' ? g.players[p].banished : [];
-    const links = other && (other === 'grave' || otherCards.length) ? [{ label: `${names[other]} (${otherCards.length})`, onClick: () => this.openPile(p, other) }] : [];
+    const links = other ? [{ label: `${names[other]} (${otherCards.length})`, onClick: () => this.openPile(p, other) }] : [];
     pileViewer(this.dialogs, this.promptCtx(), `${whose} ${names[loc]}`, cards, {
       links,
       faceDown: (c) => !this.canSee(c),

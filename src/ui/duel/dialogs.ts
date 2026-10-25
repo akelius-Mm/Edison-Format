@@ -412,9 +412,11 @@ export function selectDialog(d: Dialogs, ctx: PromptCtx, req: SelectRequest): { 
       else return;
       refresh();
     });
-    tile.addEventListener('dblclick', () => {
-      if (ok()) finish([...sel]);
-    });
+    // Desktop shortcut: double-click a single choice to confirm it (taps on a phone never confirm).
+    if (req.max === 1 && !isTouchUI())
+      tile.addEventListener('dblclick', () => {
+        if (ok()) finish([...sel]);
+      });
     grid.appendChild(tile);
   }
   const actions: ActionBtn[] = [{ label: 'Confirm', kind: 'primary', onClick: () => ok() && finish([...sel]), hotkey: 'Enter' }];
