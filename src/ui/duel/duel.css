@@ -2308,3 +2308,9 @@
 .ctx-item:disabled:hover,
 .ctx-item:disabled:active { background: none; }
 .duel-root .declare-input:focus-visible { outline: none; border-color: rgba(255, 255, 255, 0.3); }
+/* Phones held sideways: the spectator's speed control gets its own row above the tools */
+@media (orientation: landscape) and (max-height: 500px) {
+  .duel-root.is-spectator .duel-top { flex-wrap: wrap; gap: 6px; }
+  .duel-root.is-spectator .spec-speed { flex: 1 1 100%; order: -1; }
+  .duel-root .chip-btn { height: 28px; padding: 2px; }
+}
