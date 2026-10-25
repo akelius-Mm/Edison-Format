@@ -13,6 +13,7 @@ import './sets/gladiators';
 import './sets/monarchs';
 import './sets/teledad';
 import './sets/heroes';
+import './sets/tournament-extras';
 import { applyBanlist } from './banlist';
 
 applyBanlist();

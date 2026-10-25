@@ -1,17 +1,16 @@
-// Settings screen.
+// Settings ("More" tab): shortcuts to the other modes, then iOS-style grouped settings.
 import type { Difficulty } from '../../ai/ai';
 import { clearOfficialArtCache } from '../cards/officialArt';
 import { DEFAULT_SETTINGS, getSettings, updateSettings, type Settings } from '../settings';
-import { button, confirmDialog, h, segmented, toast, toggle } from './dom';
+import { iosAction, iosGroup, iosNav, iosRow } from './components';
+import { confirmDialog, h, segmented, toast, toggle } from './dom';
 import { frame, go, type Screen } from './nav';
 import { getProfile, resetAllData } from './store';
+import { loadActiveTournament, currentRoundLabel } from '../../tournament/tournament';
 
 export function settingsScreen(): Screen {
   const s = getSettings();
   const set = (patch: Partial<Settings>) => updateSettings(patch);
-
-  const row = (label: string, desc: string, control: Node) =>
-    h('div', { class: 'set-row' }, h('div', { class: 'set-text' }, h('div', { class: 'set-label' }, label), h('div', { class: 'set-desc' }, desc)), h('div', { class: 'set-control' }, control));
 
   const speeds: { value: number; label: string }[] = [
     { value: 0, label: 'Instant' },
@@ -22,32 +21,37 @@ export function settingsScreen(): Screen {
   ];
   const nearest = speeds.reduce((a, b) => (Math.abs(b.value - s.animationSpeed) < Math.abs(a.value - s.animationSpeed) ? b : a)).value;
 
-  const vol = h('input', { type: 'range', min: '0', max: '1', step: '0.05', value: String(s.volume), 'aria-label': 'Volume' });
-  const volOut = h('span', { class: 'set-val' }, `${Math.round(s.volume * 100)}%`);
+  const vol = h('input', { type: 'range', class: 'ios-range', min: '0', max: '1', step: '0.05', value: String(s.volume), 'aria-label': 'Volume' });
+  const volOut = h('span', { class: 'ios-detail' }, `${Math.round(s.volume * 100)}%`);
+  const paintVol = () => vol.style.setProperty('--v', `${Number(vol.value) * 100}%`);
+  paintVol();
   vol.addEventListener('input', () => {
     set({ volume: Number(vol.value) });
     volOut.textContent = `${Math.round(Number(vol.value) * 100)}%`;
+    paintVol();
   });
 
   const p = getProfile();
-  const group = (title: string, ...rows: Node[]) => h('section', { class: 'set-group' }, h('div', { class: 'section-title' }, h('h2', null, title)), ...rows);
+  const active = loadActiveTournament();
+  const games = p.games.w + p.games.l + p.games.d;
 
   const el = frame(
     'Settings',
-    { subtitle: 'Changes are saved automatically', cls: 'settings' },
-    h(
-      'div',
-      { class: 'set-layout' },
-      group(
-        'Gameplay',
-        row(
-          'Animation speed',
-          'How quickly cards move and effects resolve during duels.',
-          segmented(speeds, nearest, (v) => set({ animationSpeed: v }), 'Animation speed'),
-        ),
-        row(
+    { cls: 'settings-screen' },
+    iosGroup('More', [
+      iosNav('Tournament', () => go('tournament'), { icon: 'trophy', detail: active ? currentRoundLabel(active) : undefined }),
+      iosNav('Watch AI vs AI', () => go('exhibition'), { icon: 'eye' }),
+      iosNav('Card Database', () => go('database'), { icon: 'search' }),
+      iosNav('Sleeves & Playmat', () => go('customize'), { icon: 'palette' }),
+      iosNav('How to Play & Banlist', () => go('rules'), { icon: 'book' }),
+    ]),
+    iosGroup(
+      'Gameplay',
+      [
+        iosRow('Animation speed', null, segmented(speeds, nearest, (v) => set({ animationSpeed: v }), 'Animation speed'), { stack: true }),
+        iosRow(
           'Response prompts',
-          'Smart asks you to respond only when you have a relevant card; Always stops at every opportunity.',
+          'Smart asks only when you have a relevant card. Always stops at every chance to respond.',
           segmented<'smart' | 'always'>(
             [
               { value: 'smart', label: 'Smart' },
@@ -57,10 +61,11 @@ export function settingsScreen(): Screen {
             (v) => set({ responsePrompts: v }),
             'Response prompts',
           ),
+          { stack: true },
         ),
-        row(
+        iosRow(
           'Default AI difficulty',
-          'Used for new opponents in Duel vs AI.',
+          null,
           segmented<Difficulty>(
             [
               { value: 'easy', label: 'Easy' },
@@ -71,64 +76,47 @@ export function settingsScreen(): Screen {
             (v) => set({ defaultDifficulty: v }),
             'Default AI difficulty',
           ),
+          { stack: true },
         ),
-        row('First player skips draw', 'Edison-era rule: the player going first does not draw on their first turn.', toggle(s.skipFirstDraw, (v) => set({ skipFirstDraw: v }), 'First player skips draw')),
-        row('Confirm end of turn', 'Ask before ending your turn with cards you could still use.', toggle(s.confirmEndTurn, (v) => set({ confirmEndTurn: v }), 'Confirm end of turn')),
-        row('Show duel log', 'Display the running log of actions beside the field.', toggle(s.showLog, (v) => set({ showLog: v }), 'Show duel log')),
-      ),
-      group(
-        'Display',
-        row(
-          'Load official card images',
-          'Shows official card artwork loaded from the YGOPRODeck card database when online. Card art is © its owners. Falls back to generated art when unavailable.',
-          toggle(s.officialImages, (v) => set({ officialImages: v }), 'Load official card images'),
-        ),
-      ),
-      group(
-        'Audio',
-        row('Sound effects', 'Card, chain and damage sounds.', toggle(s.sound, (v) => set({ sound: v }), 'Sound effects')),
-        row('Music', 'Ambient background music during duels.', toggle(s.music, (v) => set({ music: v }), 'Music')),
-        row('Volume', 'Master volume.', h('div', { class: 'set-range' }, vol, volOut)),
-      ),
-      group(
-        'Data',
-        row(
-          'Profile',
-          `${p.games.w + p.games.l + p.games.d} games played · ${p.tournaments.length} tournaments · ${Object.keys(p.decks).length} decks with stats`,
-          button('Customize', () => go('customize'), { variant: 'ghost', small: true, icon: 'palette' }),
-        ),
-        row(
-          'Restore defaults',
-          'Reset every setting on this page (keeps decks and stats).',
-          button(
-            'Restore',
-            async () => {
-              if (!(await confirmDialog('Restore defaults', 'Reset all settings to their defaults? Your name, avatar, decks and stats are kept.', 'Restore'))) return;
-              const keep = getSettings();
-              updateSettings({ ...DEFAULT_SETTINGS, playerName: keep.playerName, avatar: keep.avatar, sleeve: keep.sleeve, playmat: keep.playmat });
-              toast('Settings restored.', 'success');
-              go('settings', { r: String(Date.now()) }, { replace: true });
-            },
-            { variant: 'ghost', small: true, icon: 'refresh' },
-          ),
-        ),
-        row(
+        iosRow('First player skips draw', 'Edison-era rule for turn 1.', toggle(s.skipFirstDraw, (v) => set({ skipFirstDraw: v }), 'First player skips draw')),
+        iosRow('Confirm end of turn', 'Ask when you still have plays.', toggle(s.confirmEndTurn, (v) => set({ confirmEndTurn: v }), 'Confirm end of turn')),
+        iosRow('Show duel log', null, toggle(s.showLog, (v) => set({ showLog: v }), 'Show duel log')),
+      ],
+    ),
+    iosGroup(
+      'Display',
+      [iosRow('Official card images', null, toggle(s.officialImages, (v) => set({ officialImages: v }), 'Load official card images'))],
+      'Loads card artwork from the YGOPRODeck database when online. Card art is © its owners; generated art is used when it is unavailable.',
+    ),
+    iosGroup('Audio', [
+      iosRow('Sound effects', null, toggle(s.sound, (v) => set({ sound: v }), 'Sound effects')),
+      iosRow('Music', null, toggle(s.music, (v) => set({ music: v }), 'Music')),
+      iosRow('Volume', null, h('div', { class: 'ios-range-wrap' }, vol, volOut), { stack: true }),
+    ]),
+    iosGroup(
+      'Data',
+      [
+        iosAction('Restore default settings', async () => {
+          if (!(await confirmDialog('Restore defaults', 'Reset all settings to their defaults? Your name, decks and stats are kept.', 'Restore'))) return;
+          const keep = getSettings();
+          updateSettings({ ...DEFAULT_SETTINGS, playerName: keep.playerName, avatar: keep.avatar, sleeve: keep.sleeve, playmat: keep.playmat });
+          toast('Settings restored.', 'success');
+          go('settings', { r: String(Date.now()) }, { replace: true });
+        }),
+        iosAction(
           'Reset all data',
-          'Delete every saved deck, statistic, tournament and setting on this device.',
-          button(
-            'Reset data',
-            async () => {
-              if (!(await confirmDialog('Reset all data', 'This permanently deletes your decks, stats, tournaments and settings. Continue?', 'Delete everything', true))) return;
-              clearOfficialArtCache();
-              resetAllData();
-              toast('All data has been reset.', 'success');
-              setTimeout(() => location.replace(location.pathname + '#/title'), 300);
-              setTimeout(() => location.reload(), 350);
-            },
-            { variant: 'danger', small: true, icon: 'trash' },
-          ),
+          async () => {
+            if (!(await confirmDialog('Reset all data', 'This permanently deletes your decks, stats, tournaments and settings. Continue?', 'Delete everything', true))) return;
+            clearOfficialArtCache();
+            resetAllData();
+            toast('All data has been reset.', 'success');
+            setTimeout(() => location.replace(location.pathname + '#/title'), 300);
+            setTimeout(() => location.reload(), 350);
+          },
+          true,
         ),
-      ),
+      ],
+      `${games} game${games === 1 ? '' : 's'} played · ${p.tournaments.length} tournament${p.tournaments.length === 1 ? '' : 's'} · ${Object.keys(p.decks).length} deck${Object.keys(p.decks).length === 1 ? '' : 's'} with stats. Everything is stored on this device.`,
     ),
   );
   return { el };

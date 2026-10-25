@@ -43,6 +43,13 @@ export function go(name: string, params: Params = {}, opts: { replace?: boolean 
   } else location.hash = hash;
 }
 
+/** Reset scrolling (the page may scroll on the window or on <body>). */
+export function scrollToTop() {
+  window.scrollTo(0, 0);
+  document.body.scrollTop = 0;
+  document.documentElement.scrollTop = 0;
+}
+
 export function back() {
   go('title');
 }
@@ -76,7 +83,7 @@ function mount(screen: Screen, key: string) {
   current = { screen, key };
   screen.el.classList.add('screen', 'screen-enter');
   root.appendChild(screen.el);
-  window.scrollTo(0, 0);
+  scrollToTop();
   requestAnimationFrame(() => {
     requestAnimationFrame(() => screen.el.classList.remove('screen-enter'));
   });
@@ -126,25 +133,65 @@ export function startRouter(el: HTMLElement) {
   render();
 }
 
-/** Standard screen frame: header with back button, title and actions, then a body. */
+/**
+ * Standard screen frame, iOS style: a slim sticky bar (back chevron, compact title, actions)
+ * over a large title that scrolls away. Once the large title leaves the viewport the bar turns
+ * translucent and shows the compact title. `compact` keeps only the slim bar (app-like screens).
+ */
 export function frame(
   title: Child,
-  opts: { subtitle?: Child; actions?: Child; cls?: string; backTo?: () => void; backLabel?: string },
+  opts: { subtitle?: Child; actions?: Child; cls?: string; backTo?: () => void; backLabel?: string; compact?: boolean; eyebrow?: Child },
   ...body: Child[]
 ) {
-  const el = h(
-    'div',
-    { class: ['frame', opts.cls], tabindex: '-1' },
-    h(
-      'header',
-      { class: 'frame-head' },
-      button(opts.backLabel ?? 'Menu', opts.backTo ?? (() => go('title')), { variant: 'subtle', icon: 'back', cls: 'frame-back', title: 'Back (Esc)' }),
-      h('div', { class: 'frame-titles' }, h('h1', { class: 'frame-title' }, title), opts.subtitle ? h('div', { class: 'frame-sub' }, opts.subtitle) : null),
-      h('div', { class: 'frame-actions' }, opts.actions ?? null),
-    ),
-    h('main', { class: 'frame-body' }, ...body),
+  const compact = !!opts.compact;
+  const back = h(
+    'button',
+    {
+      type: 'button',
+      class: 'frame-back',
+      'aria-label': `Back to ${opts.backLabel ?? 'Home'}`,
+      title: 'Back (Esc)',
+      onclick: opts.backTo ?? (() => go('title')),
+    },
+    icon('back'),
+    h('span', { class: 'frame-back-label' }, opts.backLabel ?? 'Home'),
   );
+  const sub = opts.subtitle ? h('div', { class: 'frame-sub' }, opts.subtitle) : null;
+  const head = h(
+    'header',
+    { class: 'frame-head' },
+    back,
+    h('div', { class: 'frame-titles' }, compact ? h('h1', { class: 'frame-title' }, title) : h('div', { class: 'frame-title', 'aria-hidden': 'true' }, cloneText(title))),
+    h('div', { class: 'frame-actions' }, opts.actions ?? null),
+  );
+  const large = compact
+    ? null
+    : h(
+        'div',
+        { class: 'frame-large' },
+        opts.eyebrow ? h('div', { class: 'frame-eyebrow' }, opts.eyebrow) : null,
+        h('h1', { class: 'frame-large-title' }, title),
+        sub,
+      );
+  const el = h('div', { class: ['frame', compact ? 'frame--compact' : 'frame--large', opts.cls], tabindex: '-1' }, head, large, h('main', { class: 'frame-body' }, ...body));
+  if (large && 'IntersectionObserver' in window) {
+    const io = new IntersectionObserver(
+      (ents) => {
+        if (!el.isConnected) return io.disconnect();
+        for (const e of ents) el.classList.toggle('is-scrolled', !e.isIntersecting && e.boundingClientRect.top < 80);
+      },
+      { rootMargin: '-56px 0px 0px 0px' },
+    );
+    const title = large.querySelector('.frame-large-title')!;
+    requestAnimationFrame(() => io.observe(title));
+  }
   return el;
+}
+
+/** The compact bar repeats the title as plain text. */
+function cloneText(c: Child): Child {
+  if (c instanceof Node) return c.textContent ?? '';
+  return Array.isArray(c) ? c.map(cloneText) : c;
 }
 
 export { icon };

@@ -16,7 +16,12 @@ export interface SavedDeck {
   updated: number;
   /** Premade deck this one was copied from. */
   basedOn?: string;
+  /** Draft and Sealed decks are built from opened packs: copy limits and the banlist don't apply. */
+  format?: 'draft';
 }
+
+/** Deck legality problems, with copy limits waived for Draft and Sealed decks. */
+export const deckProblems = (d: SavedDeck) => validateDeck(d, { ignoreLimits: d.format === 'draft' });
 
 /** A deck chosen somewhere in the UI: premade or custom. */
 export interface DeckRef {
@@ -131,7 +136,7 @@ export function customInfo(d: SavedDeck): DeckInfo {
     main: d.main,
     extra: d.extra,
     side: d.side,
-    problems: validateDeck(d),
+    problems: deckProblems(d),
   };
 }
 

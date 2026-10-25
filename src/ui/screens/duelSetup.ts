@@ -3,11 +3,11 @@ import type { Difficulty } from '../../ai/ai';
 import { PREMADE_DECKS } from '../../decks';
 import type { DuelSide } from '../duel/api';
 import { getSettings, loadJSON, saveJSON } from '../settings';
-import { deckPicker, newPersona, personaEditor, randomAvatar, type PersonaState } from './components';
-import { button, confirmDialog, h, icon, segmented, toast } from './dom';
-import { SLEEVES, renderAvatar } from './ext';
+import { ctaButton, deckArt, deckCarousel, deckGroups, deckShelf, linkButton, lobbySection, newPersona, opponentEditor, randomAvatar, stickyBar, type PersonaState } from './components';
+import { confirmDialog, h, icon, segmented, toast } from './dom';
+import { SLEEVES } from './ext';
 import { runMatch, type MatchSetup } from './match';
-import { frame, go, type Screen } from './nav';
+import { frame, go, scrollToTop, type Screen } from './nav';
 import { showResults } from './results';
 import { allDeckInfos, premadeInfo, recordMatch, resolveDeck, toDeckList, type DeckInfo } from './store';
 
@@ -58,120 +58,160 @@ export function duelSetupScreen(): Screen {
   const saved = loadJSON<Partial<DuelSetupState>>(SETUP_KEY, {});
   const decks = allDeckInfos();
   const st: DuelSetupState = {
-    myDeck: saved.myDeck && decks.some((d) => d.key === saved.myDeck) ? saved.myDeck : (decks[0]?.key ?? null),
+    myDeck: saved.myDeck && decks.some((d) => d.key === saved.myDeck) ? saved.myDeck : null,
     oppDeck: saved.oppDeck && decks.some((d) => d.key === saved.oppDeck) ? saved.oppDeck : null,
     persona: saved.persona?.name ? { ...saved.persona, difficulty: saved.persona.difficulty ?? s.defaultDifficulty } : newPersona(s.defaultDifficulty),
     bestOf: saved.bestOf === 3 ? 3 : 1,
   };
   const persist = () => saveJSON(SETUP_KEY, st);
+  let step: 1 | 2 = 1;
 
-  const summary = h('div', { class: 'setup-summary' });
-  const drawSummary = () => {
+  // ---- step indicator
+  const stepBtn = (n: 1 | 2, label: string) =>
+    h(
+      'button',
+      { type: 'button', class: 'flow-step-btn', onclick: () => (n === 1 ? show(1) : st.myDeck ? show(2) : toast('Choose your deck first.', 'error')) },
+      h('span', { class: 'flow-num' }, String(n)),
+      h('span', null, label),
+    );
+  const s1 = stepBtn(1, 'Your deck');
+  const s2 = stepBtn(2, 'Opponent');
+  const steps = h('nav', { class: 'flow-steps', 'aria-label': 'Setup steps' }, s1, h('span', { class: 'flow-line', 'aria-hidden': 'true' }), s2);
+  const stage = h('div', { class: 'flow-stage' });
+
+  // ---- step 1: your deck
+  function deckStep() {
+    const groups = deckGroups(decks);
+    const rows = groups.filter((g) => g.decks.length).length;
+    return h(
+      'div',
+      { class: ['flow-pane', rows <= 2 && 'flow-roomy'] },
+      ...groups
+        .filter((g) => g.decks.length)
+        .map((g) =>
+          lobbySection(
+            g.title,
+            g.key === 'mine' ? linkButton('Deck Builder', () => go('deck-builder')) : h('span', { class: 'lob-count' }, String(g.decks.length)),
+            deckCarousel(
+              g.decks,
+              st.myDeck,
+              (d) => {
+                st.myDeck = d?.key ?? null;
+                persist();
+                if (d) setTimeout(() => show(2), 140);
+              },
+              { keepOrder: true, label: `Your deck: ${g.title}`, newDeck: g.key === 'mine' ? () => go('deck-builder') : undefined },
+            ),
+          ),
+        ),
+      groups[0].decks.length
+        ? null
+        : h(
+            'button',
+            { type: 'button', class: 'home-row flow-build', onclick: () => go('deck-builder') },
+            h('span', { class: 'home-row-icon' }, icon('plus')),
+            h('span', { class: 'home-row-label' }, 'Build your own deck'),
+            icon('chevron'),
+          ),
+    );
+  }
+
+  // ---- step 2: opponent
+  const matchup = h('div', { class: 'mu' });
+  const drawMatchup = () => {
     const mine = deckFromKey(st.myDeck);
     const opp = deckFromKey(st.oppDeck);
-    summary.replaceChildren(
-      h('span', null, h('b', null, mine?.name ?? 'No deck'), ' vs ', h('b', null, opp?.name ?? 'Random deck')),
-      h('span', { class: 'muted' }, ` · ${st.persona.name} (${st.persona.difficulty}) · ${st.bestOf === 3 ? 'Best of 3' : 'Single game'}`),
+    const side = (d: DeckInfo | null, who: string, name: string, onclick?: () => void) =>
+      h(
+        onclick ? 'button' : 'div',
+        { class: 'mu-side', type: onclick ? 'button' : undefined, onclick, title: onclick ? 'Change your deck' : undefined },
+        d ? deckArt(d, 'mu-art') : h('span', { class: 'mu-art mu-art--random' }, icon('dice')),
+        h('span', { class: 'mu-text' }, h('span', { class: 'mu-who' }, who), h('b', null, name)),
+      );
+    matchup.replaceChildren(
+      side(mine, 'You', mine?.name ?? 'No deck', () => show(1)),
+      h('span', { class: 'mu-vs' }, 'vs'),
+      side(opp, st.persona.name, opp?.name ?? 'Random deck'),
     );
-    startBtn.disabled = !mine;
   };
+  const changed = () => {
+    persist();
+    drawMatchup();
+  };
+  function oppStep() {
+    drawMatchup();
+    return h(
+      'div',
+      { class: 'flow-pane flow-opp' },
+      matchup,
+      lobbySection('Opponent deck', null, deckShelf(decks, st.oppDeck, (d) => ((st.oppDeck = d?.key ?? null), changed()), { random: true, label: 'Opponent deck' })),
+      h('div', { class: 'lob-group opp-group' }, opponentEditor(st.persona, changed, { hideDifficulty: true })),
+      stickyBar(
+        h(
+          'div',
+          { class: 'flow-opts' },
+          segmented<Difficulty>(
+            [
+              { value: 'easy', label: 'Easy', hint: 'Makes mistakes, plays loosely' },
+              { value: 'normal', label: 'Normal', hint: 'Solid, straightforward play' },
+              { value: 'hard', label: 'Hard', hint: 'Careful and punishing' },
+            ],
+            st.persona.difficulty,
+            (v) => ((st.persona.difficulty = v), changed()),
+            'AI difficulty',
+          ),
+          segmented<1 | 3>(
+            [
+              { value: 1, label: 'Single', hint: 'One game' },
+              { value: 3, label: 'Bo3', hint: 'Best of three: first to two wins' },
+            ],
+            st.bestOf,
+            (v) => ((st.bestOf = v), changed()),
+            'Match format',
+          ),
+        ),
+        ctaButton('Duel', () => void start(), 'swords'),
+      ),
+    );
+  }
 
-  const myPanel = h(
-    'section',
-    { class: 'setup-panel you' },
-    h(
-      'header',
-      { class: 'setup-head' },
-      h('div', null, h('div', { class: 'setup-role' }, 'You'), h('div', { class: 'setup-name' }, s.playerName)),
-      button('Deck Builder', () => go('deck-builder'), { variant: 'ghost', icon: 'cards', small: true }),
-    ),
-    h('div', { class: 'setup-label' }, 'Choose your deck'),
-    deckPicker(
-      decks,
-      st.myDeck,
-      (d) => {
-        st.myDeck = d.key;
-        persist();
-        drawSummary();
-      },
-      { emptyText: 'No decks yet — build one in the Deck Builder.' },
-    ),
-  );
-
-  const oppPanel = h(
-    'section',
-    { class: 'setup-panel opp' },
-    h('header', { class: 'setup-head' }, h('div', null, h('div', { class: 'setup-role' }, 'Opponent'), h('div', { class: 'setup-name' }, 'AI Duelist'))),
-    personaEditor(st.persona, () => {
-      persist();
-      drawSummary();
-    }),
-    h('div', { class: 'setup-label' }, 'Opponent deck'),
-    deckPicker(
-      decks,
-      st.oppDeck,
-      (d) => {
-        st.oppDeck = d.key;
-        persist();
-        drawSummary();
-      },
-      {
-        randomOption: {
-          selected: st.oppDeck == null,
-          onSelect: () => {
-            st.oppDeck = null;
-            persist();
-            drawSummary();
-          },
-        },
-      },
-    ),
-  );
-
-  const startBtn = button('Start duel', () => void start(), { variant: 'primary', icon: 'swords', cls: 'ui-btn-lg start-btn' });
-  const formatSeg = segmented<1 | 3>(
-    [
-      { value: 1, label: 'Single game' },
-      { value: 3, label: 'Best of 3' },
-    ],
-    st.bestOf,
-    (v) => {
-      st.bestOf = v;
-      persist();
-      drawSummary();
-    },
-    'Match format',
-  );
+  function show(n: 1 | 2) {
+    if (n === 2 && !deckFromKey(st.myDeck)) n = 1;
+    const dir = n > step ? 'fwd' : n < step ? 'back' : '';
+    step = n;
+    const pane = n === 1 ? deckStep() : oppStep();
+    if (dir) pane.classList.add(`flow-${dir}`);
+    stage.replaceChildren(pane);
+    s1.classList.toggle('on', n === 1);
+    s2.classList.toggle('on', n === 2);
+    s1.classList.toggle('done', n === 2);
+    s1.setAttribute('aria-current', n === 1 ? 'step' : 'false');
+    s2.setAttribute('aria-current', n === 2 ? 'step' : 'false');
+    const lbl = el.querySelector('.frame-back-label');
+    if (lbl) lbl.textContent = n === 2 ? 'Deck' : 'Home';
+    el.querySelector('.frame-back')?.setAttribute('aria-label', n === 2 ? 'Back to deck choice' : 'Back to Home');
+    if (dir) scrollToTop();
+  }
 
   async function start() {
     const mine = deckFromKey(st.myDeck);
-    if (!mine) return toast('Choose a deck first.', 'error');
+    if (!mine) return show(1);
     if (!(await confirmDeckProblems(mine))) return;
     const opp = deckFromKey(st.oppDeck) ?? randomPremade();
     if (!opp) return toast('No opponent decks are available yet.', 'error');
     await playVsAI(mine, opp, { ...st.persona }, st.bestOf);
   }
 
-  const el = frame(
-    'Duel vs AI',
-    { subtitle: 'Pick your deck and an opponent', cls: 'duel-setup' },
-    h(
-      'div',
-      { class: 'setup-grid' },
-      myPanel,
-      h('div', { class: 'setup-vs', 'aria-hidden': 'true' }, h('span', null, 'VS')),
-      oppPanel,
-    ),
-    h(
-      'div',
-      { class: 'setup-bar' },
-      h('div', { class: 'setup-bar-left' }, h('span', { class: 'field-label' }, 'Format'), formatSeg),
-      summary,
-      startBtn,
-    ),
-  );
-  drawSummary();
-  return { el };
+  const el = frame('Duel vs AI', { cls: 'lobby-screen duel-flow', compact: true, backTo: () => (step === 2 ? show(1) : go('title')) }, steps, stage);
+  show(1);
+  return {
+    el,
+    onEscape: () => {
+      if (step !== 2) return false;
+      show(1);
+      return true;
+    },
+  };
 }
 
 export async function playVsAI(mine: DeckInfo, opp: DeckInfo, persona: PersonaState, bestOf: 1 | 3) {
@@ -198,8 +238,8 @@ export async function playVsAI(mine: DeckInfo, opp: DeckInfo, persona: PersonaSt
     context: `Duel vs AI · ${persona.difficulty[0].toUpperCase() + persona.difficulty.slice(1)}`,
     actions: [
       { label: 'Rematch', variant: 'primary', icon: 'refresh', onClick: () => void playVsAI(mine, opp, persona, bestOf) },
-      { label: 'Change setup', icon: 'swords', onClick: () => go('duel') },
-      { label: 'Main menu', icon: 'back', onClick: () => go('title') },
+      { label: 'New duel', icon: 'swords', onClick: () => go('duel') },
+      { label: 'Home', icon: 'home', onClick: () => go('title') },
     ],
   });
 }
@@ -222,15 +262,10 @@ export function exhibitionScreen(): Screen {
   while (st.b.persona.avatar === st.a.persona.avatar) st.b.persona.avatar = randomAvatar();
   const persist = () => saveJSON(EXHIBITION_KEY, st);
 
-  const sidePanel = (x: ExhibitionSide, label: string, cls: string) =>
-    h(
-      'section',
-      { class: ['setup-panel', cls] },
-      h('header', { class: 'setup-head' }, h('div', null, h('div', { class: 'setup-role' }, label), h('div', { class: 'setup-name' }, 'AI Duelist'))),
-      personaEditor(x.persona, persist),
-      h('div', { class: 'setup-label' }, 'Deck'),
-      deckPicker(decks, x.deck, (d) => ((x.deck = d.key), persist()), { randomOption: { selected: x.deck == null, onSelect: () => ((x.deck = null), persist()) } }),
-    );
+  const side = (x: ExhibitionSide, label: string) => [
+    lobbySection(label, null, h('div', { class: 'lob-group' }, opponentEditor(x.persona, persist, { nameLabel: `${label} name` }))),
+    deckShelf(decks, x.deck, (d) => ((x.deck = d?.key ?? null), persist()), { random: true, label: `${label} deck` }),
+  ];
 
   async function start() {
     const a = deckFromKey(st.a.deck) ?? randomPremade();
@@ -253,36 +288,31 @@ export function exhibitionScreen(): Screen {
       context: 'Exhibition match',
       actions: [
         { label: 'Watch again', variant: 'primary', icon: 'refresh', onClick: () => void watch(a, b) },
-        { label: 'New exhibition', icon: 'eye', onClick: () => go('exhibition') },
-        { label: 'Main menu', icon: 'back', onClick: () => go('title') },
+        { label: 'New match', icon: 'eye', onClick: () => go('exhibition') },
+        { label: 'Home', icon: 'home', onClick: () => go('title') },
       ],
     });
   }
 
   const el = frame(
     'Watch AI vs AI',
-    { subtitle: 'Spectate an exhibition between two AI duelists', cls: 'duel-setup' },
-    h('div', { class: 'setup-grid' }, sidePanel(st.a, 'Duelist A', 'you'), h('div', { class: 'setup-vs', 'aria-hidden': 'true' }, h('span', null, 'VS')), sidePanel(st.b, 'Duelist B', 'opp')),
-    h(
-      'div',
-      { class: 'setup-bar' },
-      h(
-        'div',
-        { class: 'setup-bar-left' },
-        h('span', { class: 'field-label' }, 'Format'),
-        segmented<1 | 3>(
-          [
-            { value: 1, label: 'Single game' },
-            { value: 3, label: 'Best of 3' },
-          ],
-          st.bestOf,
-          (v) => ((st.bestOf = v), persist()),
-          'Match format',
-        ),
+    { subtitle: 'Spectate an exhibition between two AI duelists', cls: 'lobby-screen' },
+    side(st.a, 'Duelist A'),
+    side(st.b, 'Duelist B'),
+    lobbySection(
+      'Format',
+      null,
+      segmented<1 | 3>(
+        [
+          { value: 1, label: 'Single game' },
+          { value: 3, label: 'Best of 3' },
+        ],
+        st.bestOf,
+        (v) => ((st.bestOf = v), persist()),
+        'Match format',
       ),
-      h('div', { class: 'setup-summary muted' }, icon('eye'), ' You will spectate; the duel plays itself.'),
-      button('Start exhibition', () => void start(), { variant: 'primary', icon: 'play', cls: 'ui-btn-lg start-btn' }),
     ),
+    stickyBar(h('div', { class: 'lob-bar-sum' }, icon('eye'), h('span', null, ' You spectate — the duel plays itself.')), ctaButton('Start exhibition', () => void start(), 'play')),
   );
   return { el };
 }

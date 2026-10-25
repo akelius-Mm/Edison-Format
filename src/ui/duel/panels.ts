@@ -27,6 +27,8 @@ export class PlayerPanel {
   private targetLp: number;
   private raf = 0;
   readonly avatarEl: HTMLElement;
+  /** Called when the LP number starts rolling, with the roll length in ms (for the counter sound). */
+  onLpRoll?: (ms: number, up: boolean) => void;
 
   constructor(
     side: DuelSide,
@@ -84,6 +86,7 @@ export class PlayerPanel {
     }
     this.lpNum.classList.toggle('dmg', lp < from);
     this.lpNum.classList.toggle('heal', lp > from);
+    if (lp !== from) this.onLpRoll?.(dur, lp > from);
     const t0 = performance.now();
     const step = (t: number) => {
       const k = Math.min(1, (t - t0) / dur);

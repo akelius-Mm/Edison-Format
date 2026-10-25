@@ -31,15 +31,21 @@ import {
 import { finalPlacements, roundComplete } from '../../tournament/swiss';
 import type { DuelSide } from '../duel/api';
 import { getSettings, loadJSON, saveJSON } from '../settings';
-import { deckPicker, tierBadge } from './components';
+import { artInto, ctaButton, deckArt, deckShelf, iosGroup, iosRow, linkButton, lobbySection, signatureCard, stickyBar } from './components';
 import { badge, button, clear, confirmDialog, h, icon, modal, pct, segmented, toast } from './dom';
 import { AVATAR_PRESETS, SLEEVES, renderAvatar } from './ext';
 import { runMatch } from './match';
-import { frame, go, lockNav, type Screen } from './nav';
+import { frame, go, lockNav, scrollToTop, type Screen } from './nav';
 import { gameRow, showResults } from './results';
-import { allDeckInfos, getProfile, ordinal, recordMatch, recordTournament, toDeckList, tournamentSummary } from './store';
+import { allDeckInfos, getProfile, ordinal, recordMatch, recordTournament, toDeckList, tournamentSummary, type DeckInfo } from './store';
 
 const FORM_KEY = 'edison.tournament.form.v1';
+
+/** Enough of a DeckInfo to draw a deck's artwork. */
+function snapInfo(d: DeckSnapshot): DeckInfo {
+  const ref = d.id.includes(':') ? { kind: d.id.split(':')[0] as 'premade' | 'custom', id: d.id.split(':').slice(1).join(':') } : { kind: 'premade' as const, id: d.id };
+  return { ref, key: `${ref.kind}:${ref.id}`, name: d.name, archetype: d.archetype, description: '', tier: d.tier, color: d.color, main: d.main, extra: d.extra, side: [], problems: [] };
+}
 
 interface FormState {
   name: string;
@@ -75,23 +81,22 @@ function createScreen(): Screen {
   };
   const persist = () => saveJSON(FORM_KEY, { ...st, name: undefined });
 
-  const nameIn = h('input', { class: 'input', value: st.name, maxlength: 40, 'aria-label': 'Tournament name' });
+  const nameIn = h('input', { class: 'ios-input', value: st.name, maxlength: 40, 'aria-label': 'Tournament name', spellcheck: false });
   nameIn.addEventListener('input', () => (st.name = nameIn.value));
 
-  const summary = h('div', { class: 'tc-summary' });
+  const summary = h('div', { class: 'ios-list' });
   const drawSummary = () => {
     const rounds = Math.ceil(Math.log2(st.size));
     const cut = st.size <= 8 ? 4 : 8;
     summary.replaceChildren(
-      h('div', { class: 'tc-sum-row' }, icon('user'), `${st.size} players (you + ${st.size - 1} AI duelists)`),
-      h('div', { class: 'tc-sum-row' }, icon('shuffle'), `${rounds} Swiss rounds, then a Top ${cut} single-elimination cut`),
-      h('div', { class: 'tc-sum-row' }, icon('swords'), `${st.bestOf === 3 ? 'Best-of-three' : 'Single-game'} matches · ${rounds + Math.log2(cut)} rounds max for you`),
-      h('div', { class: 'tc-sum-row' }, icon('robot'), st.sim === 'fast' ? 'Other tables resolved instantly with a rating model' : 'Other tables played out by the AI with the full rules engine'),
+      iosRow(`${st.size} players`, `You and ${st.size - 1} AI duelists`, null, { icon: 'user' }),
+      iosRow(`${rounds} Swiss rounds, then Top ${cut}`, `${st.bestOf === 3 ? 'Best-of-three' : 'Single-game'} matches · up to ${rounds + Math.log2(cut)} rounds for you`, null, { icon: 'bracket' }),
+      iosRow(st.sim === 'fast' ? 'Fast simulation' : 'Full simulation', st.sim === 'fast' ? 'Other tables resolve instantly with a rating model' : 'Other tables are played out by the AI with the full rules engine', null, { icon: 'robot' }),
     );
   };
   drawSummary();
 
-  const createBtn = button('Create tournament', () => void create(), { variant: 'primary', icon: 'trophy', cls: 'ui-btn-lg' });
+  const createBtn = ctaButton('Create tournament', () => void create(), 'trophy');
 
   async function create() {
     const info = decks.find((d) => d.key === st.deck);
@@ -116,104 +121,64 @@ function createScreen(): Screen {
 
   const ts = tournamentSummary();
   const history = profile.tournaments;
+  const seg = <T extends string | number>(opts: { value: T; label: string; hint?: string }[], v: T, on: (v: T) => void, label: string) => segmented<T>(opts, v, on, label);
+  const stat = (v: string, l: string) => h('div', { class: 'res-stat' }, h('b', null, v), h('span', null, l));
   const el = frame(
     'Tournament',
-    { subtitle: 'Swiss rounds, a top cut and a trophy', cls: 'tour-create' },
-    h(
-      'div',
-      { class: 'tc-layout' },
-      h(
-        'section',
-        { class: 'tc-form panel' },
-        h('div', { class: 'panel-body tc-form-body' },
-          h('div', { class: 'tc-hero' }, h('span', { class: 'tc-hero-icon' }, icon('trophy')), h('div', null, h('h2', null, 'Create a tournament'), h('p', { class: 'muted' }, 'Register with one of your decks. The AI field brings the Edison meta, weighted toward the top tiers with a few rogue picks.'))),
-          h('label', { class: 'field' }, h('span', { class: 'field-label' }, 'Tournament name'), nameIn),
-          h(
-            'div',
-            { class: 'tc-row' },
-            h('div', { class: 'field' }, h('span', { class: 'field-label' }, 'Players'), segmented<8 | 16 | 32>([{ value: 8, label: '8' }, { value: 16, label: '16' }, { value: 32, label: '32' }], st.size, (v) => ((st.size = v), persist(), drawSummary()), 'Players')),
-            h('div', { class: 'field' }, h('span', { class: 'field-label' }, 'Matches'), segmented<1 | 3>([{ value: 1, label: 'Best of 1' }, { value: 3, label: 'Best of 3' }], st.bestOf, (v) => ((st.bestOf = v), persist(), drawSummary()), 'Match format')),
-          ),
-          h(
-            'div',
-            { class: 'tc-row' },
-            h(
-              'div',
-              { class: 'field' },
-              h('span', { class: 'field-label' }, 'AI difficulty'),
-              segmented<DifficultyMix>(
-                [
-                  { value: 'easy', label: 'Easy' },
-                  { value: 'normal', label: 'Normal' },
-                  { value: 'hard', label: 'Hard' },
-                  { value: 'mixed', label: 'Mixed', hint: 'Skilled personas tend to play harder' },
-                ],
-                st.mix,
-                (v) => ((st.mix = v), persist()),
-                'AI difficulty',
-              ),
-            ),
-            h(
-              'div',
-              { class: 'field' },
-              h('span', { class: 'field-label' }, 'Simulation'),
-              segmented<SimMode>(
-                [
-                  { value: 'fast', label: 'Fast', hint: 'Instant results from deck tier, persona skill and luck' },
-                  { value: 'full', label: 'Full', hint: 'AI-vs-AI games actually played with the engine (slower)' },
-                ],
-                st.sim,
-                (v) => ((st.sim = v), persist(), drawSummary()),
-                'Simulation mode',
-              ),
-            ),
-          ),
-          summary,
+    { subtitle: 'Swiss rounds, a top cut and a title on the line', cls: 'tour-screen' },
+    h('div', { class: 'res-stats tour-circuit' }, stat(String(ts.played), 'Events'), stat(String(ts.wins), 'Titles'), stat(ts.best ? ordinal(ts.best) : '—', 'Best finish')),
+    lobbySection('Your deck', linkButton('Deck Builder', () => go('deck-builder')), deckShelf(decks, st.deck, (d) => ((st.deck = d?.key ?? null), persist()), { label: 'Your deck', newDeck: () => go('deck-builder') })),
+    iosGroup('Event', [
+      h('div', { class: 'ios-row ios-row--input' }, nameIn),
+      iosRow('Players', null, seg<8 | 16 | 32>([{ value: 8, label: '8' }, { value: 16, label: '16' }, { value: 32, label: '32' }], st.size, (v) => ((st.size = v), persist(), drawSummary()), 'Players'), { stack: true }),
+      iosRow('Matches', null, seg<1 | 3>([{ value: 1, label: 'Best of 1' }, { value: 3, label: 'Best of 3' }], st.bestOf, (v) => ((st.bestOf = v), persist(), drawSummary()), 'Match format'), { stack: true }),
+      iosRow(
+        'AI difficulty',
+        null,
+        seg<DifficultyMix>(
+          [
+            { value: 'easy', label: 'Easy' },
+            { value: 'normal', label: 'Normal' },
+            { value: 'hard', label: 'Hard' },
+            { value: 'mixed', label: 'Mixed', hint: 'Skilled personas tend to play harder' },
+          ],
+          st.mix,
+          (v) => ((st.mix = v), persist()),
+          'AI difficulty',
         ),
+        { stack: true },
       ),
-      h(
-        'section',
-        { class: 'tc-deck panel' },
-        h('header', { class: 'panel-head' }, h('h2', { class: 'panel-title' }, 'Your deck')),
-        h('div', { class: 'panel-body tc-deck-body' }, deckPicker(decks, st.deck, (d) => ((st.deck = d.key), persist()), { emptyText: 'No decks yet — build one in the Deck Builder.' })),
+      iosRow(
+        'Simulation',
+        null,
+        seg<SimMode>(
+          [
+            { value: 'fast', label: 'Fast', hint: 'Instant results from deck tier, persona skill and luck' },
+            { value: 'full', label: 'Full', hint: 'AI-vs-AI games actually played with the engine (slower)' },
+          ],
+          st.sim,
+          (v) => ((st.sim = v), persist(), drawSummary()),
+          'Simulation mode',
+        ),
+        { stack: true },
       ),
-      h(
-        'aside',
-        { class: 'tc-side' },
-        h(
-          'section',
-          { class: 'panel tc-record' },
-          h('header', { class: 'panel-head' }, h('h2', { class: 'panel-title' }, 'Your circuit')),
-          h(
-            'div',
-            { class: 'panel-body' },
+    ]),
+    h('section', { class: 'ios-group' }, h('h2', { class: 'ios-group-h' }, 'Format'), summary, h('p', { class: 'ios-foot' }, 'Progress is saved after every match, so you can leave and resume any time.')),
+    iosGroup(
+      'History',
+      history.length
+        ? history.slice(0, 8).map((x) =>
             h(
               'div',
-              { class: 'tc-chips' },
-              h('span', { class: 'stat-chip' }, h('b', null, String(ts.played)), h('span', null, 'Events')),
-              h('span', { class: 'stat-chip' }, h('b', null, String(ts.wins)), h('span', null, 'Titles')),
-              h('span', { class: 'stat-chip' }, h('b', null, ts.best ? ordinal(ts.best) : '—'), h('span', null, 'Best finish')),
+              { class: ['ios-row', 'tc-hist', x.place === 1 && 'won'] },
+              h('span', { class: 'place-pill' }, ordinal(x.place)),
+              h('div', { class: 'ios-row-text' }, h('div', { class: 'ios-label' }, x.name), h('div', { class: 'ios-desc' }, `${x.size} players · ${x.deckName} · ${x.record}`)),
+              h('span', { class: 'ios-detail' }, new Date(x.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })),
             ),
-            history.length
-              ? h(
-                  'div',
-                  { class: 'tc-history' },
-                  history.slice(0, 8).map((x) =>
-                    h(
-                      'div',
-                      { class: ['tc-hist', x.place === 1 && 'won'] },
-                      h('span', { class: 'tc-place' }, x.place === 1 ? icon('trophy') : ordinal(x.place)),
-                      h('span', { class: 'tc-hist-text' }, h('b', null, x.name), h('span', null, `${x.size} players · ${x.deckName} · ${x.record}`)),
-                      h('span', { class: 'tc-date' }, new Date(x.date).toLocaleDateString()),
-                    ),
-                  ),
-                )
-              : h('p', { class: 'muted tc-empty' }, 'No tournaments played yet. Your results will appear here.'),
-          ),
-        ),
-      ),
+          )
+        : [iosRow(h('span', { class: 'muted' }, 'No tournaments played yet.'), null, null)],
     ),
-    h('div', { class: 'setup-bar tc-bar' }, h('div', { class: 'setup-summary muted' }, icon('info'), ' Progress is saved after every match — you can leave and resume any time.'), createBtn),
+    stickyBar(createBtn),
   );
   return { el };
 }
@@ -230,7 +195,7 @@ function hubScreen(t: Tournament): Screen {
   const standings = () => computeStandings(t);
 
   const stepper = h('div', { class: 'tour-steps' });
-  const tabsEl = h('div', { class: 'tabs tour-tabs', role: 'tablist' });
+  const tabsEl = h('div', { class: 'seg tour-tabs', role: 'tablist', 'aria-label': 'Tournament views' });
   const body = h('div', { class: 'tour-body' });
   const headActions = h('div', { class: 'tour-head-actions' });
 
@@ -291,19 +256,19 @@ function hubScreen(t: Tournament): Screen {
 
   function drawTabs() {
     clear(tabsEl);
-    const tabs: [HubTab, string, Parameters<typeof icon>[0]][] = [
-      ['round', t.phase === 'lobby' ? 'Overview' : 'Current round', 'swords'],
-      ['standings', 'Standings', 'list'],
-      ['bracket', `Top ${t.topCut}`, 'bracket'],
-      ['entrants', 'Entrants', 'user'],
+    const tabs: [HubTab, string][] = [
+      ['round', t.phase === 'lobby' ? 'Overview' : 'Round'],
+      ['standings', 'Standings'],
+      ['bracket', `Top ${t.topCut}`],
+      ['entrants', 'Players'],
     ];
-    for (const [k, l, ic] of tabs)
+    for (const [k, l] of tabs)
       tabsEl.appendChild(
         h(
           'button',
           {
             type: 'button',
-            class: ['tab', tab === k && 'on'],
+            class: ['seg-btn', tab === k && 'on'],
             role: 'tab',
             'aria-selected': String(tab === k),
             onclick: () => {
@@ -311,7 +276,6 @@ function hubScreen(t: Tournament): Screen {
               redraw();
             },
           },
-          icon(ic),
           l,
         ),
       );
@@ -329,7 +293,7 @@ function hubScreen(t: Tournament): Screen {
     const ms = currentMatches(t);
     const mine = humanMatchThisRound(t);
     const wrap = h('div', { class: 'round-view' });
-    wrap.appendChild(h('div', { class: 'round-title' }, h('h2', null, currentRoundLabel(t)), h('span', { class: 'muted' }, `${ms.filter((m) => m.result).length} / ${ms.length} matches complete`)));
+    wrap.appendChild(h('div', { class: 'lob-h round-title' }, h('h2', null, currentRoundLabel(t)), h('span', { class: 'lob-count' }, `${ms.filter((m) => m.result).length} of ${ms.length} done`)));
     wrap.appendChild(myMatchCard(mine, st));
     if (progress) {
       wrap.appendChild(
@@ -353,7 +317,7 @@ function hubScreen(t: Tournament): Screen {
     const pending = pendingHumanMatch(t);
     const complete = isRoundComplete(t);
     const othersLeft = currentMatches(t).some((m) => m.result == null && m.a !== t.humanId && m.b !== t.humanId);
-    if (!complete && !pending) c.appendChild(button('Simulate remaining tables', () => void simulateRest(), { variant: 'primary', icon: 'robot' }));
+    if (!complete && !pending) c.appendChild(ctaButton('Simulate remaining tables', () => void simulateRest(), 'robot'));
     else if (!complete && othersLeft) c.appendChild(button('Simulate other tables first', () => void simulateRest(), { variant: 'subtle', small: true, icon: 'robot', title: 'Resolve the other matches before playing yours' }));
     if (complete) {
       const isLastSwiss = t.phase === 'swiss' && t.rounds.length >= t.swissRounds;
@@ -363,7 +327,7 @@ function hubScreen(t: Tournament): Screen {
         h('div', { class: 'round-done' }, icon('check'), h('span', null, isLastSwiss ? 'Swiss rounds complete — the top cut is set.' : 'Round complete.')),
       );
       c.appendChild(
-        button(
+        ctaButton(
           label,
           () => {
             advance(t);
@@ -371,9 +335,10 @@ function hubScreen(t: Tournament): Screen {
             if (t.phase === 'done') return go('tournament', { t: t.id, done: '1' }, { replace: true });
             tab = 'round';
             redraw();
+            scrollToTop();
             maybeAutoSimulate();
           },
-          { variant: 'primary', icon: isFinal ? 'trophy' : 'play', cls: 'ui-btn-lg' },
+          isFinal ? 'trophy' : 'play',
         ),
       );
     }
@@ -386,18 +351,14 @@ function hubScreen(t: Tournament): Screen {
       const out = humanEliminated(t);
       return h(
         'div',
-        { class: 'my-match idle' },
-        h('span', { class: 'mm-icon' }, icon(out ? 'flag' : 'info')),
-        h(
-          'div',
-          null,
-          h('h3', null, out ? 'Your run has ended' : 'No match this round'),
-          h('p', { class: 'muted' }, out ? 'You did not make it through this stage. The remaining matches will be simulated — follow the bracket to see who takes the title.' : 'Sit back while the other tables finish.'),
-        ),
+        { class: 'mm2 idle' },
+        h('div', { class: 'mm2-label' }, 'Your match'),
+        h('h3', { class: 'mm2-idle-title' }, out ? 'Your run has ended' : 'No match this round'),
+        h('p', { class: 'mm2-idle-text' }, out ? 'The remaining matches are simulated. Follow the bracket to see who takes the title.' : 'Sit back while the other tables finish.'),
       );
     }
     if (m.b == null)
-      return h('div', { class: 'my-match idle' }, h('span', { class: 'mm-icon' }, icon('check')), h('div', null, h('h3', null, 'You have a bye'), h('p', { class: 'muted' }, 'A bye counts as a match win (3 points).')));
+      return h('div', { class: 'mm2 idle' }, h('div', { class: 'mm2-label' }, `${m.label} · Your match`), h('h3', { class: 'mm2-idle-title' }, 'You have a bye'), h('p', { class: 'mm2-idle-text' }, 'A bye counts as a match win (3 points).'));
     const oppId = m.a === t.humanId ? m.b : m.a;
     const opp = E(oppId)!;
     const meA = m.a === t.humanId;
@@ -407,38 +368,42 @@ function hubScreen(t: Tournament): Screen {
     const wa = m.games.filter((g) => g.winner === 0).length;
     const wb = m.games.filter((g) => g.winner === 1).length;
     const [myW, opW] = meA ? [wa, wb] : [wb, wa];
+    const art = h('div', { class: 'mm2-bg', 'aria-hidden': 'true' });
+    artInto(art, signatureCard(opp.deck));
     const side = (e: Entrant, isMe: boolean) =>
       h(
         'div',
-        { class: ['mm-side', isMe ? 'me' : 'opp'] },
-        h('span', { class: 'avatar-ring' }, renderAvatar(e.avatar, 76)),
-        h(
-          'div',
-          { class: 'mm-who' },
-          h('div', { class: 'mm-name' }, e.name),
-          h('div', { class: 'mm-title' }, isMe ? `Record ${recordOf(e.id, st)}` : `${e.title} · ${recordOf(e.id, st)}`),
-          h('div', { class: 'mm-deck', style: { '--deck': e.deck.color } }, h('i'), e.deck.name, isMe ? null : badge(difficultyLabel(e.difficulty), e.difficulty === 'hard' ? 'red' : e.difficulty === 'easy' ? 'green' : 'blue')),
-        ),
+        { class: ['mm2-side', isMe ? 'me' : 'opp'] },
+        deckArt(snapInfo(e.deck), 'mm2-art'),
+        h('div', { class: 'mm2-name' }, isMe ? 'You' : e.name),
+        h('div', { class: 'mm2-deck' }, e.deck.name),
+        h('div', { class: 'mm2-meta' }, isMe ? recordOf(e.id, st) || '0-0' : `${difficultyLabel(e.difficulty)} · ${recordOf(e.id, st) || '0-0'}`),
       );
     return h(
       'div',
-      { class: ['my-match', done && (draw ? 'draw' : won ? 'won' : 'lost')] },
-      h('div', { class: 'mm-label' }, `${m.label} · Table ${m.table}`),
+      { class: ['mm2', done && (draw ? 'draw' : won ? 'won' : 'lost')] },
+      art,
+      h('div', { class: 'mm2-shade' }),
+      h('div', { class: 'mm2-label' }, `${m.label} · Table ${m.table}`),
       h(
         'div',
-        { class: 'mm-vs' },
+        { class: 'mm2-face' },
         side(me, true),
-        h('div', { class: 'mm-mid' }, done ? h('div', { class: 'mm-score' }, `${myW} – ${opW}`) : h('div', { class: 'mm-vsbadge' }, 'VS'), done ? h('div', { class: 'mm-res' }, draw ? 'Draw' : won ? 'Victory' : 'Defeat') : null),
+        h('div', { class: 'mm2-mid' }, done ? h('div', { class: 'mm2-score' }, `${myW}–${opW}`) : h('div', { class: 'mm2-vs' }, 'vs'), done ? h('div', { class: 'mm2-res' }, draw ? 'Draw' : won ? 'Victory' : 'Defeat') : null),
         side(opp, false),
       ),
       done
         ? h('div', { class: 'mm-games' }, m.games.map((g, i) => gameRow(meA ? g : { ...g, winner: g.winner == null ? null : ((1 - g.winner) as 0 | 1) }, i, [me.name, opp.name], 0)))
         : h(
             'div',
-            { class: 'mm-actions' },
-            button('Play match', () => void playMine(m), { variant: 'primary', icon: 'swords', cls: 'ui-btn-lg' }),
-            button('Auto-play my match', () => void autoPlayMine(m), { variant: 'ghost', icon: 'robot', title: 'Let the AI play your deck for you' }),
-            button('Report result', () => reportMine(m), { variant: 'subtle', icon: 'edit', title: 'Enter the result of your match manually' }),
+            { class: 'mm2-actions' },
+            ctaButton('Play match', () => void playMine(m), 'swords'),
+            h(
+              'div',
+              { class: 'mm2-alt' },
+              h('button', { type: 'button', class: 'cta cta--dark cta--sm', onclick: () => void autoPlayMine(m), title: 'Let the AI play your deck for you' }, icon('robot'), h('span', null, 'Auto-play')),
+              h('button', { type: 'button', class: 'cta cta--dark cta--sm', onclick: () => reportMine(m), title: 'Enter the result of your match manually' }, icon('edit'), h('span', null, 'Report')),
+            ),
           ),
     );
   }
@@ -450,31 +415,23 @@ function hubScreen(t: Tournament): Screen {
       const wa = m.games.filter((g) => g.winner === 0).length;
       const wb = m.games.filter((g) => g.winner === 1).length;
       const isMe = m.a === t.humanId || m.b === t.humanId;
-      const who = (e: Entrant | undefined, win: boolean, right = false) =>
-        e
-          ? h(
-              'div',
-              { class: ['pt-player', win && 'win', right && 'right'] },
-              renderAvatar(e.avatar, 30),
-              h('div', { class: 'pt-who' }, h('span', { class: 'pt-name' }, e.name, e.human ? badge('You', 'gold') : null), h('span', { class: 'pt-deck' }, `${e.deck.name} · ${recordOf(e.id, st)}`)),
-            )
-          : h('div', { class: ['pt-player', 'bye', right && 'right'] }, h('span', { class: 'muted' }, 'BYE'));
-      const res = m.b == null ? 'Bye' : m.result == null ? (progress?.label.includes(A.name) ? '…' : 'vs') : `${wa} – ${wb}`;
+      const live = m.result == null && !!progress?.label.includes(A.name);
+      const line = (e: Entrant | undefined, win: boolean, score: number | null) =>
+        h(
+          'div',
+          { class: ['pr-p', win && 'win', m.result != null && !win && m.result !== 'draw' && 'lose'] },
+          h('span', { class: 'pr-name' }, e ? e.name : 'Bye', e?.human ? h('span', { class: 'you-tag' }, 'You') : null),
+          h('span', { class: 'pr-deck' }, e ? `${e.deck.name} · ${recordOf(e.id, st)}` : ''),
+          h('span', { class: 'pr-score' }, score == null ? '' : String(score)),
+        );
       return h(
-        'tr',
-        { class: [isMe && 'me', m.result == null && 'pending'] },
-        h('td', { class: 'pt-table' }, String(m.table)),
-        h('td', null, who(A, m.result === 'a')),
-        h('td', { class: 'pt-res' }, h('span', { class: ['pt-score', m.result === 'draw' && 'draw'] }, res)),
-        h('td', null, who(B, m.result === 'b', true)),
+        'div',
+        { class: ['pr-row', isMe && 'me', m.result == null && 'pending', live && 'live'] },
+        h('span', { class: 'pr-table' }, String(m.table)),
+        h('div', { class: 'pr-players' }, line(A, m.result === 'a', m.result != null && B ? wa : null), line(B, m.result === 'b', m.result != null && B ? wb : null)),
       );
     });
-    return h(
-      'div',
-      { class: 'panel pairings' },
-      h('header', { class: 'panel-head' }, h('h2', { class: 'panel-title' }, 'Pairings')),
-      h('div', { class: 'panel-body table-wrap' }, h('table', { class: 'table pairings-table' }, h('thead', null, h('tr', null, h('th', null, 'Table'), h('th', null, 'Player'), h('th', { class: 'pt-res' }, 'Result'), h('th', { class: 'right' }, 'Opponent'))), h('tbody', null, rows))),
-    );
+    return h('section', { class: 'ios-group pairings' }, h('h2', { class: 'ios-group-h' }, 'Pairings'), h('div', { class: 'ios-list pr-list' }, rows));
   }
 
   // ---------------------------------------------------------------- lobby
@@ -488,31 +445,39 @@ function hubScreen(t: Tournament): Screen {
     }
     const meta = [...counts.values()].sort((a, b) => b.n - a.n);
     const max = Math.max(...meta.map((m) => m.n));
+    const heroArt = h('div', { class: 'lobby-art', 'aria-hidden': 'true' });
+    artInto(heroArt, signatureCard(me.deck));
     return h(
       'div',
       { class: 'lobby' },
       h(
         'section',
         { class: 'lobby-hero' },
-        h('div', { class: 'title-eyebrow' }, 'Registration closed'),
-        h('h2', null, t.name),
-        h('p', { class: 'muted' }, `${t.size} duelists · ${t.swissRounds} Swiss rounds · Top ${t.topCut} cut · ${t.bestOf === 3 ? 'Best of 3' : 'Best of 1'} · ${t.simMode === 'full' ? 'Full simulation' : 'Fast simulation'}`),
-        h('div', { class: 'lobby-me' }, h('span', { class: 'avatar-ring' }, renderAvatar(me.avatar, 64)), h('div', null, h('div', { class: 'setup-role' }, 'Registered as'), h('b', null, me.name), h('div', { class: 'mm-deck', style: { '--deck': me.deck.color } }, h('i'), me.deck.name))),
-        button('Begin Round 1', () => {
-          advance(t);
-          saveTournament(t);
-          tab = 'round';
-          redraw();
-          maybeAutoSimulate();
-        }, { variant: 'primary', icon: 'play', cls: 'ui-btn-lg' }),
+        heroArt,
+        h('div', { class: 'lobby-shade' }),
+        h(
+          'div',
+          { class: 'lobby-body' },
+          h('div', { class: 'frame-eyebrow' }, 'Registration closed'),
+          h('h2', null, `${t.size} duelists are ready`),
+          h('p', null, `${t.swissRounds} Swiss rounds · Top ${t.topCut} · ${t.bestOf === 3 ? 'Best of 3' : 'Best of 1'} · ${t.simMode === 'full' ? 'Full' : 'Fast'} simulation`),
+          h('div', { class: 'lobby-me' }, deckArt(snapInfo(me.deck), 'mm2-art'), h('div', null, h('div', { class: 'ios-desc' }, 'You are playing'), h('b', null, me.deck.name))),
+          ctaButton('Begin Round 1', () => {
+            advance(t);
+            saveTournament(t);
+            tab = 'round';
+            redraw();
+            maybeAutoSimulate();
+          }, 'play'),
+        ),
       ),
       h(
         'section',
-        { class: 'panel lobby-meta' },
-        h('header', { class: 'panel-head' }, h('h2', { class: 'panel-title' }, 'Metagame breakdown')),
+        { class: 'ios-group' },
+        h('h2', { class: 'ios-group-h' }, 'Metagame'),
         h(
           'div',
-          { class: 'panel-body meta-bars' },
+          { class: 'ios-list meta-list' },
           meta.map((m) =>
             h('div', { class: 'meta-bar', style: { '--deck': m.color } }, h('span', { class: 'meta-name' }, m.name), h('span', { class: 'meta-track' }, h('i', { style: { width: `${(m.n / max) * 100}%` } })), h('b', null, `${m.n}`), h('span', { class: 'meta-pct' }, pct(m.n / t.size))),
           ),
@@ -533,30 +498,30 @@ function hubScreen(t: Tournament): Screen {
           'tr',
           { class: [e.human && 'me', i === t.topCut - 1 && 'cutline'] },
           h('td', { class: 'num rank' }, String(s.rank)),
-          h('td', null, h('div', { class: 'pt-player' }, renderAvatar(e.avatar, 30), h('div', { class: 'pt-who' }, h('span', { class: 'pt-name' }, e.name, e.human ? badge('You', 'gold') : null), h('span', { class: 'pt-deck' }, e.title)))),
-          h('td', null, h('span', { class: 'mm-deck', style: { '--deck': e.deck.color } }, h('i'), e.deck.name)),
+          h('td', null, h('div', { class: 'pt-player' }, h('div', { class: 'pt-who' }, h('span', { class: 'pt-name' }, e.name, e.human ? h('span', { class: 'you-tag' }, 'You') : null), h('span', { class: 'pt-deck' }, e.deck.name)))),
           h('td', { class: 'num' }, `${s.w}-${s.l}${s.d ? '-' + s.d : ''}`),
           h('td', { class: 'num strong' }, String(s.mp)),
-          h('td', { class: 'num' }, pct(s.omw)),
-          h('td', { class: 'num' }, pct(s.gwp)),
+          h('td', { class: 'num hide-sm' }, pct(s.omw)),
+          h('td', { class: 'num hide-sm' }, pct(s.gwp)),
           h('td', { class: 'num hide-sm' }, pct(s.ogw)),
         ),
       );
     });
     return h(
-      'div',
-      { class: 'panel standings' },
-      h('header', { class: 'panel-head' }, h('h2', { class: 'panel-title' }, `Swiss standings after round ${Math.min(t.rounds.length, t.swissRounds)}`), h('span', { class: 'muted small' }, `Top ${t.topCut} advance · tiebreakers: OMW%, GW%, OGW%`)),
+      'section',
+      { class: 'ios-group standings' },
+      h('h2', { class: 'ios-group-h' }, `After round ${Math.min(t.rounds.length, t.swissRounds)}`),
       h(
         'div',
-        { class: 'panel-body table-wrap' },
+        { class: 'ios-list table-wrap' },
         h(
           'table',
           { class: 'table standings-table' },
-          h('thead', null, h('tr', null, h('th', { class: 'num' }, '#'), h('th', null, 'Player'), h('th', null, 'Deck'), h('th', { class: 'num' }, 'Record'), h('th', { class: 'num' }, 'Pts'), h('th', { class: 'num' }, 'OMW%'), h('th', { class: 'num' }, 'GW%'), h('th', { class: 'num hide-sm' }, 'OGW%'))),
+          h('thead', null, h('tr', null, h('th', { class: 'num' }, '#'), h('th', null, 'Player'), h('th', { class: 'num' }, 'Record'), h('th', { class: 'num' }, 'Pts'), h('th', { class: 'num hide-sm' }, 'OMW%'), h('th', { class: 'num hide-sm' }, 'GW%'), h('th', { class: 'num hide-sm' }, 'OGW%'))),
           h('tbody', null, rows),
         ),
       ),
+      h('p', { class: 'ios-foot' }, `Top ${t.topCut} advance. Tiebreakers: OMW%, GW%, OGW%.`),
     );
   }
 
@@ -567,22 +532,15 @@ function hubScreen(t: Tournament): Screen {
 
   // ---------------------------------------------------------------- entrants
   function entrantsView(): HTMLElement {
-    return h(
-      'div',
-      { class: 'entrants' },
+    return iosGroup(
+      `${t.entrants.length} duelists`,
       t.entrants.map((e) =>
         h(
           'div',
-          { class: ['entrant', e.human && 'me'], style: { '--deck': e.deck.color } },
-          h('span', { class: 'avatar-ring' }, renderAvatar(e.avatar, 54)),
-          h(
-            'div',
-            { class: 'ent-text' },
-            h('div', { class: 'ent-name' }, e.name),
-            h('div', { class: 'ent-title' }, e.human ? 'You' : e.title),
-            h('div', { class: 'ent-deck' }, h('span', { class: 'mm-deck' }, h('i'), e.deck.name), e.human ? null : tierBadge(e.deck.tier)),
-          ),
-          e.human ? null : badge(difficultyLabel(e.difficulty), e.difficulty === 'hard' ? 'red' : e.difficulty === 'easy' ? 'green' : 'blue'),
+          { class: ['ios-row', 'ent-row', e.human && 'me'] },
+          deckArt(snapInfo(e.deck), 'ent-art'),
+          h('div', { class: 'ios-row-text' }, h('div', { class: 'ios-label' }, e.name, e.human ? h('span', { class: 'you-tag' }, 'You') : null), h('div', { class: 'ios-desc' }, `${e.deck.name} · ${e.human ? 'You' : e.title}`)),
+          e.human ? null : h('span', { class: ['diff-tag', e.difficulty] }, difficultyLabel(e.difficulty)),
         ),
       ),
     );
@@ -765,7 +723,6 @@ export function bracket(t: Tournament): HTMLElement {
           'div',
           { class: ['br-slot', win && 'win', e?.human && 'me', !e && 'tbd'] },
           e ? h('span', { class: 'br-seed' }, String(seedOf.get(e.id) ?? '')) : null,
-          e ? renderAvatar(e.avatar, 24) : null,
           h('span', { class: 'br-name' }, e ? e.name : 'TBD'),
           e ? h('span', { class: 'br-deck', style: { '--deck': e.deck.color } }) : null,
           h('span', { class: 'br-score' }, score == null ? '' : String(score)),
@@ -784,7 +741,7 @@ export function bracket(t: Tournament): HTMLElement {
       'div',
       { class: 'br-col champ' },
       h('div', { class: 'br-label' }, 'Champion'),
-      h('div', { class: 'br-matches' }, h('div', { class: ['br-champ', champ && 'set'] }, trophySVG('br-trophy'), champ ? h('div', null, renderAvatar(champ.avatar, 40), h('b', null, champ.name), h('span', null, champ.deck.name)) : h('span', { class: 'muted' }, 'To be decided'))),
+      h('div', { class: 'br-matches' }, h('div', { class: ['br-champ', champ && 'set'] }, champ ? [deckArt(snapInfo(champ.deck), 'br-champ-art'), h('div', null, h('b', null, champ.name), h('span', null, champ.deck.name))] : h('span', { class: 'muted' }, 'To be decided'))),
     ),
   );
   if (!t.top.length) {
@@ -854,44 +811,50 @@ function finalScreen(t: Tournament): Screen {
             ? { title: `Top ${t.topCut}`, text: 'A top-cut medal for making it out of Swiss.', cls: 'bronze' }
             : { title: `${ordinal(myPlace)} place`, text: 'No hardware this time — tune the side deck and come back stronger.', cls: 'plain' };
 
-  const medal = (i: number) => (i === 0 ? 'gold' : i === 1 ? 'silver' : i < 4 ? 'bronze' : '');
+  const art = h('div', { class: 'res-art' });
+  artInto(art, signatureCard(entrant(t, t.humanId)!.deck));
+  const stat = (v: string, l: string) => h('div', { class: 'res-stat' }, h('b', null, v), h('span', null, l));
   const podium = placements.slice(0, t.topCut).map((id, i) => {
     const e = entrant(t, id)!;
     return h(
       'div',
-      { class: ['fin-row', e.human && 'me', medal(i)] },
-      h('span', { class: 'fin-place' }, i < 4 ? icon(i === 0 ? 'trophy' : 'medal') : null, ordinal(i + 1)),
-      renderAvatar(e.avatar, 36),
-      h('span', { class: 'fin-who' }, h('span', { class: 'fin-name' }, e.name, e.human ? badge('You', 'gold') : null), h('span', { class: 'mm-deck', style: { '--deck': e.deck.color } }, h('i'), e.deck.name)),
+      { class: ['ios-row', 'fin-row', e.human && 'me'] },
+      h('span', { class: ['place-pill', i === 0 && 'first'] }, ordinal(i + 1)),
+      h('div', { class: 'ios-row-text' }, h('div', { class: 'ios-label' }, e.name, e.human ? h('span', { class: 'you-tag' }, 'You') : null), h('div', { class: 'ios-desc' }, e.deck.name)),
     );
   });
 
   const el = h(
     'div',
-    { class: ['final-screen', `prize-${prize.cls}`], tabindex: '-1' },
-    h('div', { class: 'res-rays', 'aria-hidden': 'true' }),
+    { class: ['results', 'final-screen', `prize-${prize.cls}`, myPlace === 1 ? 'results-victory' : 'results-neutral'], tabindex: '-1' },
     h(
-      'div',
-      { class: 'fin-inner' },
-      h('div', { class: 'res-context' }, `${t.name} · ${t.size} players`),
-      h('div', { class: 'fin-hero' }, trophySVG(`fin-trophy ${prize.cls}`), h('div', null, h('div', { class: 'fin-place-big' }, ordinal(myPlace)), h('h1', { class: 'fin-title' }, prize.title), h('p', { class: 'fin-text' }, prize.text))),
+      'section',
+      { class: 'res-hero' },
+      art,
+      h('div', { class: 'res-shade' }),
       h(
         'div',
-        { class: 'res-stats' },
-        h('span', { class: 'stat-chip' }, h('b', null, record), h('span', null, 'Your record')),
-        h('span', { class: 'stat-chip' }, h('b', null, `${me.rank}`), h('span', null, 'Swiss rank')),
-        h('span', { class: 'stat-chip' }, h('b', null, pct(me.omw)), h('span', null, 'OMW%')),
-        h('span', { class: 'stat-chip' }, h('b', null, champ.human ? 'You!' : champ.name), h('span', null, 'Champion')),
+        { class: 'res-hero-body' },
+        h('div', { class: 'res-context' }, `${t.name} · ${t.size} players`),
+        h('h1', { class: 'res-headline' }, ordinal(myPlace)),
+        h('div', { class: 'fin-title' }, prize.title),
+        h('div', { class: 'res-sub' }, prize.text),
       ),
-      h('div', { class: 'fin-grid' }, h('section', { class: 'panel fin-podium' }, h('header', { class: 'panel-head' }, h('h2', { class: 'panel-title' }, `Final Top ${t.topCut}`)), h('div', { class: 'panel-body' }, podium)), h('section', { class: 'panel fin-bracket' }, h('header', { class: 'panel-head' }, h('h2', { class: 'panel-title' }, 'Bracket')), h('div', { class: 'panel-body' }, bracket(t)))),
+    ),
+    h(
+      'div',
+      { class: 'res-inner' },
+      h('div', { class: 'res-stats' }, stat(record, 'Record'), stat(`${me.rank}`, 'Swiss rank'), stat(pct(me.omw), 'OMW%')),
+      iosGroup(`Final Top ${t.topCut}`, podium, champ.human ? 'You are the champion.' : `${champ.name} won with ${champ.deck.name}.`),
+      h('section', { class: 'ios-group' }, h('h2', { class: 'ios-group-h' }, 'Bracket'), bracket(t)),
       h(
         'div',
         { class: 'res-actions' },
-        button('New tournament', () => {
+        ctaButton('New tournament', () => {
           clearActiveTournament();
           go('tournament', {}, { replace: true });
-        }, { variant: 'primary', icon: 'trophy', cls: 'ui-btn-lg' }),
-        button('Main menu', () => go('title'), { variant: 'ghost', icon: 'back', cls: 'ui-btn-lg' }),
+        }, 'trophy'),
+        h('button', { type: 'button', class: 'cta cta--dark', onclick: () => go('title') }, icon('home'), h('span', null, 'Home')),
       ),
     ),
   );

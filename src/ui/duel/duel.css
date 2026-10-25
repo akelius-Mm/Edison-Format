@@ -1545,8 +1545,11 @@
 .mats-split .side-opp::before { transform: rotate(180deg); }
 .mats-split .midline-glow { display: none; }
 /* Wide boards show the banished pile beside the grid: the mat extends to cover it. */
-.mats-split .stage:not(.stage--compact) .side-me::before { right: calc(var(--zw) * -0.64 - var(--gap) * 3.2); }
-.mats-split .stage:not(.stage--compact) .side-opp::before { left: calc(var(--zw) * -0.64 - var(--gap) * 3.2); }
+/* Both mats extend on both sides so they stay lined up with each other. */
+.mats-split .stage:not(.stage--compact) .side::before {
+  left: calc(var(--zw) * -0.64 - var(--gap) * 3.2);
+  right: calc(var(--zw) * -0.64 - var(--gap) * 3.2);
+}
 
 /* Phone sheets: fully hidden when closed (the notch and home-bar insets used to let their edges peek in). */
 @media (max-width: 600px) and (orientation: portrait) {
@@ -1563,4 +1566,119 @@
     transform: none;
     transition: transform 220ms ease;
   }
+}
+
+/* ---------------------------------------------------------------- phone landscape
+   Three columns: players and an always-on card text panel on the left, the board in the
+   middle, phase controls and the log on the right. Clear of the notch on either side. */
+@media (orientation: landscape) and (max-height: 500px) {
+  .duel-root {
+    --left-w: calc(188px + env(safe-area-inset-left, 0px));
+    --right-w: calc(148px + env(safe-area-inset-right, 0px));
+    grid-template-columns: var(--left-w) minmax(0, 1fr) var(--right-w);
+  }
+  .duel-left,
+  .duel-right {
+    position: relative;
+    inset: auto;
+    width: auto;
+    height: auto;
+    z-index: 5;
+    padding: 6px;
+    gap: 6px;
+    pointer-events: auto;
+    background: rgba(10, 11, 13, 0.94);
+    box-shadow: none;
+  }
+  .duel-left {
+    padding-left: calc(6px + env(safe-area-inset-left, 0px));
+    padding-bottom: calc(6px + env(safe-area-inset-bottom, 0px));
+    justify-content: flex-start;
+    border-right: 1px solid rgba(255, 255, 255, 0.06);
+  }
+  .duel-right {
+    padding-right: calc(6px + env(safe-area-inset-right, 0px));
+    padding-bottom: calc(6px + env(safe-area-inset-bottom, 0px));
+    border-left: 1px solid rgba(255, 255, 255, 0.06);
+  }
+  .duel-center { grid-column: 2; padding: 0; }
+  .duel-mat { inset: 0; border-radius: 0; }
+  .pp { padding: 6px 8px; }
+  .pp-bar { height: 3px; margin-top: 3px; }
+  /* Card text, always visible */
+  /* Card thumbnail beside its name and stats, the effect text below; the whole panel scrolls. */
+  .preview {
+    display: grid;
+    grid-template-columns: 58px minmax(0, 1fr);
+    align-content: start;
+    gap: 4px 8px;
+    padding: 6px;
+    border-radius: 10px;
+    overflow-y: auto;
+    font-size: 11px;
+    line-height: 1.4;
+  }
+  .preview-card { grid-column: 1; grid-row: 1 / span 3; align-self: start; }
+  .preview-card .yc { --yc-w: 58px; }
+  .preview-empty { width: 58px; font-size: 8.5px; line-height: 1.3; }
+  .preview-details { display: contents; }
+  .pv-name { grid-column: 2; font-size: 12.5px; margin: 0; align-self: end; }
+  .pv-meta { grid-column: 2; margin: 0; }
+  .pv-stats { grid-column: 2; margin: 0; font-size: 10px; gap: 8px; }
+  .pv-stats b { font-size: 13px; }
+  .pv-text,
+  .pv-status { grid-column: 1 / -1; }
+  .pv-chip { font-size: 9px; padding: 1px 5px; }
+  /* Right column: tools, phases, chain, log */
+  .duel-top { flex-direction: row; justify-content: flex-end; padding: 0; }
+  .phasebar { padding: 6px; }
+  .phasebar-list { grid-template-columns: repeat(3, 1fr); }
+  .btn--phase { min-height: 32px; font-size: 12px; }
+  .log { display: flex; flex: 1; min-height: 0; font-size: 11px; }
+  .hide-log .log { display: none; }
+  .chain { position: absolute; right: calc(100% + 6px); top: 6px; width: 200px; max-height: 70%; }
+}
+
+/* End-of-duel box: clean and quiet, matching the results screen that follows. */
+.result { background: rgba(8, 9, 11, 0.82) !important; backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
+.result-rays { display: none; }
+.result-box {
+  min-width: min(320px, calc(100vw - 32px));
+  padding: 26px 24px 20px;
+  border-radius: 18px;
+  background: rgba(20, 21, 24, 0.96);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
+  transform: translateY(10px) scale(0.98);
+  transition: transform 0.35s ease;
+}
+.result-title,
+.result.is-lose .result-title,
+.result.is-draw .result-title {
+  font: 700 40px/1.05 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+  letter-spacing: -0.01em !important;
+  text-transform: none !important;
+  background: none !important;
+  -webkit-background-clip: border-box !important;
+  background-clip: border-box !important;
+  -webkit-text-fill-color: currentColor !important;
+  color: #f2efe8 !important;
+  filter: none !important;
+  animation: none !important;
+}
+.result.is-lose .result-title { color: #d9d4ca !important; }
+.result-reason { font-size: 14px; letter-spacing: 0; }
+.result-stats b { font: 600 20px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+.result-stats small { letter-spacing: 0.08em; }
+.result-continue {
+  width: 100%;
+  min-height: 48px;
+  border-radius: 14px !important;
+  background: #f2efe8 !important;
+  color: #111 !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  font-weight: 600 !important;
+  text-transform: none !important;
+  letter-spacing: 0 !important;
 }

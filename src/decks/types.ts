@@ -13,4 +13,14 @@ export interface DeckDef {
   extra: [string, number][];
   /** Optional side deck. */
   side?: [string, number][];
+  /** Set on real decklists that placed at a tournament of the era. */
+  event?: {
+    /** e.g. "Shonen Jump Championship Edison" */
+    name: string;
+    /** ISO date, e.g. "2010-04-17" */
+    date: string;
+    /** e.g. "1st", "Top 4", "Top 8" */
+    place: string;
+    pilot?: string;
+  };
 }

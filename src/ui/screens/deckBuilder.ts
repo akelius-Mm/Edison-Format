@@ -1,16 +1,18 @@
 // Deck Builder: card browser + editable Main/Extra/Side deck with live validation and stats.
 import { findCard } from '../../cards';
-import { PREMADE_DECKS, validateDeck } from '../../decks';
+import { PREMADE_DECKS } from '../../decks';
 import type { CardData } from '../../engine/card';
 import { isExtraCard, cardBrowser, sortCards } from './cardBrowser';
 import { cardDetail, deckTile } from './components';
-import { append, button, clear, confirmDialog, h, icon, modal, promptDialog, toast, type Child } from './dom';
+import { append, button, clear, confirmDialog, h, icon, modal, promptDialog, segmented, toast, type Child } from './dom';
+import { zoomCard } from '../cards/zoom';
 import { renderCard } from './ext';
 import { frame, go, type Params, type Screen } from './nav';
 import {
   copyOfPremade,
   deckCount,
   deleteCustomDeck,
+  deckProblems,
   exportDeckText,
   getCustomDeck,
   listCustomDecks,
@@ -32,6 +34,7 @@ export function deckBuilderScreen(params: Params): Screen {
   let cur: SavedDeck | null = null;
   let selected: CardData | null = null;
   let mobileTab: 'deck' | 'cards' | 'info' = 'deck';
+  let shownSection: Section = 'main';
 
   // ---------- load initial deck
   const all = listCustomDecks();
@@ -125,6 +128,29 @@ export function deckBuilderScreen(params: Params): Screen {
   function select(c: CardData | null) {
     selected = c;
     drawDetail();
+    drawSelBar();
+    deckCol.querySelectorAll<HTMLElement>('.dk-slot').forEach((el) => el.classList.toggle('sel', !!c && el.dataset.name === c.name));
+  }
+
+  // ---------- selection bar (phone-friendly edit controls for the selected deck card)
+  const selBar = h('div', { class: 'db-selbar', 'aria-live': 'polite' });
+  function drawSelBar() {
+    const c = selected;
+    const inDeck = c && cur ? (['main', 'extra', 'side'] as Section[]).filter((x) => list(x).some(([n]) => n === c.name)) : [];
+    selBar.hidden = !c || !cur;
+    if (!c || !cur) return selBar.replaceChildren();
+    const from = inDeck.includes(shownSection) ? shownSection : inDeck[0];
+    const mini = (label: string, ic: Parameters<typeof icon>[0], fn: () => void, disabled = false, title = label) => {
+      const b = h('button', { type: 'button', class: 'db-selbtn', title, 'aria-label': title, onclick: fn }, icon(ic), label ? h('span', null, label) : null);
+      b.disabled = disabled;
+      return b;
+    };
+    selBar.replaceChildren(
+      h('button', { type: 'button', class: 'db-selcard', title: 'View card', onclick: () => zoomCard(c) }, renderCard(c, { size: 'xs' }), h('span', { class: 'db-seltext' }, h('b', null, c.name), h('span', null, `${copies(c.name)} of ${c.limit ?? 3} in deck`))),
+      mini('', 'minus', () => from && (remove(c.name, from), commit()), !from, 'Remove one copy'),
+      mini('', 'plus', () => add(c.name, from === 'side' ? 'side' : 'main') && commit(), false, 'Add one copy'),
+      ...(from ? [mini(from === 'side' ? 'Main' : 'Side', 'shuffle', () => move(c.name, from, from === 'side' ? 'main' : 'side'), false, from === 'side' ? 'Move to Main/Extra Deck' : 'Move to Side Deck')] : []),
+    );
   }
 
   // ---------- browser
@@ -179,17 +205,33 @@ export function deckBuilderScreen(params: Params): Screen {
     for (const [name, cnt] of entries) {
       const c = findCard(name);
       for (let i = 0; i < cnt; i++) {
+        let pressT = 0;
         const slot = h(
           'div',
           {
             class: ['dk-slot', selected?.name === name && 'sel', !c && 'missing'],
+            dataset: { name },
             draggable: 'true',
             tabindex: '0',
+            onpointerdown: (e: PointerEvent) => {
+              if (e.pointerType !== 'touch') return;
+              clearTimeout(pressT);
+              pressT = window.setTimeout(() => {
+                remove(name, s);
+                commit();
+                toast(`Removed ${name}.`, 'info', 1400);
+              }, 550);
+            },
+            onpointerup: () => clearTimeout(pressT),
+            onpointercancel: () => clearTimeout(pressT),
+            onpointerleave: () => clearTimeout(pressT),
             title: `${name} — right-click or Delete to remove`,
             onclick: () => c && select(c),
-            onmouseenter: () => c && select(c),
+            onmouseenter: (e: MouseEvent) => c && (e as PointerEvent).pointerType !== 'touch' && matchMedia('(hover: hover)').matches && select(c),
             oncontextmenu: (e: MouseEvent) => {
               e.preventDefault();
+              clearTimeout(pressT);
+              if (matchMedia('(hover: none)').matches) return;
               remove(name, s);
               commit();
             },
@@ -260,7 +302,7 @@ export function deckBuilderScreen(params: Params): Screen {
       deckCol.appendChild(startView());
       return;
     }
-    const nameIn = h('input', { class: 'input db-name', value: cur.name, maxlength: 40, 'aria-label': 'Deck name' });
+    const nameIn = h('input', { class: 'db-name', value: cur.name, maxlength: 40, 'aria-label': 'Deck name', spellcheck: false });
     nameIn.addEventListener('change', () => {
       const v = nameIn.value.trim();
       if (!v || !cur) return;
@@ -268,41 +310,63 @@ export function deckBuilderScreen(params: Params): Screen {
       commit();
       drawHeader();
     });
-    const problems = validateDeck(cur);
+    const problems = deckProblems(cur);
     const legal = h(
       'span',
       { class: ['db-legal', problems.length ? 'bad' : 'ok'], title: problems.join('\n') },
       icon(problems.length ? 'warn' : 'check'),
       problems.length ? `${problems.length} problem${problems.length > 1 ? 's' : ''}` : 'Legal',
     );
+    const tool = (label: string, fn: () => void, ic: Parameters<typeof icon>[0], danger = false) =>
+      h('button', { type: 'button', class: ['db-tool', danger && 'danger'], onclick: fn, title: label }, icon(ic), h('span', null, label));
     const tools = h(
       'div',
       { class: 'db-tools' },
-      button('Sort', sortDeck, { variant: 'ghost', small: true, icon: 'sort', title: 'Sort deck' }),
-      button('Test hand', testHand, { variant: 'ghost', small: true, icon: 'hand', title: 'Draw a sample opening hand' }),
-      button('Import', importDeck, { variant: 'ghost', small: true, icon: 'upload', title: 'Import from text' }),
-      button('Export', exportDeck, { variant: 'ghost', small: true, icon: 'download', title: 'Export as text' }),
-      button('', duplicateDeck, { variant: 'ghost', small: true, icon: 'copy', title: 'Duplicate deck' }),
-      button('', clearDeck, { variant: 'ghost', small: true, icon: 'refresh', title: 'Clear all cards' }),
-      button('', deleteDeck, { variant: 'danger', small: true, icon: 'trash', title: 'Delete deck' }),
+      tool('Sort', sortDeck, 'sort'),
+      tool('Test hand', testHand, 'hand'),
+      tool('Import', importDeck, 'upload'),
+      tool('Export', exportDeck, 'download'),
+      tool('Duplicate', duplicateDeck, 'copy'),
+      tool('Clear', () => void clearDeck(), 'refresh'),
+      tool('Delete', () => void deleteDeck(), 'trash', true),
+    );
+    const n = (x: Section) => deckCount(list(x));
+    const secSeg = segmented<Section>(
+      [
+        { value: 'main', label: `Main ${n('main')}` },
+        { value: 'extra', label: `Extra ${n('extra')}` },
+        { value: 'side', label: `Side ${n('side')}` },
+      ],
+      shownSection,
+      (v) => {
+        shownSection = v;
+        sections.dataset.section = v;
+        drawSelBar();
+      },
+      'Deck section',
+    );
+    secSeg.classList.add('db-secseg');
+    const sections = h(
+      'div',
+      { class: 'db-sections', dataset: { section: shownSection } },
+      sectionEl('main', 'Main Deck', 'Tap cards in Add cards (or drag them here) to build your Main Deck.'),
+      sectionEl('extra', 'Extra Deck', 'Synchro and Fusion monsters go here.'),
+      sectionEl('side', 'Side Deck', 'Add cards to the Side Deck from the card list or the selection bar.'),
     );
     deckCol.append(
-      h('div', { class: 'db-deckbar' }, h('div', { class: 'db-namewrap' }, icon('edit'), nameIn), legal, saveState, tools),
-      h(
-        'div',
-        { class: 'db-sections' },
-        sectionEl('main', 'Main Deck', 'Click cards in the browser (or drag them here) to add them to your Main Deck.'),
-        sectionEl('extra', 'Extra Deck', 'Synchro and Fusion monsters go here.'),
-        sectionEl('side', 'Side Deck', 'Right-click or Shift+click a card to add it to the Side Deck.'),
-      ),
+      h('div', { class: 'db-deckbar' }, h('div', { class: 'db-namewrap' }, nameIn), legal, saveState),
+      tools,
+      secSeg,
+      selBar,
+      sections,
       h(
         'div',
         { class: 'db-hint' },
-        icon('info'),
         h('span', { class: 'hint-mouse' }, h('b', null, 'Click'), ' add · ', h('b', null, 'Shift/Right-click'), ' add to Side · ', h('b', null, 'Right-click'), ' a deck card to remove · ', h('b', null, 'Drag'), ' between sections or back to the list'),
-        h('span', { class: 'hint-touch' }, h('b', null, 'Tap'), ' a card in the list to add it · ', h('b', null, 'Long-press'), ' a deck card to remove it · use ', h('b', null, 'Details'), ' for Side Deck'),
+        h('span', { class: 'hint-touch' }, h('b', null, 'Tap'), ' a card to select it · ', h('b', null, 'Press and hold'), ' to remove one copy'),
       ),
     );
+    drawSelBar();
   }
 
   function startView() {
@@ -382,7 +446,7 @@ export function deckBuilderScreen(params: Params): Screen {
     const extra = cur.extra.map(([n, k]) => [findCard(n), k] as const);
     const syn = extra.filter(([c]) => c?.mtypes?.includes('synchro')).reduce((a, [, k]) => a + k, 0);
     const fus = extra.filter(([c]) => c?.mtypes?.includes('fusion')).reduce((a, [, k]) => a + k, 0);
-    const problems = validateDeck(cur);
+    const problems = deckProblems(cur);
     // probability of opening at least one tuner (5 cards)
     const pOpen = (k: number, N: number, draw = 5) => {
       if (!k || N < draw) return 0;
@@ -636,43 +700,50 @@ export function deckBuilderScreen(params: Params): Screen {
     'div',
     { class: 'db-head-actions' },
     deckSel,
-    button('New', () => {
-      const m = modal(
-        'New deck',
-        h(
-          'div',
-          { class: 'db-start-actions vertical' },
-          button('Blank deck', () => (m.close(), newBlank()), { variant: 'primary', icon: 'plus' }),
-          button('Copy a premade deck', () => (m.close(), choosePremade()), { variant: 'ghost', icon: 'copy' }),
-          button('Import decklist', () => (m.close(), importDeck()), { variant: 'ghost', icon: 'upload' }),
-        ),
-        [],
-      );
-    }, { variant: 'gold', small: true, icon: 'plus', title: 'New deck' }),
-    button('', () => void renameDeck(), { variant: 'ghost', small: true, icon: 'edit', title: 'Rename deck' }),
-  );
-
-  // ---------- mobile tabs
-  const layout = h('div', { class: 'db-layout', dataset: { tab: mobileTab } }, infoCol, deckCol, browserCol);
-  const tabBtn = (t: typeof mobileTab, label: string, ic: Parameters<typeof icon>[0]) =>
     h(
       'button',
       {
         type: 'button',
-        class: ['tab', `tab-${t}`, mobileTab === t && 'on'],
-        onclick: (e: MouseEvent) => {
-          mobileTab = t;
-          layout.dataset.tab = t;
-          tabs.querySelectorAll('.tab').forEach((b) => b.classList.remove('on'));
-          (e.currentTarget as HTMLElement).classList.add('on');
+        class: 'head-icon-btn',
+        title: 'New deck',
+        'aria-label': 'New deck',
+        onclick: () => {
+          const m = modal(
+            'New deck',
+            h(
+              'div',
+              { class: 'db-start-actions vertical' },
+              button('Blank deck', () => (m.close(), newBlank()), { variant: 'primary', icon: 'plus' }),
+              button('Copy a premade deck', () => (m.close(), choosePremade()), { variant: 'ghost', icon: 'copy' }),
+              button('Import decklist', () => (m.close(), importDeck()), { variant: 'ghost', icon: 'upload' }),
+            ),
+            [],
+          );
         },
       },
-      icon(ic),
-      label,
-    );
-  const tabs = h('div', { class: 'tabs db-tabs' }, tabBtn('deck', 'Deck', 'cards'), tabBtn('cards', 'Card list', 'search'), tabBtn('info', 'Details & stats', 'info'));
+      icon('plus'),
+    ),
+  );
+  void renameDeck;
 
-  const el = frame('Deck Builder', { subtitle: 'Build and tune your Edison decks', cls: 'deck-builder frame-wide', actions: headerActions }, tabs, layout);
+  // ---------- mobile tabs
+  const layout = h('div', { class: 'db-layout', dataset: { tab: mobileTab } }, infoCol, deckCol, browserCol);
+  const tabs = segmented<'deck' | 'cards' | 'info'>(
+    [
+      { value: 'deck', label: 'Deck' },
+      { value: 'cards', label: 'Add cards' },
+      { value: 'info', label: 'Stats' },
+    ],
+    mobileTab,
+    (t) => {
+      mobileTab = t;
+      layout.dataset.tab = t;
+    },
+    'Deck Builder view',
+  );
+  tabs.classList.add('db-tabs');
+
+  const el = frame('Decks', { cls: 'deck-builder frame-wide', actions: headerActions, compact: true }, tabs, layout);
 
   drawHeader();
   drawDeck();
@@ -686,7 +757,7 @@ export function deckBuilderScreen(params: Params): Screen {
     }
   };
   document.addEventListener('keydown', onKey);
-  return { el, dispose: () => document.removeEventListener('keydown', onKey), onShow: () => setTimeout(() => browser.focusSearch(), 80) };
+  return { el, dispose: () => document.removeEventListener('keydown', onKey), onShow: () => setTimeout(() => matchMedia('(hover: hover)').matches && browser.focusSearch(), 80) };
 }
 
 export function copyText(text: string, fallback?: HTMLTextAreaElement) {

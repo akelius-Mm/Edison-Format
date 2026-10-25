@@ -32,6 +32,7 @@ import { FxDirector, sleep } from './fx';
 import { HumanController, type HumanUI, PacedController } from './human';
 import { ChainStack, LogPanel, PhaseBar, PlayerPanel, PreviewPanel } from './panels';
 import { Sfx } from './sound';
+import { music } from '../audio/music';
 
 export async function startDuel(container: HTMLElement, opts: DuelOptions): Promise<DuelResult> {
   const screen = new DuelScreen(container, opts);
@@ -127,6 +128,7 @@ class DuelScreen implements HumanUI {
     const p0 = new PlayerPanel(opts.sides[0], 0, this.me === 0, startLp, () => this.speed());
     const p1 = new PlayerPanel(opts.sides[1], 1, this.me === 1, startLp, () => this.speed());
     this.panels = [p0, p1];
+    for (const p of this.panels) p.onLpRoll = (ms, up) => this.sfx.lpTicker(ms, up);
     this.phaseBar = new PhaseBar(this.me);
     this.chain = new ChainStack(this.me);
     this.log = new LogPanel(this.me);
@@ -399,6 +401,7 @@ class DuelScreen implements HumanUI {
     this.board.render(o);
     this.panels[0].update(this.game);
     this.panels[1].update(this.game);
+    music.setPinch(Math.min(this.game.players[0].lp, this.game.players[1].lp) <= 2000);
     this.phaseBar.update(this.game);
     this.chain.update(this.game);
     this.preview.refresh();
@@ -412,6 +415,7 @@ class DuelScreen implements HumanUI {
 
   // ------------------------------------------------------------------ run
   async run(): Promise<DuelResult> {
+    music.setScene('duel');
     this.flush();
     let res: { winner: PlayerId | null; reason: string; turns: number };
     try {
@@ -440,6 +444,7 @@ class DuelScreen implements HumanUI {
     this.board.destroy();
     if (this.raf) cancelAnimationFrame(this.raf);
     window.setTimeout(() => this.sfx.dispose(), 1500);
+    music.setScene('menu', { delay: 0.4 });
     this.root.remove();
     document.querySelectorAll('body > .dc-ghost').forEach((e) => e.remove());
   }
@@ -462,6 +467,7 @@ class DuelScreen implements HumanUI {
         title = 'Defeat';
         cls = 'is-lose';
       }
+      music.duelEnd();
       this.sfx.play(cls === 'is-lose' ? 'lose' : 'win');
       const lp = this.game.players.map((p) => p.lp);
       const o = h('div', `result ${cls}`);
