@@ -10,6 +10,7 @@ import type { BattlePos, Location, PlayerId } from '../src/engine/types';
 import { ensureAnprPatches } from '../src/cards/sets/anpr';
 import { ensureRgbtPatches } from '../src/cards/sets/rgbt';
 import { ensureCrmsPatches } from '../src/cards/sets/crms';
+import { ensurePtdnPatches } from '../src/cards/sets/ptdn';
 
 const T = {
   brute: findCard('Rules Test Brute') ?? normal('Rules Test Brute', 'EARTH', 'Warrior', 4, 1800, 1000),
@@ -863,6 +864,7 @@ function eq(a: unknown, b: unknown, msg: string) {
   await abpfTests();
   await rgbtTests();
   await crmsTests();
+  await ptdnTests();
 
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
@@ -1842,5 +1844,260 @@ async function crmsTests() {
     eq(g.players[1].lp, 7200, '800 damage');
     eq(mf.location, 'grave', 'Trap destroyed');
     void a;
+  });
+}
+
+// ---------------------------------------------------------------- Phantom Darkness (PTDN)
+
+async function ptdnTests() {
+  const phase = (g: Game, ph: 'standby' | 'end') => (g as any).setPhase(ph) as Promise<void>;
+  const opp = (g: Game) => {
+    g.turnPlayer = 1;
+    g.phase = 'battle';
+  };
+
+  await test('PTDN: Yubel — burns the attacker before damage calculation, survives, no battle damage', async () => {
+    const { g, place } = setup();
+    ensurePtdnPatches(g);
+    const y = place(0, cardByName('Yubel'), 'mzone');
+    opp(g);
+    const a = place(1, T.giant, 'mzone');
+    await g.conductAttack(1, a);
+    eq(y.location, 'mzone', 'Yubel not destroyed by battle');
+    eq(g.players[1].lp, 8000 - 3000, 'attacker ATK inflicted to the opponent');
+    eq(g.players[0].lp, 8000, 'no battle damage to Yubel controller');
+  });
+
+  await test('PTDN: Yubel chain — own End Phase destruction summons nothing; destroyed otherwise -> Terror Incarnate -> Ultimate Nightmare', async () => {
+    const { g, place } = setup();
+    ensurePtdnPatches(g);
+    const y = place(0, cardByName('Yubel'), 'mzone');
+    const terror = place(0, cardByName('Yubel - Terror Incarnate'), 'deck');
+    const night = place(0, cardByName('Yubel - The Ultimate Nightmare'), 'deck');
+    await phase(g, 'end');
+    eq(y.location, 'grave', 'Yubel destroyed itself (no other monster to Tribute)');
+    eq(terror.location, 'deck', 'no Terror Incarnate when destroyed by its own effect');
+    const y2 = place(0, cardByName('Yubel'), 'mzone');
+    await g.destroy([y2], 'effect', 1);
+    await g.processTriggers(false);
+    eq(terror.location, 'mzone', 'Terror Incarnate Special Summoned from the Deck');
+    await g.destroy([terror], 'effect', 1);
+    await g.processTriggers(false);
+    eq(night.location, 'mzone', 'Ultimate Nightmare Special Summoned when Terror left the field');
+    opp(g);
+    const a = place(1, T.brute, 'mzone');
+    await g.conductAttack(1, a);
+    eq(a.location, 'grave', 'battled monster destroyed at the end of the Damage Step');
+    eq(g.players[1].lp, 8000 - 1800, "damage equal to the battled monster's ATK");
+    eq(g.players[0].lp, 8000, 'no battle damage');
+  });
+
+  await test('PTDN: Super Polymerization — uses the opponent\'s monster and cannot be responded to', async () => {
+    const { g, c1, place } = setup();
+    const twin = place(0, cardByName('Cyber Twin Dragon'), 'extra');
+    const mine = place(0, cardByName('Cyber Dragon'), 'mzone');
+    const theirs = place(1, cardByName('Cyber Dragon'), 'mzone');
+    place(0, T.wall, 'hand');
+    const sp = place(0, cardByName('Super Polymerization'), 'hand');
+    const mst = place(1, cardByName('Mystical Space Typhoon'), 'szone', { faceUp: false });
+    c1.respond = respondWith('Mystical Space Typhoon');
+    await activateCard(g, 0, sp);
+    eq(twin.location, 'mzone', 'Cyber Twin Dragon Fusion Summoned');
+    eq(mine.location, 'grave', 'own material in the GY');
+    eq(theirs.location, 'grave', "opponent's material in the GY");
+    eq(theirs.owner, 1, "opponent's Cyber Dragon went to its owner's GY");
+    eq(mst.location, 'szone', 'opponent could not respond');
+  });
+
+  await test('PTDN: Vicious Claw — returns to the hand instead, destroys a monster, burns 600, Evil Token', async () => {
+    const { g, c0, place } = setup();
+    const b = place(0, T.brute, 'mzone');
+    const claw = place(0, cardByName('Vicious Claw'), 'hand');
+    await activateCard(g, 0, claw);
+    eq(g.getAtk(b), 2100, 'equipped +300');
+    opp(g);
+    const giant = place(1, T.giant, 'mzone');
+    const wall = place(1, T.wall, 'mzone');
+    c0.pick = (_g, req) => (req.candidates.includes(wall) ? [wall] : req.candidates.slice(0, req.min));
+    await g.conductAttack(1, giant);
+    eq(b.location, 'mzone', 'equipped monster not destroyed');
+    eq(claw.location, 'hand', 'Vicious Claw returned to the hand');
+    eq(wall.location, 'grave', 'another monster destroyed');
+    eq(g.players[1].lp, 8000 - 600, '600 damage');
+    eq(g.monsters(1).some((c) => c.name === 'Evil Token'), true, "Evil Token on the opponent's field");
+    eq(g.players[0].lp, 8000 - 900, 'battle damage still applied');
+  });
+
+  await test('PTDN: Destiny HERO - Departed — banished when discarded, revives on the opponent\'s field, banished by battle', async () => {
+    const { g, place } = setup();
+    ensurePtdnPatches(g);
+    const dep = place(0, cardByName('Destiny HERO - Departed'), 'hand');
+    place(0, T.wall, 'hand');
+    const fine = place(0, cardByName('Fine'), 'szone', { faceUp: false });
+    await activateCard(g, 0, fine);
+    eq(dep.location, 'banished', 'discarded by a card effect -> banished');
+    const dep2 = place(0, cardByName('Destiny HERO - Departed'), 'grave');
+    await phase(g, 'standby');
+    eq(dep2.location, 'mzone', 'Special Summoned in the Standby Phase');
+    eq(dep2.controller, 1, "on the opponent's side");
+    g.phase = 'battle';
+    const b = place(0, T.brute, 'mzone');
+    await g.conductAttack(0, b);
+    eq(dep2.location, 'banished', 'destroyed by battle -> banished');
+  });
+
+  await test('PTDN: Obsidian Dragon — negates a Spell that targets exactly 1 DARK monster and destroys it', async () => {
+    const { g, place } = setup();
+    const ob = place(0, cardByName('Obsidian Dragon'), 'mzone');
+    opp(g);
+    g.phase = 'main1';
+    const book = place(1, cardByName('Book of Moon'), 'hand');
+    await activateCard(g, 1, book);
+    eq(ob.faceUp, true, 'Obsidian Dragon stays face-up');
+    eq(book.location, 'grave', 'Book of Moon destroyed');
+  });
+
+  await test('PTDN: Dark Red Enchanter counts resolved Spells; Dark Horus revives after an opponent\'s Main Phase Spell', async () => {
+    const { g, place } = setup();
+    const dre = place(0, cardByName('Dark Red Enchanter'), 'hand');
+    place(0, T.wall, 'mzone');
+    await g.performAction(0, { type: 'summon', card: dre });
+    eq(dre.counters.spell, 2, '2 Spell Counters on Normal Summon');
+    const horus = place(0, cardByName('Dark Horus'), 'mzone');
+    const shade = place(0, T.dark, 'grave');
+    place(0, cardByName('Sakuretsu Armor'), 'szone', { faceUp: false });
+    g.turnPlayer = 1;
+    const mst = place(1, cardByName('Mystical Space Typhoon'), 'hand');
+    await activateCard(g, 1, mst);
+    eq(dre.counters.spell, 3, 'Spell Counter added when the Spell resolved');
+    eq(g.getAtk(dre), 1700 + 900, '+300 ATK per counter');
+    eq(shade.location, 'mzone', 'Dark Horus revived a Level 4 DARK monster');
+    void horus;
+  });
+
+  await test('PTDN: Prime Material Dragon — negates Dark Hole; effect damage becomes an LP gain', async () => {
+    const { g, c0, place } = setup();
+    ensurePtdnPatches(g);
+    const pmd = place(0, cardByName('Prime Material Dragon'), 'mzone');
+    place(0, T.wall, 'hand');
+    g.turnPlayer = 1;
+    const hole = place(1, cardByName('Dark Hole'), 'hand');
+    c0.respond = respondWith('Prime Material Dragon');
+    await activateCard(g, 1, hole);
+    eq(pmd.location, 'mzone', 'Prime Material Dragon survives');
+    eq(hole.location, 'grave', 'Dark Hole negated');
+    await g.damage(0, 500, 'effect', hole, 1);
+    eq(g.players[0].lp, 8500, 'effect damage became an LP gain');
+  });
+
+  await test('PTDN: Chain Material — Polymerization banishes materials from the Deck; the Fusion is destroyed in the End Phase', async () => {
+    const { g, place } = setup();
+    const end = place(0, cardByName('Cyber End Dragon'), 'extra');
+    const cds = [0, 1, 2].map(() => place(0, cardByName('Cyber Dragon'), 'deck'));
+    const cm = place(0, cardByName('Chain Material'), 'szone', { faceUp: false });
+    await activateCard(g, 0, cm);
+    const poly = place(0, cardByName('Polymerization'), 'hand');
+    await activateCard(g, 0, poly);
+    eq(end.location, 'mzone', 'Cyber End Dragon Fusion Summoned');
+    eq(cds.every((c) => c.location === 'banished'), true, 'materials banished from the Deck');
+    eq(g.queryPlayer(0, 'cannotDeclareAttack'), true, 'cannot attack this turn');
+    await phase(g, 'end');
+    eq(end.location, 'grave', 'destroyed in the End Phase');
+  });
+
+  await test('PTDN: Transmigration Break — cards returned from the GY to the Deck are banished instead', async () => {
+    const { g, place } = setup();
+    ensurePtdnPatches(g);
+    const tb = place(0, cardByName('Transmigration Break'), 'szone', { faceUp: true });
+    tb.activeOnField = true;
+    const mons = [0, 1, 2, 3, 4].map(() => place(0, T.wall, 'grave'));
+    const pot = place(0, cardByName('Pot of Avarice'), 'hand');
+    await activateCard(g, 0, pot);
+    eq(mons.every((c) => c.location === 'banished'), true, 'banished instead of shuffled into the Deck');
+  });
+
+  await test('PTDN: Armored Cybern — equips to Cyber Dragon, trades 1000 ATK for a destruction, protects it', async () => {
+    const { g, place } = setup();
+    const cd = place(0, cardByName('Cyber Dragon'), 'mzone');
+    const ac = place(0, cardByName('Armored Cybern'), 'mzone');
+    await activateCard(g, 0, ac, 'Equip / Unequip');
+    eq(ac.location, 'szone', 'equipped');
+    const v = place(1, T.brute, 'mzone');
+    const act = g.getActivations(0, { open: true }).find((a) => a.card === ac && a.label !== 'Equip / Unequip');
+    if (!act) throw new Error('destroy effect not available');
+    (g.controllers[0] as any).pick = (_g: Game, req: any) => (req.candidates.includes(v) ? [v] : req.candidates.slice(0, req.min));
+    await g.performAction(0, { type: 'activate', card: ac, act });
+    eq(v.location, 'grave', 'target destroyed');
+    eq(g.getAtk(cd), 2100 - 1000, 'Cyber Dragon lost exactly 1000 ATK');
+    await g.destroy([cd], 'effect', 1);
+    eq(cd.location, 'mzone', 'Cyber Dragon protected');
+    eq(ac.location, 'grave', 'Armored Cybern destroyed instead');
+  });
+
+  await test('PTDN: Escape from the Dark Dimension — the monster is destroyed and banished when the trap leaves', async () => {
+    const { g, place } = setup();
+    const shade = place(0, T.dark, 'banished');
+    const esc = place(0, cardByName('Escape from the Dark Dimension'), 'szone', { faceUp: false });
+    await activateCard(g, 0, esc);
+    eq(shade.location, 'mzone', 'banished DARK monster Special Summoned');
+    await g.destroy([esc], 'effect', 1);
+    eq(shade.location, 'banished', 'destroyed and banished');
+  });
+
+  await test('PTDN: Sinister Seeds — 1 token per 500 battle damage', async () => {
+    const { g, c0, place } = setup();
+    const b = place(0, T.brute, 'mzone');
+    place(0, cardByName('Sinister Seeds'), 'szone', { faceUp: false });
+    c0.respond = respondWith('Sinister Seeds');
+    opp(g);
+    const giant = place(1, T.giant, 'mzone');
+    await g.conductAttack(1, giant);
+    eq(b.location, 'grave', 'monster destroyed by battle');
+    eq(g.monsters(0).filter((c) => c.name === 'Sinister Seed Token').length, 2, '1200 damage -> 2 tokens');
+  });
+
+  await test('PTDN: Earth Effigy counts as 2 Tributes for an EARTH Normal Monster (also face-down)', async () => {
+    const { g, place } = setup();
+    ensurePtdnPatches(g);
+    const eff = place(0, cardByName('Earth Effigy'), 'mzone', { faceUp: false, pos: 'def' });
+    const giant = place(0, T.giant, 'hand');
+    const tuner2 = place(0, T.dark, 'hand');
+    eq(g.canNormalSummon(0, giant), true, 'Level 8 EARTH Normal Monster with 1 Effigy');
+    eq(g.canNormalSummon(0, place(0, cardByName('Dark Armed Dragon'), 'hand')), false, 'not for other monsters');
+    await g.performAction(0, { type: 'summon', card: giant });
+    eq(giant.location, 'mzone', 'Tribute Summoned');
+    eq(eff.location, 'grave', 'Effigy tributed');
+    void tuner2;
+  });
+
+  await test('PTDN: Darklord Zerato — Tribute Summon with 1 DARK monster when 4 DARK names are in the GY', async () => {
+    const { g, place } = setup();
+    for (const n of ['Dark Grepher', 'Armageddon Knight', 'Dark Crusader', 'Doomsday Horror']) place(0, cardByName(n), 'grave');
+    const shade = place(0, T.dark, 'mzone');
+    const z = place(0, cardByName('Darklord Zerato'), 'hand');
+    eq(g.canNormalSummon(0, z), true, 'can Tribute Summon with 1 DARK');
+    await g.performAction(0, { type: 'summon', card: z });
+    eq(z.location, 'mzone', 'Zerato summoned');
+    eq(shade.location, 'grave', 'DARK monster tributed');
+  });
+
+  await test('PTDN: Drastic Drop Off — the opponent discards the drawn card', async () => {
+    const { g, c0, place } = setup();
+    place(0, cardByName('Drastic Drop Off'), 'szone', { faceUp: false });
+    c0.respond = respondWith('Drastic Drop Off');
+    g.turnPlayer = 1;
+    const top = place(1, T.brute, 'deck');
+    await g.draw(1, 1, 'effect');
+    await g.processTriggers(true);
+    eq(top.location, 'grave', 'added card discarded');
+  });
+
+  await test('PTDN: Rainbow Life — damage becomes an LP gain this turn', async () => {
+    const { g, place } = setup();
+    place(0, T.wall, 'hand');
+    const rl = place(0, cardByName('Rainbow Life'), 'szone', { faceUp: false });
+    await activateCard(g, 0, rl);
+    await g.damage(0, 1000, 'battle');
+    eq(g.players[0].lp, 9000, 'battle damage became an LP gain');
   });
 }
