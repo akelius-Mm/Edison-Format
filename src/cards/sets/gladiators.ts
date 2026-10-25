@@ -60,7 +60,8 @@ async function summonFromDeckBy(ctx: Ctx, cards: CardInstance[], reason: CardIns
 // ------------------------------------------------------------------ effect builders
 
 /** "At the end of the Battle Phase, if this card attacked or was attacked: shuffle it into the Deck; SS n GB from Deck". */
-function tagOut(n = 1, excludeSelfName = true): EffectDef {
+// LODT: `exclude` names a card that cannot be Special Summoned by the tag-out (Gyzarus: "except Bestiari").
+function tagOut(n = 1, excludeSelfName = true, exclude?: string): EffectDef {
   return {
     kind: 'trigger',
     event: 'battleEnd',
@@ -70,13 +71,13 @@ function tagOut(n = 1, excludeSelfName = true): EffectDef {
     canActivate: (ctx) =>
       !ctx.game.queryPlayer(ctx.player, 'cannotSpecialSummon') &&
       ctx.freeMZones() + 1 >= n &&
-      ctx.deck('me', (c) => isGB(c) && (!excludeSelfName || c.name !== ctx.self.name)).length >= n,
+      ctx.deck('me', (c) => isGB(c) && (!excludeSelfName || c.name !== ctx.self.name) && c.name !== exclude).length >= n,
     activate: async (ctx) => {
       ctx.data.name = ctx.self.name;
       await ctx.toDeck(ctx.self, 'shuffle', 'cost');
     },
     resolve: async (ctx) => {
-      const cands = ctx.deck('me', (c) => isGB(c) && (!excludeSelfName || c.name !== ctx.data.name) && ctx.canSummonCard(c));
+      const cands = ctx.deck('me', (c) => isGB(c) && (!excludeSelfName || c.name !== ctx.data.name) && c.name !== exclude && ctx.canSummonCard(c));
       const k = Math.min(n, ctx.freeMZones(), cands.length);
       if (k <= 0 || ctx.game.queryPlayer(ctx.player, 'cannotSpecialSummon')) return;
       const picked: CardInstance[] = [];
@@ -94,7 +95,7 @@ function tagOut(n = 1, excludeSelfName = true): EffectDef {
     ai: {
       score: (ctx) => {
         // Heavily damaged Laquari/Hoplomus boosts would be lost, but fresh effects are almost always worth it.
-        const cands = ctx.deck('me', (c) => isGB(c) && (!excludeSelfName || c.name !== ctx.self.name));
+        const cands = ctx.deck('me', (c) => isGB(c) && (!excludeSelfName || c.name !== ctx.self.name) && c.name !== exclude);
         const best = Math.max(0, ...cands.map((c) => gbTagScore(ctx, c)));
         if (ctx.self.name === LAQUARI && ctx.self.flags.gbSummoned && best < 500) return 0;
         return best > 0 ? 1 : 0;
@@ -478,7 +479,7 @@ spell("Gladiator Beast's Respite", 'normal', {
 const fieldGBs = (ctx: Ctx) => ctx.faceUpMonsters('me', isGB);
 
 monster('Gladiator Beast Gyzarus', {
-  attribute: 'WIND',
+  attribute: 'DARK', // LODT: DARK per YGOJSON (was WIND)
   race: 'Winged Beast',
   level: 6,
   atk: 2400,
@@ -486,7 +487,7 @@ monster('Gladiator Beast Gyzarus', {
   types: ['fusion'],
   sets: GB,
   aiValue: 500,
-  text: `"${BESTIARI}" + 1 "Gladiator Beast" monster\nMust be Special Summoned from the Extra Deck by shuffling the above cards you control into the Deck (you do not use "Polymerization"). When this card is Special Summoned: You can target up to 2 cards on the field; destroy them. At the end of the Battle Phase, if this card attacked or was attacked: You can return it to the Extra Deck; Special Summon 2 "Gladiator Beast" monsters from your Deck.`,
+  text: `"${BESTIARI}" + 1 "Gladiator Beast" monster\nMust be Special Summoned from the Extra Deck by shuffling the above cards you control into the Deck (you do not use "Polymerization"). When this card is Special Summoned: You can target up to 2 cards on the field; destroy them. At the end of the Battle Phase, if this card attacked or was attacked: You can return it to the Extra Deck; Special Summon 2 "Gladiator Beast" monsters from your Deck, except "${BESTIARI}".`,
   fusion: { materials: [(c) => c.name === BESTIARI, isGB], noPoly: true, desc: `"${BESTIARI}" + 1 "Gladiator Beast" monster` },
   effects: [
     {
@@ -532,7 +533,7 @@ monster('Gladiator Beast Gyzarus', {
       },
       ai: { score: (ctx) => (ctx.field('opp', (c) => ctx.canTarget(c)).length ? 1 : 0) },
     },
-    tagOut(2, false),
+    tagOut(2, false, BESTIARI), // LODT: except "Gladiator Beast Bestiari"
   ],
 });
 

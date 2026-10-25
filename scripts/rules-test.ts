@@ -8,6 +8,7 @@ import type { Action, Activation, PlayerController, ResponseRequest, SelectReque
 import { Game, GameOver } from '../src/engine/game';
 import type { BattlePos, Location, PlayerId } from '../src/engine/types';
 import { ensureAnprPatches } from '../src/cards/sets/anpr';
+import { ensureLodtPatches } from '../src/cards/sets/lodt';
 
 const T = {
   brute: findCard('Rules Test Brute') ?? normal('Rules Test Brute', 'EARTH', 'Warrior', 4, 1800, 1000),
@@ -859,6 +860,7 @@ function eq(a: unknown, b: unknown, msg: string) {
     eq(g.getAtk(cvd), 0, '? ATK outside damage calculation');
   });
   await abpfTests();
+  await lodtTests();
 
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
@@ -1090,5 +1092,329 @@ async function abpfTests() {
     await g.performAction(0, { type: 'summon', card: w });
     eq(top.location, 'grave', 'drawn Spell sent to the GY');
     eq(w.location, 'grave', 'Witch destroyed');
+  });
+}
+
+// ---------------------------------------------------------------- Light of Destruction (LODT)
+
+async function lodtTests() {
+  const lodtSetup = () => {
+    const s = setup();
+    ensureLodtPatches(s.g);
+    return s;
+  };
+  const live = (c: CardInstance) => {
+    c.activeOnField = true;
+    return c;
+  };
+  const gust = findCard('Rules Test Gust') ?? normal('Rules Test Gust', 'WIND', 'Winged Beast', 6, 2200, 1000);
+  const battleEnd = async (g: Game) => {
+    g.beginBatch();
+    g.emit({ type: 'battleEnd', player: g.turnPlayer, phase: 'battle' });
+    await g.processTriggers(true);
+  };
+  const LB = cardByName('Light Barrier');
+
+  await test('LODT: Light Barrier picks Heads for The Emperor, Reversal of Fate turns it into Tails', async () => {
+    const { g, c0, place } = lodtSetup();
+    live(place(0, LB, 'fzone'));
+    const mag = place(0, cardByName('Arcana Force I - The Magician'), 'mzone');
+    const emp = place(0, cardByName('Arcana Force IV - The Emperor'), 'hand');
+    await g.performAction(0, { type: 'summon', card: emp });
+    eq(g.getAtk(emp), 1900, 'Emperor (Heads): +500 to itself');
+    eq(g.getAtk(mag), 1600, 'Emperor (Heads): +500 to another Arcana Force');
+    const rof = place(0, cardByName('Reversal of Fate'), 'szone', { faceUp: false });
+    c0.pick = (_g, req) => (req.candidates.includes(emp) ? [emp] : req.candidates.slice(0, req.min));
+    await activateCard(g, 0, rof);
+    eq(g.getAtk(emp), 900, 'Tails: -500');
+    eq(g.getAtk(mag), 600, 'Tails: -500 to the other Arcana Force');
+  });
+
+  await test("LODT: Arcana Call — The Emperor uses The Moon's effect until the End Phase", async () => {
+    const { g, c0, place } = lodtSetup();
+    live(place(0, LB, 'fzone'));
+    const emp = place(0, cardByName('Arcana Force IV - The Emperor'), 'hand');
+    await g.performAction(0, { type: 'summon', card: emp });
+    const moon = place(1, cardByName('Arcana Force XVIII - The Moon'), 'grave');
+    const call = place(0, cardByName('Arcana Call'), 'szone', { faceUp: false });
+    c0.pick = (_g, req) => (req.candidates.includes(emp) ? [emp] : req.candidates.includes(moon) ? [moon] : req.candidates.slice(0, req.min));
+    await activateCard(g, 0, call);
+    eq(moon.location, 'banished', 'The Moon banished');
+    eq(g.getAtk(emp), 1400, 'the +500 effect is replaced');
+    g.turn++;
+    eq(g.getAtk(emp), 1900, 'its own effect is back after the turn');
+  });
+
+  await test('LODT: Arcana Force EX (Tails) destroys all cards on the field when destroyed', async () => {
+    const { g, c0, place } = lodtSetup();
+    (c0 as any).chooseOption = async () => 1;
+    live(place(0, LB, 'fzone'));
+    for (let i = 0; i < 3; i++) place(0, T.wall, 'mzone');
+    const ex = place(0, cardByName('Arcana Force EX - The Dark Ruler'), 'hand');
+    const proc = g.legalMainActions(0).find((a) => a.type === 'proc' && a.card === ex);
+    if (!proc) throw new Error('no summoning procedure');
+    await g.performAction(0, proc);
+    eq(ex.location, 'mzone', 'Special Summoned by sending 3 monsters');
+    eq(g.monsters(0).length, 1, 'the 3 monsters were sent');
+    const st = place(1, cardByName('Mirror Force'), 'szone', { faceUp: false });
+    const om = place(1, T.brute, 'mzone');
+    await g.destroy([ex], 'effect', 1);
+    await g.processTriggers(false);
+    eq(om.location, 'grave', 'monster destroyed');
+    eq(st.location, 'grave', 'Spell/Trap destroyed');
+    eq((await g.specialSummon([ex], 0, { pos: 'atk' })).length, 0, 'cannot be Special Summoned by a card effect');
+  });
+
+  await test('LODT: Arcana Force XIV - Temperance (Heads) halves battle damage you take', async () => {
+    const { g, c1, place } = lodtSetup();
+    live(place(0, LB, 'fzone'));
+    const temp = place(0, cardByName('Arcana Force XIV - Temperance'), 'hand');
+    await g.specialSummon([temp], 0, { pos: 'atk' });
+    await g.processTriggers(true);
+    const wall = place(0, T.wall, 'mzone');
+    const a = place(1, T.brute, 'mzone');
+    g.turnPlayer = 1;
+    c1.chooseAttackTarget = async () => wall;
+    await g.conductAttack(1, a);
+    eq(g.players[0].lp, 8000 - 650, '1300 damage halved');
+  });
+
+  await test("LODT: Arcana Force XXI - The World (Heads) skips the opponent's next turn", async () => {
+    const { g, c0, place } = lodtSetup();
+    live(place(0, LB, 'fzone'));
+    const world = place(0, cardByName('Arcana Force XXI - The World'), 'hand');
+    await g.specialSummon([world], 0, { pos: 'atk' });
+    await g.processTriggers(true);
+    const others = [place(0, T.brute, 'mzone'), place(0, T.dark, 'mzone')];
+    c0.pick = (_g, req) => req.candidates.filter((c) => c !== world).slice(0, req.min);
+    await (g as any).setPhase('end');
+    eq(others.every((c) => c.location === 'grave'), true, '2 monsters sent');
+    const hand1 = g.players[1].hand.length;
+    await g.playTurn();
+    eq(g.turn, 3, 'the skipped turn counts');
+    eq(g.players[1].hand.length, hand1, 'the skipped player did not draw');
+    await g.playTurn();
+    eq(g.turnPlayer, 0, 'the World player takes the next turn');
+  });
+
+  await test('LODT: Volcanic Queen — Tributes an opponent monster, lands on their field, burns its controller', async () => {
+    const { g, place } = lodtSetup();
+    const q = place(0, cardByName('Volcanic Queen'), 'hand');
+    const victim = place(1, T.giant, 'mzone');
+    const proc = g.legalMainActions(0).find((a) => a.type === 'proc' && a.card === q);
+    if (!proc) throw new Error('no summoning procedure');
+    await g.performAction(0, proc);
+    eq(victim.location, 'grave', 'opponent monster Tributed');
+    eq(q.location, 'mzone', 'Volcanic Queen on the field');
+    eq(q.controller, 1, "on the opponent's field");
+    eq(g.canNormalSummon(0, place(0, T.brute, 'hand')), false, 'no Normal Summon this turn');
+    g.turnPlayer = 1;
+    await (g as any).setPhase('end');
+    eq(g.players[1].lp, 7000, 'its controller takes 1000 in their End Phase');
+  });
+
+  await test('LODT: Fog King — 1-Tribute Normal Summon, ATK of the Tribute, nothing can be Tributed', async () => {
+    const { g, c0, place } = lodtSetup();
+    const b = place(0, T.brute, 'mzone');
+    const opp = place(1, T.wall, 'mzone');
+    const fk = place(0, cardByName('Fog King'), 'hand');
+    eq(g.canNormalSummon(0, fk, true), false, 'cannot be Set with 1 Tribute');
+    eq(g.canNormalSummon(0, fk), true, 'can be Normal Summoned');
+    (c0 as any).chooseOption = async () => 1;
+    await g.performAction(0, { type: 'summon', card: fk });
+    eq(fk.location, 'mzone', 'summoned');
+    eq(b.location, 'grave', '1 Tribute');
+    eq(g.getAtk(fk), 1800, 'ATK = original ATK of the Tribute');
+    eq(g.tributeCandidates(1).includes(opp), false, 'neither player can Tribute');
+  });
+
+  await test('LODT: Simorgh — WIND monsters need 1 less Tribute', async () => {
+    const { g, place } = lodtSetup();
+    const w = place(0, gust, 'hand');
+    eq(g.tributesNeeded(w), 1, 'Level 6 normally needs 1 Tribute');
+    place(1, cardByName('Simorgh, Bird of Ancestry'), 'mzone');
+    eq(g.tributesNeeded(w), 0, 'Simorgh: no Tribute');
+    eq(g.tributesNeeded(place(0, T.giant, 'hand')), 2, 'non-WIND unchanged');
+  });
+
+  await test('LODT: Divine Knight Ishzark banishes the monster it destroys by battle', async () => {
+    const { g, place } = lodtSetup();
+    const ish = place(0, cardByName('Divine Knight Ishzark'), 'mzone');
+    const v = place(1, T.brute, 'mzone');
+    await g.conductAttack(0, ish);
+    eq(v.location, 'banished', 'banished');
+    eq(g.players[1].lp, 7500, 'battle damage');
+  });
+
+  await test("LODT: Miracle Flipper — only it can be attacked; it returns on the destroyer's field", async () => {
+    const { g, place } = lodtSetup();
+    const flipper = place(1, cardByName('Miracle Flipper'), 'mzone');
+    const wall = place(1, T.wall, 'mzone');
+    const a = place(0, T.brute, 'mzone');
+    const targets = g.attackTargets(a).targets;
+    eq(targets.includes(wall), false, 'other face-up monster cannot be attacked');
+    eq(targets.includes(flipper), true, 'Miracle Flipper can');
+    await g.conductAttack(0, a);
+    eq(flipper.location, 'grave', 'destroyed by battle');
+    await battleEnd(g);
+    eq(flipper.location, 'mzone', 'Special Summoned at the end of the Battle Phase');
+    eq(flipper.controller, 0, "on the opponent's field");
+  });
+
+  await test('LODT: Interplanetary Invader "A" takes the monster that attacked it', async () => {
+    const { g, place } = lodtSetup();
+    const inv = place(1, cardByName('Interplanetary Invader "A"'), 'mzone');
+    const a = place(0, T.brute, 'mzone');
+    await g.conductAttack(0, a);
+    eq(inv.location, 'grave', 'Invader destroyed');
+    await battleEnd(g);
+    eq(a.controller, 1, 'control of the attacker taken');
+  });
+
+  await test('LODT: Summon Limit — a third Summon in one turn is not allowed', async () => {
+    const { g, place } = lodtSetup();
+    live(place(1, cardByName('Summon Limit'), 'szone', { faceUp: true }));
+    await g.performAction(0, { type: 'summon', card: place(0, T.brute, 'hand') });
+    eq((await g.specialSummon([place(0, T.dark, 'hand')], 0, { pos: 'atk' })).length, 1, 'second Summon allowed');
+    const third = place(0, T.wall, 'hand');
+    eq((await g.specialSummon([third], 0, { pos: 'atk' })).length, 0, 'third Summon blocked');
+    g.players[0].normalSummonsLeft = 1;
+    eq(g.canNormalSummon(0, third), false, 'no third Normal Summon');
+    eq(g.canNormalSummon(0, third, true), true, 'a Set is not a Summon');
+  });
+
+  await test('LODT: Angel O7 Tribute Summoned — monster effects cannot be activated', async () => {
+    const { g, c0, place } = lodtSetup();
+    const trooper = place(0, cardByName('Card Trooper'), 'mzone');
+    eq(g.getActivations(0, { open: true }).some((a) => a.card === trooper), true, 'Card Trooper usable before');
+    place(0, T.brute, 'mzone');
+    place(0, T.wall, 'mzone');
+    const o7 = place(0, cardByName('Angel O7'), 'hand');
+    c0.pick = (_g, req) => req.candidates.filter((c) => c !== trooper).slice(0, req.min);
+    await g.performAction(0, { type: 'summon', card: o7 });
+    eq(o7.location, 'mzone', 'Tribute Summoned');
+    eq(g.getActivations(0, { open: true }).some((a) => a.card.isMonster), false, 'no monster effects');
+  });
+
+  await test('LODT: Dark General Freed — searches instead of drawing, negates a Spell that targets it', async () => {
+    const { g, c1, place } = lodtSetup();
+    const freed = place(0, cardByName('Dark General Freed'), 'mzone');
+    const dark = place(0, T.dark, 'deck');
+    g.phase = 'draw';
+    const before = g.players[0].hand.length;
+    await g.draw(0, 1);
+    eq(dark.location, 'hand', 'Level 4 DARK monster added');
+    eq(g.players[0].hand.length, before + 1, 'no card drawn');
+    g.phase = 'main1';
+    const bom = place(1, cardByName('Book of Moon'), 'szone', { faceUp: false });
+    c1.pick = (_g, req) => (req.candidates.includes(freed) ? [freed] : req.candidates.slice(0, req.min));
+    await activateCard(g, 1, bom);
+    eq(freed.faceUp, true, 'Book of Moon negated');
+    eq(bom.location, 'grave', 'Book of Moon in the GY');
+    const other = place(0, cardByName('Dark General Freed'), 'grave');
+    eq((await g.specialSummon([other], 0, { pos: 'atk' })).length, 0, 'cannot be Special Summoned');
+  });
+
+  await test('LODT: Realm of Light — Shine Counters from any Deck-to-GY send, 2 counters instead of destruction', async () => {
+    const { g, place } = lodtSetup();
+    const realm = live(place(0, cardByName('Realm of Light'), 'fzone'));
+    const opp = place(1, cardByName('Ehren, Lightsworn Monk'), 'mzone');
+    await g.mill(0, 2);
+    eq(realm.counters.light, 1, '1 counter per send');
+    eq(g.getAtk(opp), 1700, "boosts the opponent's Lightsworn too");
+    realm.counters.light = 2;
+    await g.destroy([realm], 'effect', 1);
+    eq(realm.location, 'fzone', 'survives');
+    eq(realm.counters.light, 0, '2 counters removed');
+    await g.destroy([realm], 'effect', 1);
+    eq(realm.location, 'grave', 'destroyed without counters');
+  });
+
+  await test('LODT: Celestia, Lightsworn Angel — 1 Lightsworn Tribute, send 4, destroy an opponent card', async () => {
+    const { g, place } = lodtSetup();
+    const jain = place(0, cardByName('Jain, Lightsworn Paladin'), 'mzone');
+    const cel = place(0, cardByName('Celestia, Lightsworn Angel'), 'hand');
+    const v = place(1, T.brute, 'mzone');
+    const deck = g.players[0].deck.length;
+    await g.performAction(0, { type: 'summon', card: cel });
+    eq(jain.location, 'grave', 'Lightsworn Tributed');
+    eq(g.players[0].deck.length, deck - 4, 'top 4 sent');
+    eq(v.location, 'grave', 'opponent card destroyed');
+  });
+
+  await test('LODT: Sanguine Swamp — no face-down Spell/Trap activations, destroyed when you Set another', async () => {
+    const { g, place } = lodtSetup();
+    place(1, T.brute, 'grave');
+    const call = place(1, cardByName('Call of the Haunted'), 'szone', { faceUp: false });
+    const ef = call.data.effects![0];
+    eq(!!g.canActivateEffect(1, call, ef, 0, { open: true }), true, 'Call usable before');
+    const sw = live(place(0, cardByName('Sanguine Swamp'), 'szone', { faceUp: true }));
+    eq(g.canActivateEffect(1, call, ef, 0, { open: true }), null, 'face-down Trap blocked');
+    await g.performAction(0, { type: 'setST', card: place(0, cardByName('Dark Hole'), 'hand') });
+    eq(sw.location, 'grave', 'Swamp destroyed');
+  });
+
+  await test('LODT: Mystical Cards of Light — 2 copies: draw 2 for the normal draw, 1 zone each is locked', async () => {
+    const { g, place } = lodtSetup();
+    live(place(0, cardByName('Mystical Cards of Light'), 'szone', { faceUp: true }));
+    live(place(0, cardByName('Mystical Cards of Light'), 'szone', { faceUp: true }));
+    eq(g.freeSZones(0), 1, '5 zones - 2 used - 2 locked');
+    g.phase = 'draw';
+    const before = g.players[0].hand.length;
+    await g.draw(0, 1);
+    eq(g.players[0].hand.length, before + 2, 'drew 2');
+  });
+
+  await test('LODT: Tualatin — Special Summoned after the Battle Phase wipe, destroys and locks an Attribute', async () => {
+    const { g, place } = lodtSetup();
+    const tual = place(1, cardByName('Tualatin'), 'hand');
+    place(1, T.wall, 'mzone');
+    place(1, T.wall, 'mzone');
+    const myDark = place(0, T.dark, 'mzone');
+    const a1 = place(0, T.brute, 'mzone');
+    const a2 = place(0, T.brute, 'mzone');
+    await (g as any).setPhase('battle');
+    await g.conductAttack(0, a1);
+    await g.conductAttack(0, a2);
+    eq(tual.location, 'mzone', 'Tualatin Special Summoned');
+    eq(myDark.location, 'grave', 'DARK (chosen) monster destroyed');
+    eq(g.canNormalSummon(0, place(0, T.dark, 'hand')), false, 'cannot Summon DARK monsters');
+    eq(g.canNormalSummon(0, place(0, T.brute, 'hand')), true, 'other Attributes are fine');
+  });
+
+  await test('LODT: Union Attack — ATK sum in the Battle Phase only, no battle damage, others cannot attack', async () => {
+    const { g, c0, place } = lodtSetup();
+    const b = place(0, T.brute, 'mzone');
+    const d = place(0, T.dark, 'mzone');
+    c0.pick = (_g, req) => (req.candidates.includes(b) ? [b] : req.candidates.slice(0, req.min));
+    await activateCard(g, 0, place(0, cardByName('Union Attack'), 'hand'));
+    eq(g.getAtk(b), 1800, 'no boost in the Main Phase');
+    g.phase = 'battle';
+    eq(g.getAtk(b), 3400, 'boosted in the Battle Phase');
+    eq(g.canAttack(d), false, 'the other monster cannot attack');
+    await g.conductAttack(0, b);
+    eq(g.players[1].lp, 8000, 'no battle damage to the opponent');
+  });
+
+  await test('LODT: Magical Exemplar — 2 Spell Counters per Spell, removes 4 to revive a Level 4 Spellcaster', async () => {
+    const { g, place } = lodtSetup();
+    const ex = place(0, cardByName('Magical Exemplar'), 'mzone');
+    const lyla = place(0, cardByName('Lyla, Lightsworn Sorceress'), 'grave');
+    await activateCard(g, 0, place(0, cardByName('Level Tuning'), 'hand'));
+    await activateCard(g, 0, place(0, cardByName('Level Tuning'), 'hand'));
+    eq(ex.counters.spell, 4, '4 Spell Counters');
+    await activateCard(g, 0, ex);
+    eq(lyla.location, 'mzone', 'Lyla Special Summoned');
+    eq(ex.counters.spell, 0, 'counters removed');
+  });
+
+  await test('LODT: Dice Try! negates Dangerous Machine Type-6 and destroys it', async () => {
+    const { g, c1, place } = lodtSetup();
+    const dmt = live(place(0, cardByName('Dangerous Machine Type-6'), 'szone', { faceUp: true }));
+    const dt = place(1, cardByName('Dice Try!'), 'szone', { faceUp: false });
+    c1.respond = respondWith('Dice Try!');
+    await (g as any).setPhase('standby');
+    eq(dt.location, 'grave', 'Dice Try! used');
+    eq(dmt.location, 'grave', 'Dangerous Machine Type-6 destroyed');
   });
 }

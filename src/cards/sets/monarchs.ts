@@ -320,11 +320,11 @@ monster('Substitoad', {
   def: 2000,
   sets: ['frog'],
   aiValue: 500,
-  text: 'Once per turn: You can Tribute 1 monster; Special Summon 1 "Frog" monster from your Deck, except "Substitoad". "Frog" monsters you control, except "Substitoad", cannot be destroyed by battle.',
+  // LODT: no once-per-turn clause and the battle protection covers every "Frog" monster (YGOJSON).
+  text: 'You can Tribute 1 monster; Special Summon 1 "Frog" monster from your Deck, except "Substitoad". "Frog" monsters, except "Substitoad", cannot be destroyed by battle.',
   effects: [
     {
       kind: 'ignition',
-      opt: true,
       label: 'Tribute 1: Special Summon a Frog',
       categories: ['specialSummon'],
       canActivate: (ctx) =>
@@ -363,7 +363,7 @@ monster('Substitoad', {
         {
           q: 'indestructibleBattle',
           to: 'cards',
-          filter: (ctx, c) => c.location === 'mzone' && c.controller === ctx.player && isFrog(c) && c.name !== 'Substitoad',
+          filter: (_ctx, c) => c.location === 'mzone' && c.faceUp && isFrog(c) && c.name !== 'Substitoad',
         },
       ],
     },
