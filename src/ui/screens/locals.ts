@@ -61,6 +61,8 @@ import { frame, go, type Screen } from './nav';
 import { showResults } from './results';
 import { allDeckInfos, ordinal, recordMatch, toDeckList, type DeckInfo } from './store';
 import './locals.css';
+// Events agent: Locals Night matches you play count toward your Constructed rating.
+import { aiRating, recordConstructedResult, signed } from '../../events/ratings';
 
 const FORM_KEY = 'edison.locals.form.v1';
 
@@ -89,19 +91,19 @@ export function localsScreen(params: Record<string, string>): Screen {
 const roundKey = (ms: LocalsMatch[]) => ms[0]?.id.replace(/-\d+$|-bye$/, '') ?? '';
 
 /** Initials monogram (the app does not show duelist pictures). */
-function avatar(e: { name: string; human?: boolean }, size: number) {
+export function avatar(e: { name: string; human?: boolean }, size: number) {
   const words = e.name.replace(/^Big /, '').replace(/[^A-Za-z ]/g, ' ').trim().split(/\s+/).filter(Boolean);
   const ini = words.length > 1 ? words[0][0] + words[words.length - 1][0] : (words[0] ?? '?').slice(0, 1);
   return h('span', { class: ['lx-av', e.human && 'is-you'], style: { width: `${size}px`, height: `${size}px`, fontSize: `${Math.round(size * 0.36)}px` }, 'aria-hidden': 'true' }, ini.toUpperCase());
 }
 
 /** The app scrolls inside <body>; reset both scrollers. */
-function toTop() {
+export function toTop() {
   window.scrollTo(0, 0);
   document.body.scrollTo?.({ top: 0 });
 }
 
-function deckArtEl(deck: Pick<DeckSnapshot, 'id' | 'main' | 'extra' | 'color'>, cls: string) {
+export function deckArtEl(deck: Pick<DeckSnapshot, 'id' | 'main' | 'extra' | 'color'>, cls: string) {
   const el = h('span', { class: cls, style: { '--deck': deck.color }, 'aria-hidden': 'true' });
   artInto(el, signatureCard({ id: deck.id, main: deck.main, extra: deck.extra }));
   return el;
@@ -123,7 +125,7 @@ function rivalLine(e: LocalsEntrant): Child {
   return h('span', { class: 'lx-rival' }, icon('user'), rec ? `Store record vs you · ${rec}` : 'First time you meet');
 }
 
-function timer(n: LocalsNight) {
+export function timer(n: LocalsNight) {
   const el = h('span', { class: 'lx-timer-v' });
   const tick = () => {
     const left = Math.round(n.roundMinutes * 60 - (Date.now() - n.roundStartedAt) / 1000);
@@ -292,7 +294,7 @@ function checkInScreen(): Screen {
   return { el };
 }
 
-function prizeRow(label: string, packs: number, coins: number, note?: string) {
+export function prizeRow(label: string, packs: number, coins: number, note?: string) {
   return h(
     'div',
     { class: 'lx-prize-row' },
@@ -301,7 +303,7 @@ function prizeRow(label: string, packs: number, coins: number, note?: string) {
   );
 }
 
-function packIcon() {
+export function packIcon() {
   return h('span', { class: 'lx-pack-ico', 'aria-hidden': 'true' });
 }
 
@@ -667,12 +669,13 @@ function hubScreen(n: LocalsNight): Screen {
       const wa = outcome.games.filter((g) => g.winner === 0).length;
       const wb = outcome.games.filter((g) => g.winner === 1).length;
       const my = outcome.result === 'a' ? 'W' : outcome.result === 'b' ? 'L' : 'D';
+      const rated = recordConstructedResult(aiRating(opp.difficulty, opp.skill), my);
       recordMatch({ date: Date.now(), deckName: me.deck.name, oppName: opp.name, oppDeck: opp.deck.name, result: my, score: `${wa}-${wb}`, context: `${n.shop.name} · ${where}` });
       showResults({
         setup,
         outcome,
         human: 0,
-        context: `Locals Night · ${where}`,
+        context: `Locals Night · ${where} · Rating ${rated.after} (${signed(rated.delta)})`,
         actions: [{ label: 'Back to the tables', variant: 'primary', icon: 'clipboard', onClick: () => go('locals', {}, { replace: true }) }],
       });
     } finally {
@@ -714,7 +717,7 @@ function seedOf(n: LocalsNight, id: string) {
 }
 
 /** The list behind the archetype: a pilot's placing list, or the build's own archetype line. */
-function listLine(deck: DeckSnapshot, label: string) {
+export function listLine(deck: DeckSnapshot, label: string) {
   const m = deck.name.match(/^(.*) \((.+)\)$/);
   if (m) return `${m[1]} · ${m[2]}'s list`;
   if (deck.name !== label) return deck.name;

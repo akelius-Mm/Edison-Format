@@ -7,6 +7,9 @@ import { go, type Screen } from './nav';
 import { getOfficialImage } from '../cards/officialArt';
 import { dp, totalUnopened } from '../../collection';
 import { getProfile, tournamentSummary, ordinal } from './store';
+// Events agent: Events tile, Profile chip and event resume.
+import { loadActiveEvent, loadRatings, roundLabel as eventRoundLabel } from '../../events';
+import { avatar as initialsAvatar } from './locals';
 
 interface MenuItem {
   route: string;
@@ -94,9 +97,19 @@ export function titleScreen(): Screen {
       ),
       h('button', { type: 'button', class: 'home-cta', onclick: () => go('duel') }, icon('swords'), h('span', null, 'Duel')),
     ),
+    h('button', { type: 'button', class: 'home-profile', 'aria-label': 'Profile', onclick: () => go('profile') }, initialsAvatar({ name: getSettings().playerName || 'You', human: true }, 28), String(loadRatings().constructed.rating)),
   );
 
-  const resume: Child = active
+  const ev = loadActiveEvent();
+  const resume: Child = ev
+    ? h(
+        'button',
+        { type: 'button', class: 'home-resume', onclick: () => go('events', { view: 'run' }) },
+        icon('trophy'),
+        h('span', { class: 'home-resume-text' }, h('b', null, 'Resume event'), h('span', null, `${ev.title} · ${eventRoundLabel(ev)}`)),
+        icon('play'),
+      )
+    : active
     ? h(
         'button',
         { type: 'button', class: 'home-resume', onclick: () => go('tournament') },
@@ -125,7 +138,7 @@ export function titleScreen(): Screen {
     tile('packs', 'Packs', unopened ? `${unopened} to open · ${dp()} DP` : `Shop · ${dp()} DP`, 'Pot of Avarice', unopened ? String(unopened) : undefined),
     tile('locals', 'Locals Night', 'Friday at the card shop', 'Black Rose Dragon', 'New'),
     tile('draft', 'Draft', 'Draft and Sealed', 'Gold Sarcophagus'),
-    tile('tournament', 'Tournament', 'Swiss + Top 8', 'Judgment Dragon'),
+    tile('events', 'Events', 'Regionals, SJCs and the circuit', 'Judgment Dragon'),
     tile('deck-builder', 'Decks', 'Build and edit', 'Brionac, Dragon of the Ice Barrier'),
     tile('binder', 'Binder', 'Your collection', 'Stardust Dragon'),
   );
