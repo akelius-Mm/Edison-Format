@@ -29,6 +29,10 @@ jobs:
       - name: Engine smoke test (AI vs AI duels)
         run: npm test
       - run: npx vite build
+      - uses: actions/configure-pages@v5
+        if: github.event_name != 'pull_request'
+        with:
+          enablement: true
       - uses: actions/upload-pages-artifact@v3
         if: github.event_name != 'pull_request'
         with:
