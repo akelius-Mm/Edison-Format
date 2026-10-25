@@ -2331,3 +2331,6 @@
 .duel-root .resp-top img,
 .duel-root .resp-opt img { object-fit: cover; }
 .duel-root .tile-acts .btn { width: 100%; height: auto; min-height: 30px; padding: 5px 8px; line-height: 1.2; white-space: normal; text-align: center; }
+/* Icon-only dialog button (the attack bar's Cancel) */
+.duel-root .dlg-actions .btn.btn--icon { flex: none; width: 38px; min-width: 38px; min-height: 38px; padding: 0; border-radius: 50%; background: rgba(255, 255, 255, 0.08); border-color: transparent; color: var(--dl-ink); }
+.duel-root .dlg-actions .btn.btn--icon svg { width: 16px; height: 16px; }

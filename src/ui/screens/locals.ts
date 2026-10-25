@@ -572,7 +572,7 @@ function hubScreen(n: LocalsNight): Screen {
       cta = revealed ? ctaButton('Play match', () => void playMine(), 'swords') : ctaButton('Sit down', () => sitDown(m), 'hand');
     } else if (n.step === 'pairings') {
       const mine = humanMatch(n);
-      sum = mine?.b == null && mine ? h('span', null, 'Bye this round') : h('span', null, `${currentRound(n).length} table${currentRound(n).length === 1 ? "" : "s"} in play`);
+      sum = mine?.b == null && mine ? h('span', null, 'Bye this round') : h('span', null, `${currentRound(n).length} table${currentRound(n).length === 1 ? '' : 's'} in play`);
       cta = ctaButton('Get results', () => collect(), 'clipboard');
     } else if (n.step === 'results') {
       if (n.phase === 'swiss') {

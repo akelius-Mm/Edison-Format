@@ -16,6 +16,8 @@ export interface ActionBtn {
   onClick: () => void;
   disabled?: boolean;
   hotkey?: string;
+  /** Show only this icon (the label becomes the button's accessible name). */
+  icon?: keyof typeof ICONS;
 }
 
 export interface ModalOpts {
@@ -234,7 +236,12 @@ export class Dialogs {
       const bar = h('div', 'dlg-actions');
       for (const a of o.actions) {
         const b = h('button', `btn btn--${a.kind ?? 'secondary'}`) as HTMLButtonElement;
-        b.innerHTML = `<span>${esc(a.label)}</span>${a.hotkey ? `<kbd>${a.hotkey === ' ' ? 'Space' : a.hotkey}</kbd>` : ''}`;
+        if (a.icon) {
+          b.innerHTML = ICONS[a.icon];
+          b.classList.add('btn--icon');
+          b.title = a.label;
+          b.setAttribute('aria-label', a.label);
+        } else b.innerHTML = `<span>${esc(a.label)}</span>${a.hotkey ? `<kbd>${a.hotkey === ' ' ? 'Space' : a.hotkey}</kbd>` : ''}`;
         if (a.hotkey) b.dataset.hotkey = a.hotkey === ' ' ? 'Space' : a.hotkey;
         b.disabled = !!a.disabled;
         b.onclick = () => {

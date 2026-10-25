@@ -815,7 +815,7 @@ class DuelScreen implements HumanUI {
     });
     for (const t of targets) this.board.mark(t.uid, 'is-target');
     this.board.mark(attacker.uid, 'is-attacker');
-    const actions = [] as { label: string; kind?: 'primary' | 'secondary' | 'danger' | 'ghost'; onClick: () => void; hotkey?: string }[];
+    const actions = [] as { label: string; kind?: 'primary' | 'secondary' | 'danger' | 'ghost'; onClick: () => void; hotkey?: string; icon?: 'close' }[];
     if (canDirect)
       actions.push({
         label: 'Direct Attack',
@@ -830,6 +830,7 @@ class DuelScreen implements HumanUI {
       label: replay ? 'Stop attack' : 'Cancel',
       kind: 'ghost',
       hotkey: 'Escape',
+      icon: 'close',
       onClick: () => {
         const st = this.attackState;
         this.endAttackTargeting();
