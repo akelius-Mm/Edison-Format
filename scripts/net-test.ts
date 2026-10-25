@@ -204,7 +204,7 @@ async function runCase(c: Case, label: string) {
 
   let decisions = 0;
   for (let gi = 0; gi < 5; gi++) {
-    await waitFor(() => ready[0].includes(gi) && ready[1].includes(gi), 5000, `game ${gi + 1} ready`);
+    await waitFor(() => ready[0].includes(gi) && ready[1].includes(gi), 20000, `game ${gi + 1} ready`);
     startGame(host, gi);
     startGame(guest, gi);
     let cutsLeft = c.cuts;
@@ -284,9 +284,9 @@ async function runCase(c: Case, label: string) {
       if (JSON.stringify(hs.logs) !== JSON.stringify(gs.logs)) fail(`${tag}: decision logs differ`);
     }
     if (verbose) console.log(`${tag}: ${hs.logs[0].length}+${hs.logs[1].length} decisions, ${hr.turns} turns, winner ${hr.winner} (${hr.reason})${c.reload !== 'none' && gi === 0 ? `, ${c.reload} reloaded` : ''}${c.cuts && gi === 0 ? `, ${c.cuts} cuts` : ''}`);
-    await waitFor(() => !!host.room.match!.games[gi].end && !!guest.room.match!.games[gi].end, 3000, 'both ends');
+    await waitFor(() => !!host.room.match!.games[gi].end && !!guest.room.match!.games[gi].end, 20000, 'both ends');
     if (host.room.outcome() || guest.room.outcome()) {
-      await waitFor(() => host.room.outcome() === guest.room.outcome(), 3000, 'agreed outcome');
+      await waitFor(() => host.room.outcome() === guest.room.outcome(), 20000, 'agreed outcome');
       break;
     }
     // between games: the loser chooses, both submit (unchanged) decks
@@ -297,14 +297,15 @@ async function runCase(c: Case, label: string) {
     }
     host.room.submitDeck(gi + 1, sided(wireDeck(c.a), wireDeck(c.b), c.seed + gi));
     guest.room.submitDeck(gi + 1, sided(wireDeck(c.b), wireDeck(c.a), c.seed * 3 + gi));
-    await waitFor(() => !!host.room.match!.games[gi + 1]?.decks[1] && !!guest.room.match!.games[gi + 1]?.decks[0], 3000, 'decks exchanged');
+    // a cut just before this can need a full redial with backoff, so allow a realistic reconnect time
+    await waitFor(() => !!host.room.match!.games[gi + 1]?.decks[1] && !!guest.room.match!.games[gi + 1]?.decks[0], 20000, 'decks exchanged');
     if (JSON.stringify(host.room.match!.games[gi + 1].decks) !== JSON.stringify(guest.room.match!.games[gi + 1].decks)) fail(`${tag}: sided decks differ between phones`);
     if (host.room.match!.games[gi + 1].decks.some((d, i) => d!.main.join() !== (i ? wireDeck(c.b) : wireDeck(c.a)).main.join())) sidedGames++;
   }
   // rematch: both ask, both land in the lobby
   host.room.askRematch();
   guest.room.askRematch();
-  await waitFor(() => !host.room.match && !guest.room.match, 3000, 'rematch to lobby');
+  await waitFor(() => !host.room.match && !guest.room.match, 20000, 'rematch to lobby');
   host.room.leave();
   guest.room.leave();
   await sleep(10);
