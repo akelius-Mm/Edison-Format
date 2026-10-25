@@ -2314,3 +2314,5 @@
   .duel-root.is-spectator .spec-speed { flex: 1 1 100%; order: -1; }
   .duel-root .chip-btn { height: 28px; padding: 2px; }
 }
+.duel-root .banner--turn .fx-banner-in { max-width: calc(100vw - 32px); }
+.duel-root .banner--turn b { overflow: hidden; text-overflow: ellipsis; }
