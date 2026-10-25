@@ -1,11 +1,15 @@
 // Runs a single game or best-of-three match through the duel screen, with interstitials
 // between games (loser chooses to go first or second; the AI always chooses to go first).
+// Best-of-3: before that choice the human sides (when their deck has a Side Deck and side decking
+// is on in Settings) and AI players side by a deterministic heuristic (decks/siding.ts).
+import { aiSideDeck, cloneDeck, sideDiff, type DeckIds } from '../../decks/siding';
 import type { PlayerId } from '../../engine/types';
 import { matchOutcome } from '../../tournament/simulate';
 import type { GameResult } from '../../tournament/types';
 import type { DuelResult, DuelSide } from '../duel/api';
 import { startDuel } from '../duel/duelScreen';
-import { activeDuelFor, clearActiveDuel, fromSavedSide, saveActiveDuel, toSavedSide, type ResumeTag, type SavedDuel } from '../duel/resume';
+import { activeDuelFor, clearActiveDuel, deckFromIds, deckToIds, fromSavedSide, saveActiveDuel, toSavedSide, type PlayedGame, type ResumeTag, type SavedDuel } from '../duel/resume';
+import { sidingScreen } from './siding';
 import { getSettings } from '../settings';
 import { button, h, icon, toast, type ICONS } from './dom';
 
@@ -30,6 +34,8 @@ export interface MatchSetup {
    * saved duel has the same key, runMatch picks it up where it was left instead of starting over.
    */
   resume?: ResumeTag;
+  /** Draft / Sealed: the Side Deck is the rest of the pool and siding is not one-for-one. */
+  limited?: boolean;
 }
 
 export interface MatchOutcome {
@@ -47,7 +53,7 @@ export function setupFromSaved(d: SavedDuel): MatchSetup | null {
   const a = fromSavedSide(d.setup.sides[0]);
   const b = fromSavedSide(d.setup.sides[1]);
   if (!a || !b) return null;
-  return { sides: [a, b], bestOf: d.setup.bestOf, playmat: d.setup.playmat, caption: d.setup.caption, requireWinner: d.setup.requireWinner, stats: d.setup.stats, resume: d.tag };
+  return { sides: [a, b], bestOf: d.setup.bestOf, playmat: d.setup.playmat, caption: d.setup.caption, requireWinner: d.setup.requireWinner, stats: d.setup.stats, resume: d.tag, limited: d.setup.limited };
 }
 
 export async function runMatch(setup: MatchSetup): Promise<MatchOutcome> {
@@ -77,6 +83,7 @@ export async function runMatch(setup: MatchSetup): Promise<MatchOutcome> {
           caption: setup.caption,
           requireWinner: setup.requireWinner,
           stats: setup.stats,
+          ...(setup.limited ? { limited: true } : {}),
         },
         games: [],
         game: null,
@@ -102,6 +109,19 @@ export async function runMatch(setup: MatchSetup): Promise<MatchOutcome> {
   document.body.classList.add('in-duel');
   lockNav(true);
   const games: GameResult[] = rec ? [...rec.games] : [];
+  // ---- siding state: the original decks, each finished game's decks, and the match seed
+  const original: [DeckIds, DeckIds] = [deckToIds(setup.sides[0].deck), deckToIds(setup.sides[1].deck)];
+  const played: (PlayedGame | null)[] = rec?.played ? [...rec.played] : [];
+  const matchSeed = rec?.seed ?? newSeed();
+  if (rec && rec.seed == null) {
+    rec.seed = matchSeed;
+    persist();
+  }
+  /** The decks of the last finished game (older records without them: the original decks). */
+  const lastDecks = (): [DeckIds, DeckIds] => {
+    const d = played[games.length - 1]?.decks;
+    return d ? [cloneDeck(d[0]), cloneDeck(d[1])] : [cloneDeck(original[0]), cloneDeck(original[1])];
+  };
   let conceded = false;
   let left = false;
   try {
@@ -120,8 +140,19 @@ export async function runMatch(setup: MatchSetup): Promise<MatchOutcome> {
       let cur = rec?.game && rec.game.index === games.length ? rec.game : null;
       if (!cur) {
         let first: PlayerId | 'coin' = 'coin';
+        let decks: [DeckIds, DeckIds] = lastDecks();
+        let oppSided = 0;
         if (games.length) {
-          const choice = await interstitial(host, setup, games, playmat);
+          const prev = lastDecks();
+          if (setup.bestOf === 3 && getSettings().sideDecking) {
+            decks = await sideForGame(host, setup, games, played, original, prev, matchSeed, playmat, rec, persist);
+            const h = setup.sides.findIndex(isHuman);
+            if (h >= 0) {
+              const d = sideDiff(prev[1 - h], decks[1 - h]);
+              oppSided = d.added.reduce((a, [, n]) => a + n, 0);
+            }
+          }
+          const choice = await interstitial(host, setup, games, playmat, oppSided);
           if (choice === 'concede') {
             conceded = true;
             finish();
@@ -140,22 +171,31 @@ export async function runMatch(setup: MatchSetup): Promise<MatchOutcome> {
           log: [],
           turn: 0,
         };
+        // the decks are stored only when siding changed them (older builds read the setup decks)
+        if (!sameDecks(decks, original)) cur.decks = decks;
         if (rec) {
           rec.game = cur;
+          rec.siding = null;
           persist();
         }
       }
       host.replaceChildren();
       const game = cur;
+      const gameSides: [DuelSide, DuelSide] = [0, 1].map((i) => {
+        const d = game.decks?.[i] ? deckFromIds(game.decks[i]) : null;
+        return d ? { ...setup.sides[i], deck: d } : setup.sides[i];
+      }) as [DuelSide, DuelSide];
       let decided = false;
       const onGameOver = (r: DuelResult) => {
         decided = true;
         const g: GameResult = { winner: (r.winner ?? null) as 0 | 1 | null, turns: r.turns, reason: r.surrendered ? 'Surrender' : r.reason, how: 'human' };
         games.push(g);
+        played[game.index] = { decks: game.decks ?? original, ...(r.seen ? { seen: r.seen } : {}) };
         if (setup.stats) recordGame(setup.stats.deckKey, setup.stats.deckName, g.winner === 0 ? 'W' : g.winner === 1 ? 'L' : 'D');
         if (rec) {
           // decided: a reload from the result screen resumes between games, not inside this one
           rec.games = [...games];
+          rec.played = [...played];
           rec.game = null;
           persist();
         }
@@ -163,7 +203,7 @@ export async function runMatch(setup: MatchSetup): Promise<MatchOutcome> {
       let r: DuelResult | null = null;
       try {
         r = await startDuel(host, {
-          sides: setup.sides,
+          sides: gameSides,
           playmat,
           firstPlayer: game.first,
           seed: game.seed,
@@ -239,8 +279,76 @@ function restoreFailed(host: HTMLElement, setup: MatchSetup, index: number, play
   });
 }
 
+const sameDeck = (a: DeckIds, b: DeckIds) => a.main.join() === b.main.join() && a.extra.join() === b.extra.join() && a.side.join() === b.side.join();
+const sameDecks = (a: [DeckIds, DeckIds], b: [DeckIds, DeckIds]) => sameDeck(a[0], b[0]) && sameDeck(a[1], b[1]);
+
+/**
+ * Side decking before game `games.length + 1`. AI players side from their original deck against
+ * the opponent's original deck (deterministic from the match seed); the human sides on the siding
+ * screen, starting from the previous game's deck (or the swaps saved before the app was closed).
+ */
+async function sideForGame(
+  host: HTMLElement,
+  setup: MatchSetup,
+  games: GameResult[],
+  played: (PlayedGame | null)[],
+  original: [DeckIds, DeckIds],
+  prev: [DeckIds, DeckIds],
+  matchSeed: number,
+  playmat: string,
+  rec: SavedDuel | null,
+  persist: () => void,
+): Promise<[DeckIds, DeckIds]> {
+  const index = games.length;
+  const decks: [DeckIds, DeckIds] = [cloneDeck(prev[0]), cloneDeck(prev[1])];
+  for (const i of [0, 1] as const) {
+    if (isHuman(setup.sides[i]) || setup.limited || !original[i].side.length) continue;
+    decks[i] = aiSideDeck(original[i], original[1 - i], (matchSeed + index * 7919 + i * 104729) >>> 0);
+  }
+  const hi = setup.sides.findIndex(isHuman);
+  if (hi < 0 || !original[hi].side.length) return decks;
+  const saved = rec?.siding && rec.siding.index === index && rec.siding.player === hi ? rec.siding : null;
+  if (saved?.done) {
+    decks[hi] = cloneDeck(saved.deck);
+    return decks;
+  }
+  const oi = 1 - hi;
+  const wHuman = games.filter((g) => g.winner === hi).length;
+  const wOpp = games.filter((g) => g.winner === oi).length;
+  const last = games[games.length - 1];
+  const lastText = last.winner == null ? `Game ${index} was a draw` : last.winner === hi ? `You won game ${index}` : `You lost game ${index}`;
+  // what the opponent showed: the most copies seen in any one game
+  const seen = new Map<string, number>();
+  for (const p of played) {
+    const t = new Map<string, number>();
+    for (const id of p?.seen?.[oi] ?? []) t.set(id, (t.get(id) ?? 0) + 1);
+    for (const [id, n] of t) seen.set(id, Math.max(n, seen.get(id) ?? 0));
+  }
+  const persistSiding = (deck: DeckIds, done = false) => {
+    if (!rec) return;
+    rec.siding = { index, player: hi as PlayerId, deck, ...(done ? { done: true } : {}) };
+    persist();
+  };
+  if (rec && !saved) persistSiding(decks[hi]);
+  const deck = await sidingScreen(host, {
+    caption: setup.caption,
+    gameNo: index + 1,
+    status: `${lastText} · ${wHuman}–${wOpp}`,
+    opp: { name: setup.sides[oi].name, deck: setup.sides[oi].title, seen: [...seen].sort((a, b) => b[1] - a[1]) },
+    start: saved ? saved.deck : decks[hi],
+    previous: prev[hi],
+    original: original[hi],
+    limited: setup.limited,
+    playmat,
+    onChange: (d) => persistSiding(d),
+  });
+  persistSiding(deck, true);
+  decks[hi] = deck;
+  return decks;
+}
+
 /** Between-games screen. Resolves with who goes first next, or 'concede'. */
-function interstitial(host: HTMLElement, setup: MatchSetup, games: GameResult[], playmat: string): Promise<PlayerId | 'coin' | 'concede'> {
+function interstitial(host: HTMLElement, setup: MatchSetup, games: GameResult[], playmat: string, oppSided = 0): Promise<PlayerId | 'coin' | 'concede'> {
   return new Promise((resolve) => {
     host.replaceChildren();
     const [A, B] = setup.sides;
@@ -266,6 +374,10 @@ function interstitial(host: HTMLElement, setup: MatchSetup, games: GameResult[],
     } else {
       msg = `${setup.sides[loser].name} lost the previous game and chooses to go first.`;
       actions.append(cta('Continue', () => resolve(loser), 'play'));
+    }
+    if (humanPlays && oppSided) {
+      const opp = setup.sides.find((s) => !isHuman(s));
+      msg += ` ${opp?.name ?? 'Your opponent'} sided ${oppSided} card${oppSided === 1 ? '' : 's'}.`;
     }
     if (humanPlays) actions.append(button('Concede match', () => resolve('concede'), { variant: 'subtle', icon: 'flag', cls: 'inter-concede' }));
     else setTimeout(() => resolve(loser ?? 'coin'), 4500); // exhibitions continue on their own

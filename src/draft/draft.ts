@@ -349,6 +349,26 @@ export function deckOf(s: DraftState, id: string): BuiltDeck {
   return d ? fromIds(d) : { main: [], extra: [] };
 }
 
+/**
+ * The human's Side Deck for siding between games: every drafted card not in the deck, plus the
+ * free basic monsters (up to 3 copies of each, counting those already in the deck).
+ */
+export function humanSideIds(s: DraftState): string[] {
+  const deck = s.deck;
+  if (!deck) return [];
+  const left = new Map<string, number>();
+  for (const p of s.picks[0]) left.set(p.id, (left.get(p.id) ?? 0) + 1);
+  const used = new Map<string, number>();
+  for (const id of [...deck.main, ...deck.extra]) used.set(id, (used.get(id) ?? 0) + 1);
+  const out: string[] = [];
+  for (const [id, n] of left) for (let i = (used.get(id) ?? 0); i < n; i++) out.push(id);
+  for (const id of fillerIds(s)) {
+    if (left.has(id)) continue;
+    for (let i = used.get(id) ?? 0; i < 3; i++) out.push(id);
+  }
+  return out;
+}
+
 function fastGame(ra: number, rb: number, rng: Rng): GameResult {
   if (rng.next() < 0.015) return { winner: null, turns: 30, reason: 'Turn limit reached', how: 'fast' };
   const a = ra + (rng.next() - 0.5) * 140;

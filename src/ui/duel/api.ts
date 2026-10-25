@@ -54,6 +54,8 @@ export interface DuelResult {
   left?: boolean;
   /** Replaying the saved decisions did not reproduce the game (nothing was decided). */
   restoreFailed?: boolean;
+  /** Card ids each player showed: face-up on the field, in the Graveyard or banished at the end. */
+  seen?: [string[], string[]];
 }
 
 /**

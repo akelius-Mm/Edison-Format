@@ -11,6 +11,7 @@ import { DECKS as T2 } from './tournament2';
 import type { DeckDef } from './types';
 
 export type { DeckDef };
+export * from './siding';
 
 export const PREMADE_DECKS: DeckDef[] = [...A, ...B, ...C, ...T, ...T2];
 
@@ -19,7 +20,7 @@ export function deckById(id: string) {
 }
 
 /** Expand a deck definition into card data lists. Unknown cards are skipped (and reported). */
-export function buildDeckList(def: Pick<DeckDef, 'main' | 'extra'>): DeckList & { missing: string[] } {
+export function buildDeckList(def: Pick<DeckDef, 'main' | 'extra' | 'side'>): DeckList & { missing: string[] } {
   const missing: string[] = [];
   const expand = (entries: [string, number][]) => {
     const out: CardData[] = [];
@@ -33,12 +34,16 @@ export function buildDeckList(def: Pick<DeckDef, 'main' | 'extra'>): DeckList & 
     }
     return out;
   };
-  return { main: expand(def.main), extra: expand(def.extra), missing };
+  const out: DeckList & { missing: string[] } = { main: expand(def.main), extra: expand(def.extra), missing };
+  if (def.side?.length) out.side = expand(def.side);
+  return out;
 }
 
 /**
  * Validate a deck against Edison construction rules. Returns a list of problems.
- * `ignoreLimits` (Draft / Sealed) waives copy limits, the banlist and the post-Edison release check.
+ * Copy limits count the Main, Extra and Side Deck together.
+ * `ignoreLimits` (Draft / Sealed) waives copy limits, the banlist, the post-Edison release check and
+ * the 15-card Side Deck cap (a Limited side is the rest of the pool).
  */
 export function validateDeck(
   def: Pick<DeckDef, 'main' | 'extra'> & { side?: [string, number][] },
@@ -51,6 +56,8 @@ export function validateDeck(
   if (main < 40) errs.push(`Main Deck has ${main} cards (minimum 40).`);
   if (main > 60) errs.push(`Main Deck has ${main} cards (maximum 60).`);
   if (extra > 15) errs.push(`Extra Deck has ${extra} cards (maximum 15).`);
+  const side = count(def.side ?? []);
+  if (side > 15 && !opts.ignoreLimits) errs.push(`Side Deck has ${side} cards (maximum 15).`);
   const totals = new Map<string, number>();
   for (const [n, c] of [...def.main, ...def.extra, ...(def.side ?? [])]) totals.set(n, (totals.get(n) ?? 0) + c);
   for (const [name, n] of totals) {

@@ -12,6 +12,7 @@ import { ensureRgbtPatches } from '../src/cards/sets/rgbt';
 import { ensureCrmsPatches } from '../src/cards/sets/crms';
 import { ensurePtdnPatches } from '../src/cards/sets/ptdn';
 import { ensureLodtPatches } from '../src/cards/sets/lodt';
+import { PREMADE_DECKS, aiSideDeck, buildDeckList, canSwap, moveToDeck, moveToSide, sideSummary, sidedDeckProblems, swapCards, validateDeck, type DeckIds } from '../src/decks';
 
 const T = {
   brute: findCard('Rules Test Brute') ?? normal('Rules Test Brute', 'EARTH', 'Warrior', 4, 1800, 1000),
@@ -867,6 +868,7 @@ function eq(a: unknown, b: unknown, msg: string) {
   await crmsTests();
   await ptdnTests();
   await lodtTests();
+  await sidingTests();
 
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
@@ -2440,5 +2442,134 @@ async function lodtTests() {
     await (g as any).setPhase('standby');
     eq(dt.location, 'grave', 'Dice Try! used');
     eq(dmt.location, 'grave', 'Dangerous Machine Type-6 destroyed');
+  });
+}
+
+// ---------------------------------------------------------------- Side decking
+async function sidingTests() {
+  const id = (n: string) => cardByName(n).id;
+  const ids = (e: [string, number][]) => e.flatMap(([n, k]) => Array(k).fill(id(n)) as string[]);
+  const forty: [string, number][] = [
+    ['Card Trooper', 1],
+    ['Marauding Captain', 3],
+    ['Elemental HERO Stratos', 1],
+    ['Sangan', 1],
+    ['Cyber Dragon', 2],
+    ['Mystical Space Typhoon', 1],
+    ['Pot of Avarice', 2],
+    ['Bottomless Trap Hole', 2],
+    ['Solemn Judgment', 1],
+    ['Torrential Tribute', 1],
+    ['Mirror Force', 1],
+    ['Brain Control', 1],
+    ['Monster Reborn', 1],
+    ['Heavy Storm', 1],
+    ['Book of Moon', 2],
+    ['Dimensional Prison', 2],
+    ['Gold Sarcophagus', 1],
+    ['Smashing Ground', 2],
+    ['Trap Hole', 3],
+    ['Gemini Elf', 3],
+    ['Vorse Raider', 3],
+    ['Spirit Reaper', 1],
+    ['Morphing Jar', 1],
+    ['Exiled Force', 3],
+  ];
+  const side: [string, number][] = [
+    ['D.D. Crow', 2],
+    ['Royal Decree', 2],
+    ['Light-Imprisoning Mirror', 1],
+    ['Shadow-Imprisoning Mirror', 1],
+    ['Trap Stun', 2],
+    ['Macro Cosmos', 2],
+    ['Kycoo the Ghost Destroyer', 2],
+    ['Chimeratech Fortress Dragon', 1],
+    ['Thunder King Rai-Oh', 2],
+  ];
+  const extra: [string, number][] = [
+    ['Stardust Dragon', 1],
+    ['Goyo Guardian', 1],
+  ];
+  const count = (e: [string, number][]) => e.reduce((a, [, n]) => a + n, 0);
+
+  await test('Siding: validation enforces Side ≤15 (waived for Limited)', async () => {
+    eq(count(forty), 40, 'test deck has 40 cards');
+    eq(validateDeck({ main: forty, extra, side }).length, 0, `legal deck: ${validateDeck({ main: forty, extra, side }).join(' ')}`);
+    const big = [...side, ['Dust Tornado', 2] as [string, number]];
+    eq(count(big), 17, '17 side cards');
+    eq(validateDeck({ main: forty, extra, side: big }).some((e) => /Side Deck has 17 cards \(maximum 15\)/.test(e)), true, 'Side 17 is rejected');
+    eq(validateDeck({ main: forty, extra, side: big }, { ignoreLimits: true }).some((e) => /Side Deck/.test(e)), false, 'Limited has no side cap');
+  });
+
+  await test('Siding: card limits count Main + Extra + Side together', async () => {
+    const s2: [string, number][] = [['Gemini Elf', 1]];
+    eq(validateDeck({ main: forty, extra, side: s2 }).some((e) => /Gemini Elf: 4 copies/.test(e)), true, '3 main + 1 side Gemini Elf is over the limit');
+    const s3: [string, number][] = [['Stardust Dragon', 3]];
+    eq(validateDeck({ main: forty, extra, side: s3 }).some((e) => /Stardust Dragon: 4 copies/.test(e)), true, 'Extra + Side counted together');
+    const s4: [string, number][] = [['Brain Control', 1]];
+    eq(validateDeck({ main: forty, extra, side: s4 }).some((e) => /Brain Control: 2 copies \(limit 1\)/.test(e)), true, 'Limited card in main and side');
+  });
+
+  const deck: DeckIds = { main: ids(forty), extra: ids(extra), side: ids(side) };
+
+  await test('Siding: a one-for-one swap keeps every count', async () => {
+    const d1 = swapCards(deck, id('Trap Hole'), id('D.D. Crow'))!;
+    eq(!!d1, true, 'swap allowed');
+    eq(d1.main.length, 40, 'Main stays 40');
+    eq(d1.extra.length, 2, 'Extra stays 2');
+    eq(d1.side.length, 15, 'Side stays 15');
+    eq(d1.main.filter((x) => x === id('D.D. Crow')).length, 1, 'D.D. Crow in');
+    eq(d1.side.filter((x) => x === id('Trap Hole')).length, 1, 'Trap Hole to the side');
+    eq(d1.main.indexOf(id('D.D. Crow')), deck.main.lastIndexOf(id('Trap Hole')), 'the incoming card takes the outgoing card’s slot');
+    const d2 = swapCards(d1, id('Trap Hole'), id('D.D. Crow'))!;
+    eq(sideSummary(deck, d2), '+2 D.D. Crow, \u22122 Trap Hole', 'summary');
+    eq(sidedDeckProblems(d2, deck).length, 0, 'still legal');
+    eq(swapCards(deck, id('Trap Hole'), id('Dust Tornado')), null, 'a card that is not in the side cannot come in');
+    eq(deck.main.length + deck.side.length, 55, 'the original deck is untouched');
+  });
+
+  await test('Siding: Extra Deck monsters swap only with Extra-type cards', async () => {
+    eq(canSwap(cardByName('Stardust Dragon'), cardByName('Chimeratech Fortress Dragon')), true, 'Synchro ↔ Fusion');
+    eq(canSwap(cardByName('Stardust Dragon'), cardByName('D.D. Crow')), false, 'Synchro ↔ Main Deck monster');
+    eq(swapCards(deck, id('Stardust Dragon'), id('D.D. Crow')), null, 'Extra out, Main card in is refused');
+    eq(swapCards(deck, id('Card Trooper'), id('Chimeratech Fortress Dragon')), null, 'Main out, Fusion in is refused');
+    const d = swapCards(deck, id('Goyo Guardian'), id('Chimeratech Fortress Dragon'))!;
+    eq(d.extra.includes(id('Chimeratech Fortress Dragon')) && d.side.includes(id('Goyo Guardian')), true, 'Extra ↔ Extra works');
+    eq(d.extra.length, 2, 'Extra count kept');
+  });
+
+  await test('Siding: Limited moves keep the Main Deck at 40 or more', async () => {
+    eq(moveToSide(deck, id('Trap Hole')), null, 'cannot drop to 39');
+    const up = moveToDeck(deck, id('D.D. Crow'))!;
+    eq(up.main.length, 41, 'added to 41');
+    eq(up.side.length, 14, 'pool shrinks');
+    const down = moveToSide(up, id('Trap Hole'))!;
+    eq(down.main.length, 40, 'back to 40');
+    eq(moveToDeck(deck, id('Chimeratech Fortress Dragon'))!.extra.length, 3, 'Fusion goes to the Extra Deck');
+  });
+
+  await test('Siding: AI sides deterministically and sensibly', async () => {
+    const lightsworn = PREMADE_DECKS.find((d) => d.id === 'lightsworn')!;
+    const opp = buildDeckList(lightsworn);
+    const oppIds = { main: opp.main.map((c) => c.id), extra: opp.extra.map((c) => c.id) };
+    const a = aiSideDeck(deck, oppIds, 1234);
+    const b = aiSideDeck(deck, oppIds, 1234);
+    eq(JSON.stringify(a), JSON.stringify(b), 'same seed, same deck');
+    eq(a.main.length, 40, 'Main count kept');
+    eq(a.side.length, 15, 'Side count kept');
+    eq(a.main.filter((x) => x === id('D.D. Crow') || x === id('Macro Cosmos') || x === id('Kycoo the Ghost Destroyer')).length >= 2, true, `graveyard hate sided in vs Lightsworn (${sideSummary(deck, a)})`);
+    eq(a.main.includes(id('Royal Decree')), false, 'no Royal Decree vs a deck with few traps');
+    // every premade pairing keeps legal counts
+    for (const x of PREMADE_DECKS) {
+      if (!x.side?.length) continue;
+      const own = buildDeckList(x);
+      const mine: DeckIds = { main: own.main.map((c) => c.id), extra: own.extra.map((c) => c.id), side: (own.side ?? []).map((c) => c.id) };
+      for (const y of PREMADE_DECKS) {
+        const o = buildDeckList(y);
+        const r = aiSideDeck(mine, { main: o.main.map((c) => c.id), extra: o.extra.map((c) => c.id) }, 7);
+        const probs = sidedDeckProblems(r, mine);
+        if (probs.length) throw new Error(`${x.id} vs ${y.id}: ${probs.join(' ')}`);
+      }
+    }
   });
 }

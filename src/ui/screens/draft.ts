@@ -16,6 +16,7 @@ import {
   humanMatch,
   humanPack,
   humanRecord,
+  humanSideIds,
   isExtraDeck,
   isFoilRarity,
   makePick,
@@ -1471,7 +1472,7 @@ function hubView(ctl: Ctl, s: DraftState, autoResume = false) {
     const me = s.players[0];
     const deckName = deckNameOf(s);
     const sides: [DuelSide, DuelSide] = [
-      { name: me.name, deck: myDeck, avatar: st.avatar, sleeve: st.sleeve, control: 'human', title: deckName },
+      { name: me.name, deck: { ...myDeck, side: humanSideIds(s).map(card) }, avatar: st.avatar, sleeve: st.sleeve, control: 'human', title: deckName },
       { name: opp.name, deck: oppDeck, avatar: opp.avatar, sleeve: opp.sleeve, control: optsOf(s).ai, title: describeDeck(oppDeck) },
     ];
     const out = await runMatch({
@@ -1480,6 +1481,7 @@ function hubView(ctl: Ctl, s: DraftState, autoResume = false) {
       caption: `Draft · Round ${n} – vs ${opp.name}`,
       stats: s.savedDeckId ? { deckKey: `custom:${s.savedDeckId}`, deckName } : undefined,
       resume: { kind: 'draft', key: duelKey(s, n), route: 'draft', params: { view: 'hub' } },
+      limited: true,
     });
     const token = ctl.token;
     actions.style.display = 'none';
