@@ -298,6 +298,58 @@ async function screenshots(browser) {
         ok(true, `host resumed after a reload (had ${before} decisions) and play continues`);
       },
     });
+    // A real report: the guest reloads while the host is away. The saved duel must restore at once
+    // (the board, then only the "Reconnecting" banner), and the match finishes once the host is back.
+    await match(browser, 'guest reload while host offline', 'lightsworn', 'zombies', {
+      pace: 30,
+      midGame: async (host, guest) => {
+        await host.page.evaluate(() => window.__edisonNet.drop(30000));
+        // the guest plays on until it needs the host's next decision
+        await guest.page.waitForFunction(() => window.__edisonNet.status !== 'connected', null, { timeout: 10000 });
+        await sleep(2500);
+        await guest.page.reload();
+        const card = guest.page.locator('.home-resume--duel');
+        await card.waitFor({ timeout: 15000 });
+        await card.click();
+        await guest.page.waitForSelector('.duel-root', { timeout: 20000 });
+        const restored = await guest.page
+          .waitForFunction(() => document.querySelector('.duel-root') && !document.querySelector('.duel-restoring:not(.is-gone)'), null, { timeout: 8000 })
+          .then(() => true, () => false);
+        await guest.page.screenshot({ path: path.join(OUT, 'guest-restored-host-offline.png') });
+        ok(restored, 'guest: "Restoring your duel" finishes while the host is offline');
+        const lp = await guest.page.evaluate(() => [...document.querySelectorAll('.pp-lp')].map((e) => e.textContent).join('/'));
+        const cards = await guest.page.evaluate(() => document.querySelectorAll('.duel-root .dc[data-uid]:not(.dc-ghost)').length);
+        ok(cards > 0, `guest: the restored board shows the real game (${cards} cards, LP ${lp})`);
+        await guest.page.waitForSelector('.fr-offline', { timeout: 10000 });
+        ok(true, 'guest: only the Reconnecting banner shows while the host is away');
+      },
+    });
+    // The host never comes back: the guest's restored duel offers a clean way out that keeps it saved.
+    if (!ONLY || 'host never returns'.includes(ONLY)) {
+      const host = await phone(browser, 'Hana', 'blackwings', { pace: 30 });
+      const guest = await phone(browser, 'Gus', 'lightsworn', { pace: 30 });
+      await createAndJoin(host, guest);
+      await readyBoth(host, guest);
+      await host.page.waitForFunction(() => { const c = window.__edisonNet?.room.current; return c && c.logs[0].length + c.logs[1].length > 20; }, null, { timeout: 120000, polling: 100 });
+      await host.ctx.close();
+      await guest.page.waitForFunction(() => window.__edisonNet.status !== 'connected', null, { timeout: 30000 });
+      await sleep(1500);
+      await guest.page.reload();
+      await guest.page.locator('.home-resume--duel').click({ timeout: 15000 });
+      await guest.page.waitForSelector('.duel-root', { timeout: 20000 });
+      const restored = await guest.page.waitForFunction(() => !document.querySelector('.duel-restoring:not(.is-gone)'), null, { timeout: 8000 }).then(() => true, () => false);
+      ok(restored, 'host gone: the guest\'s duel restores without the host');
+      const leave = guest.page.locator('.fr-offline .fr-offline-leave');
+      await leave.waitFor({ timeout: 20000 });
+      const hint = await guest.page.locator('.fr-offline').innerText();
+      ok(/reopen the app where they started/i.test(hint), 'host gone: the banner says the friend must reopen the app where they started');
+      await guest.page.screenshot({ path: path.join(OUT, 'guest-host-gone-actions.png') });
+      await leave.click();
+      await guest.page.waitForSelector('.home-resume--duel', { timeout: 10000 });
+      ok(!(await guest.page.locator('.duel-root').count()), 'host gone: Leave closes the duel and returns Home');
+      ok(/Play a friend/.test(await guest.page.locator('.home-resume--duel').innerText()), 'host gone: the duel stays saved (resume card on Home)');
+      await guest.ctx.close();
+    }
   } catch (e) {
     failures++;
     console.log('FAIL', e.stack || e);

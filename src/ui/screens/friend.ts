@@ -49,6 +49,9 @@ const PREFS_KEY = 'edison.friend.v1';
 const H2H_KEY = 'edison.friends.h2h.v1';
 const CLIENT_KEY = 'edison.clientId';
 const CLAIM_AFTER_MS = 2 * 60 * 1000;
+/** Waiting for the friend this long shows what helps and a way out. */
+const OFFLINE_ACTIONS_MS = 10 * 1000;
+const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 const ART = 'Elemental HERO Stratos';
 
 // ------------------------------------------------------------------ config and test hooks
@@ -332,6 +335,8 @@ export class FriendSession {
   view: HTMLElement;
   private lobbyRefresh: (() => void) | null = null;
   private inMatch = false;
+  /** The player left a duel without deciding it ("Leave (duel stays saved)"). */
+  private leftSaved = false;
   private duel: { g: number; ctl: DuelControl | null } | null = null;
   private netChip: HTMLElement | null = null;
   private waitTimer = 0;
@@ -712,6 +717,7 @@ export class FriendSession {
           if (!(cur.decks[0] && cur.decks[1] && cur.first != null)) await this.between(host, cur.index);
           if (!this.room.match) break;
           await this.playGame(host, cur.index);
+          if (this.leftSaved) break;
           continue;
         }
         if (cur.end.kind === 'desync' || this.room.outcome()) break;
@@ -721,6 +727,13 @@ export class FriendSession {
       closeUi();
     }
     if (this.closed) return;
+    if (this.leftSaved) {
+      // the duel stays saved (Home's resume card, or the event's match card picks it back up)
+      this.close();
+      if (this.hooks) this.hooks.onDone();
+      else go('title');
+      return;
+    }
     this.recordMatch();
     if (this.hooks) {
       this.persist();
@@ -795,7 +808,9 @@ export class FriendSession {
       resultTitle: (r) => (r.reason === 'Out of sync' ? 'Out of sync' : undefined),
     })
       .catch((e) => console.error('online duel failed', e))
-      .then(() => {
+      .then((r) => {
+        // "Leave (duel stays saved)", from the Reconnecting banner or a stalled restore
+        if (r && r.left) this.leftSaved = true;
         this.duel = null;
         this.netChip = null;
         window.clearTimeout(this.waitTimer);
@@ -846,27 +861,43 @@ export class FriendSession {
     if (!off || !this.inMatch) return;
     const name = this.room.match?.start.players[this.room.peerSeat].name ?? 'your friend';
     const el = h('div', { class: 'fr-offline', role: 'status' });
+    let stage = '';
     const draw = () => {
       if (!this.offline) return;
       const waited = Date.now() - off.since;
       const canClaim = waited >= (this.hooks?.claimAfterMs ?? CLAIM_AFTER_MS) && !!this.duel?.ctl;
+      // after a while, never just a spinner: say what helps, and offer a way out
+      const long = waited >= OFFLINE_ACTIONS_MS;
+      const text = canClaim ? `${name} has been away for ${Math.max(1, Math.floor(waited / 60000))} min.` : `Waiting for ${name}. Your game is safe.`;
+      const key = `${long}|${canClaim}|${text}`;
+      if (key === stage) return;
+      const rebuildButtons = !stage.startsWith(`${long}|${canClaim}|`);
+      stage = key;
+      if (!rebuildButtons) {
+        const small = el.querySelector('.fr-offline-row small');
+        if (small) small.textContent = text;
+        return;
+      }
+      el.classList.toggle('is-long', long);
       el.replaceChildren(
         ...([
-        h('div', { class: 'fr-offline-row' }, h('span', { class: 'spinner' }), h('span', null, h('b', null, 'Reconnecting…'), h('small', null, canClaim ? `${name} has been away for ${Math.floor(waited / 60000)} min.` : `Waiting for ${name}. Your game is safe.`))),
-        canClaim
-          ? h(
-              'div',
-              { class: 'fr-offline-actions' },
-              button('Keep waiting', () => ((off.since = Date.now()), draw()), { variant: 'ghost', small: true }),
-              button('Claim the win', () => this.claimWin(), { variant: 'primary', small: true }),
-            )
-          : null,
+          h('div', { class: 'fr-offline-row' }, h('span', { class: 'spinner' }), h('span', null, h('b', null, 'Reconnecting…'), h('small', null, text))),
+          long ? h('p', { class: 'fr-offline-hint' }, `${cap(name)} needs to reopen the app where they started this duel.`) : null,
+          long
+            ? h(
+                'div',
+                { class: 'fr-offline-actions' },
+                canClaim ? button('Keep waiting', () => ((off.since = Date.now()), draw()), { variant: 'ghost', small: true }) : null,
+                button('Leave (duel stays saved)', () => this.leaveSaved(), { variant: canClaim ? 'ghost' : 'primary', small: true, cls: 'fr-offline-leave' }),
+                canClaim ? button('Claim the win', () => this.claimWin(), { variant: 'primary', small: true }) : null,
+              )
+            : null,
         ].filter(Boolean) as HTMLElement[]),
       );
     };
     draw();
     off.el = el;
-    off.timer = window.setInterval(draw, 5000);
+    off.timer = window.setInterval(draw, 1000);
     (this.duel?.ctl?.root ?? document.querySelector('.fr-duel-host') ?? document.body).appendChild(el);
   }
 
@@ -877,6 +908,13 @@ export class FriendSession {
     window.clearInterval(off.timer);
     off.el?.remove();
     this.offline = null;
+  }
+
+  /** Leave the duel without deciding it: it stays saved and resumes from Home (or the event). */
+  private leaveSaved() {
+    this.leftSaved = true;
+    this.hideOffline();
+    this.duel?.ctl?.leave();
   }
 
   private claimWin() {
