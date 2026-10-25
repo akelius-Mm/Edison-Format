@@ -86,7 +86,6 @@ const jeffJones: DeckDef = {
 };
 
 // Source: https://yugiohtopdecks.com/deck/2303 (Built by Renaldo Lainez, 2010 SJ Edison, 2nd Place)
-// The published list has no Extra Deck, so none is included here.
 const renaldoLainez: DeckDef = {
   id: 't-sjc-edison-2nd',
   name: 'Doomcaliber Gadgets (Renaldo Lainez)',
@@ -123,7 +122,24 @@ const renaldoLainez: DeckDef = {
     ['Phoenix Wing Wind Blast', 1],
     ['Torrential Tribute', 1],
   ],
-  extra: [],
+  // Extra Deck reconstructed: published list not available.
+  // Chimeratech Fortress Dragon from Cyber Dragon + Gadgets; the only Tuners are Plaguespreader Zombie (Level 2)
+  // and Blackwing - Gale the Whirlwind (Level 3), so Synchros are Level 6 (Plaguespreader + Gadget),
+  // Level 7 (Gale + Gadget, Plaguespreader + Cyber Dragon) and Level 8 (Gale + Cyber Dragon).
+  extra: [
+    ['Chimeratech Fortress Dragon', 3],
+    ['Stardust Dragon', 2],
+    ['Goyo Guardian', 1],
+    ['Brionac, Dragon of the Ice Barrier', 1],
+    ['Gaia Knight, the Force of Earth', 1],
+    ['Black Rose Dragon', 1],
+    ['Ancient Fairy Dragon', 1],
+    ['Power Tool Dragon', 1],
+    ['Iron Chain Dragon', 1],
+    ['Exploder Dragonwing', 1],
+    ['Red Dragon Archfiend', 1],
+    ['Colossal Fighter', 1],
+  ],
   side: [
     ['Thunder King Rai-Oh', 2],
     ['Creature Swap', 2],
