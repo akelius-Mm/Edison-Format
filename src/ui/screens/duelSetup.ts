@@ -12,6 +12,10 @@ import { announceReward } from './rewards';
 import { frame, go, scrollToTop, type Screen } from './nav';
 import { showResults } from './results';
 import { allDeckInfos, premadeInfo, recordMatch, resolveDeck, toDeckList, type DeckInfo } from './store';
+// Events agent: optional Ranked switch (Constructed rating).
+import { aiRating, recordConstructedResult, signed } from '../../events/ratings';
+import { iosRow } from './components';
+import { toggle } from './dom';
 
 const SETUP_KEY = 'edison.duelSetup.v1';
 const EXHIBITION_KEY = 'edison.exhibition.v1';
@@ -21,6 +25,8 @@ interface DuelSetupState {
   oppDeck: string | null; // null = random
   persona: PersonaState;
   bestOf: 1 | 3;
+  /** Ranked: the result updates your Constructed rating (default Casual). */
+  ranked?: boolean;
 }
 
 const TIER_W: Record<number, number> = { 1: 5, 2: 3, 3: 1.5 };
@@ -64,6 +70,7 @@ export function duelSetupScreen(): Screen {
     oppDeck: saved.oppDeck && decks.some((d) => d.key === saved.oppDeck) ? saved.oppDeck : null,
     persona: saved.persona?.name ? { ...saved.persona, difficulty: saved.persona.difficulty ?? s.defaultDifficulty } : newPersona(s.defaultDifficulty),
     bestOf: saved.bestOf === 3 ? 3 : 1,
+    ranked: saved.ranked === true,
   };
   const persist = () => saveJSON(SETUP_KEY, st);
   let step: 1 | 2 = 1;
@@ -148,6 +155,7 @@ export function duelSetupScreen(): Screen {
       matchup,
       lobbySection('Opponent deck', null, deckShelf(decks, st.oppDeck, (d) => ((st.oppDeck = d?.key ?? null), changed()), { random: true, label: 'Opponent deck' })),
       h('div', { class: 'lob-group opp-group' }, opponentEditor(st.persona, changed, { hideDifficulty: true })),
+      h('div', { class: 'lob-group' }, iosRow('Ranked', 'Counts toward your Constructed rating', toggle(!!st.ranked, (v) => ((st.ranked = v), changed()), 'Ranked'))),
       stickyBar(
         h(
           'div',
@@ -201,7 +209,7 @@ export function duelSetupScreen(): Screen {
     if (!(await confirmDeckProblems(mine))) return;
     const opp = deckFromKey(st.oppDeck) ?? randomPremade();
     if (!opp) return toast('No opponent decks are available yet.', 'error');
-    await playVsAI(mine, opp, { ...st.persona }, st.bestOf);
+    await playVsAI(mine, opp, { ...st.persona }, st.bestOf, !!st.ranked);
   }
 
   const el = frame('Duel vs AI', { cls: 'lobby-screen duel-flow', compact: true, backTo: () => (step === 2 ? show(1) : go('title')) }, steps, stage);
@@ -216,7 +224,7 @@ export function duelSetupScreen(): Screen {
   };
 }
 
-export async function playVsAI(mine: DeckInfo, opp: DeckInfo, persona: PersonaState, bestOf: 1 | 3) {
+export async function playVsAI(mine: DeckInfo, opp: DeckInfo, persona: PersonaState, bestOf: 1 | 3, ranked = false) {
   const s = getSettings();
   const sides: [DuelSide, DuelSide] = [
     { name: s.playerName, deck: toDeckList(mine), avatar: s.avatar, sleeve: s.sleeve, control: 'human', title: mine.name },
@@ -232,14 +240,15 @@ export async function playVsAI(mine: DeckInfo, opp: DeckInfo, persona: PersonaSt
   const res = outcome.result === 'a' ? 'W' : outcome.result === 'b' ? 'L' : 'D';
   const wa = outcome.games.filter((g) => g.winner === 0).length;
   const wb = outcome.games.filter((g) => g.winner === 1).length;
-  recordMatch({ date: Date.now(), deckName: mine.name, oppName: persona.name, oppDeck: opp.name, result: res, score: `${wa}-${wb}`, context: 'Duel vs AI' });
+  recordMatch({ date: Date.now(), deckName: mine.name, oppName: persona.name, oppDeck: opp.name, result: res, score: `${wa}-${wb}`, context: ranked ? 'Duel vs AI · Ranked' : 'Duel vs AI' });
+  const rated = ranked ? recordConstructedResult(aiRating(persona.difficulty), res) : null;
   showResults({
     setup,
     outcome,
     human: 0,
-    context: `Duel vs AI · ${persona.difficulty[0].toUpperCase() + persona.difficulty.slice(1)}`,
+    context: `Duel vs AI · ${persona.difficulty[0].toUpperCase() + persona.difficulty.slice(1)}${rated ? ` · Ranked · Rating ${rated.after} (${signed(rated.delta)})` : ''}`,
     actions: [
-      { label: 'Rematch', variant: 'primary', icon: 'refresh', onClick: () => void playVsAI(mine, opp, persona, bestOf) },
+      { label: 'Rematch', variant: 'primary', icon: 'refresh', onClick: () => void playVsAI(mine, opp, persona, bestOf, ranked) },
       { label: 'New duel', icon: 'swords', onClick: () => go('duel') },
       { label: 'Home', icon: 'home', onClick: () => go('title') },
     ],

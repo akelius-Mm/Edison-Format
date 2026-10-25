@@ -1,6 +1,7 @@
 // Draft mode screens: home (setup / resume), pack opening, picking, deck building,
 // the 3-round draft tournament against the AI drafters, and the final result.
 // The event logic lives in src/draft; this file only drives and persists it.
+import { aiRating, recordLimitedResult } from '../../events/ratings';
 import './draft.css';
 import type { CardData } from '../../engine/card';
 import {
@@ -1470,6 +1471,8 @@ function hubView(ctl: Ctl, s: DraftState) {
     await recordHumanMatch(s, out.games, out.result);
     persist(s);
     const r = scoreOf({ games: out.games });
+    const res = out.result === 'a' ? 'W' : out.result === 'b' ? 'L' : 'D';
+    recordLimitedResult(aiRating(optsOf(s).ai), res); // Limited rating
     recordMatch({
       date: Date.now(),
       deckName,
