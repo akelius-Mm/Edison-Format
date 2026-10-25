@@ -105,7 +105,7 @@ export function titleScreen(): Screen {
   );
 
   const gp = profile.games.w + profile.games.l + profile.games.d;
-  const plate = h(
+  const _plate = h(
     'button',
     { type: 'button', class: 'player-plate', onclick: () => go('customize'), title: 'Customize your profile' },
     h('span', { class: 'avatar-ring' }, renderAvatar(s.avatar, 52)),
@@ -157,7 +157,6 @@ export function titleScreen(): Screen {
         h('div', { class: 'title-eyebrow' }, 'The April 2010 meta · Revived'),
         h('h1', { class: 'title-logo' }, h('span', { class: 'logo-main' }, 'Edison'), h('span', { class: 'logo-sub' }, 'Format Simulator')),
         h('p', { class: 'title-tag' }, 'Synchros, Plants, Blackwings and Monarchs. Duel the format many players still call the best ever.'),
-        plate,
       ),
       h('section', { class: 'title-side' }, resume, menu),
     ),

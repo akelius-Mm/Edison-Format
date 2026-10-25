@@ -61,8 +61,17 @@ ${inner}
 </svg>`;
 }
 
-/** Render a duelist badge into a new element. */
+/** Duelist pictures are turned off: this returns an empty, hidden element. */
 export function renderAvatar(id: string, size = 64): HTMLElement {
+  const empty = document.createElement('span');
+  empty.hidden = true;
+  void id;
+  void size;
+  return empty;
+}
+
+/** The previous badge renderer (kept for reference, not used). */
+export function renderBadge(id: string, size = 64): HTMLElement {
   const el = document.createElement('div');
   el.className = 'avatar';
   el.style.width = `${size}px`;

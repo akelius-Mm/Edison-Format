@@ -82,7 +82,6 @@ export function duelSetupScreen(): Screen {
     h(
       'header',
       { class: 'setup-head' },
-      h('span', { class: 'avatar-ring' }, renderAvatar(s.avatar, 56)),
       h('div', null, h('div', { class: 'setup-role' }, 'You'), h('div', { class: 'setup-name' }, s.playerName)),
       button('Deck Builder', () => go('deck-builder'), { variant: 'ghost', icon: 'cards', small: true }),
     ),
