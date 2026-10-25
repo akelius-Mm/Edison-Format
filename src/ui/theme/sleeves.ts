@@ -366,6 +366,32 @@ const DESIGNS: { id: string; name: string; color: string; svg: () => string }[] 
   },
   ...matteSleeves(),
   ...eraSleeves(),
+  {
+    id: 'classic-back',
+    name: 'Classic Card Back',
+    color: '#2a160a',
+    svg: () => {
+      let swirl = '';
+      for (let i = 0; i < 9; i++) {
+        const a = i * 40;
+        swirl += `<path d="M50 73 C${56 + i} ${58 - i} ${74 - i} ${60} ${70 - i * 0.6} ${78 + i * 0.4}" fill="none" stroke="${i % 2 ? '#ffb15a' : '#5a1e05'}" stroke-opacity="${i % 2 ? 0.35 : 0.5}" stroke-width="${2.6 - i * 0.15}" transform="rotate(${a} 50 73)"/>`;
+      }
+      return sleeveSvg(
+        `<rect width="${W}" height="${H}" rx="4" fill="url(#cbbg)"/>
+        <ellipse cx="50" cy="73" rx="36" ry="50" fill="#120803" opacity=".55"/>
+        <ellipse cx="50" cy="73" rx="33" ry="47" fill="url(#cboval)"/>
+        <g clip-path="url(#cbclip)">${swirl}</g>
+        <ellipse cx="50" cy="73" rx="33" ry="47" fill="none" stroke="#1a0b03" stroke-width="1.6"/>
+        <ellipse cx="50" cy="73" rx="7" ry="9" fill="url(#cbcore)"/>`,
+        `<radialGradient id="cbbg" cx="50%" cy="50%" r="75%"><stop offset="0" stop-color="#3b200d"/><stop offset="1" stop-color="#140a04"/></radialGradient>
+        <radialGradient id="cboval" cx="50%" cy="50%" r="60%"><stop offset="0" stop-color="#f08a2c"/><stop offset=".45" stop-color="#b8480f"/><stop offset="1" stop-color="#4a1804"/></radialGradient>
+        <radialGradient id="cbcore"><stop offset="0" stop-color="#ffe0a0"/><stop offset="1" stop-color="#e07020" stop-opacity="0"/></radialGradient>
+        <clipPath id="cbclip"><ellipse cx="50" cy="73" rx="33" ry="47"/></clipPath>`,
+        '#1e0f05',
+        0.2,
+      );
+    },
+  },
 ];
 
 /** Sleeve wrapper with a plastic finish: grain, sheen and a clear sleeve edge. */
@@ -576,13 +602,9 @@ function sleeveUri(id: string): string {
 
 export const CUSTOM_ID = 'custom';
 
-/** Sleeves duelists actually used in 2010 come first in menus. */
-const ERA_FIRST = ['matte-black', 'matte-red', 'matte-purple', 'matte-blue', 'matte-white', 'stardust-wings', 'black-feather', 'synchro-rings', 'crimson-mark', 'championship-gold', 'gloss-blue', 'gloss-red'];
-const ORDERED = [...DESIGNS].sort((a, b) => {
-  const ia = ERA_FIRST.indexOf(a.id);
-  const ib = ERA_FIRST.indexOf(b.id);
-  return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib);
-});
+/** Only plain, real-world sleeves are offered: solid matte/gloss colours and the classic card back. */
+const OFFERED = ['matte-black', 'classic-back', 'matte-red', 'matte-blue', 'matte-purple', 'matte-white', 'matte-green', 'matte-sky', 'gloss-blue', 'gloss-red', 'gold-foil', 'silver-foil'];
+const ORDERED = OFFERED.map((id) => DESIGNS.find((d) => d.id === id)).filter((d): d is (typeof DESIGNS)[number] => !!d);
 
 export const SLEEVES: Sleeve[] = [
   ...ORDERED.map((d) => ({

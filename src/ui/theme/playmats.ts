@@ -450,14 +450,11 @@ const BUILT_IN: Playmat[] = DEFS.map((d) => ({
   },
 }));
 
-const ERA_MATS = ['starter-game-mat', 'championship-prize-mat', 'regional-qualifier-mat', 'tournament-black', 'edison-2010', 'green-felt', 'walnut-table'];
+/** Only realistic mats are offered (the older fantasy designs stay defined but hidden). */
+const OFFERED_MATS = ['tournament-black', 'starter-game-mat', 'championship-prize-mat', 'regional-qualifier-mat', 'edison-2010', 'green-felt', 'walnut-table'];
 
 export const PLAYMATS: Playmat[] = [
-  ...[...BUILT_IN].sort((a, b) => {
-    const ia = ERA_MATS.indexOf(a.id);
-    const ib = ERA_MATS.indexOf(b.id);
-    return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib);
-  }),
+  ...OFFERED_MATS.map((id) => BUILT_IN.find((m) => m.id === id)).filter((m): m is Playmat => !!m),
   {
     id: CUSTOM_MAT_ID,
     name: 'Your Upload',
@@ -468,7 +465,7 @@ export const PLAYMATS: Playmat[] = [
     zoneFill: 'rgba(0,0,0,.18)',
     get css() {
       const img = getCustomImage('mat');
-      return img ? `url("${img}") center / cover no-repeat, #111` : BUILT_IN[0].css;
+      return img ? `url("${img}") center / cover no-repeat, #111` : (BUILT_IN.find((m) => m.id === 'tournament-black') ?? BUILT_IN[0]).css;
     },
   },
 ];

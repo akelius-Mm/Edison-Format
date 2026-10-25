@@ -29,7 +29,7 @@ export const DEFAULT_SETTINGS: Settings = {
   playerName: 'Duelist',
   avatar: 'avatar-1',
   sleeve: 'matte-black',
-  playmat: 'championship-prize-mat',
+  playmat: 'tournament-black',
   animationSpeed: 1,
   sound: true,
   volume: 0.6,
