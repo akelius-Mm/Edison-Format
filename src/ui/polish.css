@@ -3879,3 +3879,43 @@ body.in-duel .ui-toast-host {
   background: var(--grp-hi) !important;
   box-shadow: none !important;
 }
+
+/* Loading screen (shown for a moment before the app starts) */
+.boot {
+  font: 500 13px var(--font);
+  letter-spacing: 0;
+  text-transform: none;
+}
+.boot-ring {
+  width: 28px;
+  height: 28px;
+  border: 2px solid rgba(255, 255, 255, 0.12);
+  border-top-color: var(--cta);
+}
+
+/* Badges: quiet filled tags, no outlines; colour only where it carries meaning */
+.badge {
+  height: 22px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-2);
+  font: 600 12px/1 var(--font);
+  letter-spacing: 0;
+}
+.badge-gold,
+.badge-blue,
+.badge-violet,
+.badge-green {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-2);
+}
+.badge-red {
+  background: rgba(227, 139, 139, 0.16);
+  color: #f0b0b0;
+}
+.badge-orange {
+  background: rgba(224, 176, 122, 0.16);
+  color: #e8c49c;
+}
