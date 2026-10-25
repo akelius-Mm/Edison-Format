@@ -1,5 +1,5 @@
 // Card-back (sleeve) designs. Pure SVG, rendered as CSS background images.
-import { getCustomImage } from './customImages';
+import { customSrc, getCustomImage } from './customImages';
 import { Rand, polyPoints, starPoints, svgUri } from './util';
 
 export interface Sleeve {
@@ -618,22 +618,13 @@ export const SLEEVES: Sleeve[] = [
       applySleeve(el, d.id);
     },
   })),
-  {
-    id: CUSTOM_ID,
-    name: 'Your Upload',
-    color: '#333',
-    get css() {
-      const img = getCustomImage('sleeve');
-      if (!img) return `${sleeveUri(DESIGNS[0].id)} center / 100% 100% no-repeat, ${DESIGNS[0].color}`;
-      return `url("${img}") center / cover no-repeat, #222`;
-    },
-    render(el: HTMLElement) {
-      applySleeve(el, CUSTOM_ID);
-    },
-  },
 ];
 
 export function sleeveById(id: string): Sleeve {
+  if (id.startsWith('custom')) {
+    const src = customSrc('sleeve', id);
+    if (src) return { id, name: 'Your sleeve', color: '#222', css: `url("${src}") center / cover no-repeat, #222`, render: (el) => applySleeve(el, id) };
+  }
   return SLEEVES.find((s) => s.id === id) ?? SLEEVES[0];
 }
 

@@ -1,5 +1,5 @@
 // Themed playmats. Each provides a background (layered gradients + SVG ornament) and zone colours.
-import { getCustomImage } from './customImages';
+import { customSrc, getCustomImage } from './customImages';
 import { Rand, polyPoints, starPoints, svgUri } from './util';
 
 export interface Playmat {
@@ -455,22 +455,14 @@ const OFFERED_MATS = ['tournament-black', 'starter-game-mat', 'championship-priz
 
 export const PLAYMATS: Playmat[] = [
   ...OFFERED_MATS.map((id) => BUILT_IN.find((m) => m.id === id)).filter((m): m is Playmat => !!m),
-  {
-    id: CUSTOM_MAT_ID,
-    name: 'Your Upload',
-    description: 'A photo of your own playmat.',
-    base: '#111',
-    accent: '#e8e8e8',
-    zoneLine: 'rgba(255,255,255,.6)',
-    zoneFill: 'rgba(0,0,0,.18)',
-    get css() {
-      const img = getCustomImage('mat');
-      return img ? `url("${img}") center / cover no-repeat, #111` : (BUILT_IN.find((m) => m.id === 'tournament-black') ?? BUILT_IN[0]).css;
-    },
-  },
 ];
 
 export function playmatById(id: string): Playmat {
+  if (id.startsWith('custom')) {
+    const src = customSrc('mat', id);
+    if (src)
+      return { id, name: 'Your mat', description: 'Your own playmat photo.', base: '#111', accent: '#e8e8e8', zoneLine: 'rgba(255,255,255,.55)', zoneFill: 'rgba(0,0,0,.16)', css: `url("${src}") center / cover no-repeat, #111` };
+  }
   return PLAYMATS.find((p) => p.id === id) ?? PLAYMATS[0];
 }
 

@@ -140,3 +140,85 @@ export function setCustomImageUrl(kind: CustomKind, url: string): Promise<void> 
     img.src = u;
   });
 }
+
+// ---------------------------------------------------------------- collection
+// Several real sleeves / mats can be kept. Ids look like 'custom' (legacy single slot) or 'custom-<n>'.
+export interface CustomItem {
+  id: string;
+  src: string;
+}
+const LIST_KEYS: Record<CustomKind, string> = { sleeve: 'edison.custom.sleeve.list', mat: 'edison.custom.mat.list' };
+
+export function listCustom(kind: CustomKind): CustomItem[] {
+  let list: CustomItem[] = [];
+  try {
+    list = JSON.parse(localStorage.getItem(LIST_KEYS[kind]) ?? '[]');
+  } catch {
+    list = [];
+  }
+  const legacy = getCustomImage(kind);
+  if (legacy && !list.some((i) => i.id === 'custom')) list.unshift({ id: 'custom', src: legacy });
+  return list;
+}
+
+function saveList(kind: CustomKind, list: CustomItem[]) {
+  try {
+    localStorage.setItem(LIST_KEYS[kind], JSON.stringify(list.filter((i) => i.id !== 'custom')));
+  } catch {
+    throw new Error('Your browser storage is full. Remove a saved image or use an image link instead of an upload.');
+  }
+}
+
+export function customSrc(kind: CustomKind, id: string): string | null {
+  return listCustom(kind).find((i) => i.id === id)?.src ?? null;
+}
+
+/** Add an image (data URL or http link) to the collection; returns its id. */
+export function addCustom(kind: CustomKind, src: string): string {
+  const list = listCustom(kind);
+  const existing = list.find((i) => i.src === src);
+  if (existing) return existing.id;
+  const n = list.reduce((m, i) => Math.max(m, Number(i.id.split('-')[1] ?? 0) || 0), 0) + 1;
+  const item = { id: `custom-${n}`, src };
+  saveList(kind, [...list, item]);
+  return item.id;
+}
+
+export function removeCustom(kind: CustomKind, id: string) {
+  if (id === 'custom') clearCustomImage(kind);
+  else saveList(kind, listCustom(kind).filter((i) => i.id !== id));
+}
+
+/** Pick a photo from the device and add it to the collection. Resolves the new id, or null if cancelled. */
+export async function pickIntoCollection(kind: CustomKind): Promise<string | null> {
+  const prev = getCustomImage(kind);
+  const ok = await pickCustomImage(kind);
+  if (!ok) return null;
+  const src = getCustomImage(kind)!;
+  // the picker writes the legacy slot; move it into the list and restore the slot
+  if (prev) {
+    mem[kind] = prev;
+    try {
+      localStorage.setItem(KEYS[kind], prev);
+    } catch {
+      /* ignore */
+    }
+  } else clearCustomImage(kind);
+  return addCustom(kind, src);
+}
+
+/** Add an image link to the collection after checking it loads. */
+export async function linkIntoCollection(kind: CustomKind, url: string): Promise<string> {
+  const prev = getCustomImage(kind);
+  await setCustomImageUrl(kind, url);
+  const src = getCustomImage(kind)!;
+  if (prev) {
+    mem[kind] = prev;
+    try {
+      localStorage.setItem(KEYS[kind], prev);
+    } catch {
+      /* ignore */
+    }
+  } else clearCustomImage(kind);
+  return addCustom(kind, src);
+}

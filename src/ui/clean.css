@@ -309,9 +309,12 @@ body::after {
 
 /* Duel banners: small clean pill in the system font */
 .banner,
-.banner * {
+.banner *,
+.fx-banner,
+.fx-banner * {
   font-family: var(--font) !important;
 }
+.fx-banner.banner--phase b,
 .banner--phase b {
   font-size: 15px !important;
   font-weight: 600 !important;
@@ -363,4 +366,33 @@ body::after {
   -webkit-backdrop-filter: blur(12px);
   backdrop-filter: blur(12px);
   background: rgba(21, 22, 25, 0.94) !important;
+}
+
+/* No duelist badges anywhere */
+.avatar,
+.avatar-ring,
+.pp-avatar,
+.pt-player > .avatar,
+.cz-pplayer {
+  display: none !important;
+}
+.player-plate {
+  padding-left: 18px !important;
+}
+
+/* App mark on the title screen (Dark Armed Dragon artwork, hosted site only) */
+.title-mark {
+  width: clamp(84px, 22vw, 120px);
+  aspect-ratio: 1;
+  border-radius: 22%;
+  object-fit: cover;
+  display: block;
+  margin: 0 auto 18px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
+/* Phone portrait: keep the opponent's hand clear of their life points */
+.stage--tall .hand-opp {
+  top: calc(var(--ch) * 0.04) !important;
+  --hw: calc(var(--cw) * 0.7) !important;
 }
