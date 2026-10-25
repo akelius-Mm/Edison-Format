@@ -449,26 +449,36 @@ class EventSession {
       this.tab = 'round';
       if (v.phase !== 'lobby') haptic('light');
     }
-    // the organiser settled my match some other way while I play it
-    const mm = this.match;
-    if (mm) {
-      const m = this.findMatch(mm.mid);
-      if (!m || m.attempt !== mm.attempt || m.result != null) {
-        const room = mm.session.room;
-        if (!room.outcome() || !m || m.attempt !== mm.attempt) {
-          const why = !m || m.attempt !== mm.attempt ? 'The organiser restarted this match' : m.how === 'id' ? 'Intentional draw' : m.how === 'time' ? 'Time was called' : m.how === 'drop' ? 'A player dropped' : 'The organiser decided this match';
-          if (mm.session.inDuel) toast(why, 'info', 4000);
-          this.match = null;
-          mm.session.abandon(why);
-        } else if (!mm.session.inDuel) {
-          this.match = null;
-          mm.session.close();
-        }
-      }
-    }
+    this.reconcileMatch();
     if (v.phase === 'done') this.finish(v);
     this.render();
     this.autoPlay();
+  }
+
+  /**
+   * Let go of a match the organiser has settled. Called on every view, when the duel screens
+   * close and once a second: the settling view often arrives while the result screen is still
+   * up, and the next round's pairings can too, so no single moment is enough.
+   */
+  private reconcileMatch() {
+    const mm = this.match;
+    if (!mm || this.closed) return;
+    const m = this.findMatch(mm.mid);
+    if (m && m.attempt === mm.attempt && m.result == null) return;
+    const room = mm.session.room;
+    if (!room.outcome() || !m || m.attempt !== mm.attempt) {
+      // settled some other way while we play it: stop here
+      const why = !m || m.attempt !== mm.attempt ? 'The organiser restarted this match' : m.how === 'id' ? 'Intentional draw' : m.how === 'time' ? 'Time was called' : m.how === 'drop' ? 'A player dropped' : 'The organiser decided this match';
+      if (mm.session.inDuel) toast(why, 'info', 4000);
+      this.match = null;
+      mm.session.abandon(why);
+      this.render();
+    } else if (!mm.session.inDuel) {
+      // played out and confirmed: close the room (the opponent has had our last entries)
+      this.match = null;
+      mm.session.close();
+      this.render();
+    }
   }
 
   private findMatch(mid: string): TMatch | null {
@@ -486,6 +496,11 @@ class EventSession {
   private playMatch(m: TMatch, snap?: RoomSnapshot) {
     const v = this.client.view!;
     if (this.match?.key === this.matchKey(m)) return;
+    // an earlier match still holding its room (decided, not yet confirmed): let it go
+    if (this.match && !this.match.session.inDuel) {
+      this.match.session.close();
+      this.match = null;
+    }
     this.watching?.stop();
     const opp = v.players.find((p) => p.id === (m.a === this.client.me.clientId ? m.b : m.a))!;
     const r = this.client.roomFor(m);
@@ -509,15 +524,16 @@ class EventSession {
       },
       onDone: () => {
         if (this.match?.session === session && !session.inDuel) {
-          // keep the room open while the opponent may still need our last entries; close on settle
-          if (session.room.outcome() || session.room.match?.games.some((g) => g.end?.kind === 'desync')) {
-            /* stays until the organiser settles it */
-          } else {
+          // a decided match keeps its room open until the organiser settles it (the opponent may
+          // still need our last entries); one that never got going is closed now
+          if (session.room.outcome() || session.room.match?.games.some((g) => g.end?.kind === 'desync')) this.reconcileMatch();
+          else {
             this.match = null;
             session.close();
           }
         }
         this.render();
+        this.autoPlay();
       },
       onError: (msg) => {
         this.error = msg;
@@ -1192,6 +1208,8 @@ class EventSession {
   // ---------------------------------------------------------------- timers and tests
 
   private tickTimers() {
+    this.reconcileMatch();
+    this.autoPlay();
     const b = this.body;
     if (!b?.isConnected) return;
     for (const el of b.querySelectorAll<HTMLElement>('.fl-timer')) {

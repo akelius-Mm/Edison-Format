@@ -101,6 +101,60 @@ async function tab(p, label) {
 /** Every result of the current round is in (on the organiser's phone). */
 const roundDone = (p) => L(p, () => { const h = window.__edisonLocals?.host; return !!h && h.roundComplete(); });
 
+/**
+ * Spectating, deterministically: the bots at table 1 slow to 400 ms a decision (window.__edisonPace)
+ * while a table-2 player finishes, then that player watches table 1. The watched match must still be
+ * running, decisions must keep arriving, and both hands must stay hidden. Table 1 speeds up again after.
+ */
+async function spectate(phones) {
+  const v = await L(phones[0], () => window.__edisonLocals.view);
+  const [t1, t2] = v.rounds[0];
+  const byId = async (id) => {
+    for (const p of phones) if ((await L(p, () => window.__edisonLocals.client.me.clientId)) === id) return p;
+    return null;
+  };
+  const slow = [await byId(t1.a), await byId(t1.b)];
+  for (const p of slow) await L(p, () => (window.__edisonPace = 400));
+  const watcher = await byId(t2.a);
+  // the watcher's own match is over (reported) and its duel screens have closed
+  await watcher.page.waitForFunction(
+    () => {
+      const l = window.__edisonLocals;
+      const m = l.client.myMatch();
+      return !!m && (m.result != null || l.client.reportPending(m.id)) && !l.playing && !document.body.classList.contains('in-duel');
+    },
+    null,
+    { timeout: 120000, polling: 200 },
+  );
+  const still = await L(watcher, (mid) => window.__edisonLocals.view.rounds[0].find((m) => m.id === mid).result == null, t1.id);
+  ok(still, 'the slowed table is still playing when the spectator sits down');
+  await L(watcher, (mid) => window.__edisonLocals.watch(mid), t1.id);
+  await watcher.page.waitForSelector('.fl-watching', { timeout: 30000 });
+  // caught up: the cover is gone and decisions are in
+  await watcher.page.waitForFunction(() => !document.querySelector('.duel-restoring') && window.__edisonLocals.watchEntries > 0, null, { timeout: 30000, polling: 100 });
+  await sleep(600);
+  const chip = await L(watcher, () => document.querySelector('.fl-watch-chip')?.textContent ?? '');
+  ok(/Watching/.test(chip), `spectator board says what is being watched (${chip})`);
+  const seen = await L(watcher, () => {
+    const root = document.querySelector('.fl-watching');
+    const hands = [...(root?.querySelectorAll('.hand .dc') ?? [])];
+    return { spec: !!root?.classList.contains('is-spectator'), cards: hands.length, backs: hands.filter((e) => e.querySelector('.yc--back')).length };
+  });
+  ok(seen.spec && seen.cards > 0 && seen.backs === seen.cards, `${watcher.name} watches a live table on a spectator board; both hands hidden (${seen.backs}/${seen.cards} face down)`);
+  await watcher.page.screenshot({ path: path.join(OUT, 'fl-spectating-portrait.png') });
+  const n1 = await L(watcher, () => window.__edisonLocals.watchEntries);
+  await watcher.page.setViewportSize({ width: 844, height: 390 });
+  await sleep(600);
+  await watcher.page.screenshot({ path: path.join(OUT, 'fl-spectating-landscape.png') });
+  await watcher.page.setViewportSize({ width: 390, height: 844 });
+  await watcher.page.waitForFunction((n) => window.__edisonLocals.watchEntries > n, n1, { timeout: 20000, polling: 100 });
+  const n2 = await L(watcher, () => window.__edisonLocals.watchEntries);
+  ok(n1 > 0 && n2 > n1, `spectator receives the decision stream live (${n1} → ${n2} decisions)`);
+  await L(watcher, () => window.__edisonLocals.stopWatching());
+  await watcher.page.waitForFunction(() => !window.__edisonLocals.watching && !document.body.classList.contains('in-duel'), null, { timeout: 10000 });
+  for (const p of slow) await L(p, () => delete window.__edisonPace);
+}
+
 (async () => {
   const app = staticServer();
   const peer = PeerServer({ port: PEER_PORT, host: '127.0.0.1', path: '/edison' });
@@ -174,6 +228,11 @@ const roundDone = (p) => L(p, () => { const h = window.__edisonLocals?.host; ret
         await rio.page.screenshot({ path: path.join(OUT, 'fl-pairings-portrait.png') }).catch(() => {});
       }
       const tRound = Date.now();
+      // round 2: Rio's bot leaves its result screen up for 8 s, so the organiser's confirmation and
+      // round 3's pairings reach Rio while the duel screen is still open. Rio must still sit down
+      // for round 3 (this used to stall the event).
+      if (round === 2) await L(rio, () => (window.__edisonHoldResult = 8000));
+      if (round === 3) await L(rio, () => delete window.__edisonHoldResult);
       // reload one player mid-match in round 2
       if (round === 2 && !reloaded) {
         await mei.page.waitForFunction(() => window.__edisonLocals?.playing && (window.__edisonNet?.room.current?.logs[0].length ?? 0) + (window.__edisonNet?.room.current?.logs[1].length ?? 0) > 20, null, { timeout: 120000, polling: 100 });
@@ -194,51 +253,14 @@ const roundDone = (p) => L(p, () => { const h = window.__edisonLocals?.host; ret
         ok(true, `Mei resumed (had ${before} decisions) and play continues`);
         reloaded = true;
       }
-      // a player who is done watches a table still playing
+      // round 1: a player from one table watches the other, which is slowed down so it is
+      // certainly still going (decided by the pairings, not by timing)
+      if (round === 1) await spectate(phones);
       while (!(await roundDone(hana))) {
         if (Date.now() - tRound > 300000) throw new Error(`round ${round} timed out`);
-        if (!watched) {
-          for (const p of phones) {
-            const target = await L(p, () => {
-              const l = window.__edisonLocals;
-              const v = l?.view;
-              if (!v || l.playing || l.watching) return null;
-              const me = l.client.me.clientId;
-              const mine = l.client.myMatch();
-              if (mine && mine.result == null && !l.client.reportPending(mine.id)) return null;
-              const r = v.rounds[v.rounds.length - 1];
-              const m = r.find((x) => x.result == null && x.b && x.a !== me && x.b !== me && x.reported.length === 0);
-              return m ? m.id : null;
-            });
-            if (!target) continue;
-            await L(p, (mid) => window.__edisonLocals.watch(mid), target);
-            const live = await p.page.waitForSelector('.fl-watching', { timeout: 20000 }).then(() => true).catch(() => false);
-            if (!live) continue;
-            await p.page.waitForFunction(() => !document.querySelector('.duel-restoring'), null, { timeout: 30000 }).catch(() => {});
-            await p.page.screenshot({ path: path.join(OUT, 'fl-spectating-portrait.png') });
-            await p.page.setViewportSize({ width: 844, height: 390 });
-            await sleep(400);
-            await p.page.screenshot({ path: path.join(OUT, 'fl-spectating-landscape.png') });
-            await p.page.setViewportSize({ width: 390, height: 844 });
-            const chip = await L(p, () => document.querySelector('.fl-watch-chip')?.textContent ?? '');
-            ok(/Watching/.test(chip), `spectator board says what is being watched (${chip})`);
-            const seen = await L(p, () => {
-              const root = document.querySelector('.fl-watching');
-              const hands = [...(root?.querySelectorAll('.hand .dc') ?? [])];
-              return { spec: !!root?.classList.contains('is-spectator'), cards: hands.length, backs: hands.filter((e) => e.querySelector('.yc--back')).length };
-            });
-            ok(seen.spec && seen.cards > 0 && seen.backs === seen.cards, `${p.name} watches a live table on a spectator board; both hands hidden (${seen.backs}/${seen.cards} face down)`);
-            const n1 = await L(p, () => window.__edisonLocals.watchEntries);
-            await sleep(1500);
-            const n2 = await L(p, () => window.__edisonLocals.watchEntries);
-            ok(n1 > 0, `spectator receives the decision stream (${n1} decisions${n2 ? `, then ${n2}` : ', then the match ended'})`);
-            await L(p, () => window.__edisonLocals.stopWatching());
-            watched = true;
-            break;
-          }
-        }
         await sleep(400);
       }
+      watched = round >= 1;
       ok(true, `round ${round}: every result in and verified (${((Date.now() - tRound) / 1000).toFixed(0)}s)`);
       const hows = await L(hana, () => window.__edisonLocals.view.rounds[window.__edisonLocals.view.rounds.length - 1].map((m) => m.how));
       ok(hows.every((x) => x === 'verified' || x === 'concede' || x === 'bye'), `round ${round} results verified by replay: ${hows.join(', ')}`);
@@ -257,7 +279,9 @@ const roundDone = (p) => L(p, () => { const h = window.__edisonLocals?.host; ret
       // the organiser pairs the next round (or posts the final standings)
       await tab(hana, 'Organiser');
       await hana.page.waitForFunction(() => !document.querySelector('[data-test=fl-pair]')?.hasAttribute('disabled'), null, { timeout: 20000 });
+      const held = round === 2 ? await L(rio, () => !!document.querySelector('.result-continue')) : false;
       await hana.page.click('[data-test=fl-pair]');
+      if (round === 2) console.log(`  Rio ${held ? 'was still on its result screen' : 'had left its result screen'} when round 3 was paired`);
       if (round < 3) for (const p of phones) await p.page.waitForFunction((r) => window.__edisonLocals?.view?.rounds.length === r + 1, round, { timeout: 30000 });
     }
     ok(watched, 'a player watched a live match');

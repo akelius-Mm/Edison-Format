@@ -70,7 +70,7 @@ export const botLevel = (): Difficulty | null => {
   return b === 'easy' || b === 'normal' || b === 'hard' ? b : null;
 };
 
-/** Test hook: the bot waits `ms` before each decision (`netpace`), so tests can act mid-game. */
+/** Test hook: the bot waits `ms` before each decision (`netpace`; `window.__edisonPace` overrides it live), so tests can act mid-game. */
 export function paced(c: PlayerController, ms: number): PlayerController {
   if (!ms) return c;
   return new Proxy(c, {
@@ -78,7 +78,9 @@ export function paced(c: PlayerController, ms: number): PlayerController {
       const v = (t as any)[k];
       if (typeof v !== 'function') return v;
       return async (...a: unknown[]) => {
-        await new Promise((r) => setTimeout(r, ms));
+        // tests can slow one table down while it is being watched (window.__edisonPace)
+        const pace = Number((globalThis as { __edisonPace?: number }).__edisonPace ?? ms);
+        await new Promise((r) => setTimeout(r, pace));
         return v.apply(t, a);
       };
     },
@@ -787,7 +789,8 @@ export class FriendSession {
         if (r.seen) st.seen = r.seen;
         if (!r.restoreFailed && !r.left) room.gameOver(g, { winner: r.winner, reason: r.reason, turns: r.turns });
         this.persist();
-        if (bot) setTimeout(() => (document.querySelector('.result-continue') as HTMLButtonElement | null)?.click(), 400);
+        // tests can keep the result screen up for a while (window.__edisonHoldResult, ms)
+        if (bot) setTimeout(() => (document.querySelector('.result-continue') as HTMLButtonElement | null)?.click(), Number((globalThis as { __edisonHoldResult?: number }).__edisonHoldResult ?? 400));
       },
       resultTitle: (r) => (r.reason === 'Out of sync' ? 'Out of sync' : undefined),
     })
