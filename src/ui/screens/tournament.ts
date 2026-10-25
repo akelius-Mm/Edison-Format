@@ -37,6 +37,8 @@ import { AVATAR_PRESETS, SLEEVES, renderAvatar } from './ext';
 import { runMatch } from './match';
 import { frame, go, lockNav, scrollToTop, type Screen } from './nav';
 import { gameRow, showResults } from './results';
+import { rewardForDuel } from '../../collection';
+import { announceReward } from './rewards';
 import { allDeckInfos, getProfile, ordinal, recordMatch, recordTournament, toDeckList, tournamentSummary, type DeckInfo } from './store';
 
 const FORM_KEY = 'edison.tournament.form.v1';
@@ -799,6 +801,7 @@ function finalScreen(t: Tournament): Screen {
     recordTournament({ id: t.id, name: t.name, date: Date.now(), size: t.size, place: myPlace, record, deckName: entrant(t, t.humanId)!.deck.name, champion: champ.name });
     t.recorded = true;
     saveTournament(t);
+    announceReward(rewardForDuel({ won: myPlace === 1, mode: 'tournament', place: myPlace, players: t.size }));
   }
   const prize =
     myPlace === 1
