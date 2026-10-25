@@ -110,10 +110,10 @@ const roundDone = (p) => L(p, () => { const h = window.__edisonLocals?.host; ret
   const phones = [];
   let monitorStop = () => {};
   try {
-    const hana = await phone(browser, 'Hana', 'blackwings', { pace: 45 });
-    const gus = await phone(browser, 'Gus', 'lightsworn', { pace: 45 });
-    const mei = await phone(browser, 'Mei', 'zombies', { pace: 45 });
-    const rio = await phone(browser, 'Rio', 'x-sabers', { pace: 45 });
+    const hana = await phone(browser, 'Hana', 'blackwings', { pace: 60 });
+    const gus = await phone(browser, 'Gus', 'lightsworn', { pace: 60 });
+    const mei = await phone(browser, 'Mei', 'zombies', { pace: 60 });
+    const rio = await phone(browser, 'Rio', 'x-sabers', { pace: 60 });
     phones.push(hana, gus, mei, rio);
     // log every phone's link to the organiser as it changes
     const last = {};
@@ -216,6 +216,12 @@ const roundDone = (p) => L(p, () => { const h = window.__edisonLocals?.host; ret
             if (!live) continue;
             await p.page.waitForFunction(() => !document.querySelector('.duel-restoring'), null, { timeout: 30000 }).catch(() => {});
             await p.page.screenshot({ path: path.join(OUT, 'fl-spectating-portrait.png') });
+            await p.page.setViewportSize({ width: 844, height: 390 });
+            await sleep(400);
+            await p.page.screenshot({ path: path.join(OUT, 'fl-spectating-landscape.png') });
+            await p.page.setViewportSize({ width: 390, height: 844 });
+            const chip = await L(p, () => document.querySelector('.fl-watch-chip')?.textContent ?? '');
+            ok(/Watching/.test(chip), `spectator board says what is being watched (${chip})`);
             const seen = await L(p, () => {
               const root = document.querySelector('.fl-watching');
               const hands = [...(root?.querySelectorAll('.hand .dc') ?? [])];
@@ -223,10 +229,6 @@ const roundDone = (p) => L(p, () => { const h = window.__edisonLocals?.host; ret
             });
             ok(seen.spec && seen.cards > 0 && seen.backs === seen.cards, `${p.name} watches a live table on a spectator board; both hands hidden (${seen.backs}/${seen.cards} face down)`);
             const n1 = await L(p, () => window.__edisonLocals.watchEntries);
-            await p.page.setViewportSize({ width: 844, height: 390 });
-            await sleep(500);
-            await p.page.screenshot({ path: path.join(OUT, 'fl-spectating-landscape.png') });
-            await p.page.setViewportSize({ width: 390, height: 844 });
             await sleep(1500);
             const n2 = await L(p, () => window.__edisonLocals.watchEntries);
             ok(n1 > 0, `spectator receives the decision stream (${n1} decisions${n2 ? `, then ${n2}` : ', then the match ended'})`);

@@ -589,3 +589,9 @@
     font-size: 22px;
   }
 }
+
+/* "Watching · Table 2" on the spectator board */
+.fl-watch-chip .icon {
+  width: 14px;
+  height: 14px;
+}

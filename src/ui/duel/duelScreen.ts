@@ -161,6 +161,7 @@ class DuelScreen implements HumanUI {
     this.panels = [p0, p1];
     for (const p of this.panels) p.onLpRoll = (ms, up) => this.sfx.lpTicker(ms, up);
     this.phaseBar = new PhaseBar(this.me);
+    if (this.spectator) this.phaseBar.setSpectatorLabels([opts.sides[0].name, opts.sides[1].name]);
     this.chain = new ChainStack(this.me);
     this.log = new LogPanel(this.me);
     this.preview = new PreviewPanel(this.game);

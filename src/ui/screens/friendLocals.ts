@@ -668,6 +668,7 @@ class EventSession {
         onMount: (c) => {
           ctl = c;
           c.root.classList.add('fl-watching');
+          (c.root.querySelector('.phasebar') ?? c.root).appendChild(h('div', { class: 'fr-chip is-on fl-watch-chip', role: 'status' }, icon('eye'), h('span', { class: 'fr-chip-text' }, `Watching · ${table}`)));
           c.onAbort(() => {
             if (!stopped) stop();
           });
@@ -938,7 +939,7 @@ class EventSession {
       h(
         'header',
         { class: 'fl-head' },
-        h('div', null, h('span', { class: 'home-eyebrow' }, `Friends Locals · ${v.code} · ${v.players.length} players · Bo${v.settings.bestOf}`), h('h2', { class: 'fl-head-title' }, label)),
+        h('div', null, h('span', { class: 'home-eyebrow' }, `${v.code} · ${v.players.length} players · Best of ${v.settings.bestOf}`), h('h2', { class: 'fl-head-title' }, label)),
         timer,
       ),
       h(
