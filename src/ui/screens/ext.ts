@@ -12,6 +12,7 @@ export interface RenderCardOpts {
   faceDown?: boolean;
   sleeve?: string;
   showLimit?: boolean;
+  lazy?: boolean;
 }
 export interface ThemeItem {
   id: string;

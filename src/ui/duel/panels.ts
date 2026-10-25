@@ -69,15 +69,25 @@ export class PlayerPanel {
     this.setLp(ps.lp);
   }
 
+  /** Tap-to-hurry: show the final LP now. */
+  finishLp() {
+    if (this.shownLp === this.targetLp) return;
+    cancelAnimationFrame(this.raf);
+    this.shownLp = this.targetLp;
+    this.lpNum.textContent = String(this.targetLp);
+    this.lpNum.classList.remove('dmg', 'heal');
+  }
+
   setLp(lp: number) {
     if (lp === this.targetLp) return;
     const from = this.shownLp;
     this.targetLp = lp;
     const pct = Math.max(0, Math.min(1, lp / Math.max(this.startLp, lp, 1)));
-    this.lpFill.style.width = `${(pct * 100).toFixed(1)}%`;
-    this.lpGhost.style.width = `${(pct * 100).toFixed(1)}%`;
+    // scaleX, not width: the bar animates on the compositor
+    this.lpFill.style.transform = `scaleX(${pct.toFixed(4)})`;
+    this.lpGhost.style.transform = `scaleX(${pct.toFixed(4)})`;
     this.el.classList.toggle('is-low', lp <= this.startLp * 0.25);
-    const dur = 750 * this.speed();
+    const dur = 600 * this.speed();
     cancelAnimationFrame(this.raf);
     if (dur <= 0) {
       this.shownLp = lp;

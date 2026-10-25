@@ -345,7 +345,7 @@ export class BoardView {
 
   render(o: RenderOpts = {}) {
     const g = this.game;
-    const dur = Math.round(430 * this.cfg.speed());
+    const dur = Math.round(300 * this.cfg.speed());
     // 1) snapshot current positions
     const before = new Map<number, Rect>();
     for (const [uid, v] of this.views) {

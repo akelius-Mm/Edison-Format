@@ -5,8 +5,8 @@
 .dr-dock {
   --dr-gutter: max(16px, env(safe-area-inset-left, 0px));
   --dr-gutter-r: max(16px, env(safe-area-inset-right, 0px));
-  --dr-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
-  --dr-spring: cubic-bezier(0.2, 1.25, 0.35, 1);
+  --dr-ease: var(--ease-out);
+  --dr-spring: var(--ease-spring);
   --dock-h: 0px;
   --r-c: rgba(255, 255, 255, 0.55);
   --r-r: #b9c3cf;
@@ -35,8 +35,8 @@ body.dr-immersive.has-tabbar .dr-root .frame {
 }
 .dr-root > .frame {
   transition:
-    opacity 0.28s var(--dr-ease),
-    transform 0.28s var(--dr-ease);
+    opacity var(--dur-slow) var(--ease-out),
+    transform var(--dur-slow) var(--ease-out);
 }
 .dr-muted {
   color: var(--muted);
@@ -145,7 +145,7 @@ body.dr-immersive.has-tabbar .dr-root .frame {
 .dr-card {
   background: var(--bg-2);
   border: 1px solid var(--line);
-  border-radius: 18px;
+  border-radius: 20px;
   padding: 18px;
 }
 .dr-resume {
@@ -167,10 +167,12 @@ body.dr-immersive.has-tabbar .dr-root .frame {
 .dr-progress > i {
   display: block;
   height: 100%;
-  width: var(--p, 0%);
+  width: 100%;
+  /* clip instead of width: the bar grows without a layout pass */
+  clip-path: inset(0 calc(100% - var(--p, 0%)) 0 0 round 999px);
   background: var(--gold);
   border-radius: inherit;
-  transition: width 0.4s var(--dr-ease);
+  transition: clip-path var(--dur-slow) var(--ease-out);
 }
 .dr-hero {
   display: grid;
@@ -225,8 +227,8 @@ body.dr-immersive.has-tabbar .dr-root .frame {
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
   transition:
-    border-color 0.18s,
-    background 0.18s;
+    border-color var(--dur-base),
+    background var(--dur-base);
 }
 .dr-preset.on {
   border-color: var(--gold);
@@ -321,11 +323,9 @@ body.dr-immersive.has-tabbar .dr-root .frame {
   width: 56px;
   --pw: 56px;
   filter: none;
-  transition: transform 0.18s var(--dr-spring);
+  transition: transform var(--dur-base) var(--dr-spring);
 }
-.dr-striptile:active > :first-child {
-  transform: scale(0.94);
-}
+
 .dr-plan-summary {
   font-size: 13px;
   color: var(--text-2);
@@ -442,7 +442,7 @@ body.dr-immersive.has-tabbar .dr-root .frame {
 }
 .dr-pack-btn.is-torn .dr-rpack-top {
   transition:
-    transform var(--t-tear, 420ms) var(--dr-ease),
+    transform var(--t-tear, 420ms) var(--ease-out),
     opacity var(--t-tear, 420ms) ease-in;
   transform: translate(26%, -60%) rotate(16deg);
   opacity: 0;
@@ -653,15 +653,13 @@ body.dr-immersive.has-tabbar .dr-root .frame {
   --pw: min(62vw, 260px);
   animation: drFloat 3.2s ease-in-out infinite;
 }
-.dr-pack-btn:active .dr-pack {
-  transform: scale(0.98);
-}
+
 .dr-tap-hint {
   font-size: 14px;
   font-weight: 600;
   color: var(--text-2);
   letter-spacing: 0.01em;
-  transition: opacity 0.25s;
+  transition: opacity var(--dur-base);
 }
 @keyframes drFloat {
   0%,
@@ -695,7 +693,7 @@ body.dr-immersive.has-tabbar .dr-root .frame {
 }
 .dr-pack-btn.is-torn .dr-pack-top {
   transition:
-    transform var(--t-tear, 420ms) var(--dr-ease),
+    transform var(--t-tear, 420ms) var(--ease-out),
     opacity var(--t-tear, 420ms) ease-in;
   transform: translate(26%, -120%) rotate(16deg);
   opacity: 0;
@@ -766,7 +764,7 @@ body.dr-immersive.has-tabbar .dr-root .frame {
   touch-action: manipulation;
 }
 .dr-ocard.is-dealt {
-  transition: transform var(--t-deal, 460ms) var(--dr-ease) var(--d, 0ms), opacity calc(var(--t-deal, 460ms) * 0.6) ease var(--d, 0ms);
+  transition: transform var(--t-deal, 460ms) var(--ease-out) var(--d, 0ms), opacity calc(var(--t-deal, 460ms) * 0.6) var(--ease-out) var(--d, 0ms);
 }
 .dr-ocard-in {
   position: absolute;
@@ -895,7 +893,7 @@ body.dr-immersive.has-tabbar .dr-root .frame {
   bottom: -7px;
   transform: translateX(-50%);
   padding: 1px 6px;
-  border-radius: 99px;
+  border-radius: 999px;
   font: 700 9px/14px var(--font);
   letter-spacing: 0.04em;
   color: #141210;
@@ -920,7 +918,7 @@ body.dr-immersive.has-tabbar .dr-root .frame {
   opacity: 0;
 }
 .dr-ocard > .dr-rar {
-  transition: opacity 0.2s;
+  transition: opacity var(--dur-base);
 }
 .dr-pip {
   width: 9px;
@@ -973,7 +971,7 @@ body.dr-immersive.has-tabbar .dr-root .frame {
   align-items: center;
   gap: 6px;
   padding: 4px 10px 4px 8px;
-  border-radius: 99px;
+  border-radius: 999px;
   border: 1px solid var(--line-2);
   color: var(--text-2);
   font-size: 12.5px;
@@ -1014,21 +1012,21 @@ body.dr-immersive.has-tabbar .dr-root .frame {
   -webkit-tap-highlight-color: transparent;
   -webkit-touch-callout: none;
   transition:
-    transform 0.22s var(--dr-spring),
-    opacity 0.22s ease,
-    filter 0.22s ease;
+    transform var(--dur-base) var(--dr-spring),
+    opacity var(--dur-base) var(--ease-out),
+    filter var(--dur-base) var(--ease-out);
 }
 .dr-tile::after {
   content: '';
   position: absolute;
   inset: -4px;
-  border-radius: 9px;
+  border-radius: 10px;
   box-shadow: 0 0 0 2px var(--gold);
   opacity: 0;
   transform: scale(0.97);
   transition:
-    opacity 0.18s ease,
-    transform 0.22s var(--dr-spring);
+    opacity var(--dur-base) var(--ease-out),
+    transform var(--dur-base) var(--dr-spring);
   pointer-events: none;
 }
 .dr-tile.is-sel {
@@ -1056,7 +1054,7 @@ body.dr-immersive.has-tabbar .dr-root .frame {
   min-width: 22px;
   height: 22px;
   padding: 0 6px;
-  border-radius: 11px;
+  border-radius: 12px;
   background: var(--text);
   color: #141210;
   font: 700 12px/22px var(--font);
@@ -1087,8 +1085,8 @@ body.dr-immersive.has-tabbar .dr-root .frame {
 }
 .dr-tile.is-in.go {
   transition:
-    transform var(--t-pass, 320ms) var(--dr-ease) var(--d, 0ms),
-    opacity var(--t-pass, 320ms) ease var(--d, 0ms);
+    transform var(--t-pass, 320ms) var(--ease-out) var(--d, 0ms),
+    opacity var(--t-pass, 320ms) var(--ease-out) var(--d, 0ms);
   transform: none;
   opacity: 1;
 }
@@ -1126,7 +1124,7 @@ body.dr-immersive.has-tabbar .dr-root .frame {
   height: 18px;
   color: var(--muted);
   transform: rotate(90deg);
-  transition: transform 0.25s var(--dr-ease);
+  transition: transform var(--dur-base) var(--ease-out);
 }
 .dr-dock.is-open .dr-picks-bar .icon {
   transform: rotate(-90deg);
@@ -1142,7 +1140,7 @@ body.dr-immersive.has-tabbar .dr-root .frame {
 .dr-picks-strip {
   display: grid;
   grid-template-rows: 0fr;
-  transition: grid-template-rows 0.3s var(--dr-ease);
+  transition: grid-template-rows var(--dur-slow) var(--ease-out);
 }
 .dr-dock.is-open .dr-picks-strip {
   grid-template-rows: 1fr;
@@ -1258,7 +1256,7 @@ body.dr-immersive.has-tabbar .dr-root .frame {
   flex: none;
   min-height: 32px;
   padding: 0 13px;
-  border-radius: 99px;
+  border-radius: 999px;
   border: 1px solid var(--line-2);
   background: transparent;
   color: var(--text-2);
@@ -1360,7 +1358,7 @@ body.dr-immersive.has-tabbar .dr-root .frame {
 .dr-result-tag {
   display: inline-block;
   padding: 3px 10px;
-  border-radius: 99px;
+  border-radius: 999px;
   font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.02em;
@@ -1609,7 +1607,7 @@ body.dr-immersive.has-tabbar .dr-root .frame {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 5px;
+  gap: 6px;
   min-height: 30px;
   padding: 0 11px;
   border: 0;
@@ -1678,7 +1676,7 @@ body.dr-immersive.has-tabbar .dr-root .frame {
   text-align: left;
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
-  transition: background 0.12s ease;
+  transition: background var(--dur-fast) var(--ease-out);
 }
 .dr-custom:active {
   background: rgba(255, 255, 255, 0.08);
@@ -1751,7 +1749,7 @@ body.dr-immersive.has-tabbar .dr-root .frame {
 .dr-soon-chip {
   display: inline-flex;
   align-items: baseline;
-  gap: 5px;
+  gap: 6px;
   padding: 4px 9px;
   border-radius: 999px;
   background: var(--fill);

@@ -124,7 +124,8 @@ const frame2 = () => new Promise<void>((r) => requestAnimationFrame(() => reques
 // ------------------------------------------------------------------ small helpers
 
 const modeLabel = (s: DraftState) => (s.mode === 'sealed' ? 'Sealed' : 'Booster Draft');
-const deckDate = (t: number) => new Date(t).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+const DECK_DATE_FMT = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short' });
+const deckDate = (t: number) => DECK_DATE_FMT.format(new Date(t));
 const PACK_COVERS = ['Judgment Dragon', 'Dark Armed Dragon', 'Stardust Dragon', 'Blackwing Armor Master', 'Arcanite Magician', 'Gladiator Beast Heraklinos'];
 const PACK_HUES = [220, 28, 352, 160, 265, 45];
 
@@ -398,7 +399,9 @@ function choosePack(round: number, current: string, dev: boolean, realSize: Real
   });
 }
 
-const releaseYear = (iso?: string) => (iso ? new Date(iso).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' }) : '');
+// One formatter, made once: toLocaleDateString builds a new one per call (slow on long lists).
+const RELEASE_FMT = new Intl.DateTimeFormat('en-GB', { month: 'short', year: 'numeric' });
+const releaseYear = (iso?: string) => (iso ? RELEASE_FMT.format(new Date(iso)) : '');
 
 function setStatus(o: PackOption) {
   const pct = Math.round((o.playable / o.printed) * 100);

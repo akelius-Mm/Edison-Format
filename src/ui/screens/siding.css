@@ -180,16 +180,14 @@
   user-select: none;
   -webkit-touch-callout: none;
   transition:
-    transform 0.15s var(--ease-out, ease),
-    opacity 0.15s;
+    transform var(--dur-fast) var(--ease-out, var(--ease-out)),
+    opacity var(--dur-fast);
 }
 .sd-tile > .yc {
   --yc-w: 100%;
   pointer-events: none;
 }
-.sd-tile:active {
-  transform: scale(0.96);
-}
+
 .sd-tile.sel > .yc {
   box-shadow:
     0 0 0 2px var(--cta, #f2efe8),
@@ -211,7 +209,7 @@
   min-width: 20px;
   height: 17px;
   padding: 0 4px;
-  border-radius: 9px;
+  border-radius: 10px;
   background: rgba(12, 13, 15, 0.92);
   border: 1px solid rgba(255, 255, 255, 0.16);
   font: 700 11px/16px var(--font);

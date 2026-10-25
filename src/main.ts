@@ -7,7 +7,10 @@ import { startUpdater } from './ui/updater';
 import './ui/clean.css';
 import './ui/home.css';
 import './ui/polish.css';
+import './ui/motion.css';
+import { installPressFeedback } from './ui/press';
 
+installPressFeedback();
 startApp(document.getElementById('app')!);
 // Menu theme in the app shell; it starts on the first tap (iOS needs a gesture to unlock audio).
 music.setScene('menu');

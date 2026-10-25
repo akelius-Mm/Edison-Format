@@ -101,7 +101,7 @@ function mount(screen: Screen, key: string) {
     } catch (e) {
       console.error(e);
     }
-    setTimeout(() => old.el.remove(), 380);
+    setTimeout(() => old.el.remove(), 240);
   }
   screen.onShow?.();
   if (!screen.el.contains(document.activeElement)) {

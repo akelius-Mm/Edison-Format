@@ -237,16 +237,25 @@ export function binderScreen(_params: Params): Screen {
   }
 
   let io: IntersectionObserver | null = null;
+  // Sections near the screen are filled one per task, so a tap or a scroll frame can run in between.
+  let queue: (() => void)[] = [];
+  let pumping = 0;
+  const pump = () => {
+    queue.shift()?.();
+    pumping = queue.length ? window.setTimeout(pump, 0) : 0;
+  };
   function drawSections() {
     io?.disconnect();
+    queue = [];
     io = new IntersectionObserver(
       (ents) => {
         for (const e of ents) {
           if (!e.isIntersecting) continue;
           const host = e.target as HTMLElement & { fill?: () => void };
           io!.unobserve(host);
-          host.fill?.();
+          if (host.fill) queue.push(host.fill);
         }
+        if (queue.length && !pumping) pumping = window.setTimeout(pump, 0);
       },
       { rootMargin: '700px 0px' },
     );
@@ -303,7 +312,7 @@ export function binderScreen(_params: Params): Screen {
     return h(
       'button',
       { type: 'button', class: 'bd-cell', 'aria-label': `${name}: ${parts.join(', ')}`, title: parts.join(' · '), onclick: () => c && zoomCard(c) },
-      foilCard(name, best as Rarity),
+      foilCard(name, best as Rarity, { lazy: true }),
       h('div', { class: 'bd-badges' }, best !== 'C' ? rarityPill(best as Rarity) : h('span'), h('span', { class: 'bd-n' }, `×${have}`)),
     );
   }
@@ -328,6 +337,8 @@ export function binderScreen(_params: Params): Screen {
     dispose: () => {
       off();
       io?.disconnect();
+      queue = [];
+      window.clearTimeout(pumping);
     },
   };
 }

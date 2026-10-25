@@ -86,9 +86,7 @@
   background: var(--grp);
   color: var(--text-2);
 }
-.ev-more:active {
-  transform: scale(0.98);
-}
+
 .ev-tag {
   display: inline-flex;
   align-items: center;
@@ -150,9 +148,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.ev-resume:active {
-  transform: scale(0.99);
-}
+
 
 .ev-circuit {
   position: relative;
@@ -367,7 +363,7 @@
 .ev-progress {
   display: grid;
   grid-template-columns: repeat(12, minmax(0, 1fr));
-  gap: 3px;
+  gap: 4px;
   margin: 16px 0 0;
 }
 .ev-progress span {
@@ -617,7 +613,7 @@
 .pf-rating {
   margin: 0 0 26px;
   padding: 16px 16px 12px;
-  border-radius: 18px;
+  border-radius: 20px;
   background: var(--grp);
 }
 .pf-rating-top {
@@ -724,14 +720,14 @@
   flex: none;
   width: 72px;
   height: 6px;
-  border-radius: 3px;
+  border-radius: 4px;
   background: var(--fill);
   overflow: hidden;
 }
 .pf-bar span {
   position: absolute;
   inset: 0 auto 0 0;
-  border-radius: 3px;
+  border-radius: 4px;
   background: var(--text-2);
 }
 .pf-pct {
@@ -784,6 +780,4 @@
   height: 28px;
   font-size: 11px;
 }
-.home-profile:active {
-  transform: scale(0.97);
-}
+

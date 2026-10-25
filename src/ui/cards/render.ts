@@ -61,6 +61,8 @@ export interface RenderCardOptions {
   game?: Game;
   /** Show the Forbidden/Limited badge. */
   showLimit?: boolean;
+  /** In a long scrolling grid: let the browser load the artwork when it nears the screen. */
+  lazy?: boolean;
 }
 
 export const CARD_WIDTHS: Record<CardSize, number> = { xs: 56, sm: 84, md: 124, lg: 210, xl: 320 };
@@ -222,7 +224,7 @@ export function cardFaceHTML(data: CardData, opts: RenderCardOptions = {}): stri
   <div class="yc-frame"></div>
   <div class="yc-name${foil ? ' yc-name--foil' : ''}"><span class="yc-name-text" style="--nfs:${nameFontSize(data.name)}cqw">${esc(data.name)}</span><span class="yc-attr">${attributeIconSVG(attr as any)}</span></div>
   ${row}
-  <div class="yc-art"><img src="${cardArtSrc(data)}" alt="" draggable="false" decoding="async"></div>
+  <div class="yc-art"><img src="${cardArtSrc(data)}" alt="" draggable="false" decoding="async"${opts.lazy ? ' loading="lazy"' : ''}></div>
   <div class="yc-box${isMon ? '' : ' yc-box--st'}">${typeRow}<div class="yc-desc${descCls}${flavor}">${text}</div>${stats}${isMon ? '' : `<div class="yc-mini">${esc(typeLine(data))}</div>`}</div>
   ${foil ? '<div class="yc-foil"></div>' : ''}
 </div>${limit}`;

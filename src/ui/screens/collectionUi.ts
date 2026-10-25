@@ -88,9 +88,9 @@ export function rarityPill(r: Rarity, opts: { long?: boolean } = {}) {
  * A card face with its rarity treatment (silver/gold name, holo art, secret sparkle…).
  * `live` starts the sheen animation (used right after a flip).
  */
-export function foilCard(name: string, rarity: Rarity, opts: { live?: boolean; cls?: string } = {}): HTMLElement {
+export function foilCard(name: string, rarity: Rarity, opts: { live?: boolean; cls?: string; lazy?: boolean } = {}): HTMLElement {
   const data = findCard(name);
-  const card = data ? renderCard(data, { size: 'md' }) : h('div', { class: 'yc yc--md rf-missing' }, name);
+  const card = data ? renderCard(data, { size: 'md', lazy: opts.lazy }) : h('div', { class: 'yc yc--md rf-missing' }, name);
   return h(
     'div',
     { class: ['rf', opts.live && 'is-live', opts.cls], dataset: { r: rarity } },
@@ -99,13 +99,17 @@ export function foilCard(name: string, rarity: Rarity, opts: { live?: boolean; c
   );
 }
 
+// Formatters made once (toLocale*String builds a new one on every call).
+const RELEASE_FMT = new Intl.DateTimeFormat('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' });
+const NUM_FMT = new Intl.NumberFormat('en-US');
+
 export function dpChip(n: number) {
-  return h('span', { class: 'dp-chip', title: 'Duel Points' }, h('span', { class: 'dp-coin', 'aria-hidden': 'true' }), h('b', null, n.toLocaleString('en-US')), h('span', { class: 'dp-unit' }, 'DP'));
+  return h('span', { class: 'dp-chip', title: 'Duel Points' }, h('span', { class: 'dp-coin', 'aria-hidden': 'true' }), h('b', null, NUM_FMT.format(n)), h('span', { class: 'dp-unit' }, 'DP'));
 }
 
-export const fmtDP = (n: number) => `${n.toLocaleString('en-US')} DP`;
+export const fmtDP = (n: number) => `${NUM_FMT.format(n)} DP`;
 
 export function releaseLabel(iso: string) {
   const d = new Date(iso + 'T12:00:00Z');
-  return d.toLocaleDateString('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' });
+  return RELEASE_FMT.format(d);
 }

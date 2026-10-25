@@ -23,6 +23,33 @@
   --ef-shadow: 0 10px 30px rgba(0, 0, 0, 0.55);
   --ef-font-ui: 'Segoe UI', system-ui, -apple-system, 'Helvetica Neue', Arial, sans-serif;
   --ef-font-display: 'Palatino Linotype', 'Book Antiqua', Palatino, Georgia, 'Times New Roman', serif;
-  --ef-ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
-  --ef-ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ef-ease-out: var(--ease-out);
+  --ef-ease-spring: var(--ease-spring);
+
+  /* Motion: one set of curves and lengths for the whole app (see also src/ui/motion.css) */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --ease-spring: cubic-bezier(0.34, 1.4, 0.64, 1);
+  --dur-fast: 150ms; /* press states, small fades */
+  --dur-base: 220ms; /* most transitions, screen changes */
+  --dur-slow: 300ms; /* sheets, larger moves */
+  --dur-big: 600ms; /* big moments only (skippable) */
+
+  /* Spacing and corner radii scales */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --radius-xs: 4px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+  --radius-pill: 999px;
+
+  /* The shared press state (motion.css): shrink a little and dim, instantly */
+  --press-scale: 0.97;
+  --press-dim: 0.82;
 }
