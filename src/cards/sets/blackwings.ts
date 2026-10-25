@@ -582,7 +582,7 @@ monster('Blackwing Armed Wing', {
 
 monster('Blackwing - Silverwind the Ascendant', {
   attribute: 'DARK',
-  race: 'Dragon',
+  race: 'Winged Beast',
   level: 8,
   atk: 2800,
   def: 2000,

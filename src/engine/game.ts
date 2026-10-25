@@ -72,6 +72,11 @@ export interface BattleState {
   negated: boolean;
   inDamageStep: boolean;
   oppMonsterCount: number;
+  /**
+   * SOVR: snapshot taken at damage calculation: the stats used and every monster that lost the battle
+   * (would be destroyed), before battle-indestructibility is applied. Lives until the battle ends.
+   */
+  calc?: { attackerAtk: number; targetAtk: number; targetDef: number; targetPos: BattlePos | null; losers: CardInstance[] };
 }
 
 export interface LogEntry {
@@ -394,6 +399,9 @@ export class Game {
     if (card.flags.setAtk !== undefined && card.flags.setAtkTurn === this.turn) {
       return Math.max(0, card.flags.setAtk + this.queryCardNum(card, 'atk'));
     }
+    // SOVR: lasting "ATK becomes X" ('atkBecomes' TempMod); later ATK modifiers still apply on top.
+    const becomes = card.tempMods.filter((t) => t.q === 'atkBecomes');
+    if (becomes.length) return Math.max(0, Number(becomes[becomes.length - 1].value) + this.queryCardNum(card, 'atk'));
     return Math.max(0, this.baseAtk(card) + this.queryCardNum(card, 'atk'));
   }
   getDef(card: CardInstance): number {
@@ -535,6 +543,8 @@ export class Game {
     const from = card.location;
     const wasOnField = card.onField;
     let dest = to;
+    // SOVR: "would be sent from the field to the GY: place it on top of the Deck instead" (Archlord Kristya).
+    if (dest === 'grave' && wasOnField && card.faceUp && this.queryCard(card, 'deckTopInsteadOfGrave')) dest = 'deck';
     const isBanishSource = !!card.data.effects?.some((e) => e.mods?.some((m) => m.q === 'banishInsteadOfGrave'));
     if (dest === 'grave' && !isBanishSource && this.queryPlayer(card.owner, 'banishInsteadOfGrave')) dest = 'banished';
     if (dest === 'grave' && card.banishOnLeave && wasOnField) dest = 'banished';
@@ -2281,6 +2291,14 @@ export class Game {
         dmg = { player: p, amount: defT - atkA };
       }
     }
+    // SOVR: remember the damage calculation for "would be destroyed by battle" / "destroys a 0 ATK monster" effects.
+    b.calc = {
+      attackerAtk: atkA,
+      targetAtk: target ? this.getAtk(target) : 0,
+      targetDef: target ? this.getDef(target) : 0,
+      targetPos: target ? target.pos : null,
+      losers: losers.map((l) => l.card),
+    };
     this.log(
       target
         ? `Damage calculation: ${attacker.name} (${atkA}) vs ${target.name} (${target.pos === 'atk' ? this.getAtk(target) : this.getDef(target)} ${target.pos === 'atk' ? 'ATK' : 'DEF'})`
