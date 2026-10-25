@@ -4,6 +4,8 @@ import { databaseScreen } from './screens/database';
 import { customizeScreen } from './screens/customize';
 import { deckBuilderScreen } from './screens/deckBuilder';
 import { draftScreen } from './screens/draft';
+import { binderScreen } from './screens/binder';
+import { packsScreen } from './screens/packs';
 import { duelSetupScreen, exhibitionScreen } from './screens/duelSetup';
 import { registerRoute, startRouter } from './screens/nav';
 import { rulesScreen } from './screens/rules';
@@ -23,6 +25,8 @@ export function startApp(root: HTMLElement) {
   registerRoute('rules', rulesScreen);
   registerRoute('tournament', tournamentScreen);
   registerRoute('draft', draftScreen);
+  registerRoute('packs', packsScreen);
+  registerRoute('binder', binderScreen);
   clear(root);
   startRouter(root);
   mountTabBar();
