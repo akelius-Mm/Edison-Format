@@ -292,6 +292,17 @@ export class AIController implements PlayerController {
     const ai = c.data.aiValue ?? 0;
     const enablesSynchro = need === 0 && this.enablesSynchro(game, p, c);
     if (enablesSynchro) return set ? -1 : 62 + ai / 100;
+    // Card hint (EffectDef.ai.summon): a reason to Normal Summon this face-up instead of Setting it.
+    let summonBonus = 0;
+    for (const e of c.data.effects ?? []) {
+      if (!e.ai?.summon) continue;
+      try {
+        summonBonus += e.ai.summon(new Ctx(game, c, e, p));
+      } catch {
+        /* ignore */
+      }
+    }
+    if (summonBonus > 0) return set ? 5 : 35 + summonBonus + ai / 100 - tribLoss / 200;
     if (set) {
       if (isFlip) return 45 + ai / 100;
       if (hasSummonTrigger) return 5;

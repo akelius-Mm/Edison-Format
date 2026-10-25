@@ -17,6 +17,7 @@ import { ensureCsocPatches } from '../src/cards/sets/csoc';
 import { PREMADE_DECKS, aiSideDeck, buildDeckList, canSwap, moveToDeck, moveToSide, sideSummary, sidedDeckProblems, swapCards, validateDeck, type DeckIds } from '../src/decks';
 import { ensureTdgsPatches } from '../src/cards/sets/tdgs';
 import { ensureArchetypeExtrasPatches } from '../src/cards/sets/archetype-extras';
+import { ensureArchetypeExtras2Patches } from '../src/cards/sets/archetype-extras2';
 
 const T = {
   brute: findCard('Rules Test Brute') ?? normal('Rules Test Brute', 'EARTH', 'Warrior', 4, 1800, 1000),
@@ -877,6 +878,7 @@ function eq(a: unknown, b: unknown, msg: string) {
   await sidingTests();
   await tdgsTests();
   await archetypeExtrasTests();
+  await archetypeExtras2Tests();
 
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
@@ -3477,5 +3479,142 @@ async function archetypeExtrasTests() {
     eq(v.g.queryPlayer(1, 'cannotSpecialSummon'), true, 'opponent cannot Special Summon');
     eq(v.g.queryPlayer(0, 'cannotSpecialSummon'), true, 'controller cannot Special Summon either');
     eq((await v.g.specialSummon([rev], 1, { pos: 'atk' })).length, 0, 'Special Summon blocked');
+  });
+}
+
+// ---------------------------------------------------------------- Archetype extras, wave 2 (group E)
+
+async function archetypeExtras2Tests() {
+  const ySetup = () => {
+    const s = setup();
+    ensureTdgsPatches(s.g);
+    ensureArchetypeExtras2Patches(s.g);
+    return s;
+  };
+  const procOf = (g: Game, c: CardInstance) => g.legalMainActions(0).find((a) => a.type === 'proc' && a.card === c);
+
+  await test('Extras2: Ancient Gear Golem — piercing, no Spell/Trap responses to its attack, cannot be Special Summoned', async () => {
+    const { g, c1, place } = ySetup();
+    const golem = place(0, cardByName('Ancient Gear Golem'), 'mzone');
+    const mf = place(1, cardByName('Mirror Force'), 'szone', { faceUp: false });
+    const wall = place(1, T.wall, 'mzone', { pos: 'def' });
+    c1.respond = respondWith('Mirror Force');
+    await g.conductAttack(0, golem);
+    eq(mf.location, 'szone', 'Mirror Force could not be activated');
+    eq(golem.location, 'mzone', 'Golem survives');
+    eq(wall.location, 'grave', 'wall destroyed');
+    eq(g.players[1].lp, 8000 - 1000, 'piercing damage 3000 - 2000');
+    await g.sendToGrave([golem], 'effect');
+    eq((await g.specialSummon([golem], 0, { pos: 'atk' })).length, 0, 'cannot be Special Summoned from the GY');
+    await g.banish([wall], 'effect', 0);
+    const reborn = place(0, cardByName('Monster Reborn'), 'hand');
+    eq(g.getActivations(0, { open: true }).some((a) => a.card === reborn), false, 'Monster Reborn has no target');
+  });
+
+  await test('Extras2: Ancient Gear Castle — +300 ATK, counters on Normal Summons, sent instead of Tributes', async () => {
+    const { g, place } = ySetup();
+    const castle = place(0, cardByName('Ancient Gear Castle'), 'fzone', { faceUp: true });
+    castle.activeOnField = true;
+    const soldier = place(0, cardByName('Ancient Gear Soldier'), 'mzone');
+    eq(g.getAtk(soldier), 1600, 'Ancient Gear Soldier 1300 + 300');
+    const body = place(0, T.brute, 'hand');
+    await g.performAction(0, { type: 'summon', card: body });
+    eq(castle.counters.gear, 1, '1 counter after a Normal Summon');
+    castle.counters.gear = 2;
+    g.players[0].normalSummonsLeft = 1;
+    await g.sendToGrave([soldier], 'effect');
+    const golem = place(0, cardByName('Ancient Gear Golem'), 'hand');
+    eq(g.canNormalSummon(0, golem), true, 'Golem can be Summoned with 1 monster and a 2-counter Castle');
+    await g.performAction(0, { type: 'summon', card: golem });
+    eq(golem.location, 'mzone', 'Golem Tribute Summoned');
+    eq(castle.location, 'grave', 'Castle sent to the GY');
+    eq(body.location, 'mzone', 'no monster Tributed');
+  });
+
+  await test('Extras2: Gadjiltron Dragon / Chimera gain effects from the Gadgets Tributed', async () => {
+    const a = ySetup();
+    a.place(0, cardByName('Green Gadget'), 'mzone');
+    a.place(0, cardByName('Red Gadget'), 'mzone');
+    const dragon = a.place(0, cardByName('Ancient Gear Gadjiltron Dragon'), 'hand');
+    await a.g.performAction(0, { type: 'summon', card: dragon });
+    eq(dragon.location, 'mzone', 'Dragon Tribute Summoned');
+    a.place(1, T.wall, 'mzone', { pos: 'def' });
+    await a.g.conductAttack(0, dragon);
+    eq(a.g.players[1].lp, 8000 - 1000 - 400, 'Green: piercing 1000, Red: +400');
+
+    const b = ySetup();
+    b.place(0, cardByName('Yellow Gadget'), 'mzone');
+    const chim = b.place(0, cardByName('Ancient Gear Gadjiltron Chimera'), 'hand');
+    await b.g.performAction(0, { type: 'summon', card: chim });
+    eq(b.g.getAtk(chim), 2300, 'no Green Gadget: 2300 ATK');
+    b.place(1, T.brute, 'mzone');
+    await b.g.conductAttack(0, chim);
+    eq(b.g.players[1].lp, 8000 - 500 - 700, 'Yellow: +700 after destroying a monster');
+
+    const c = ySetup();
+    c.place(0, cardByName('Green Gadget'), 'mzone');
+    const chim2 = c.place(0, cardByName('Ancient Gear Gadjiltron Chimera'), 'hand');
+    await c.g.performAction(0, { type: 'summon', card: chim2 });
+    eq(c.g.getAtk(chim2), 2600, 'Green: 2600 ATK');
+  });
+
+  await test('Extras2: Ancient Gear Beast negates a monster it destroys; Engineer destroys a Spell/Trap after attacking', async () => {
+    const a = ySetup();
+    const beast = a.place(0, cardByName('Ancient Gear Beast'), 'mzone');
+    const sangan = a.place(1, cardByName('Sangan'), 'mzone');
+    const hand = a.g.players[1].hand.length;
+    await a.g.conductAttack(0, beast);
+    await a.g.processTriggers(true);
+    eq(sangan.location, 'grave', 'Sangan destroyed');
+    eq(a.g.players[1].hand.length, hand, 'Sangan did not search');
+
+    const b = ySetup();
+    const eng = b.place(0, cardByName('Ancient Gear Engineer'), 'mzone');
+    const st = b.place(1, cardByName('Mirror Force'), 'szone', { faceUp: false });
+    b.c1.respond = respondWith('Mirror Force');
+    await b.g.conductAttack(0, eng);
+    eq(st.location, 'grave', 'Set Mirror Force destroyed');
+    eq(eng.location, 'mzone', 'Engineer survives');
+  });
+
+  await test('Extras2: Ancient Gear Special Summons itself; Machine Duplication Summons 2 copies; Geartown fetches Gadjiltron', async () => {
+    const { g, c0, place } = ySetup();
+    c0.pick = (_g, req) => req.candidates.slice(0, req.max);
+    place(0, cardByName('Ancient Gear'), 'mzone');
+    const h = place(0, cardByName('Ancient Gear'), 'hand');
+    const act = procOf(g, h);
+    if (!act) throw new Error('proc not offered');
+    await g.performAction(0, act);
+    eq(h.location, 'mzone', 'Special Summoned from the hand');
+    eq(h.pos, 'atk', 'in Attack Position');
+    const d1 = place(0, cardByName('Ancient Gear'), 'deck');
+    const d2 = place(0, cardByName('Ancient Gear'), 'deck');
+    await activateCard(g, 0, place(0, cardByName('Machine Duplication'), 'hand'));
+    eq(d1.location === 'mzone' && d2.location === 'mzone', true, 'both copies Special Summoned from the Deck');
+
+    const b = ySetup();
+    const town = b.place(0, cardByName('Geartown'), 'fzone', { faceUp: true });
+    town.activeOnField = true;
+    const golem = b.place(0, cardByName('Ancient Gear Golem'), 'deck');
+    const drag = b.place(0, cardByName('Ancient Gear Gadjiltron Dragon'), 'deck');
+    await b.g.destroy([town], 'effect', 1);
+    await b.g.processTriggers(true);
+    eq(drag.location, 'mzone', 'Gadjiltron Dragon Special Summoned from the Deck');
+    eq(golem.location, 'deck', 'Golem cannot be');
+  });
+
+  await test('Extras2: Call of the Mummy Special Summons a Zombie from the hand only with no monsters, once per turn', async () => {
+    const { g, place } = ySetup();
+    const mummy = place(0, cardByName('Call of the Mummy'), 'szone', { faceUp: true });
+    mummy.activeOnField = true;
+    const vl = place(0, cardByName('Vampire Lord'), 'hand');
+    const rk = place(0, cardByName('Ryu Kokki'), 'hand');
+    const body = place(0, T.brute, 'mzone');
+    eq(g.getActivations(0, { open: true }).some((a) => a.card === mummy), false, 'not while you control a monster');
+    await g.sendToGrave([body], 'effect');
+    await activateCard(g, 0, mummy);
+    eq([vl, rk].filter((c) => c.location === 'mzone').length, 1, 'one Zombie Special Summoned');
+    await g.sendToGrave(g.monsters(0), 'effect');
+    eq(g.getActivations(0, { open: true }).some((a) => a.card === mummy), false, 'once per turn');
   });
 }
