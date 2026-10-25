@@ -582,6 +582,47 @@ export function stickyBar(...children: Child[]) {
   return h('div', { class: 'lob-bar' }, h('div', { class: 'lob-bar-in' }, ...children));
 }
 
+// ------------------------------------------------------------------ iOS grouped lists
+
+/** A grouped list section: small header, rounded list, optional footer note. */
+export function iosGroup(title: string | null, rows: Child[], foot?: Child) {
+  return h(
+    'section',
+    { class: 'ios-group' },
+    title ? h('h2', { class: 'ios-group-h' }, title) : null,
+    h('div', { class: 'ios-list' }, rows),
+    foot ? h('p', { class: 'ios-foot' }, foot) : null,
+  );
+}
+
+/** Row with a label (and optional description) and a trailing control. */
+export function iosRow(label: Child, desc: Child | null, control: Child, opts: { icon?: Parameters<typeof icon>[0]; stack?: boolean; cls?: string } = {}) {
+  return h(
+    'div',
+    { class: ['ios-row', opts.stack && 'ios-row--stack', opts.cls] },
+    opts.icon ? h('span', { class: 'ios-icon' }, icon(opts.icon)) : null,
+    h('div', { class: 'ios-row-text' }, h('div', { class: 'ios-label' }, label), desc ? h('div', { class: 'ios-desc' }, desc) : null),
+    control != null ? h('div', { class: 'ios-ctl' }, control) : null,
+  );
+}
+
+/** Tappable navigation row with a chevron. */
+export function iosNav(label: Child, onClick: () => void, opts: { icon?: Parameters<typeof icon>[0]; detail?: Child; desc?: Child } = {}) {
+  return h(
+    'button',
+    { type: 'button', class: 'ios-row ios-row--nav', onclick: onClick },
+    opts.icon ? h('span', { class: 'ios-icon' }, icon(opts.icon)) : null,
+    h('span', { class: 'ios-row-text' }, h('span', { class: 'ios-label' }, label), opts.desc ? h('span', { class: 'ios-desc' }, opts.desc) : null),
+    opts.detail != null ? h('span', { class: 'ios-detail' }, opts.detail) : null,
+    icon('chevron', 'icon ios-chev'),
+  );
+}
+
+/** Full-width text button row (iOS "Reset…" style). */
+export function iosAction(label: string, onClick: () => void, danger = false) {
+  return h('button', { type: 'button', class: ['ios-row', 'ios-row--action', danger && 'danger'], onclick: onClick }, h('span', { class: 'ios-label' }, label));
+}
+
 // ------------------------------------------------------------------ card detail
 
 export function limitBadge(c: CardData) {

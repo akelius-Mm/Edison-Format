@@ -1435,3 +1435,186 @@ button.mu-side:active {
 .inter-concede {
   justify-self: center;
 }
+
+/* ---------------------------------------------------------------- iOS grouped lists */
+.ios-group {
+  margin: 0 0 26px;
+  min-width: 0;
+}
+.ios-group-h {
+  margin: 0 0 7px 16px;
+  font: 400 13px var(--font) !important;
+  letter-spacing: 0.02em !important;
+  text-transform: uppercase;
+  color: var(--muted) !important;
+}
+.ios-list {
+  border-radius: 14px;
+  background: var(--grp);
+  overflow: hidden;
+}
+.ios-foot {
+  margin: 8px 16px 0;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--muted);
+}
+.ios-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 52px;
+  padding: 8px 16px;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+}
+.ios-row + .ios-row::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 16px;
+  height: 1px;
+  background: var(--sep);
+}
+.ios-row:has(.ios-icon) + .ios-row::before {
+  left: 58px;
+}
+.ios-row--stack {
+  flex-wrap: wrap;
+  padding-top: 12px;
+  padding-bottom: 12px;
+}
+.ios-row--stack .ios-ctl {
+  flex: 1 0 100%;
+}
+.ios-row-text {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+.ios-label {
+  font: 400 16px/1.3 var(--font);
+  letter-spacing: -0.01em;
+  color: var(--text);
+}
+.ios-desc {
+  font-size: 13px;
+  line-height: 1.35;
+  color: var(--muted);
+}
+.ios-ctl {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.ios-icon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--text-2);
+}
+.ios-icon .icon {
+  width: 18px;
+  height: 18px;
+}
+.ios-detail {
+  flex: none;
+  font-size: 15px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.ios-chev {
+  flex: none;
+  width: 14px !important;
+  height: 14px !important;
+  color: var(--faint);
+}
+.ios-row--nav,
+.ios-row--action {
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+.ios-row--nav:active,
+.ios-row--action:active {
+  background: var(--grp-hi);
+}
+@media (hover: hover) {
+  .ios-row--nav:hover,
+  .ios-row--action:hover {
+    background: rgba(255, 255, 255, 0.025);
+  }
+}
+.ios-row--action .ios-label {
+  color: var(--gold-hi);
+}
+.ios-row--action.danger .ios-label {
+  color: var(--loss);
+}
+.ios-row:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: -2px;
+  border-radius: 14px;
+}
+
+/* range slider */
+.ios-range-wrap {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+}
+.ios-range {
+  --v: 50%;
+  flex: 1;
+  height: 44px;
+  margin: 0;
+  background: none;
+  -webkit-appearance: none;
+  appearance: none;
+  cursor: pointer;
+}
+.ios-range::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 4px;
+  background: linear-gradient(90deg, var(--cta) var(--v), var(--fill-2) var(--v));
+}
+.ios-range::-moz-range-track {
+  height: 4px;
+  border-radius: 4px;
+  background: linear-gradient(90deg, var(--cta) var(--v), var(--fill-2) var(--v));
+}
+.ios-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 26px;
+  height: 26px;
+  margin-top: -11px;
+  border-radius: 50%;
+  background: #fff;
+  border: 0;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+.ios-range::-moz-range-thumb {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: #fff;
+  border: 0;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+.ios-range-wrap .ios-detail {
+  min-width: 42px;
+  text-align: right;
+}
