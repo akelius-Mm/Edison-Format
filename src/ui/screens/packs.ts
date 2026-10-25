@@ -481,13 +481,13 @@ class Stage {
   showPack() {
     this.cards = [];
     this.updateSub(true);
-    const TEAR = 9; // % from the top, just under the crimp
+    const TEAR = 6; // % from the top, just under the crimp
     const zig = (from: number, to: number) => {
       const pts: string[] = [];
       const N = 16;
       for (let i = 0; i <= N; i++) {
         const k = from < to ? i : N - i;
-        pts.push(`${(k / N) * 100}% ${TEAR + (k % 2 ? 1.3 : -1.3)}%`);
+        pts.push(`${(k / N) * 100}% ${TEAR + (k % 2 ? 1 : -1)}%`);
       }
       return pts.join(', ');
     };
@@ -595,7 +595,7 @@ class Stage {
 
   private deal(pulls: OpenedPull[], from: DOMRect) {
     const { cols, gap, w } = this.layout(pulls.length);
-    const grid = h('div', { class: 'po-grid', style: { '--po-w': w + 'px', '--po-gap': gap + 'px', gridTemplateColumns: `repeat(${cols}, var(--po-w))` } });
+    const grid = h('div', { class: ['po-grid', pulls.length > 12 && 'po-grid--dense'], style: { '--po-w': w + 'px', '--po-gap': gap + 'px', gridTemplateColumns: `repeat(${cols}, var(--po-w))` } });
     this.cards = pulls.map((pull, i) => {
       const face = foilCard(pull.name, pull.rarity);
       const back = h('div', { class: 'po-back' }, renderCard(findCard(pull.name)!, { faceDown: true, size: 'md' }));
