@@ -3983,4 +3983,18 @@ async function fuzzRegressionTests() {
     place(0, T.dark, 'mzone');
     eq(g.canSynchro(0, stardust), false, 'a DARK monster would stay beside the WIND Synchro');
   });
+
+  await test("Frog the Jam: the monster that destroyed it cannot attack during its controller's next turn", async () => {
+    const { g, place } = setup();
+    const brute = place(0, T.brute, 'mzone');
+    place(1, cardByName('Frog the Jam'), 'mzone');
+    await g.conductAttack(0, brute);
+    await g.processTriggers(true);
+    g.turn = 4;
+    g.turnPlayer = 0;
+    brute.attacksThisTurn = 0;
+    eq(g.canAttack(brute), false, "cannot attack in its controller's next turn (turn 4)");
+    g.turn = 6;
+    eq(g.canAttack(brute), true, 'can attack again afterwards');
+  });
 }

@@ -518,7 +518,8 @@ monster('Frog the Jam', {
       eventFilter: (ctx, ev) => ev.card === ctx.self,
       resolve: async (ctx) => {
         const o = ctx.event?.other as CardInstance | undefined;
-        if (o && o.location === 'mzone') ctx.addTempMod(o, 'cannotAttack', true, 'opponentEnd');
+        // "during its controller's next turn": the turn after this one if it is the opponent's, else the one after that.
+        if (o && o.location === 'mzone') o.flags.cannotAttackTurn = ctx.game.turn + (o.controller === ctx.game.turnPlayer ? 2 : 1);
       },
     },
   ],
