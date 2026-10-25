@@ -56,6 +56,12 @@ export type QueryKey =
   | 'unaffectedBySpells'
   | 'unaffectedByTraps'
   | 'mustBeAttacked'
+  // SOVR: numeric TempMod only (until 'field'): "this card's ATK becomes X" for as long as it stays
+  // face-up on the field (Reptilianne). Read by Game.getAtk; the newest one wins.
+  | 'atkBecomes'
+  // SOVR: "If this face-up card would be sent from the field to the GY, place it on top of the
+  // Deck instead" (Archlord Kristya). Read by Game.rawMove.
+  | 'deckTopInsteadOfGrave'
   // player subjects (boolean)
   | 'cannotSpecialSummon'
   | 'cannotNormalSummon'
