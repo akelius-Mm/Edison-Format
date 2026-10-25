@@ -6,7 +6,7 @@ import type { Entrant, Match } from '../tournament/types';
 export type { DeckSnapshot, Entrant, GameResult, Match } from '../tournament/types';
 
 /** Archetype buckets of the Edison metagame (see meta.ts). */
-export type MetaKey = 'plants' | 'blackwings' | 'lightsworn' | 'monarchs' | 'gladiators' | 'zombies' | 'xsabers' | 'teledad' | 'herobeat' | 'rogue';
+export type MetaKey = 'plants' | 'blackwings' | 'lightsworn' | 'monarchs' | 'gladiators' | 'zombies' | 'xsabers' | 'teledad' | 'herobeat' | 'gadgets' | 'samurai' | 'rogue';
 
 export type FieldSize = 16 | 24 | 32;
 

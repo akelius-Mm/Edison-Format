@@ -224,7 +224,9 @@ async function runCase(c: Case, label: string) {
         hub.cut();
         setTimeout(() => (hub.down = false), 60);
       }
-      if (!corrupted && n > 40 && !guestRes) {
+      // Early enough that even a 4-turn game still sends entries after it (the case's decks depend on the
+      // number of premade decks, so it can draw a fast matchup).
+      if (!corrupted && n > 12 && !guestRes) {
         // the host's next entry arrives tampered with: both sides must stop, not diverge
         corrupted = true;
         const session = host.room.session;

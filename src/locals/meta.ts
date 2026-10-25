@@ -30,7 +30,11 @@ export const META: MetaArchetype[] = [
   { key: 'xsabers', label: 'X-Sabers', share: 7, strength: 12, match: /x-?saber/i },
   { key: 'teledad', label: 'Tele-DAD', share: 7, strength: 20, match: /tele-?dad|dark armed dragon|vayu turbo/i },
   { key: 'herobeat', label: 'Hero Beat', share: 6, strength: 2, match: /\bhero\b/i },
-  { key: 'rogue', label: 'Rogue', share: 10, strength: -10 },
+  // Machina Gadgets made Top 16 at SJC Edison (Enye Gilmore) and Six Samurai were the classic store-level rogue;
+  // both used to count as Rogue and now have their own buckets (their shares come out of Rogue's).
+  { key: 'gadgets', label: 'Machina Gadgets', share: 3, strength: 6, match: /gadget|machina/i },
+  { key: 'samurai', label: 'Six Samurai', share: 2, strength: -6, match: /samurai/i },
+  { key: 'rogue', label: 'Rogue', share: 5, strength: -10 },
 ];
 
 export const metaInfo = (k: MetaKey) => META.find((m) => m.key === k)!;
@@ -89,6 +93,12 @@ const EDGES: [MetaKey, MetaKey, number][] = [
   ['xsabers', 'gladiators', 15],
   ['herobeat', 'monarchs', 15],
   ['blackwings', 'xsabers', 15],
+  // Gadgets grind out the synchro decks; Gladiator Beasts' trap removal and Zombie recursion outlast them.
+  ['gadgets', 'plants', 10],
+  ['gladiators', 'gadgets', 10],
+  // Six Samurai trade well with slow Monarchs but fold to Blackwing swarms and Lightsworn mills.
+  ['samurai', 'monarchs', 10],
+  ['blackwings', 'samurai', 15],
 ];
 
 export function matchupEdge(a: MetaKey, b: MetaKey): number {

@@ -16,6 +16,7 @@ import { ensureGlasPatches } from '../src/cards/sets/glas';
 import { ensureCsocPatches } from '../src/cards/sets/csoc';
 import { PREMADE_DECKS, aiSideDeck, buildDeckList, canSwap, moveToDeck, moveToSide, sideSummary, sidedDeckProblems, swapCards, validateDeck, type DeckIds } from '../src/decks';
 import { ensureTdgsPatches } from '../src/cards/sets/tdgs';
+import { ensureArchetypeExtrasPatches } from '../src/cards/sets/archetype-extras';
 
 const T = {
   brute: findCard('Rules Test Brute') ?? normal('Rules Test Brute', 'EARTH', 'Warrior', 4, 1800, 1000),
@@ -875,6 +876,7 @@ function eq(a: unknown, b: unknown, msg: string) {
   await csocTests();
   await sidingTests();
   await tdgsTests();
+  await archetypeExtrasTests();
 
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
@@ -3260,5 +3262,220 @@ async function glasTests() {
     eq(dt.location, 'deck', 'Defensive Tactics in the Deck');
     eq(g.players[0].deck[0], dt, 'at the bottom');
     eq(g.players[0].lp, 8000, 'no battle damage');
+  });
+}
+
+// ---------------------------------------------------------------- Archetype extras (src/cards/sets/archetype-extras.ts)
+
+async function archetypeExtrasTests() {
+  const xSetup = () => {
+    const s = setup();
+    ensureArchetypeExtrasPatches(s.g);
+    return s;
+  };
+  const procOf = (g: Game, c: CardInstance) => g.legalMainActions(0).find((a) => a.type === 'proc' && a.card === c);
+  const live = (c: CardInstance) => {
+    c.activeOnField = true;
+    return c;
+  };
+
+  await test('Extras: Grandmaster of the Six Samurai — Special Summon with a Six Samurai, only 1 face-up, GY recovery', async () => {
+    const { g, place } = xSetup();
+    const gm = place(0, cardByName('Grandmaster of the Six Samurai'), 'hand');
+    const gm2 = place(0, cardByName('Grandmaster of the Six Samurai'), 'hand');
+    eq(!!procOf(g, gm), false, 'no Six Samurai: no Summon');
+    place(0, cardByName('The Six Samurai - Kamon'), 'mzone');
+    const act = procOf(g, gm);
+    if (!act) throw new Error('proc not offered');
+    await g.performAction(0, act);
+    eq(gm.location, 'mzone', 'Grandmaster Special Summoned');
+    eq(!!procOf(g, gm2), false, 'second Grandmaster cannot be Special Summoned');
+    eq(g.canNormalSummon(0, gm2), false, 'second Grandmaster cannot be Normal Summoned');
+    const fromGy = place(0, cardByName('The Six Samurai - Zanji'), 'grave');
+    await g.destroy([gm], 'effect', 1);
+    await g.processTriggers(true);
+    eq(gm.location, 'grave', 'Grandmaster destroyed');
+    eq(fromGy.location, 'hand', 'Six Samurai added from the GY');
+  });
+
+  await test('Extras: Kamon / Yaichi destroy Spells/Traps only beside another Six Samurai, then cannot attack', async () => {
+    const { g, place } = xSetup();
+    const kamon = place(0, cardByName('The Six Samurai - Kamon'), 'mzone');
+    const faceUpST = live(place(1, cardByName('Swords of Revealing Light'), 'szone', { faceUp: true }));
+    const setST = place(1, cardByName('Mirror Force'), 'szone', { faceUp: false });
+    eq(g.getActivations(0, { open: true }).some((a) => a.card === kamon), false, 'Kamon alone: no effect');
+    const yaichi = place(0, cardByName('The Six Samurai - Yaichi'), 'mzone');
+    await activateCard(g, 0, kamon);
+    eq(faceUpST.location, 'grave', 'Kamon destroyed the face-up Spell');
+    eq(g.canAttack(kamon), false, 'Kamon cannot attack this turn');
+    await activateCard(g, 0, yaichi);
+    eq(setST.location, 'grave', 'Yaichi destroyed the Set Trap');
+  });
+
+  await test('Extras: Six Samurai destruction substitution (another face-up Six Samurai is destroyed instead)', async () => {
+    const { g, place } = xSetup();
+    const zanji = place(0, cardByName('The Six Samurai - Zanji'), 'mzone');
+    const nisashi = place(0, cardByName('The Six Samurai - Nisashi'), 'mzone');
+    await g.destroy([zanji], 'effect', 1);
+    eq(zanji.location, 'mzone', 'Zanji survives');
+    eq(nisashi.location, 'grave', 'Nisashi destroyed instead');
+  });
+
+  await test('Extras: Irou destroys a face-down Defense Position monster without damage calculation', async () => {
+    const { g, place } = xSetup();
+    const irou = place(0, cardByName('The Six Samurai - Irou'), 'mzone');
+    place(0, cardByName('The Six Samurai - Kamon'), 'mzone');
+    const wall = place(1, T.wall, 'mzone', { faceUp: false, pos: 'def' });
+    await g.conductAttack(0, irou);
+    eq(wall.location, 'grave', 'face-down monster destroyed');
+    eq(g.players[0].lp, 8000, 'no damage calculation (no reflect damage)');
+  });
+
+  await test('Extras: Zanji destroys the monster it attacked at the end of the Damage Step; Nisashi attacks twice', async () => {
+    const { g, place } = xSetup();
+    const zanji = place(0, cardByName('The Six Samurai - Zanji'), 'mzone');
+    const nisashi = place(0, cardByName('The Six Samurai - Nisashi'), 'mzone');
+    const wall = place(1, T.wall, 'mzone', { pos: 'def' });
+    await g.conductAttack(0, zanji);
+    eq(wall.location, 'grave', '2000 DEF wall destroyed after battle');
+    eq(g.players[0].lp, 8000 - 200, 'damage calculation still happened');
+    await g.conductAttack(0, nisashi);
+    eq(g.canAttack(nisashi), true, 'Nisashi can attack a second time');
+    await g.conductAttack(0, nisashi);
+    eq(g.canAttack(nisashi), false, 'no third attack');
+    eq(g.players[1].lp, 8000 - 2800, 'two direct attacks');
+  });
+
+  await test('Extras: Backs to the Wall — pay down to 100 LP, revive Six Samurai with different names', async () => {
+    const { g, place } = xSetup();
+    const btw = place(0, cardByName('Backs to the Wall'), 'szone', { faceUp: false });
+    const k1 = place(0, cardByName('The Six Samurai - Kamon'), 'grave');
+    const k2 = place(0, cardByName('The Six Samurai - Kamon'), 'grave');
+    const z = place(0, cardByName('The Six Samurai - Zanji'), 'grave');
+    const onField = place(0, cardByName('The Six Samurai - Irou'), 'mzone');
+    const irouGy = place(0, cardByName('The Six Samurai - Irou'), 'grave');
+    await activateCard(g, 0, btw);
+    eq(g.players[0].lp, 100, 'LP paid down to 100');
+    eq(z.location, 'mzone', 'Zanji revived');
+    eq([k1, k2].filter((c) => c.location === 'mzone').length, 1, 'one Kamon (names must differ)');
+    eq(irouGy.location, 'grave', 'no second Irou (same name as a monster you control)');
+    eq(onField.location, 'mzone', 'Irou stays');
+  });
+
+  await test('Extras: Evil HERO Infernal Prodigy — Summon with an empty field, draw after a HERO Tribute Summon', async () => {
+    const { g, place } = xSetup();
+    const ip = place(0, cardByName('Evil HERO Infernal Prodigy'), 'hand');
+    const act = procOf(g, ip);
+    if (!act) throw new Error('proc not offered');
+    await g.performAction(0, act);
+    eq(ip.location, 'mzone', 'Special Summoned');
+    eq(ip.pos, 'atk', 'in Attack Position');
+    const ip2 = place(0, cardByName('Evil HERO Infernal Prodigy'), 'hand');
+    eq(!!procOf(g, ip2), false, 'not with a monster on the field');
+    place(1, T.brute, 'mzone');
+    const edge = place(0, cardByName('Evil HERO Malicious Edge'), 'hand');
+    await g.performAction(0, { type: 'summon', card: edge });
+    eq(edge.location, 'mzone', 'Malicious Edge Tribute Summoned');
+    eq(ip.location, 'grave', 'Prodigy Tributed');
+    const hand = g.players[0].hand.length;
+    await (g as any).setPhase('end');
+    eq(g.players[0].hand.length, hand + 1, 'drew 1 card in the End Phase');
+  });
+
+  await test('Extras: Red-Eyes Darkness Metal Dragon — banish a Dragon to Summon, then revive a Dragon', async () => {
+    const { g, place } = xSetup();
+    const wy = place(0, cardByName('Red-Eyes Wyvern'), 'mzone');
+    const redmd = place(0, cardByName('Red-Eyes Darkness Metal Dragon'), 'hand');
+    const rebd = place(0, cardByName('Red-Eyes B. Dragon'), 'grave');
+    const act = procOf(g, redmd);
+    if (!act) throw new Error('proc not offered');
+    await g.performAction(0, act);
+    eq(redmd.location, 'mzone', 'REDMD Special Summoned');
+    eq(wy.location, 'banished', 'Wyvern removed from play');
+    await activateCard(g, 0, redmd);
+    eq(rebd.location, 'mzone', 'Red-Eyes B. Dragon Special Summoned from the GY');
+    eq(g.getActivations(0, { open: true }).some((a) => a.card === redmd), false, 'once per turn');
+  });
+
+  await test('Extras: Red-Eyes Wyvern revives a Red-Eyes in the End Phase only without a Normal Summon', async () => {
+    const a = xSetup();
+    const wy = a.place(0, cardByName('Red-Eyes Wyvern'), 'grave');
+    const redmd = a.place(0, cardByName('Red-Eyes Darkness Metal Dragon'), 'grave');
+    await (a.g as any).setPhase('end');
+    eq(wy.location, 'banished', 'Wyvern banished');
+    eq(redmd.location, 'mzone', 'REDMD revived');
+
+    const b = xSetup();
+    const wy2 = b.place(0, cardByName('Red-Eyes Wyvern'), 'grave');
+    b.place(0, cardByName('Red-Eyes Darkness Metal Dragon'), 'grave');
+    const body = b.place(0, T.brute, 'hand');
+    await b.g.performAction(0, { type: 'summon', card: body });
+    await (b.g as any).setPhase('end');
+    eq(wy2.location, 'grave', 'no effect after a Normal Summon');
+  });
+
+  await test('Extras: Phantom of Chaos copies a GY monster until the End Phase; no battle damage to the opponent', async () => {
+    const { g, place } = xSetup();
+    const ph = place(0, cardByName('Phantom of Chaos'), 'mzone');
+    const src = place(0, cardByName('Red-Eyes Darkness Metal Dragon'), 'grave');
+    await activateCard(g, 0, ph);
+    eq(src.location, 'banished', 'copied monster removed from play');
+    eq(ph.name, 'Red-Eyes Darkness Metal Dragon', 'name copied');
+    eq(g.getAtk(ph), 2800, 'ATK copied');
+    const rebd = place(0, cardByName('Red-Eyes B. Dragon'), 'grave');
+    await activateCard(g, 0, ph, 'Special Summon 1 Dragon from hand or GY');
+    eq(rebd.location, 'mzone', 'copied effect used');
+    const v = place(1, T.brute, 'mzone');
+    await g.conductAttack(0, ph);
+    eq(v.location, 'grave', 'battle won');
+    eq(g.players[1].lp, 8000, 'no battle damage to the opponent');
+    await (g as any).setPhase('end');
+    eq(ph.name, 'Phantom of Chaos', 'back to Phantom of Chaos');
+    eq(g.getAtk(ph), 0, 'back to 0 ATK');
+  });
+
+  await test('Extras: Sky Scourge Norleras — banish 1 LIGHT Fairy + 3 DARK Fiends, then wipe hands and field', async () => {
+    const { g, place } = xSetup();
+    const nor = place(0, cardByName('Sky Scourge Norleras'), 'hand');
+    place(0, cardByName('Honest'), 'grave');
+    eq(!!procOf(g, nor), false, 'needs 3 DARK Fiends');
+    for (let i = 0; i < 3; i++) place(0, cardByName('Phantom of Chaos'), 'grave');
+    const act = procOf(g, nor);
+    if (!act) throw new Error('proc not offered');
+    await g.performAction(0, act);
+    eq(nor.location, 'mzone', 'Norleras Special Summoned');
+    eq(g.players[0].banished.length, 4, '4 monsters removed from play');
+    const opp = place(1, T.brute, 'mzone');
+    const oppHand = place(1, T.wall, 'hand');
+    const myHand = place(0, T.wall, 'hand');
+    await activateCard(g, 0, nor);
+    eq(g.players[0].lp, 7000, 'paid 1000');
+    eq(nor.location, 'grave', 'Norleras sent too');
+    eq(opp.location, 'grave', 'opponent field cleared');
+    eq(oppHand.location, 'grave', 'opponent hand cleared');
+    eq(myHand.location, 'grave', 'own hand cleared');
+    eq(g.players[0].hand.length, 1, 'then drew 1');
+  });
+
+  await test("Extras: Dark Dust Spirit wipes face-up monsters and returns; Vanity's Fiend stops Special Summons", async () => {
+    const { g, place } = xSetup();
+    const fodder = place(0, T.wall, 'mzone');
+    const theirs = place(1, T.brute, 'mzone');
+    const dds = place(0, cardByName('Dark Dust Spirit'), 'hand');
+    await g.performAction(0, { type: 'summon', card: dds });
+    eq(dds.location, 'mzone', 'Tribute Summoned');
+    eq(fodder.location, 'grave', 'Tribute used');
+    eq(theirs.location, 'grave', 'opponent monster destroyed');
+    await (g as any).setPhase('end');
+    eq(dds.location, 'hand', 'Spirit returned to the hand');
+    await g.sendToGrave([dds], 'effect');
+    eq((await g.specialSummon([dds], 0, { pos: 'atk' })).length, 0, 'Dark Dust Spirit cannot be Special Summoned');
+
+    const v = xSetup();
+    v.place(0, cardByName("Vanity's Fiend"), 'mzone');
+    const rev = v.place(1, T.brute, 'grave');
+    eq(v.g.queryPlayer(1, 'cannotSpecialSummon'), true, 'opponent cannot Special Summon');
+    eq(v.g.queryPlayer(0, 'cannotSpecialSummon'), true, 'controller cannot Special Summon either');
+    eq((await v.g.specialSummon([rev], 1, { pos: 'atk' })).length, 0, 'Special Summon blocked');
   });
 }
