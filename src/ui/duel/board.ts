@@ -202,15 +202,19 @@ export class BoardView {
     const r = this.stage.getBoundingClientRect();
     if (!r.width || !r.height) return;
     const compact = r.width < 620;
+    // Phones held sideways are short: tighter gap between the two fields and less of the opponent's hand showing.
+    const flat = typeof matchMedia === 'function' && matchMedia('(orientation: landscape) and (max-height: 500px)').matches;
+    const mid = flat ? 0.16 : 0.42;
+    const oppPeek = flat ? 0.3 : 0.55;
     const unitW = 7 * 1.16 + 6 * 0.08 + (compact ? 0.3 : 2 * 0.86);
-    const unitH = 4 * RATIO * 1.03 + 0.16 + 0.42 + 0.82 * RATIO * 0.55 + 1.08 * RATIO * 0.76 + 0.2;
+    const unitH = 4 * RATIO * 1.03 + 0.16 + mid + 0.82 * RATIO * oppPeek + 1.08 * RATIO * 0.76 + 0.2;
     const cw = Math.max(34, Math.min(170, Math.floor(Math.min(r.width / unitW, r.height / unitH))));
     this.cw = cw;
     const s = this.stage.style;
     s.setProperty('--cw', `${cw}px`);
     s.setProperty('--ch', `${(cw * RATIO).toFixed(2)}px`);
-    const boardH = 4 * cw * RATIO * 1.03 + cw * 0.16 + cw * 0.42;
-    const topRes = 0.82 * cw * RATIO * 0.55;
+    const boardH = 4 * cw * RATIO * 1.03 + cw * 0.16 + cw * mid;
+    const topRes = 0.82 * cw * RATIO * oppPeek;
     // Tall, narrow screens (phones in portrait) get a bigger, fully visible hand.
     const tallPhone = r.width < 520 && r.height > r.width * 1.05;
     this.handScale = tallPhone ? 1.6 : 1.08;

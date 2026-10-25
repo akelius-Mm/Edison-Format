@@ -1573,10 +1573,14 @@
    middle, phase controls and the log on the right. Clear of the notch on either side. */
 @media (orientation: landscape) and (max-height: 500px) {
   .duel-root {
-    --left-w: calc(188px + env(safe-area-inset-left, 0px));
-    --right-w: calc(148px + env(safe-area-inset-right, 0px));
+    --left-w: calc(172px + env(safe-area-inset-left, 0px));
+    --right-w: calc(136px + env(safe-area-inset-right, 0px));
     grid-template-columns: var(--left-w) minmax(0, 1fr) var(--right-w);
+    padding: 0 !important; /* the side columns already keep clear of the notch */
   }
+  .midline { height: calc(var(--cw) * 0.16); }
+  .midline-glow { display: none; }
+  .hand-opp { top: calc(var(--ch) * -0.6); }
   .duel-left,
   .duel-right {
     position: relative;
