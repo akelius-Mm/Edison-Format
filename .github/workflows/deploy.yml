@@ -7,9 +7,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
-  pages: write
-  id-token: write
+  contents: write
 
 concurrency:
   group: pages
@@ -26,25 +24,15 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run typecheck
-      - name: Engine smoke test (AI vs AI duels)
+      - name: Rules tests and AI-vs-AI smoke test
         run: npm test
       - run: npx vite build
-      - uses: actions/configure-pages@v5
-        if: github.event_name != 'pull_request'
+      - run: touch dist/.nojekyll
+      # GitHub Pages serves the gh-pages branch (https://akelius-mm.github.io/Edison-Format/).
+      - name: Publish to gh-pages
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        uses: peaceiris/actions-gh-pages@v4
         with:
-          enablement: true
-      - uses: actions/upload-pages-artifact@v3
-        if: github.event_name != 'pull_request'
-        with:
-          path: dist
-
-  deploy:
-    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
-    needs: build
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - id: deployment
-        uses: actions/deploy-pages@v4
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./dist
+          force_orphan: true
