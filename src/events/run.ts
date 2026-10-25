@@ -99,7 +99,7 @@ export const night = (r: EventRun) => r as unknown as LocalsNight;
 
 export function loadActiveEvent(): EventRun | null {
   const r = load<EventRun | null>(KEYS.activeEvent, null);
-  if (!r || r.version !== 1 || !r.kind || !Array.isArray(r.entrants) || !Array.isArray(r.rounds)) return null;
+  if (!r || r.version !== 1 || !(r.kind in EVENT_SPECS) || !Array.isArray(r.entrants) || !Array.isArray(r.rounds)) return null;
   r.rated ??= [];
   r.ratingDelta ??= 0;
   return r;
@@ -109,7 +109,8 @@ export const clearActiveEvent = () => remove(KEYS.activeEvent);
 
 export function loadEventHistory(): EventHistoryEntry[] {
   const h = load<EventHistoryEntry[]>(KEYS.eventHistory, []);
-  return Array.isArray(h) ? h : [];
+  // entries of retired event kinds (Worlds) are dropped
+  return Array.isArray(h) ? h.filter((x) => x.kind in EVENT_SPECS) : [];
 }
 
 // ------------------------------------------------------------------ check-in
