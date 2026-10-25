@@ -131,7 +131,7 @@ function interstitial(host: HTMLElement, setup: MatchSetup, games: GameResult[],
         h('div', { class: 'inter-caption' }, setup.caption),
         h('div', { class: 'inter-title' }, `Game ${games.length}`),
         h('div', { class: 'inter-result' }, lastText),
-        h('div', { class: 'inter-reason' }, `${last.reason}${last.turns ? ` · ${last.turns} turns` : ''}`),
+        h('div', { class: 'inter-reason' }, `${last.reason}${last.turns ? ` · ${last.turns} turn${last.turns === 1 ? '' : 's'}` : ''}`),
         h(
           'div',
           { class: 'inter-score' },

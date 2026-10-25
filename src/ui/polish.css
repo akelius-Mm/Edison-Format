@@ -1041,6 +1041,7 @@ button.mu-side:active {
 .results {
   min-height: 100dvh;
   display: block !important;
+  place-items: normal !important;
   padding: 0 0 calc(var(--tabbar-h) + 24px) !important;
   background: var(--bg-0) !important;
   overflow: hidden;
@@ -1115,7 +1116,9 @@ button.mu-side:active {
   }
 }
 .res-sub {
-  font: 500 15px var(--font);
+  font: 500 15px var(--font) !important;
+  letter-spacing: 0 !important;
+  text-transform: none !important;
   color: rgba(236, 235, 231, 0.7);
   margin: 0 !important;
 }
@@ -1125,7 +1128,11 @@ button.mu-side:active {
   padding: 16px var(--gutter-r) 0 var(--gutter) !important;
   display: grid !important;
   gap: 14px !important;
-  text-align: left;
+  justify-items: stretch !important;
+  text-align: left !important;
+}
+.res-side {
+  min-width: 0 !important;
 }
 .res-board {
   display: grid;
@@ -1292,12 +1299,35 @@ button.mu-side:active {
   color: var(--muted);
 }
 .res-actions {
+  position: sticky;
+  bottom: var(--tabbar-h);
+  z-index: 5;
   display: grid !important;
+  grid-template-columns: 1fr 1fr;
   gap: 10px !important;
-  margin-top: 6px;
+  margin: 6px calc(-1 * var(--gutter-r)) 0 calc(-1 * var(--gutter));
+  padding: 22px var(--gutter-r) 12px var(--gutter);
+  background: linear-gradient(180deg, rgba(11, 12, 14, 0) 0, var(--bg-0) 20px);
 }
 .res-actions .cta {
   width: 100%;
+  min-width: 0;
+}
+.res-actions .cta:first-child,
+.res-actions .cta:only-child {
+  grid-column: 1 / -1;
+}
+.res-actions .cta span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.results {
+  overflow: visible !important;
+  overflow-x: clip !important;
+}
+.results {
+  padding-bottom: var(--tabbar-h) !important;
 }
 
 /* ---------------------------------------------------------------- between games */

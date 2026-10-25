@@ -29,7 +29,7 @@ export function gameRow(g: GameResult, i: number, names: [string, string], human
       h('span', { class: 'game-res' }, `Game ${i + 1} · `, g.winner == null ? 'Draw' : `${names[g.winner]} won`),
       h('span', { class: 'game-why' }, g.reason),
     ),
-    h('span', { class: 'game-turns' }, g.turns ? `${g.turns} turns` : ''),
+    h('span', { class: 'game-turns' }, g.turns ? `${g.turns} turn${g.turns === 1 ? '' : 's'}` : ''),
   );
 }
 

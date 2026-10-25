@@ -46,6 +46,7 @@ import { button, confirmDialog, h, icon, modal, segmented, toast } from './dom';
 import { AVATAR_PRESETS, SLEEVES } from './ext';
 import { runMatch } from './match';
 import { frame, go, type Screen } from './nav';
+import { grantPrize } from '../../collection/api';
 import { getCustomDeck, newDeckId, ordinal, recordMatch, recordTournament, saveCustomDeck, uniqueDeckName, type Entry } from './store';
 
 const KEY = 'edison.draft.v1';
@@ -1118,6 +1119,11 @@ function hubView(ctl: Ctl, s: DraftState) {
 
 // ------------------------------------------------------------------ final
 
+/** Event prize: a pack per match win (+1 for the champion) and Duel Points for taking part. */
+function prizeFor(place: number, wins: number) {
+  return { packs: wins + (place === 1 ? 1 : 0), coins: 50 + 50 * wins };
+}
+
 function finalView(ctl: Ctl, s: DraftState) {
   const st = standings(s);
   const me = st.find((x) => x.id === 'p0');
@@ -1137,7 +1143,10 @@ function finalView(ctl: Ctl, s: DraftState) {
       deckName: deckNameOf(s),
       champion: champ.human ? 'You' : champ.name,
     });
+    const prize = prizeFor(place, rec.w);
+    if (prize.packs || prize.coins) grantPrize({ ...prize, reason: `${modeLabel(s)} · ${ordinal(place)} place` });
   }
+  const prize = prizeFor(place, rec.w);
   const headline = place === 1 ? `Champion · ${rec.text}` : `Record ${rec.text}`;
   const body = h(
     'div',
@@ -1148,7 +1157,8 @@ function finalView(ctl: Ctl, s: DraftState) {
       h('div', { class: 'dr-eyebrow' }, `${modeLabel(s)} · ${SEATS} players`),
       h('div', { class: 'dr-place-big' }, ordinal(place)),
       h('div', { class: 'dr-place-sub' }, headline),
-      h('div', { class: 'dr-place-deck' }, `Your deck is saved as “${deckNameOf(s)}”.`),
+      h('div', { class: 'dr-place-deck' }, `Prize: ${[prize.packs ? plural(prize.packs, 'pack') : '', prize.coins ? `${prize.coins} DP` : ''].filter(Boolean).join(' · ')}`),
+      h('div', { class: 'dr-place-deck', style: { marginTop: '2px' } }, `Your deck is saved as “${deckNameOf(s)}”.`),
     ),
     h(
       'div',
