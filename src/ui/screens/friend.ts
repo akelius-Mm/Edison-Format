@@ -652,7 +652,8 @@ export class FriendSession {
     );
     this.view.replaceChildren(body);
     this.lobbyRefresh = () => {
-      if (body.isConnected) refresh();
+      // the lobby on show (it may be built before the router attaches the screen)
+      if (this.view.contains(body)) refresh();
     };
     refresh();
     scrollToTop();

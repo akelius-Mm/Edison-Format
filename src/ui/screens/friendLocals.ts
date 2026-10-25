@@ -734,7 +734,10 @@ class EventSession {
 
   render() {
     const body = this.body;
-    if (!body || this.closed || !body.isConnected) return;
+    // A body that is not attached yet still renders: the router builds a screen before attaching
+    // it, and skipping here left the screen blank when returning to Friends Locals. A screen that
+    // was left clears `body` in its dispose, so nothing renders into a closed screen.
+    if (!body || this.closed) return;
     const v = this.client.view;
     if (!v) {
       busy(body, this.client.connected ? 'Joining…' : 'Connecting to the organiser…', () => this.leave());
