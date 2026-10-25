@@ -37,6 +37,8 @@ export interface GameState {
   /** We ended it outside the engine (concede, claim, desync): re-sent on reconnect. */
   endByMe?: boolean;
   endDetail?: string;
+  /** Card ids each seat showed by the end (this phone's own view; feeds the siding screen). */
+  seen?: [string[], string[]];
 }
 
 export interface MatchState {

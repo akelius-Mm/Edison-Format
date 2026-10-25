@@ -388,33 +388,54 @@
 }
 
 /* ---------------------------------------------------------------- on the duel board */
+.duel-root .phasebar:has(.fr-chip) {
+  position: relative;
+}
 .fr-chip {
   position: absolute;
-  z-index: 40;
-  left: 50%;
-  top: calc(env(safe-area-inset-top, 0px) + 8px);
-  transform: translate(-50%, -6px);
+  z-index: 5;
+  right: 8px;
+  top: 6px;
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px 12px;
+  gap: 6px;
+  padding: 3px 10px;
   border-radius: 99px;
-  background: rgba(20, 21, 24, 0.88);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.08);
   color: var(--text-2, #c5c4bf);
-  font: 500 12px var(--font);
+  font: 500 11.5px var(--font);
   white-space: nowrap;
   pointer-events: none;
   opacity: 0;
+  transform: translateY(-3px);
   transition:
     opacity 0.2s ease,
     transform 0.2s ease;
-  -webkit-backdrop-filter: blur(12px);
-  backdrop-filter: blur(12px);
 }
 .fr-chip.is-on {
   opacity: 1;
-  transform: translate(-50%, 0);
+  transform: none;
+}
+/* landscape phones and wider: the phase bar is a narrow column, so the chip takes its own row */
+@media (orientation: landscape), (min-width: 601px) {
+  .fr-chip {
+    position: static;
+    display: none;
+    justify-self: start;
+    align-self: flex-start;
+    margin-top: 6px;
+    max-width: 100%;
+    box-sizing: border-box;
+    white-space: normal;
+    line-height: 1.25;
+    border-radius: 10px;
+  }
+  .fr-chip.is-on {
+    display: inline-flex;
+  }
+  .fr-chip-dot {
+    flex: none;
+  }
 }
 .fr-chip-dot {
   width: 7px;
@@ -423,19 +444,13 @@
   background: #d9b96f;
   animation: fr-pulse 1.2s ease-in-out infinite;
 }
-/* landscape phones: sit over the board, clear of the side columns */
-@media (orientation: landscape) and (max-height: 500px) {
-  .fr-chip {
-    top: calc(env(safe-area-inset-top, 0px) + 4px);
-  }
-}
 
 .fr-offline {
   position: absolute;
   z-index: 60;
   left: 50%;
-  bottom: calc(env(safe-area-inset-bottom, 0px) + 16px);
-  transform: translateX(-50%);
+  top: 42%;
+  transform: translate(-50%, -50%);
   width: min(360px, calc(100% - 32px));
   display: grid;
   gap: 10px;

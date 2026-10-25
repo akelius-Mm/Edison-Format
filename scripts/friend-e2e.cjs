@@ -5,12 +5,14 @@
 //     share link, both ready, the AI plays each phone's seat (?netbot=…) to the end, and both
 //     phones must hold the identical final state (LP, every zone, winner) for every game.
 //  2. A forced disconnect mid-game (no reconnect for 4 s): "Reconnecting…", then it finishes in step.
-//  3. One phone reloads mid-duel, resumes from Home's "Duel in progress" card and finishes in step.
-//  4. Screenshots of the landing, lobby and "Opponent is thinking…" chip, portrait and landscape.
+//  3. A Bo3 where the guest sides on the siding screen (one swap) and the sided list reaches the host.
+//  4. The guest, then the host, reloads mid-duel, resumes from Home's "Duel in progress" card and
+//     finishes in step.
+//  5. Screenshots of the landing, lobby and "Opponent is thinking…" chip, portrait and landscape.
 //  No console errors anywhere (blocked card-art requests excepted).
 //
 // Usage (after `npm run build`; Playwright is not a project dependency):
-//   NODE_PATH=$(npm root -g) node scripts/friend-e2e.cjs [outDir]
+//   npm run test:friend-e2e -- [outDir]     (ONLY=<label part> runs a subset; ONLY=shots the screenshots)
 const { chromium, devices } = require('playwright');
 const { PeerServer } = require('peer');
 const http = require('http');
@@ -70,7 +72,7 @@ async function phone(browser, name, deck, opts = {}) {
     errors.push(`[${name}] ${t}`);
   });
   page.on('pageerror', (e) => errors.push(`[${name}] ${e}`));
-  const q = `?peer=${encodeURIComponent(PEER)}${opts.bot === false ? '' : `&netbot=${opts.bot ?? 'normal'}`}${opts.pace ? `&netpace=${opts.pace}` : ''}`;
+  const q = `?peer=${encodeURIComponent(PEER)}${opts.bot === false ? '' : `&netbot=${opts.bot ?? 'normal'}`}${opts.pace ? `&netpace=${opts.pace}` : ''}${opts.side ? '&netside=1' : ''}`;
   return { ctx, page, name, q };
 }
 
@@ -103,8 +105,19 @@ async function readyBoth(host, guest) {
 const net = (p, expr) => p.page.evaluate(expr);
 const decisions = (p) => net(p, () => { const c = window.__edisonNet?.room.current; return c ? c.logs[0].length + c.logs[1].length : 0; });
 
-async function waitMatchOver(p, ms = 240000) {
-  await p.page.waitForFunction(() => window.__edisonNet && window.__edisonNet.outcome() && !window.__edisonNet.inMatch, null, { timeout: ms, polling: 250 });
+async function waitMatchOver(p, ms = 120000, other) {
+  await p.page.waitForFunction(() => window.__edisonNet && window.__edisonNet.outcome() && !window.__edisonNet.inMatch, null, { timeout: ms, polling: 250 }).catch(async (e) => {
+    for (const q of [p, other].filter(Boolean)) {
+      const dump = await q.page.evaluate(() => {
+        const n = window.__edisonNet;
+        const r = n?.room;
+        return { status: n?.status, inMatch: n?.inMatch, games: r?.match?.games.map((g) => ({ i: g.index, d: g.decks.map((x) => !!x), first: g.first, end: g.end, logs: g.logs.map((l) => l.length), turn: g.turn })), html: document.querySelector('.duel-host')?.innerText.slice(0, 300) };
+      });
+      console.log(q.name, JSON.stringify(dump));
+      await q.page.screenshot({ path: path.join(OUT, `debug-${q.name}.png`) });
+    }
+    throw e;
+  });
 }
 
 async function compareGames(label, host, guest) {
@@ -121,19 +134,33 @@ async function compareGames(label, host, guest) {
   }
 }
 
+const ONLY = process.env.ONLY || '';
 async function match(browser, label, deckA, deckB, opts = {}) {
+  if (ONLY && !label.includes(ONLY)) return;
   const host = await phone(browser, 'Hana', deckA, { bestOf: opts.bestOf, pace: opts.pace });
-  const guest = await phone(browser, 'Gus', deckB, { pace: opts.pace });
+  const guest = await phone(browser, 'Gus', deckB, { pace: opts.pace, side: opts.side });
   const t0 = Date.now();
   const code = await createAndJoin(host, guest);
   await readyBoth(host, guest);
   const seed = await net(host, () => window.__edisonNet.room.match.start.seed);
+  if (opts.side) {
+    // the guest sides on the siding screen between games 1 and 2: swap one card, then Done
+    await guest.page.waitForSelector('.sd-done', { timeout: 120000 });
+    await guest.page.screenshot({ path: path.join(OUT, 'siding-online-portrait.png') });
+    await guest.page.locator('.sd-sec--main .sd-tile').first().click();
+    await guest.page.locator('.sd-sec--side .sd-tile.can').first().click();
+    await guest.page.click('.sd-done');
+    const sided = await host.page.waitForFunction(() => { const g = window.__edisonNet.room.match?.games[1]; return g && g.decks[1] ? g.decks[1].main.join() !== window.__edisonNet.room.match.games[0].decks[1].main.join() : null; }, null, { timeout: 20000 });
+    ok(await sided.jsonValue(), 'the guest\'s sided deck reached the host for game 2');
+    // a game 3 sides with no further changes
+    await guest.page.evaluate(() => setInterval(() => document.querySelector('.sd-done')?.click(), 300));
+  }
   if (opts.midGame) {
     await host.page.waitForFunction(() => { const c = window.__edisonNet?.room.current; return c && c.logs[0].length + c.logs[1].length > 30; }, null, { timeout: 120000, polling: 100 });
     await opts.midGame(host, guest);
   }
-  await waitMatchOver(host);
-  await waitMatchOver(guest);
+  await waitMatchOver(host, 120000, guest);
+  await waitMatchOver(guest, 120000, host);
   console.log(`  ${label}: room ${code}, seed ${seed}, ${((Date.now() - t0) / 1000).toFixed(1)}s`);
   await compareGames(label, host, guest);
   // the after-match screen offers a rematch on both phones
@@ -155,6 +182,8 @@ async function screenshots(browser) {
   ok((await host.page.inputValue('[data-test=join-code]')) === 'KQTM-4825', 'code entry formats as KQTM-4825');
   await host.page.goto(url(host, 'play'));
   await host.page.waitForSelector('.play-tiles--friend');
+  await sleep(600);
+  await host.page.locator('.play-tiles--friend').scrollIntoViewIfNeeded();
   await host.page.screenshot({ path: path.join(OUT, 'duel-hub-portrait.png') });
   ok((await host.page.locator('.tabbar .tab.on').textContent()).includes('Duel'), 'Duel tab highlighted on the hub');
   await host.page.goto(url(host, 'friend'));
@@ -210,7 +239,7 @@ async function screenshots(browser) {
   const browser = await chromium.launch({ args: ['--disable-features=WebRtcHideLocalIpsWithMdns'] });
   const t0 = Date.now();
   try {
-    await screenshots(browser);
+    if (!ONLY || ONLY === 'shots') await screenshots(browser);
     const matchups = [
       ['blackwings', 'lightsworn', 1],
       ['zombies', 'gladiator-beasts', 3],
@@ -219,6 +248,7 @@ async function screenshots(browser) {
       ['hero-beat', 'zombies', 1],
     ];
     for (const [a, b, bestOf] of matchups) await match(browser, `${a} vs ${b} (Bo${bestOf})`, a, b, { bestOf });
+    await match(browser, 'Bo3 with siding', 'x-sabers', 'blackwings', { bestOf: 3, side: true });
     await match(browser, 'disconnect mid-game', 'lightsworn', 'blackwings', {
       pace: 20,
       midGame: async (host, guest) => {
@@ -230,7 +260,7 @@ async function screenshots(browser) {
         ok(true, 'both phones reconnect after the drop');
       },
     });
-    await match(browser, 'reload mid-duel', 'gladiator-beasts', 'tele-dad', {
+    await match(browser, 'guest reload mid-duel', 'gladiator-beasts', 'tele-dad', {
       pace: 40,
       midGame: async (host, guest) => {
         const before = await decisions(guest);
@@ -247,6 +277,25 @@ async function screenshots(browser) {
         await guest.page.waitForSelector('.duel-root', { timeout: 20000 });
         await guest.page.waitForFunction((n) => { const c = window.__edisonNet?.room.current; return c && c.logs[0].length + c.logs[1].length > n; }, before, { timeout: 60000 });
         ok(true, `guest resumed after a reload (had ${before} decisions) and play continues`);
+      },
+    });
+    await match(browser, 'host reload mid-duel', 'blackwings', 'zombies', {
+      pace: 40,
+      midGame: async (host, guest) => {
+        const before = await decisions(host);
+        await host.page.reload();
+        // the app reopens on Home with the "Duel in progress" card
+        const card = host.page.locator('.home-resume--duel');
+        await card.waitFor({ timeout: 15000 }).catch(async (e) => {
+          console.log('debug', await host.page.evaluate(() => ({ hash: location.hash, saved: (localStorage.getItem('edison.duel.active.v1') || '').slice(0, 300) })));
+          await host.page.screenshot({ path: path.join(OUT, 'debug-reload.png') });
+          throw e;
+        });
+        ok((await card.textContent()).includes('Play a friend'), 'Home shows the online duel in progress');
+        await card.click();
+        await host.page.waitForSelector('.duel-root', { timeout: 20000 });
+        await host.page.waitForFunction((n) => { const c = window.__edisonNet?.room.current; return c && c.logs[0].length + c.logs[1].length > n; }, before, { timeout: 60000 });
+        ok(true, `host resumed after a reload (had ${before} decisions) and play continues`);
       },
     });
   } catch (e) {

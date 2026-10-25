@@ -57,6 +57,8 @@ export interface WireDeck {
   name: string;
   main: string[];
   extra: string[];
+  /** Side Deck (Bo3 siding happens on each phone; only main and extra are played). */
+  side?: string[];
 }
 
 export interface LobbyState {

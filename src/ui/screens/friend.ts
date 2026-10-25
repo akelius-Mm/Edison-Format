@@ -11,10 +11,13 @@
 //
 // Test hooks (URL query, before the #): `peer=host:port/path` points at another PeerJS server,
 // `netbot=easy|normal|hard` lets the AI play this phone's seat and answers the between-game
-// screens by itself, and exposes window.__edisonNet for end-to-end tests.
+// screens by itself (`netside=1` still shows the siding screen for the test to use), and exposes window.__edisonNet for end-to-end tests.
 import './friend.css';
 import { createAI, type Difficulty } from '../../ai/ai';
 import { CARDS } from '../../cards';
+import { buildDeckList } from '../../decks';
+import type { DeckIds } from '../../decks/siding';
+import { sidingScreen } from './siding';
 import type { CardData, CardInstance } from '../../engine/card';
 import type { PlayerController } from '../../engine/controller';
 import { GameOver, type Game } from '../../engine/game';
@@ -97,8 +100,10 @@ function mePlayer(): NetPlayer {
 
 const wireDeck = (d: DeckInfo): WireDeck => {
   const l = toDeckList(d);
-  return { name: d.name, main: l.main.map((c) => c.id), extra: l.extra.map((c) => c.id) };
+  const side = buildDeckList({ main: d.side, extra: [] }).main.map((c) => c.id);
+  return { name: d.name, main: l.main.map((c) => c.id), extra: l.extra.map((c) => c.id), side };
 };
+const deckIds = (w: WireDeck): DeckIds => ({ main: [...w.main], extra: [...w.extra], side: [...(w.side ?? [])] });
 
 function deckFromWire(w: WireDeck): { main: CardData[]; extra: CardData[] } | null {
   const main = w.main.map((id) => CARDS[id]);
@@ -300,6 +305,8 @@ class FriendSession {
   private readyWaiters = new Map<number, () => void>();
   private lastResult: Record<number, Game> = {};
   private matchEndRefresh: (() => void) | null = null;
+  /** Side decking in progress for game `index` (saved, so a closed app comes back to it). */
+  private siding: { index: number; deck: DeckIds; done?: boolean } | null = null;
 
   constructor(
     body: HTMLElement,
@@ -308,6 +315,11 @@ class FriendSession {
     private snap?: RoomSnapshot,
   ) {
     this.view = body;
+    if (snap) {
+      const saved = loadActiveDuel();
+      const sd = saved?.tag.kind === 'friend' ? saved.siding : null;
+      if (sd && sd.player === (role === 'host' ? 0 : 1)) this.siding = { index: sd.index, deck: sd.deck, done: sd.done };
+    }
     const prefs = loadJSON<{ deck?: string; bestOf?: 1 | 3 }>(PREFS_KEY, {});
     this.room = new Room({
       role,
@@ -649,7 +661,8 @@ class FriendSession {
         this.duel = { g, ctl };
         this.lastResult[g] = ctl.game;
         this.netChip = h('div', { class: 'fr-chip', role: 'status', 'aria-live': 'polite' }, h('span', { class: 'fr-chip-dot' }), h('span', { class: 'fr-chip-text' }, 'Opponent is thinking…'));
-        ctl.root.appendChild(this.netChip);
+        // in the phase bar, next to "Opponent's turn"
+        (ctl.root.querySelector('.phasebar') ?? ctl.root).appendChild(this.netChip);
         ctl.onAbort((winner, reason) => {
           remote.fail(new GameOver(winner, reason));
           if (reason === 'Surrender') room.endGame(g, { winner, reason: 'Conceded', turns: ctl.game.turn, kind: 'concede' });
@@ -657,6 +670,7 @@ class FriendSession {
         if (room.status !== 'connected') this.onStatus(room.status);
       },
       onGameOver: (r) => {
+        if (r.seen) st.seen = r.seen;
         if (!r.restoreFailed && !r.left) room.gameOver(g, { winner: r.winner, reason: r.reason, turns: r.turns });
         this.persist();
         if (bot) setTimeout(() => (document.querySelector('.result-continue') as HTMLButtonElement | null)?.click(), 400);
@@ -764,11 +778,72 @@ class FriendSession {
     const room = this.room;
     const m = room.match!;
     const st = room.match!.games[g];
-    // Side decking plugs in here: submit the deck for the next game (unchanged for now).
-    const prevMine = (room.match!.games[g - 1]?.decks[room.mySeat] ?? m.start.decks[room.mySeat])!;
-    if (!st.decks[room.mySeat]) room.submitDeck(g, prevMine);
+    return this.sideDeck(host, g).then(() => this.waitNext(host, g));
+  }
+
+  /**
+   * Side decking before game `g`: each phone sides on its own siding screen, starting from its
+   * previous game's deck, then sends the final list. The game starts once both lists arrived.
+   */
+  private async sideDeck(host: HTMLElement, g: number) {
+    const room = this.room;
+    const m = room.match!;
+    const st = m.games[g];
+    if (st.decks[room.mySeat]) return;
+    const prev = (m.games[g - 1]?.decks[room.mySeat] ?? m.start.decks[room.mySeat])!;
+    const original = m.start.decks[room.mySeat];
+    let deck = deckIds(prev);
+    const canSide = m.start.bestOf === 3 && getSettings().sideDecking && !!original.side?.length && (!botLevel() || query().get('netside') === '1');
+    if (canSide) {
+      const draft = this.siding?.index === g ? this.siding : null;
+      if (draft?.done) deck = draft.deck;
+      else {
+        const res = room.results();
+        const me = room.mySeat;
+        const opp = room.peerSeat;
+        const last = res[res.length - 1];
+        const lastText = last?.winner == null ? `Game ${g} was a draw` : last.winner === me ? `You won game ${g}` : `You lost game ${g}`;
+        // what the friend showed: the most copies seen in any one game
+        const seen = new Map<string, number>();
+        for (const pg of m.games.slice(0, g)) {
+          const t = new Map<string, number>();
+          for (const id of pg.seen?.[opp] ?? []) t.set(id, (t.get(id) ?? 0) + 1);
+          for (const [id, n] of t) seen.set(id, Math.max(n, seen.get(id) ?? 0));
+        }
+        this.siding = { index: g, deck: draft?.deck ?? deck };
+        this.persist();
+        const friend = m.start.players[opp];
+        deck = await sidingScreen(host, {
+          caption: `vs ${friend.name} · Online`,
+          gameNo: g + 1,
+          status: `${lastText} · ${res.filter((r) => r.winner === me).length}–${res.filter((r) => r.winner === opp).length}`,
+          opp: { name: friend.name, deck: (m.games[g - 1]?.decks[opp] ?? m.start.decks[opp]).name, seen: [...seen].sort((a, b) => b[1] - a[1]) },
+          start: this.siding.deck,
+          previous: deckIds(prev),
+          original: deckIds(original),
+          playmat: getSettings().playmat,
+          onChange: (d) => {
+            this.siding = { index: g, deck: d };
+            this.persist();
+          },
+        });
+      }
+      this.siding = { index: g, deck, done: true };
+    }
+    if (!room.match || room.match !== m) return;
+    room.submitDeck(g, { name: prev.name, main: deck.main, extra: deck.extra, side: deck.side });
+  }
+
+  /** After siding: the loser chooses who goes first; wait until both decks and the choice are in. */
+  private waitNext(host: HTMLElement, g: number): Promise<void> {
+    const room = this.room;
+    const m = room.match!;
+    const st = m.games[g];
     return new Promise<void>((resolve) => {
+      let finished = false;
+      let botPicked = false;
       const done = () => {
+        finished = true;
         this.readyWaiters.delete(g);
         this.betweenRefresh = null;
         resolve();
@@ -778,6 +853,7 @@ class FriendSession {
       const bg = h('div', { class: 'inter-bg' });
       applyPlaymat(bg, getSettings().playmat);
       const draw = () => {
+        if (finished) return;
         if (!room.match) return done();
         const res = room.results();
         const last = room.match.games[g - 1]?.end;
@@ -793,6 +869,7 @@ class FriendSession {
         else if (chooser === room.mySeat) {
           msg = 'You lost the previous game, so you choose: go first or second?';
           const pick = (first: PlayerId) => {
+            if (finished || st.first != null) return;
             haptic('selection');
             room.chooseFirst(g, first);
             draw();
@@ -805,7 +882,7 @@ class FriendSession {
               h('button', { type: 'button', class: 'cta cta--dark', onclick: () => pick(room.peerSeat) }, icon('hand'), h('span', null, 'Go second')),
             ),
           );
-          if (botLevel()) setTimeout(() => pick((g % 2 ? room.mySeat : room.peerSeat) as PlayerId), 300);
+          if (botLevel() && !botPicked && (botPicked = true)) setTimeout(() => pick((g % 2 ? room.mySeat : room.peerSeat) as PlayerId), 300);
         } else msg = `${friend} lost the previous game and is choosing who goes first…`;
         const side = (i: PlayerId) =>
           h('div', { class: ['inter-side', last?.winner === i && 'won', i === 1 && 'right'] }, h('div', { class: 'inter-name' }, players[i].name), h('div', { class: 'inter-deck' }, (room.match!.games[g - 1]?.decks[i] ?? m.start.decks[i]).name));
@@ -906,8 +983,11 @@ class FriendSession {
       tag: { kind: 'friend', key: `friend:${m.start.id}`, route: 'friend', meta: { room: room.snapshot() as unknown as Record<string, unknown> } },
       savedAt: Date.now(),
       setup: { sides: [side(0), side(1)], bestOf: m.start.bestOf, playmat: getSettings().playmat, caption: `vs ${m.start.players[room.peerSeat].name} · Online` },
+      seed: m.start.seed,
+      played: m.games.filter((x) => x.end).map((x) => ({ decks: [deckIds(x.decks[0] ?? m.start.decks[0]), deckIds(x.decks[1] ?? m.start.decks[1])] as [DeckIds, DeckIds], ...(x.seen ? { seen: x.seen } : {}) })),
+      siding: this.siding && !cur.decks[room.mySeat] ? { index: this.siding.index, player: room.mySeat, deck: this.siding.deck, ...(this.siding.done ? { done: true } : {}) } : null,
       games: room.results(),
-      game: cur.end
+      game: cur.end || !(cur.decks[0] && cur.decks[1] && cur.first != null)
         ? null
         : { index: cur.index, seed: cur.seed, first: cur.first ?? 'coin', skipFirstDraw: m.start.skipFirstDraw, caption: '', log: cur.logs[room.mySeat], turn: cur.turn },
       live: true,

@@ -21,6 +21,7 @@ import { newRoomCode, normalizeRoomCode, type GameEnd, type WireDeck } from '../
 import { AsHuman, RemoteController } from '../src/net/remote';
 import { Room, type RoomSnapshot } from '../src/net/room';
 import { CARDS } from '../src/cards';
+import { aiSideDeck } from '../src/decks/siding';
 import { parseServer } from '../src/net/transport';
 
 const args = process.argv.slice(2);
@@ -43,6 +44,7 @@ console.warn = (...a: unknown[]) => {
 };
 
 let failures = 0;
+let sidedGames = 0;
 const fail = (msg: string) => {
   failures++;
   console.log(`FAIL ${msg}`);
@@ -51,7 +53,14 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 function wireDeck(d: DeckDef): WireDeck {
   const l = buildDeckList(d);
-  return { name: d.name, main: l.main.map((c) => c.id), extra: l.extra.map((c) => c.id) };
+  const side = buildDeckList({ main: d.side ?? [], extra: [] }).main.map((c) => c.id);
+  return { name: d.name, main: l.main.map((c) => c.id), extra: l.extra.map((c) => c.id), side };
+}
+/** Between games each phone sides on its own and sends the final list (AI siding stands in for the screen). */
+function sided(w: WireDeck, opp: WireDeck, seed: number): WireDeck {
+  if (!w.side?.length) return w;
+  const d = aiSideDeck({ main: w.main, extra: w.extra, side: w.side }, { main: opp.main, extra: opp.extra }, seed);
+  return { name: w.name, ...d };
 }
 const fromWire = (w: WireDeck) => ({ main: w.main.map((id) => CARDS[id]), extra: w.extra.map((id) => CARDS[id]) });
 
@@ -284,8 +293,11 @@ async function runCase(c: Case, label: string) {
       const p = chooser === 0 ? host : guest;
       p.room.chooseFirst(gi + 1, ((gi + c.seed) % 2) as PlayerId);
     }
-    host.room.submitDeck(gi + 1, wireDeck(c.a));
-    guest.room.submitDeck(gi + 1, wireDeck(c.b));
+    host.room.submitDeck(gi + 1, sided(wireDeck(c.a), wireDeck(c.b), c.seed + gi));
+    guest.room.submitDeck(gi + 1, sided(wireDeck(c.b), wireDeck(c.a), c.seed * 3 + gi));
+    await waitFor(() => !!host.room.match!.games[gi + 1]?.decks[1] && !!guest.room.match!.games[gi + 1]?.decks[0], 3000, 'decks exchanged');
+    if (JSON.stringify(host.room.match!.games[gi + 1].decks) !== JSON.stringify(guest.room.match!.games[gi + 1].decks)) fail(`${tag}: sided decks differ between phones`);
+    if (host.room.match!.games[gi + 1].decks.some((d, i) => d!.main.join() !== (i ? wireDeck(c.b) : wireDeck(c.a)).main.join())) sidedGames++;
   }
   // rematch: both ask, both land in the lobby
   host.room.askRematch();
@@ -340,7 +352,7 @@ function mulberry(a: number) {
     }
     if (!c.corrupt && warnings.length) fail(`${label}: unexpected warnings ${warnings.slice(0, 2).join(' | ')}`);
   }
-  console.log(`net-test: ${games}/${GAMES} matches, ${total} decisions in lockstep, ${failures} failure${failures === 1 ? '' : 's'}, ${((Date.now() - t0) / 1000).toFixed(1)}s`);
+  console.log(`net-test: ${games}/${GAMES} matches, ${total} decisions in lockstep, ${sidedGames} games after siding, ${failures} failure${failures === 1 ? '' : 's'}, ${((Date.now() - t0) / 1000).toFixed(1)}s`);
   process.exit(failures ? 1 : 0);
 })();
 void (null as unknown as GameEnd);
