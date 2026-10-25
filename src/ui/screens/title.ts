@@ -153,6 +153,7 @@ export function titleScreen(): Screen {
         'section',
         { class: 'title-hero' },
         emblemSVG('emblem title-emblem'),
+        titleMark(),
         h('div', { class: 'title-eyebrow' }, 'The April 2010 meta · Revived'),
         h('h1', { class: 'title-logo' }, h('span', { class: 'logo-main' }, 'Edison'), h('span', { class: 'logo-sub' }, 'Format Simulator')),
         h('p', { class: 'title-tag' }, 'Synchros, Plants, Blackwings and Monarchs. Duel the format many players still call the best ever.'),
@@ -185,4 +186,17 @@ export function titleScreen(): Screen {
     onShow: () => setTimeout(() => items[0]?.focus({ preventScroll: true }), 60),
     dispose: () => document.removeEventListener('keydown', onKey),
   };
+}
+
+/** Dark Armed Dragon artwork as the app mark; hidden where outside images are blocked. */
+function titleMark(): HTMLElement {
+  const img = new Image();
+  img.className = 'title-mark';
+  img.alt = '';
+  img.decoding = 'async';
+  img.hidden = true;
+  img.onload = () => (img.hidden = false);
+  img.onerror = () => img.remove();
+  img.src = 'https://images.ygoprodeck.com/images/cards_cropped/65192027.jpg';
+  return img;
 }
