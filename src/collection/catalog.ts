@@ -61,6 +61,13 @@ export interface PlayableSet {
 /** A set needs at least this many playable cards before its packs are offered. */
 export const MIN_PLAYABLE = 5;
 
+/**
+ * Packs on the shelf at Edison time (spring 2010): the current boosters plus that season's Turbo Packs.
+ * Older boosters stay in the data (so the Binder knows their cards) but aren't sold, opened or awarded;
+ * The Shining Darkness, Gold Series 3 and Turbo Pack 3 came out after Edison.
+ */
+export const EDISON_SHELF = new Set(['ABPF', 'SOVR', 'ANPR', 'HA01', 'TU01', 'TU02']);
+
 let cache: Map<string, PlayableSet> | null = null;
 
 function build(): Map<string, PlayableSet> {
@@ -84,7 +91,7 @@ function build(): Map<string, PlayableSet> {
       rarities,
       printed: data.cards.length,
       leftOut: data.cards.length - playable.length,
-      available: playable.length >= MIN_PLAYABLE,
+      available: EDISON_SHELF.has(data.code) && playable.length >= MIN_PLAYABLE,
     });
   }
   return m;

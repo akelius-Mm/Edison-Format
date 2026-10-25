@@ -112,8 +112,26 @@ function S(): CollectionState {
   if (!state) {
     state = load();
     if (!state.starterGiven) giveStarter(state);
+    else swapOffShelfPacks(state);
   }
   return state;
+}
+
+/** Unopened packs from sets no longer on the shelf (older boosters, given before the Edison-era shelf) become current boosters. */
+function swapOffShelfPacks(s: CollectionState) {
+  const core = playableSets().filter((p) => p.available && p.data.format.startsWith('core'));
+  if (!core.length) return;
+  let i = 0;
+  for (const [code, n] of Object.entries(s.packs)) {
+    const set = playableSet(code);
+    if (set?.available || !n) continue;
+    delete s.packs[code];
+    for (let k = 0; k < n; k++, i++) {
+      const to = core[i % core.length].code;
+      s.packs[to] = (s.packs[to] ?? 0) + 1;
+    }
+  }
+  if (i) save();
 }
 
 function save() {
@@ -484,9 +502,11 @@ function giveStarter(s: CollectionState) {
     if (!d) continue;
     for (const c of structureDeckCards(d)) addCard(s, c.name, c.rarity, c.copies * STARTER.copiesEach);
   }
-  // One pack of every openable booster, then Hidden Arsenal and Turbo Packs up to 12.
+  // Mostly the current boosters (3 each), then Hidden Arsenal and a Turbo Pack, up to 12.
   const avail = playableSets().filter((p) => p.available);
-  const order = [...avail.filter((p) => p.data.format.startsWith('core')), ...avail.filter((p) => p.data.format === 'hidden-arsenal'), ...avail.filter((p) => p.data.format === 'turbo')];
+  const core = avail.filter((p) => p.data.format.startsWith('core'));
+  const ha = avail.filter((p) => p.data.format === 'hidden-arsenal');
+  const order = [...core, ...core, ...core, ...ha, ...ha, ...avail.filter((p) => p.data.format === 'turbo')];
   let left = STARTER.packs;
   for (let i = 0; left > 0 && order.length; i++, left--) {
     const code = order[i % order.length].code;
