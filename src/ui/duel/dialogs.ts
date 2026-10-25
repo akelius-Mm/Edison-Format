@@ -274,12 +274,19 @@ export class Dialogs {
   }
 
   // ------------------------------------------------------------ context menu
-  menuAt(x: number, y: number, title: string, items: { label: string; sub?: string; onClick: () => void; kind?: string }[]) {
+  menuAt(x: number, y: number, title: string, items: { label: string; sub?: string; onClick: () => void; kind?: string; disabled?: boolean }[]) {
     this.closeMenu();
     const m = h('div', 'ctx-menu');
     if (title) m.appendChild(h('div', 'ctx-title', esc(title)));
     for (const it of items) {
       const b = h('button', `ctx-item ${it.kind ?? ''}`, `<span>${esc(it.label)}</span>${it.sub ? `<small>${esc(it.sub)}</small>` : ''}`) as HTMLButtonElement;
+      if (it.disabled) {
+        b.disabled = true;
+        b.setAttribute('aria-disabled', 'true');
+        b.onclick = (e) => e.stopPropagation();
+        m.appendChild(b);
+        continue;
+      }
       b.onclick = (e) => {
         e.stopPropagation();
         this.sfx.play('click');

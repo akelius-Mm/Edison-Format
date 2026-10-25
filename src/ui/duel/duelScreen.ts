@@ -3,7 +3,7 @@ import '../theme/theme.css';
 import '../cards/cards.css';
 import './duel.css';
 import { createAI } from '../../ai/ai';
-import type { CardData, CardInstance } from '../../engine/card';
+import type { CardData, CardInstance, EffectDef } from '../../engine/card';
 import type { Action, Activation, ConfirmRequest, OptionRequest, ResponseRequest, SelectRequest } from '../../engine/controller';
 import { Ctx } from '../../engine/ctx';
 import { Game, GameOver, phaseName } from '../../engine/game';
@@ -700,6 +700,16 @@ class DuelScreen implements HumanUI {
       this.onPileClick(c.owner, pile, ev);
       return;
     }
+    // Effects that exist but can't be used now get a disabled row saying why (e.g. an LP cost).
+    const blocked = st ? this.effectBlockedNote(c, acts) : null;
+    if (!acts?.length && blocked) {
+      const r = el.getBoundingClientRect();
+      this.dialogs.menuAt(r.left + r.width / 2, r.top, c.name, [
+        { label: `Effect: ${blocked.label}`, sub: blocked.sub, onClick: () => {}, kind: 'is-disabled', disabled: true },
+        { label: 'View card', sub: 'Enlarge and read', onClick: () => zoomCard(c.data, { instance: c, game: this.game }), kind: 'is-view' },
+      ]);
+      return;
+    }
     if (!acts?.length) {
       this.dialogs.closeMenu();
       // Nothing to do with this card: tap to enlarge it.
@@ -720,12 +730,42 @@ class DuelScreen implements HumanUI {
           const l = this.actionLabel(a);
           return { label: l.label, sub: l.sub, onClick: () => this.resolveAction(a), kind: a.type === 'attack' ? 'is-attack' : '' };
         }),
+        ...(blocked ? [{ label: `Effect: ${blocked.label}`, sub: blocked.sub, onClick: () => {}, kind: 'is-disabled', disabled: true }] : []),
         pile === 'extra'
           ? { label: 'View Extra Deck', sub: `${this.game.players[c.owner].extra.length} cards`, onClick: () => this.openPile(c.owner, 'extra'), kind: 'is-view' }
           : { label: 'View card', sub: 'Enlarge and read', onClick: () => zoomCard(c.data, { instance: c, game: this.game }), kind: 'is-view' },
       ],
     );
     void ev;
+  }
+
+  /**
+   * When your card has Ignition or Quick effects but none can be activated right now, say why
+   * (for the action menu). Null when one of them can be used, or the card has none.
+   */
+  private effectBlockedNote(c: CardInstance, acts: Action[] | undefined): { label: string; sub?: string } | null {
+    if (this.spectator || c.controller !== this.me) return null;
+    if (!(c.location === 'hand' || (c.onField && c.faceUp))) return null;
+    if (acts?.some((a) => a.type === 'activate')) return null;
+    const g = this.game;
+    const effs = (c.data.effects ?? [])
+      .map((ef, idx) => ({ ef, idx }))
+      .filter(({ ef }) => (ef.kind === 'ignition' || ef.kind === 'quick') && g.defaultRange(c, ef).includes(c.location));
+    if (!effs.length) return null;
+    const lp = g.players[this.me].lp;
+    const fmt = (n: number) => n.toLocaleString('en-US');
+    for (const { ef } of effs) {
+      const cost = lpCost(ef, effs.length === 1 ? c.data.text : '');
+      if (cost && lp <= cost)
+        return lp < cost
+          ? { label: `needs ${fmt(cost)} LP (you have ${fmt(lp)})`, sub: 'Not enough Life Points to pay the cost' }
+          : { label: `needs more than ${fmt(cost)} LP (you have ${fmt(lp)})`, sub: 'Paying the cost would leave you at 0' };
+    }
+    if (effs.every(({ ef, idx }) => ef.opt && g.isOptUsed(g.optKey(c, ef, idx, this.me)))) return { label: 'already used this turn', sub: 'Once per turn' };
+    if (c.onField && g.isNegated(c)) return { label: "can't be used right now", sub: 'Its effects are negated' };
+    const mainPhase = g.turnPlayer === this.me && (g.phase === 'main1' || g.phase === 'main2') && !g.chain.length;
+    if (!mainPhase && effs.every(({ ef }) => ef.kind === 'ignition')) return { label: "can't be used right now", sub: 'Only in your Main Phase' };
+    return { label: "can't be used right now", sub: 'Condition or timing not met' };
   }
 
   private onPileClick(p: PlayerId, loc: 'grave' | 'banished' | 'extra' | 'deck', ev: MouseEvent) {
@@ -913,4 +953,13 @@ class DuelScreen implements HumanUI {
 
 function isPhonePortrait() {
   return typeof matchMedia === 'function' && matchMedia('(max-width: 600px) and (orientation: portrait)').matches;
+}
+
+/** The Life Point cost of an effect: from its cost code (payLp(N)) or, failing that, the card text. */
+function lpCost(ef: EffectDef, text: string): number | null {
+  const code = ef.activate ? String(ef.activate) : '';
+  const m = code.match(/payLp\(\s*([\d.e]+)\s*\)/);
+  if (m && Number.isFinite(Number(m[1]))) return Number(m[1]);
+  const t = text.match(/pay (\d[\d,]*) (?:Life Points|LP)/i);
+  return t ? Number(t[1].replace(/,/g, '')) : null;
 }

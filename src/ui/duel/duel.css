@@ -2301,3 +2301,11 @@
   .dice-caption { min-height: 44px; }
   .dice-caption b { font-size: 19px; }
 }
+
+/* Card action menu: an effect that can't be used right now, with the reason */
+.ctx-item:disabled,
+.ctx-item.is-disabled { cursor: default; color: rgba(242, 239, 232, 0.5); }
+.ctx-item:disabled small,
+.ctx-item.is-disabled small { color: rgba(143, 144, 149, 0.85); }
+.ctx-item:disabled:hover,
+.ctx-item:disabled:active { background: none; }
