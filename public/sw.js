@@ -43,7 +43,7 @@ self.addEventListener('fetch', (e) => {
   }
 
   // Card images: keep a copy so each picture is only downloaded once.
-  if (url.hostname === 'images.ygoprodeck.com') {
+  if (url.hostname === 'images.ygoprodeck.com' || url.hostname === 'ms.yugipedia.com') {
     e.respondWith(
       caches.open('edison-cards').then((c) =>
         c.match(req).then(
