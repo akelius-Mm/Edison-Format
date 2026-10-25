@@ -193,10 +193,26 @@ export function topCutSeeds(n: NightLike & Pick<LocalsNight, 'topCut'>): string[
     .map((x) => x.id);
 }
 
-/** First bracket round: 1v8, 4v5, 2v7, 3v6 (or 1v4, 2v3). */
+/**
+ * Standard bracket order for a power-of-two cut, as 0-based seed pairs: Top 8 gives 1v8, 4v5,
+ * 2v7, 3v6; Top 4 gives 1v4, 2v3; larger cuts (Events: Top 16/32/64) follow the same pattern so
+ * the top seeds can only meet late.
+ */
+export function bracketPairs(size: number): [number, number][] {
+  let order = [0, 1];
+  while (order.length < size) {
+    const n = order.length * 2;
+    order = order.flatMap((s) => [s, n - 1 - s]);
+  }
+  const out: [number, number][] = [];
+  for (let i = 0; i < order.length; i += 2) out.push([order[i], order[i + 1]]);
+  return out;
+}
+
+/** First bracket round: 1v8, 4v5, 2v7, 3v6 (or 1v4, 2v3; or any larger power-of-two cut). */
 export function seedTopCut(n: NightLike & Pick<LocalsNight, 'topCut'>): LocalsMatch[] {
   const s = topCutSeeds(n);
-  const order = n.topCut === 8 ? [[0, 7], [3, 4], [1, 6], [2, 5]] : [[0, 3], [1, 2]];
+  const order = bracketPairs(n.topCut);
   const label = topRoundLabel(n.topCut);
   return order.map(([x, y], i) => ({ id: `t1-${i + 1}`, stage: 'top', round: 1, table: i + 1, a: s[x], b: s[y], games: [], result: null, label }));
 }

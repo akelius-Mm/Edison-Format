@@ -1,6 +1,9 @@
 // Hash router with animated screen transitions.
 import { button, h, icon, type Child } from './dom';
 import { localsScreen } from './locals';
+// Events hub + Profile (Events agent): registered in startRouter below.
+import { eventsScreen } from './events';
+import { profileScreen } from './profile';
 
 export interface Screen {
   el: HTMLElement;
@@ -122,6 +125,8 @@ function errorScreen(e: unknown): Screen {
 export function startRouter(el: HTMLElement) {
   root = el;
   if (!routes.has('locals')) registerRoute('locals', localsScreen);
+  if (!routes.has('events')) registerRoute('events', eventsScreen);
+  if (!routes.has('profile')) registerRoute('profile', profileScreen);
   window.addEventListener('hashchange', render);
   document.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape' || locked || e.defaultPrevented) return;
