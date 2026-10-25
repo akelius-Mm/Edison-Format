@@ -1,6 +1,6 @@
 // The optional Circuit: a 12-week season of 2010 Organized Play. Locals every Friday, Regional
-// Qualifiers on some Saturdays, an SJC mid-season, Nationals (invite only) near the end and a
-// Worlds finale. Placings earn circuit points; your circuit rank counts only your best results
+// Qualifiers on some Saturdays, an SJC mid-season and an invite-only Nationals finale in week 12.
+// Placings earn circuit points; your circuit rank counts only your best results
 // from the last 8 weeks, so you have to keep proving yourself. ~200 AI duelists play the same
 // season: regulars at your Locals, travellers at Regionals and SJCs.
 import { hash, rand, shuffleIn, type RngState } from '../locals/rng';
@@ -11,7 +11,6 @@ import {
   CIRCUIT_INVITE_RANK,
   EVENT_SPECS,
   SJC_INVITE_CUT,
-  WORLDS_INVITE_CUT,
   bandFor,
   eventDate,
   regionalInviteCut,
@@ -20,7 +19,7 @@ import {
   venueList,
   type EventKind,
 } from './catalog';
-import { SKILL_MEAN, buildCircuit, domestic, type CircuitDuelist } from './field';
+import { SKILL_MEAN, buildCircuit, type CircuitDuelist } from './field';
 import { aiRating, loadRatings } from './ratings';
 import { clearActiveEvent, createEvent, deckLabel, entrantOf, eventSeed, finalizeEvent, inTopCut, loadActiveEvent, night, placeOf, saveEvent, type EventRun, type HumanEntry } from './run';
 import { KEYS, load, remove, save } from './storage';
@@ -31,7 +30,9 @@ export const RANK_WINDOW = 8;
 /** How many results inside the window count. */
 export const BEST_OF = 4;
 /** Nationals registration closes after this week; the circuit Top 16 get at-large invites. */
-export const INVITE_DEADLINE_WEEK = 10;
+export const INVITE_DEADLINE_WEEK = 11;
+/** The season finale. */
+export const NATIONALS_WEEK = 12;
 
 export const YOU = 'you';
 
@@ -67,7 +68,6 @@ export interface PointsRow {
 
 export interface Invite {
   nationals?: string;
-  worlds?: string;
 }
 
 export interface SeasonSummary {
@@ -110,6 +110,14 @@ export interface SeasonArchiveEntry extends SeasonSummary {
 export function loadSeason(): Season | null {
   const s = load<Season | null>(KEYS.season, null);
   if (!s || s.version !== 1 || !Array.isArray(s.events)) return null;
+  // Worlds was retired: drop it from seasons saved before, and end the season with Nationals
+  s.events = s.events.filter((e) => e.kind in EVENT_SPECS);
+  for (const inv of Object.values(s.invites ?? {})) delete (inv as { worlds?: string }).worlds;
+  for (const e of s.events)
+    if (e.kind === 'nationals' && e.week !== NATIONALS_WEEK && e.status === 'upcoming' && s.week <= e.week) {
+      const d = eventDate('nationals', NATIONALS_WEEK);
+      Object.assign(e, { week: NATIONALS_WEEK, date: d.iso, dateLabel: d.label });
+    }
   return s;
 }
 export const saveSeason = (s: Season) => save(KEYS.season, s);
@@ -132,8 +140,8 @@ export const CALENDAR: Record<number, EventKind[]> = {
   8: ['locals'],
   9: ['locals', 'regional'],
   10: ['locals'],
-  11: ['locals', 'nationals'],
-  12: ['locals', 'worlds'],
+  11: ['locals', 'regional'],
+  12: ['locals', 'nationals'],
 };
 
 function sizeFor(kind: EventKind, key: string): number {
@@ -238,7 +246,7 @@ export interface CircuitRow {
 }
 
 export function circuitStandings(s: Season, week = standingsWeek(s)): CircuitRow[] {
-  const rows: CircuitRow[] = domestic(circuitOf(s)).map((d) => ({
+  const rows: CircuitRow[] = circuitOf(s).map((d) => ({
     id: d.id,
     name: d.name,
     rank: 0,
@@ -267,7 +275,6 @@ export const eventById = (s: Season, id: string) => s.events.find((e) => e.id ==
 
 export function hasInvite(s: Season, kind: EventKind, id = YOU) {
   if (kind === 'nationals') return !!s.invites[id]?.nationals;
-  if (kind === 'worlds') return !!s.invites[id]?.worlds;
   return true;
 }
 
@@ -282,14 +289,9 @@ export function attendeesFor(s: Season, ev: SeasonEvent, humanPlays: boolean): C
     const rest = order.filter((r) => !r.you && !s.invites[r.id]?.nationals).map((r) => r.duelist!);
     return [...invited, ...rest].slice(0, seats);
   }
-  if (ev.kind === 'worlds') {
-    const qualified = domestic(all).filter((d) => s.invites[d.id]?.worlds);
-    const intl = all.filter((d) => d.tier === 'world');
-    return [...qualified, ...intl].slice(0, seats);
-  }
   const key = ev.kind === 'locals' ? 'locals' : ev.kind === 'regional' ? 'regional' : 'sjc';
   const cap = Math.floor(ev.size * (ev.kind === 'locals' ? 0.85 : ev.kind === 'regional' ? 0.6 : 0.4));
-  const going = domestic(all).filter((d) => rand(st) < d.attend[key]);
+  const going = all.filter((d) => rand(st) < d.attend[key]);
   // regulars first at Locals so the familiar faces always make it in
   const ordered = ev.kind === 'locals' ? [...going.filter((d) => d.regular), ...shuffleIn(st, going.filter((d) => !d.regular))] : shuffleIn(st, going);
   return ordered.slice(0, Math.min(cap, seats));
@@ -314,7 +316,6 @@ function award(s: Season, ev: SeasonEvent, finishes: Finish[]) {
     const made = f.madeCut ?? f.place <= cut;
     if (ev.kind === 'regional' && made && f.place <= regionalInviteCut(ev.size)) inv.nationals ??= `Top ${regionalInviteCut(ev.size)} · ${ev.title}`;
     if (ev.kind === 'sjc' && made && f.place <= SJC_INVITE_CUT) inv.nationals ??= `Top ${SJC_INVITE_CUT} · ${ev.title}`;
-    if (ev.kind === 'nationals' && made && f.place <= WORLDS_INVITE_CUT) inv.worlds ??= `Top ${WORLDS_INVITE_CUT} · Nationals`;
   }
 }
 

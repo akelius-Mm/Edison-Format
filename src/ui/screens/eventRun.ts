@@ -1,5 +1,5 @@
 // A live event of any tier (route events?view=run): the Locals Night table experience scaled up
-// to Regionals, SJCs, Nationals and Worlds. Big fields show feature tables, your table and your
+// to Regionals, SJCs and Nationals. Big fields show feature tables, your table and your
 // neighbourhood in the standings, with "show all" for the full sheet. Engine in src/events.
 import {
   EVENT_SPECS,
@@ -487,7 +487,7 @@ export function eventRunScreen(r: EventRun): Screen {
       r.season ? h('div', { class: 'ev-fact' }, h('span', { class: 'lx-k' }, 'Circuit points'), h('b', null, `+${ev?.result?.points ?? r.points ?? 0}`), h('span', null, `Week ${r.season.week}`)) : null,
     ];
     const inviteNote =
-      r.season && invite && ((r.kind === 'regional' || r.kind === 'sjc') && invite.nationals?.includes(r.title) ? 'nationals' : r.kind === 'nationals' && invite.worlds ? 'worlds' : null);
+      r.season && invite && ((r.kind === 'regional' || r.kind === 'sjc') && invite.nationals?.includes(r.title) ? 'nationals' : null);
     return h(
       'section',
       { class: ['lx-ceremony', place === 1 && 'is-champ'] },
@@ -505,7 +505,7 @@ export function eventRunScreen(r: EventRun): Screen {
         ),
       ),
       inviteNote
-        ? h('div', { class: 'ev-invite' }, icon(inviteNote === 'worlds' ? 'crown' : 'medal'), h('div', null, h('b', null, inviteNote === 'worlds' ? 'Invited to Worlds' : 'Invited to Nationals'), h('span', null, inviteNote === 'worlds' ? invite!.worlds! : invite!.nationals!)))
+        ? h('div', { class: 'ev-invite' }, icon('medal'), h('div', null, h('b', null, 'Invited to Nationals'), h('span', null, invite!.nationals!)))
         : null,
       h('div', { class: 'ev-facts' }, facts),
       h(

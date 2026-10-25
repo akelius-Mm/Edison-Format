@@ -24,7 +24,7 @@ import {
   EVENT_SPECS,
   RANK_WINDOW,
   SEASON_WEEKS,
-  WORLDS_INVITE_CUT,
+  NATIONALS_WEEK,
   YOU,
   acceptId,
   advance,
@@ -36,7 +36,6 @@ import {
   circuitStandings,
   closeOutEvent,
   createEvent,
-  domestic,
   eloStep,
   eventsThisWeek,
   finishRound,
@@ -178,11 +177,11 @@ for (const kind of EVENT_KINDS) {
     void grants;
   }
 }
-// tiers by field: locals sizes (3), regional (3), sjc (3), nationals (1), worlds (1)
-const tierAvg = [avgRating.slice(0, 3), avgRating.slice(3, 6), avgRating.slice(6, 9), avgRating.slice(9, 10), avgRating.slice(10, 11)].map((a) => a.reduce((x, y) => x + y, 0) / a.length);
+// tiers by field: locals sizes (3), regional (3), sjc (3), nationals (1)
+const tierAvg = [avgRating.slice(0, 3), avgRating.slice(3, 6), avgRating.slice(6, 9), avgRating.slice(9, 10)].map((a) => a.reduce((x, y) => x + y, 0) / a.length);
 for (let i = 1; i < tierAvg.length; i++) check(tierAvg[i] > tierAvg[i - 1], `field rating rises by tier: ${tierAvg.map((x) => x.toFixed(0)).join(' < ')}`);
 check(realShare[9] > realShare[0], `more real lists at Nationals (${(realShare[9] * 100).toFixed(0)}%) than at Locals (${(realShare[0] * 100).toFixed(0)}%)`);
-check(loadEventHistory().length === 11, `history has ${loadEventHistory().length} events`);
+check(loadEventHistory().length === 10, `history has ${loadEventHistory().length} events`);
 const tEvents = performance.now() - t0;
 
 // ------------------------------------------------------------------ rolling window (synthetic)
@@ -234,10 +233,10 @@ function playSeason(seed: number, policy: { enter: boolean; p: number }) {
       check(after.result!.points === band.points, `${e.id}: ${after.result!.points} points vs band ${band.points}`);
     }
     const before = loadSeason()!;
-    // Nationals / Worlds need invites
+    // Nationals needs an invite
     for (const ev of eventsThisWeek(before)) {
-      if (ev.kind === 'nationals' || ev.kind === 'worlds') {
-        const invited = ev.kind === 'nationals' ? !!before.invites[YOU]?.nationals : !!before.invites[YOU]?.worlds;
+      if (ev.kind === 'nationals') {
+        const invited = !!before.invites[YOU]?.nationals;
         check(canEnter(before, ev) === (invited && ev.status === 'upcoming'), `${ev.id}: entry follows the invite`);
         if (!policy.enter) check(ev.status === 'upcoming', `${ev.id}: not entered`);
       }
@@ -274,7 +273,7 @@ for (let i = 0; i < SEASONS; i++) {
     .reduce((a, b) => a + b, 0);
   check(end.summary!.score === manual, `${tag}: final score ${end.summary!.score} vs ${manual}`);
   const st = circuitStandings(end, SEASON_WEEKS);
-  check(st.length === domestic(buildCircuit(end.seed)).length + 1, `${tag}: standings hold ${st.length} players`);
+  check(st.length === buildCircuit(end.seed).length + 1, `${tag}: standings hold ${st.length} players`);
   check(st.every((x, j) => j === 0 || st[j - 1].score >= x.score), `${tag}: standings sorted by rolling score`);
   check(st.find((x) => x.you)!.rank === end.summary!.finalRank, `${tag}: final rank`);
   // invites: regional top cut → Nationals
@@ -285,24 +284,18 @@ for (let i = 0; i < SEASONS; i++) {
       if (row && row.p <= cut) check(!!end.invites[id]?.nationals, `${tag}: ${id} top ${cut} at ${ev.id} has a Nationals invite`);
     }
   }
-  // Nationals field: everyone invited (AI) got a seat, worlds invites = Nationals top 4
+  // Nationals is the week-12 finale and everyone invited (AI) got a seat
   const nats = end.events.find((e) => e.kind === 'nationals')!;
+  check(nats.week === NATIONALS_WEEK && NATIONALS_WEEK === SEASON_WEEKS, `${tag}: Nationals closes the season`);
+  check(!end.events.some((e) => !(e.kind in EVENT_SPECS)), `${tag}: only known event kinds`);
   const natsRows = Object.entries(end.points).filter(([, prs]) => prs.some((r) => r.e === nats.id));
   check(natsRows.length >= Math.min(nats.size - 1, 100), `${tag}: Nationals field ${natsRows.length}`);
   const invitedAI = Object.entries(end.invites).filter(([id, inv]) => id !== YOU && inv.nationals && !inv.nationals.startsWith('Top 4'));
   const natsIds = new Set(natsRows.map(([id]) => id));
   check(invitedAI.filter(([id]) => !natsIds.has(id)).length === 0 || invitedAI.length > nats.size - 1, `${tag}: invited AI play Nationals`);
-  for (const [id, prs] of natsRows) {
-    const r = prs.find((x) => x.e === nats.id)!;
-    if (r.p <= WORLDS_INVITE_CUT) check(!!end.invites[id]?.worlds, `${tag}: Nationals top 4 (${id}) invited to Worlds`);
-  }
-  const worldsInv = Object.entries(end.invites).filter(([, inv]) => inv.worlds).length;
-  check(worldsInv === WORLDS_INVITE_CUT, `${tag}: ${worldsInv} Worlds invites`);
   // player entry rules
   const you = end.invites[YOU] ?? {};
   check((nats.status === 'played') === !!you.nationals, `${tag}: you played Nationals only with an invite (${nats.status}, ${you.nationals ?? 'none'})`);
-  const worlds = end.events.find((e) => e.kind === 'worlds')!;
-  check((worlds.status === 'played') === !!you.worlds, `${tag}: you played Worlds only with an invite`);
   // ratings
   const ratings = loadRatings().constructed;
   check(ratings.matches === r1.ratedMatches && ratings.history.length === r1.ratedMatches && ratings.matches > 50, `${tag}: ${ratings.matches} rated matches (${r1.ratedMatches} expected)`);
@@ -312,7 +305,7 @@ for (let i = 0; i < SEASONS; i++) {
   const r2 = playSeason(seed, { enter: true, p: 0.66 });
   const fp2 = JSON.stringify({ pts: r2.end.points, inv: r2.end.invites, rank: r2.end.rankHistory, r: loadRatings().constructed.rating, champs: r2.end.events.map((e) => e.champion?.name) });
   check(fp === fp2, `${tag}: deterministic replay`);
-  seasonResults.push(`${tag}: rank ${end.summary!.finalRank}/${st.length}, ${end.summary!.score} pts (${end.summary!.totalPoints} total), rating ${ratings.rating}, invites ${[you.nationals ? 'Nationals' : '', you.worlds ? 'Worlds' : ''].filter(Boolean).join(' + ') || 'none'}, trophies ${end.summary!.trophies.length}`);
+  seasonResults.push(`${tag}: rank ${end.summary!.finalRank}/${st.length}, ${end.summary!.score} pts (${end.summary!.totalPoints} total), rating ${ratings.rating}, invites ${you.nationals ? 'Nationals' : 'none'}, trophies ${end.summary!.trophies.length}`);
 }
 
 // a season skipped entirely: the AI circuit still plays, you sit unranked at 0

@@ -159,7 +159,7 @@ export function profileScreen(): Screen {
     circuitRows.push(
       iosNav(season.done ? `Season ${season.number} · final` : `Season ${season.number} · week ${season.week}`, () => go('events', { view: 'season' }), {
         icon: 'flag',
-        desc: `${me.score} pts (best ${BEST_OF} in ${RANK_WINDOW} weeks)${inv.nationals ? ' · Nationals invite' : ''}${inv.worlds ? ' · Worlds invite' : ''}`,
+        desc: `${me.score} pts (best ${BEST_OF} in ${RANK_WINDOW} weeks)${inv.nationals ? ' · Nationals invite' : ''}`,
         detail: me.score ? `${ordinal(me.rank)} / ${field}` : 'Unranked',
       }),
     );
@@ -170,17 +170,17 @@ export function profileScreen(): Screen {
         'div',
         { class: 'ios-row' },
         h('span', { class: 'ios-icon' }, icon('scroll')),
-        h('span', { class: 'ios-row-text' }, h('span', { class: 'ios-label' }, `Season ${a.number}`), h('span', { class: 'ios-desc' }, `${a.score} pts · ${a.trophies.length} trophies${a.invites.nationals ? ' · Nationals' : ''}${a.invites.worlds ? ' · Worlds' : ''}`)),
+        h('span', { class: 'ios-row-text' }, h('span', { class: 'ios-label' }, `Season ${a.number}`), h('span', { class: 'ios-desc' }, `${a.score} pts · ${a.trophies.length} trophies${a.invites.nationals ? ' · Nationals' : ''}`)),
         h('span', { class: 'ios-detail' }, a.score ? `${ordinal(a.finalRank)} / ${a.field}` : '—'),
       ),
     );
-  if (!circuitRows.length) circuitRows.push(iosNav('Start a season', () => go('events'), { icon: 'flag', desc: '12 weeks: Locals, Regionals, an SJC, Nationals, Worlds' }));
+  if (!circuitRows.length) circuitRows.push(iosNav('Start a season', () => go('events'), { icon: 'flag', desc: '12 weeks: Locals, Regionals, an SJC, then Nationals' }));
 
   // ---- trophies and best finishes
   const wins = hist.filter((x) => x.place === 1);
   const kindLabel = (k: HistoryRow['kind']) => (k === 'tournament' ? 'Practice tournament' : k === 'locals' ? 'Locals' : EVENT_SPECS[k].label);
   const trophyRows = wins.length
-    ? wins.slice(0, 12).map((w) => h('div', { class: 'ios-row pf-trophy' }, h('span', { class: 'ios-icon' }, icon(w.kind === 'tournament' ? 'trophy' : w.kind === 'worlds' ? 'crown' : 'trophy')), h('span', { class: 'ios-row-text' }, h('span', { class: 'ios-label' }, w.title), h('span', { class: 'ios-desc' }, `${kindLabel(w.kind)} · ${w.size} players`))))
+    ? wins.slice(0, 12).map((w) => h('div', { class: 'ios-row pf-trophy' }, h('span', { class: 'ios-icon' }, icon('trophy')), h('span', { class: 'ios-row-text' }, h('span', { class: 'ios-label' }, w.title), h('span', { class: 'ios-desc' }, `${kindLabel(w.kind)} · ${w.size} players`))))
     : [h('div', { class: 'ios-row' }, h('span', { class: 'ios-row-text' }, h('span', { class: 'ios-label' }, 'No trophies yet'), h('span', { class: 'ios-desc' }, 'Win an event and it is listed here.')))];
   const bestRows = [...EVENT_KINDS, 'tournament' as const]
     .map((k) => {
