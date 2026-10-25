@@ -2,7 +2,8 @@
 import { findCard } from '../../cards';
 import { FORBIDDEN, LIMITED, SEMI_LIMITED } from '../../cards/banlist';
 import { PREMADE_DECKS } from '../../decks';
-import { cardDetail, tierBadge } from './components';
+import { artInto, cardDetail, deckArt, eventShort, tierBadge } from './components';
+import { premadeInfo } from './store';
 import { button, clear, h, icon, modal, type Child } from './dom';
 import { renderCard } from './ext';
 import { frame, go, type Params, type Screen } from './nav';
@@ -12,23 +13,23 @@ type Tab = 'format' | 'rules' | 'pool' | 'banlist' | 'controls';
 export function rulesScreen(params: Params): Screen {
   let tab: Tab = (['format', 'rules', 'pool', 'banlist', 'controls'] as Tab[]).includes(params.tab as Tab) ? (params.tab as Tab) : 'format';
   const body = h('div', { class: 'rules-body' });
-  const tabs = h('div', { class: 'tabs', role: 'tablist' });
+  const tabs = h('div', { class: 'chip-tabs', role: 'tablist', 'aria-label': 'Sections' });
   const TABS: [Tab, string, Parameters<typeof icon>[0]][] = [
-    ['format', 'Edison Format', 'bolt'],
+    ['format', 'The format', 'bolt'],
     ['rules', 'Duel rules', 'scroll'],
-    ['pool', 'Card pool & decks', 'cards'],
+    ['pool', 'Card pool', 'cards'],
     ['banlist', 'Banlist', 'warn'],
     ['controls', 'Controls', 'keyboard'],
   ];
   const draw = () => {
     clear(tabs);
-    for (const [t, l, ic] of TABS)
+    for (const [t, l] of TABS)
       tabs.appendChild(
         h(
           'button',
           {
             type: 'button',
-            class: ['tab', tab === t && 'on'],
+            class: ['chip-tab', tab === t && 'on'],
             role: 'tab',
             'aria-selected': String(tab === t),
             onclick: () => {
@@ -37,15 +38,15 @@ export function rulesScreen(params: Params): Screen {
               draw();
             },
           },
-          icon(ic),
           l,
         ),
       );
+    tabs.querySelector<HTMLElement>('.chip-tab.on')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
     clear(body);
     body.appendChild(tab === 'format' ? formatTab() : tab === 'rules' ? rulesTab() : tab === 'pool' ? poolTab() : tab === 'banlist' ? banlistTab() : controlsTab());
   };
   draw();
-  const el = frame('How to Play', { subtitle: 'The Edison Format, its rules and its Forbidden & Limited list', cls: 'rules' }, tabs, body);
+  const el = frame('How to Play', { subtitle: 'The Edison Format, its rules and its Forbidden & Limited list', cls: 'rules rules-screen' }, tabs, body);
   return { el };
 }
 
@@ -60,6 +61,7 @@ function formatTab() {
     h(
       'article',
       { class: 'rule-hero' },
+      artInto(h('div', { class: 'rule-hero-art', 'aria-hidden': 'true' }), 'Dark Armed Dragon'),
       h('div', { class: 'title-eyebrow' }, 'April 2010'),
       h('h2', null, 'What is Edison Format?'),
       p(
@@ -124,10 +126,15 @@ function poolTab() {
               h(
                 'div',
                 { class: 'pool-deck', style: { '--deck': d.color } },
-                h('div', { class: 'pool-deck-head' }, h('b', null, d.name), tierBadge(d.tier)),
-                h('div', { class: 'pool-deck-arch' }, d.archetype),
-                h('p', null, d.description),
-                button('Open copy in Deck Builder', () => go('deck-builder', { from: d.id }), { variant: 'subtle', small: true, icon: 'cards' }),
+                deckArt(premadeInfo(d), 'pool-art'),
+                h(
+                  'div',
+                  { class: 'pool-deck-main' },
+                  h('div', { class: 'pool-deck-head' }, h('b', null, d.name), tierBadge(d.tier)),
+                  h('div', { class: 'pool-deck-arch' }, d.event ? `${d.event.place} · ${eventShort(d.event)}` : d.archetype),
+                  h('p', null, d.description),
+                  button('Copy to Deck Builder', () => go('deck-builder', { from: d.id }), { variant: 'subtle', small: true, icon: 'copy' }),
+                ),
               ),
             ),
           )
@@ -181,7 +188,7 @@ function banlistTab() {
   return h(
     'div',
     { class: 'banlist' },
-    h('div', { class: 'ban-top' }, h('p', { class: 'muted' }, 'The Forbidden & Limited list in effect for Edison Format (March 2010 TCG list). Click a card to view it. Every other card is unlimited (3 copies).'), q),
+    h('div', { class: 'ban-top' }, h('p', { class: 'muted' }, 'The Forbidden & Limited list in effect for Edison Format (March 2010 TCG list). Tap a card to view it. Every other card is unlimited (3 copies).'), q),
     cols,
   );
 }
