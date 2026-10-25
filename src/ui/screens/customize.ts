@@ -1,6 +1,6 @@
 // Customize: sleeve, playmat, avatar and player name.
 import { getSettings, updateSettings } from '../settings';
-import { getCustomImage, pickCustomImage, type CustomKind } from '../theme/customImages';
+import { getCustomImage, pickCustomImage, setCustomImageUrl, type CustomKind } from '../theme/customImages';
 import { avatarGrid } from './components';
 import { clear, h, toast } from './dom';
 import { PLAYMATS, SLEEVES, applyPlaymat, renderAvatar, sleevePreview } from './ext';
@@ -207,6 +207,34 @@ function uploadRow(kind: CustomKind, label: string, help: string, done: () => vo
       },
       getCustomImage(kind) ? label.replace('Upload a', 'Replace your') : label,
     ),
+    linkInput(kind, done),
     h('span', { class: 'field-help', style: { fontSize: '12px', opacity: '.75', flex: '1 1 220px' } }, help),
   );
+}
+
+function linkInput(kind: CustomKind, done: () => void) {
+  const id = `cz-link-${kind}`;
+  const input = h('input', {
+    id,
+    class: 'input',
+    type: 'url',
+    inputmode: 'url',
+    placeholder: kind === 'mat' ? 'or paste a playmat image link' : 'or paste a sleeve image link',
+    style: { flex: '1 1 220px', minWidth: '0' },
+    'aria-label': kind === 'mat' ? 'Playmat image link' : 'Sleeve image link',
+  }) as HTMLInputElement;
+  const go = async () => {
+    try {
+      await setCustomImageUrl(kind, input.value);
+      done();
+      toast(kind === 'mat' ? 'Playmat image set.' : 'Sleeve image set.', 'success', 1600);
+      input.value = '';
+    } catch (e) {
+      toast((e as Error).message, 'error', 4000);
+    }
+  };
+  input.addEventListener('keydown', (ev) => {
+    if ((ev as KeyboardEvent).key === 'Enter') void go();
+  });
+  return h('span', { style: { display: 'flex', gap: '8px', flex: '2 1 320px', minWidth: '0' } }, input, h('button', { type: 'button', class: 'ui-btn', onclick: () => void go() }, 'Use link'));
 }

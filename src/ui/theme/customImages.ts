@@ -120,3 +120,23 @@ export function pickCustomImage(kind: CustomKind): Promise<boolean> {
     input.click();
   });
 }
+
+/** Use an image from the web by link (loads in the browser; not stored as a copy). */
+export function setCustomImageUrl(kind: CustomKind, url: string): Promise<void> {
+  const u = url.trim();
+  if (!/^https?:\/\/\S+$/i.test(u)) return Promise.reject(new Error('Paste a full image link starting with http:// or https://'));
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      try {
+        localStorage.setItem(KEYS[kind], u);
+      } catch {
+        /* storage unavailable: keep for this session */
+      }
+      mem[kind] = u;
+      resolve();
+    };
+    img.onerror = () => reject(new Error("That link didn't load as an image here. Copy the image address itself (long-press the picture → Copy Image Address)."));
+    img.src = u;
+  });
+}

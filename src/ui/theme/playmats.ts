@@ -399,7 +399,7 @@ function eraMats(noise: (id: string, freq: string, alpha: number, octaves?: numb
           <circle cx="800" cy="520" r="260" fill="url(#core)"/>
           ${wings('#e8f0ff', 0.13)}
           ${grain()}
-          <text x="800" y="508" text-anchor="middle" font-family="Georgia, serif" font-weight="700" font-size="26" letter-spacing="14" fill="#f2cf6b" opacity=".75">DUELIST CHAMPIONSHIP · EDISON, NJ · APRIL 2010</text>`,
+          <text x="800" y="508" text-anchor="middle" font-family="Georgia, serif" font-weight="700" font-size="22" letter-spacing="9" fill="#f2cf6b" opacity=".75">DUELIST CHAMPIONSHIP · EDISON 2010</text>`,
           noise('grain', '.9', 0.06) + '<radialGradient id="core"><stop offset="0" stop-color="#fff2c4" stop-opacity=".55"/><stop offset="1" stop-color="#fff2c4" stop-opacity="0"/></radialGradient>',
         ),
     },

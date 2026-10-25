@@ -136,6 +136,28 @@ export function attachOfficialArt(artEl: HTMLElement, cardName: string, mode: 'a
   });
 }
 
+/**
+ * Swap a rendered card face for the real full card scan once it loads.
+ * Badges (limit status, chain numbers) stay on top. Drawn face stays if loading fails.
+ */
+export function attachOfficialCard(cardEl: HTMLElement, cardName: string) {
+  if (!officialArtEnabled()) return;
+  void getOfficialImage(cardName).then((img) => {
+    if (!img) return;
+    const el = new Image();
+    el.decoding = 'async';
+    el.alt = cardName;
+    el.draggable = false;
+    el.className = 'official-card';
+    el.onload = () => {
+      const keep = [...cardEl.querySelectorAll(':scope > .yc-limit, :scope > .yc-badge')];
+      cardEl.replaceChildren(el, ...keep);
+      cardEl.classList.add('yc--official');
+    };
+    el.src = img.full;
+  });
+}
+
 /** Clear cached lookups (Settings → reset). */
 export function clearOfficialArtCache() {
   cache = {};

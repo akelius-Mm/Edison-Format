@@ -317,3 +317,15 @@
   background: linear-gradient(125deg, rgba(255, 255, 255, 0.2) 0%, rgba(255, 255, 255, 0) 28%, rgba(255, 255, 255, 0.06) 52%, rgba(255, 255, 255, 0) 64%, rgba(0, 0, 0, 0.18) 100%);
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.16), inset 0 0 0 2px rgba(0, 0, 0, 0.25);
 }
+
+/* Real card scans (official images setting) */
+.yc--official { background: #111; }
+.yc--official > .official-card {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: inherit;
+  display: block;
+}

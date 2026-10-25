@@ -7,7 +7,7 @@ import { getSettings } from '../settings';
 import { applySleeve } from '../theme/sleeves';
 import { esc } from '../theme/util';
 import { cardArtSVG, cardArtSrc } from './art';
-import { attachOfficialArt } from './officialArt';
+import { attachOfficialArt, attachOfficialCard } from './officialArt';
 import { LEVEL_STAR_SVG, attributeIconSVG, spellTypeIcon } from './icons';
 
 export { cardArtSVG, cardArtSrc };
@@ -143,8 +143,12 @@ export function renderCard(data: CardData, opts: RenderCardOptions = {}): HTMLEl
   el.dataset.cardId = data.id;
   el.dataset.cardName = data.name;
   el.innerHTML = cardFaceHTML(data, opts);
-  const art = el.querySelector('.yc-art') as HTMLElement | null;
-  if (art) attachOfficialArt(art, data.name);
+  // Real card scans replace the drawn face when available (tokens have no scan).
+  if (!data.isToken) attachOfficialCard(el, data.name);
+  else {
+    const art = el.querySelector('.yc-art') as HTMLElement | null;
+    if (art) attachOfficialArt(art, data.name);
+  }
   return el;
 }
 
