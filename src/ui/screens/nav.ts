@@ -170,8 +170,8 @@ export function frame(
   if (large && 'IntersectionObserver' in window) {
     const io = new IntersectionObserver(
       (ents) => {
-        if (!el.isConnected && el.classList.contains('screen-leave')) return io.disconnect();
-        for (const e of ents) el.classList.toggle('is-scrolled', !e.isIntersecting && e.boundingClientRect.top < 0);
+        if (!el.isConnected) return io.disconnect();
+        for (const e of ents) el.classList.toggle('is-scrolled', !e.isIntersecting && e.boundingClientRect.top < 80);
       },
       { rootMargin: '-56px 0px 0px 0px' },
     );
