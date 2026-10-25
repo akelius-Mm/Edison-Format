@@ -30,6 +30,7 @@ import { SpectateServer } from '../../net/spectate';
 import { TransportError, describeServer, parseServer, type PeerServerConfig, type Transport } from '../../net/transport';
 import type { DuelControl, DuelSide } from '../duel/api';
 import { startDuel } from '../duel/duelScreen';
+import { setDuelDiagExtra } from '../diag';
 import { clearActiveDuel, loadActiveDuel, saveActiveDuel, type ResumeTag, type SavedDuel, type SavedSide } from '../duel/resume';
 import { haptic } from '../haptics';
 import { getSettings, loadJSON, saveJSON, updateSettings } from '../settings';
@@ -788,6 +789,8 @@ export class FriendSession {
       onDecision: (log, game) => room.localDecision(g, log, game.turn),
       onMount: (ctl) => {
         this.duel = { g, ctl };
+        // "Report a problem": the friend's decisions too, so the game replays on one phone
+        setDuelDiagExtra(() => ({ room: { role: this.role, code: this.code, mySeat: room.mySeat, game: g, matchSeed: room.match?.start.seed, status: room.status, peerLog: st.logs[room.peerSeat] } }));
         this.lastResult[g] = ctl.game;
         this.netChip = h('div', { class: 'fr-chip', role: 'status', 'aria-live': 'polite' }, h('span', { class: 'fr-chip-dot' }), h('span', { class: 'fr-chip-text' }, 'Opponent is thinking…'));
         // in the phase bar, next to "Opponent's turn"

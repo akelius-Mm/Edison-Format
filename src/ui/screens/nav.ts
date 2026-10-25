@@ -4,6 +4,7 @@ import { localsScreen } from './locals';
 // Events hub + Profile (Events agent): registered in startRouter below.
 import { eventsScreen } from './events';
 import { profileScreen } from './profile';
+import { reportError } from '../diag';
 
 export interface Screen {
   el: HTMLElement;
@@ -77,6 +78,7 @@ function render() {
     screen = f(params);
   } catch (e) {
     console.error(e);
+    reportError(e, `screen ${name} failed to open`);
     screen = errorScreen(e);
   }
   mount(screen, name);

@@ -37,6 +37,8 @@ import { ChainStack, LogPanel, PhaseBar, PlayerPanel, PreviewPanel } from './pan
 import { Sfx } from './sound';
 import { music } from '../audio/music';
 import { haptic } from '../haptics';
+import { duelLogLine, reportError, setDuelDiag } from '../diag';
+import { openReportSheet } from '../screens/report';
 
 export async function startDuel(container: HTMLElement, opts: DuelOptions): Promise<DuelResult> {
   const screen = new DuelScreen(container, opts);
@@ -146,6 +148,9 @@ class DuelScreen implements HumanUI {
       skipFirstDraw: opts.skipFirstDraw ?? s.skipFirstDraw,
     });
 
+    // "Report a problem" carries this duel: seed, decks and decisions replay it exactly
+    setDuelDiag({ opts, seed, me: this.me, log: () => this.recorder?.log ?? [], turn: () => this.game.turn });
+
     // ---- DOM
     this.root = h('div', `duel-root${this.spectator ? ' is-spectator' : ''}${s.showLog ? '' : ' hide-log'}`);
     this.root.tabIndex = -1;
@@ -224,6 +229,7 @@ class DuelScreen implements HumanUI {
         if (!this.replaying) this.scheduleRender();
       },
       log: (e) => {
+        duelLogLine(e.turn, e.text);
         if (this.replaying) this.replayLog.push(e);
         else this.log.add(e);
       },
@@ -497,6 +503,7 @@ class DuelScreen implements HumanUI {
       if (e instanceof GameOver) res = { winner: e.winner, reason: e.reason, turns: this.game.turn };
       else {
         console.error('Duel crashed', e);
+        reportError(e, 'duel crashed');
         res = { winner: null, reason: `Engine error: ${(e as Error)?.message ?? e}`, turns: this.game.turn };
       }
     }
@@ -650,6 +657,7 @@ class DuelScreen implements HumanUI {
   }
 
   private teardown() {
+    setDuelDiag(null);
     this.unsubSettings();
     this.dialogs.dispose();
     this.board.destroy();
@@ -723,6 +731,7 @@ class DuelScreen implements HumanUI {
             { label: 'Leave and save', kind: 'primary', onClick: () => (m.close(), resolve('leave')) },
             { label: 'Concede', kind: 'danger', onClick: () => (m.close(), resolve('concede')) },
             { label: 'Keep playing', kind: 'ghost', hotkey: 'Escape', onClick: () => (m.close(), resolve(null)) },
+            { label: 'Report a problem', kind: 'ghost', onClick: () => (m.close(), resolve(null), openReportSheet()) },
           ],
         });
       });
@@ -732,12 +741,19 @@ class DuelScreen implements HumanUI {
       this.abort(new GameOver(this.game.opp(this.me), 'Surrender'));
       return;
     }
-    const yes = await confirmDialog(
-      this.dialogs,
-      { prompt: this.spectator ? 'Stop watching this duel?' : 'Surrender this duel?' },
-      this.spectator ? 'Stop' : 'Surrender',
-      'Keep playing',
-    );
+    const yes = await new Promise<boolean>((resolve) => {
+      const m = this.dialogs.modal({
+        title: this.spectator ? 'Stop watching this duel?' : 'Surrender this duel?',
+        className: 'dlg--leave',
+        dismissible: true,
+        onDismiss: () => resolve(false),
+        actions: [
+          { label: this.spectator ? 'Stop' : 'Surrender', kind: this.spectator ? 'primary' : 'danger', hotkey: 'Enter', onClick: () => (m.close(), resolve(true)) },
+          { label: 'Keep playing', kind: 'ghost', hotkey: 'Escape', onClick: () => (m.close(), resolve(false)) },
+          { label: 'Report a problem', kind: 'ghost', onClick: () => (m.close(), resolve(false), openReportSheet()) },
+        ],
+      });
+    });
     if (!yes || this.aborted) return;
     if (this.spectator) {
       this.abort(new GameOver(null, 'Spectating stopped'));
