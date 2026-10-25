@@ -396,3 +396,101 @@ body::after {
   top: calc(var(--ch) * 0.04) !important;
   --hw: calc(var(--cw) * 0.7) !important;
 }
+
+/* ---------------------------------------------------------------- sleek duel board */
+/* Empty zones: thin outlines only, no ornaments */
+.zone--m::before,
+.zone--s::before,
+.zone--m::after,
+.zone--s::after,
+.zone--f .zone-label,
+.zone--pile .zone-label {
+  opacity: 0 !important;
+}
+.zone {
+  border-width: 1px !important;
+  border-radius: 6px !important;
+  box-shadow: none !important;
+  background: var(--zone-fill) !important;
+}
+.duel-mat::before {
+  outline: none !important;
+}
+.duel-mat {
+  border-radius: 14px !important;
+}
+.duel-mat::after {
+  box-shadow: none !important;
+  border-color: rgba(255, 255, 255, 0.06) !important;
+}
+/* Player strips: one slim line each */
+.pp {
+  border-radius: 12px !important;
+  background: rgba(18, 19, 22, 0.94) !important;
+  border: 1px solid rgba(255, 255, 255, 0.07) !important;
+}
+.pp::before {
+  display: none !important;
+}
+.pp.is-turn {
+  border-color: rgba(201, 182, 142, 0.5) !important;
+}
+.pp-lplabel {
+  color: var(--muted) !important;
+  font-weight: 600 !important;
+}
+.pp-stats {
+  color: var(--muted) !important;
+}
+.pp-bar-fill {
+  background: var(--gold) !important;
+  box-shadow: none !important;
+}
+.pp--opp .pp-bar-fill {
+  background: #b98080 !important;
+}
+/* Phase bar: quiet buttons */
+.phasebar {
+  background: rgba(18, 19, 22, 0.94) !important;
+  border: 1px solid rgba(255, 255, 255, 0.07) !important;
+}
+.btn--phase {
+  background: rgba(255, 255, 255, 0.04) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  color: var(--text) !important;
+  font-weight: 600 !important;
+}
+.btn--phase:disabled {
+  opacity: 0.35 !important;
+}
+.phasebar-turn span {
+  color: var(--gold) !important;
+}
+/* Pile counters */
+.pile-count {
+  background: rgba(10, 10, 12, 0.85) !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  color: var(--text) !important;
+  box-shadow: none !important;
+}
+@media (max-width: 600px) and (orientation: portrait) {
+  .icon-btn {
+    width: 32px !important;
+    height: 32px !important;
+    padding: 7px !important;
+    background: transparent !important;
+    border-color: rgba(255, 255, 255, 0.08) !important;
+  }
+  .duel-tools .icon-btn:nth-child(3) {
+    display: none !important; /* sound: in Settings */
+  }
+  .pp {
+    padding: 6px 12px !important;
+  }
+  .pp-lp {
+    font-size: 18px !important;
+  }
+  .stage--tall .hand-opp {
+    --hw: calc(var(--cw) * 0.6) !important;
+  }
+}

@@ -1,5 +1,5 @@
 // Offline support: the app shell is cached on first visit; card images are cached as they load.
-const VERSION = 'edison-v3';
+const VERSION = 'edison-v4';
 const SHELL = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './apple-touch-icon.png'];
 
 self.addEventListener('install', (e) => {

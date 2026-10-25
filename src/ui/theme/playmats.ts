@@ -275,14 +275,12 @@ function realMats(): Def[] {
       base: '#111215',
       accent: '#e8e8e8',
       zoneLine: 'rgba(240,240,240,.62)',
-      zoneFill: 'rgba(255,255,255,.03)',
-      printedZones: true,
-      gradient: 'radial-gradient(ellipse at 50% 45%, #24262c 0%, #131418 60%, #08090b 100%)',
+      zoneFill: 'rgba(255,255,255,.025)',
+      gradient: 'radial-gradient(ellipse at 50% 45%, #202227 0%, #121316 60%, #08090b 100%)',
       svg: () =>
         wrap(
           `${grain()}
-          <g fill="none" stroke="#fff" opacity=".1" stroke-width="3"><circle cx="800" cy="500" r="300"/><circle cx="800" cy="500" r="280" stroke-dasharray="4 10"/></g>
-          <text x="800" y="512" text-anchor="middle" font-family="Georgia, serif" font-size="46" letter-spacing="18" fill="#fff" opacity=".1">DUEL FIELD</text>`,
+`,
           noise('grain', '.85', 0.09),
         ),
     },
