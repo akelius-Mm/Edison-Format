@@ -5,7 +5,31 @@ import { ERA_SETS, STRUCTURE_DECKS } from './sets';
 import { RARITY_ORDER, type EraSetData, type Rarity, type StructureDeckData } from './types';
 
 /** Official product image for a set code (loads on the phone; may be blocked in sandboxes). */
-export const packImageUrl = (code: string) => `https://images.ygoprodeck.com/images/sets/${code}.jpg`;
+/** Full-size English booster artwork (Yugipedia, via the YGOJSON set data). */
+const PACK_ART: Record<string, string> = {
+  ABPF: 'https://ms.yugipedia.com//2/2c/ABPF-BoosterEN.png',
+  ANPR: 'https://ms.yugipedia.com//4/42/ANPR-BoosterEN.jpg',
+  CRMS: 'https://ms.yugipedia.com//b/b8/CRMS-BoosterEN.jpg',
+  CSOC: 'https://ms.yugipedia.com//0/0e/CSOC-Booster-EN-1E.jpg',
+  GLAS: 'https://ms.yugipedia.com//4/47/GLAS-BoosterEN.png',
+  GLD1: 'https://ms.yugipedia.com//0/0c/GLD1-BoosterEN.png',
+  GLD2: 'https://ms.yugipedia.com//4/4b/GLD2-BoosterEN.png',
+  GLD3: 'https://ms.yugipedia.com//7/73/GLD3-BoosterEN.png',
+  HA01: 'https://ms.yugipedia.com//f/fd/HA01-BoosterEN.png',
+  LODT: 'https://ms.yugipedia.com//1/15/LODT-Booster-EN-1E.png',
+  PTDN: 'https://ms.yugipedia.com//0/07/PTDN-BoosterEN.png',
+  RGBT: 'https://ms.yugipedia.com//5/52/RGBT-BoosterEN.png',
+  SOVR: 'https://ms.yugipedia.com//4/4e/SOVR-BoosterEN.jpg',
+  TDGS: 'https://ms.yugipedia.com//5/53/TDGS-BoosterEN.jpg',
+  TSHD: 'https://ms.yugipedia.com//9/93/TSHD-BoosterEN.png',
+  TU01: 'https://ms.yugipedia.com//6/6f/TU01-BoosterEN.jpg',
+  TU02: 'https://ms.yugipedia.com//2/25/TU02-BoosterEN.jpg',
+  TU03: 'https://ms.yugipedia.com//9/93/TU03-BoosterEN.jpg',
+};
+/** Small fallback pack image (YGOPRODeck). */
+export const packThumbUrl = (code: string) => `https://images.ygoprodeck.com/images/sets/${code}.jpg`;
+/** Best pack image for a set: the full-size artwork when known, else the small one. */
+export const packImageUrl = (code: string) => PACK_ART[code] ?? packThumbUrl(code);
 
 /** Names the pool spells differently from the printed English name. */
 const ALIASES: Record<string, string> = {

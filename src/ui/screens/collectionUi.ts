@@ -2,7 +2,7 @@
 // with a drawn fallback), foil card faces per rarity, rarity pills and the DP balance chip.
 import './packs.css';
 import { findCard } from '../../cards';
-import { packImageUrl, playableSet } from '../../collection/catalog';
+import { packImageUrl, packThumbUrl, playableSet } from '../../collection/catalog';
 import { PACK_FORMATS } from '../../collection/packs';
 import { STRUCTURE_DECKS } from '../../collection/sets';
 import { RARITY_NAMES, type Rarity } from '../../collection/types';
@@ -65,7 +65,11 @@ export function packArt(code: string, opts: { cls?: string; image?: boolean } = 
       el.appendChild(img);
       el.classList.add('pk--img');
     };
-    img.onerror = () => badImages.add(code);
+    // Full-size artwork first; if that host fails, the small image; then the drawn pack stays.
+    img.onerror = () => {
+      if (img.src !== packThumbUrl(code)) img.src = packThumbUrl(code);
+      else badImages.add(code);
+    };
     img.src = packImageUrl(code);
   }
   return el;
