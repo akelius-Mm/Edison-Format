@@ -3838,3 +3838,25 @@ body.in-duel .ui-toast-host {
     --page-max: 980px;
   }
 }
+.db-start-title h2 {
+  margin: 0;
+  font: 700 24px var(--font-display) !important;
+  letter-spacing: -0.02em !important;
+  text-transform: none !important;
+}
+.db-start-title .icon {
+  color: var(--text-2) !important;
+}
+.db-start-actions:not(.vertical) {
+  display: grid !important;
+  width: min(320px, 100%);
+}
+.db-start-actions .ui-btn {
+  width: 100%;
+}
+.premade-grid .deck-tile {
+  border: 0 !important;
+  border-radius: 14px !important;
+  background: var(--grp-hi) !important;
+  box-shadow: none !important;
+}
