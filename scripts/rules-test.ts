@@ -18,6 +18,7 @@ import { PREMADE_DECKS, aiSideDeck, buildDeckList, canSwap, moveToDeck, moveToSi
 import { ensureTdgsPatches } from '../src/cards/sets/tdgs';
 import { ensureArchetypeExtrasPatches } from '../src/cards/sets/archetype-extras';
 import { ensureArchetypeExtras2Patches } from '../src/cards/sets/archetype-extras2';
+import { AIController } from '../src/ai/ai';
 
 const T = {
   brute: findCard('Rules Test Brute') ?? normal('Rules Test Brute', 'EARTH', 'Warrior', 4, 1800, 1000),
@@ -879,6 +880,7 @@ function eq(a: unknown, b: unknown, msg: string) {
   await tdgsTests();
   await archetypeExtrasTests();
   await archetypeExtras2Tests();
+  await fuzzRegressionTests();
 
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
@@ -3616,5 +3618,41 @@ async function archetypeExtras2Tests() {
     eq([vl, rk].filter((c) => c.location === 'mzone').length, 1, 'one Zombie Special Summoned');
     await g.sendToGrave(g.monsters(0), 'effect');
     eq(g.getActivations(0, { open: true }).some((a) => a.card === mummy), false, 'once per turn');
+  });
+}
+
+// Regressions for bugs found by the self-play fuzz (scripts/fuzz.ts).
+async function fuzzRegressionTests() {
+  console.log('Fuzz regressions');
+
+  await test('AI: no Tribute Summon of Raiza / Caius when their mandatory trigger could only hit its own cards', async () => {
+    for (const name of ['Raiza the Storm Monarch', 'Caius the Shadow Monarch']) {
+      const { g, place } = setup();
+      place(0, cardByName('Treeborn Frog'), 'mzone');
+      const monarch = place(0, cardByName(name), 'hand');
+      const ai = new AIController('hard', 7);
+      const isMonarchSummon = (a: Action) => a.type === 'summon' && a.card === monarch;
+      eq(g.legalMainActions(0).some(isMonarchSummon), true, `${name} can be Tribute Summoned`);
+      eq(isMonarchSummon(await ai.chooseAction(g, 0, g.legalMainActions(0))), false, `${name} not summoned onto an empty opposing field`);
+      place(1, T.brute, 'mzone');
+      eq(isMonarchSummon(await ai.chooseAction(g, 0, g.legalMainActions(0))), true, `${name} summoned when the opponent has a target`);
+    }
+  });
+
+  await test('Bad Reaction to Simochi + Prime Material Dragon / Rainbow Life: the LP gain is converted once (no endless loop)', async () => {
+    const { g, place } = setup();
+    g.turnPlayer = 1;
+    await activateCard(g, 1, place(1, cardByName('Bad Reaction to Simochi'), 'szone', { faceUp: false }));
+    eq(g.spellTraps(1).some((c) => c.name === 'Bad Reaction to Simochi' && c.faceUp), true, 'Simochi is active');
+    ensurePtdnPatches(g);
+    place(1, cardByName('Prime Material Dragon'), 'mzone');
+    await g.recover(0, 500);
+    eq(g.players[0].lp, 8500, 'gain -> Simochi damage -> Prime Material gain');
+    await g.damage(0, 300, 'effect');
+    eq(g.players[0].lp, 8800, 'damage -> Prime Material gain -> Simochi damage -> gain');
+    await g.sendToGrave(g.monsters(1), 'effect');
+    g.turnData['ptdn:rainbowLife:0'] = true;
+    await g.recover(0, 200);
+    eq(g.players[0].lp, 9000, 'Rainbow Life: gain -> Simochi damage -> gain');
   });
 }

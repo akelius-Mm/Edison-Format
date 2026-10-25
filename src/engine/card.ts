@@ -92,6 +92,7 @@ export interface AiHints {
   /**
    * Monster cards only, read from any of the card's effects while it is in the hand: a bonus for Normal Summoning it
    * face-up (the AI then prefers the Summon over a Set), e.g. "Ancient Gear", whose Special Summons need it face-up.
+   * A negative value tells the AI not to Normal Summon it face-up right now.
    */
   summon?: (ctx: Ctx) => number;
 }

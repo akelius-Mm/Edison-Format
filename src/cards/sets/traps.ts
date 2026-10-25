@@ -118,11 +118,20 @@ function patchGame(g: Game) {
     return origDamage(p, amount, kind, source, sourcePlayer);
   };
   const origRecover = g.recover.bind(g);
+  // Simochi turns a gain into damage once: if that damage is itself turned back into a gain (Energy-Absorbing
+  // Monolith, Rainbow Life, Prime Material Dragon), the player gains the LP. Without this the two replacements
+  // called each other until the stack overflowed.
+  let converting = 0;
   anyG.recover = async (p: PlayerId, amount: number, source?: CardInstance) => {
-    const sim = amount > 0 ? simochiAgainst(g, p) : undefined;
+    const sim = amount > 0 && !converting ? simochiAgainst(g, p) : undefined;
     if (sim) {
       g.log(`Bad Reaction to Simochi: ${g.players[p].name}'s LP gain becomes damage.`, 'action', sim.controller);
-      await g.damage(p, amount, 'effect', sim, sim.controller);
+      converting++;
+      try {
+        await g.damage(p, amount, 'effect', sim, sim.controller);
+      } finally {
+        converting--;
+      }
       return;
     }
     return origRecover(p, amount, source);
