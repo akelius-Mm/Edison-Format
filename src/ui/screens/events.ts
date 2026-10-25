@@ -397,7 +397,7 @@ function checkInScreen(params: Record<string, string>): Screen {
     }
     if (info.problems.length && !(await confirmDialog('Deck is not tournament legal', `${info.name}: ${info.problems.slice(0, 2).join(' ')} Check in anyway?`, 'Check in anyway'))) return;
     const s = getSettings();
-    const deck: DeckSnapshot = { id: info.key, name: info.name, archetype: info.archetype, tier: info.tier, color: info.color, main: info.main, extra: info.extra };
+    const deck: DeckSnapshot = { id: info.key, name: info.name, archetype: info.archetype, tier: info.tier, color: info.color, main: info.main, extra: info.extra, side: info.side };
     const human = { name: s.playerName || 'You', avatar: s.avatar, sleeve: s.sleeve, deck };
     const sleeves = SLEEVES.map((x) => x.id);
     const avatars = AVATAR_PRESETS.filter((a) => a !== s.avatar);

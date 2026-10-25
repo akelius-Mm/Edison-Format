@@ -22,6 +22,8 @@ export interface Settings {
   defaultDifficulty: Difficulty;
   /** Player going first skips the first draw (Edison-era rule). */
   skipFirstDraw: boolean;
+  /** Side decking between games of a best-of-3 (both players; off keeps the decks unchanged). */
+  sideDecking: boolean;
   showLog: boolean;
   confirmEndTurn: boolean;
   /** Opt-in: show official card artwork fetched from the YGOPRODeck database. */
@@ -44,6 +46,7 @@ export const DEFAULT_SETTINGS: Settings = {
   defaultDifficulty: 'normal',
   // Edison (2008 TCG rules): the player going first draws on turn 1.
   skipFirstDraw: false,
+  sideDecking: true,
   showLog: true,
   confirmEndTurn: false,
   officialImages: true,

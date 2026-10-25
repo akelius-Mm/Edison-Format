@@ -13,6 +13,8 @@ export interface DeckSnapshot {
   color: string;
   main: Entry[];
   extra: Entry[];
+  /** Side Deck (missing in snapshots saved before siding: looked up by id). */
+  side?: Entry[];
 }
 
 export interface Entrant {

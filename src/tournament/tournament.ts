@@ -26,7 +26,7 @@ export interface CreateOptions {
 }
 
 export function snapshotPremade(d: DeckDef): DeckSnapshot {
-  return { id: d.id, name: d.name, archetype: d.archetype, tier: d.tier, color: d.color, main: d.main, extra: d.extra };
+  return { id: d.id, name: d.name, archetype: d.archetype, tier: d.tier, color: d.color, main: d.main, extra: d.extra, side: d.side ?? [] };
 }
 
 const TIER_WEIGHT: Record<1 | 2 | 3, number> = { 1: 6, 2: 3, 3: 1.2 };

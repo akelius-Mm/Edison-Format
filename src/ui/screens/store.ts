@@ -159,9 +159,23 @@ export function allDeckInfos(): DeckInfo[] {
   return [...listCustomDecks().map(customInfo), ...PREMADE_DECKS.map(premadeInfo)];
 }
 
-export function toDeckList(d: Pick<DeckInfo, 'main' | 'extra'>): DeckList {
-  const { main, extra } = buildDeckList(d);
-  return { main, extra };
+/**
+ * Card lists for a duel, with the Side Deck for siding between games. Deck snapshots saved before
+ * Side Decks existed have no `side`: it is looked up from the deck they were taken from (by id).
+ */
+export function toDeckList(d: Pick<DeckInfo, 'main' | 'extra'> & { side?: Entry[]; id?: string; key?: string }): DeckList {
+  const side = d.side ?? sideFor(d.id ?? d.key);
+  const { main, extra, side: sideCards } = buildDeckList({ main: d.main, extra: d.extra, side });
+  return sideCards?.length ? { main, extra, side: sideCards } : { main, extra };
+}
+
+/** The Side Deck of a premade ("id" or "premade:id") or custom ("custom:id") deck. */
+export function sideFor(id: string | undefined): Entry[] {
+  if (!id) return [];
+  const ref = parseRefKey(id);
+  if (ref?.kind === 'custom') return getCustomDeck(ref.id)?.side ?? [];
+  const pid = ref?.kind === 'premade' ? ref.id : id;
+  return PREMADE_DECKS.find((p) => p.id === pid)?.side ?? [];
 }
 
 export function deckCount(entries: Entry[]) {

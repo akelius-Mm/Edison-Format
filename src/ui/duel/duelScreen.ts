@@ -477,7 +477,7 @@ class DuelScreen implements HumanUI {
     this.clearInteraction();
     this.dialogs.closeAll();
     this.flush();
-    const out: DuelResult = { winner: res.winner, reason: res.reason, turns: res.turns };
+    const out: DuelResult = { winner: res.winner, reason: res.reason, turns: res.turns, seen: this.shownCards() };
     if (this.surrendered) out.surrendered = true;
     try {
       this.opts.onGameOver?.(out);
@@ -513,6 +513,21 @@ class DuelScreen implements HumanUI {
       r.classList.add('is-gone');
       window.setTimeout(() => r.remove(), 250);
     }
+  }
+
+  /** Cards each player showed this game (by owner): face-up on the field, in the Graveyard or banished. */
+  private shownCards(): [string[], string[]] {
+    const out: [string[], string[]] = [[], []];
+    try {
+      for (const c of this.game.allCards) {
+        if (c.isToken) continue;
+        const shown = c.location === 'grave' || c.location === 'banished' || ((c.location === 'mzone' || c.location === 'szone' || c.location === 'fzone') && c.faceUp);
+        if (shown) out[c.owner].push(c.data.id);
+      }
+    } catch {
+      /* best effort */
+    }
+    return out;
   }
 
   private teardown() {
