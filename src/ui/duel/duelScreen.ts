@@ -890,12 +890,15 @@ class DuelScreen implements HumanUI {
       this.onPileClick(c.owner, pile, ev);
       return;
     }
-    // Effects that exist but can't be used now get a disabled row saying why (e.g. an LP cost).
+    // Things the card could do but can't right now get a disabled row saying why (an LP cost, a used
+    // Normal Summon, missing Tributes, a Trap Set this turn...).
     const blocked = st ? this.effectBlockedNote(c, acts) : null;
-    if (!acts?.length && blocked) {
+    const notes = [...(st ? this.playBlockedNotes(c, acts) : []), ...(blocked ? [{ label: `Effect: ${blocked.label}`, sub: blocked.sub }] : [])];
+    const noteRows = notes.map((n) => ({ label: n.label, sub: n.sub, onClick: () => {}, kind: 'is-disabled', disabled: true }));
+    if (!acts?.length && notes.length) {
       const r = el.getBoundingClientRect();
       this.dialogs.menuAt(r.left + r.width / 2, r.top, c.name, [
-        { label: `Effect: ${blocked.label}`, sub: blocked.sub, onClick: () => {}, kind: 'is-disabled', disabled: true },
+        ...noteRows,
         { label: 'View card', sub: 'Enlarge and read', onClick: () => zoomCard(c.data, { instance: c, game: this.game }), kind: 'is-view' },
       ]);
       return;
@@ -920,13 +923,69 @@ class DuelScreen implements HumanUI {
           const l = this.actionLabel(a);
           return { label: l.label, sub: l.sub, onClick: () => this.resolveAction(a), kind: a.type === 'attack' ? 'is-attack' : '' };
         }),
-        ...(blocked ? [{ label: `Effect: ${blocked.label}`, sub: blocked.sub, onClick: () => {}, kind: 'is-disabled', disabled: true }] : []),
+        ...noteRows,
         pile === 'extra'
           ? { label: 'View Extra Deck', sub: `${this.game.players[c.owner].extra.length} cards`, onClick: () => this.openPile(c.owner, 'extra'), kind: 'is-view' }
           : { label: 'View card', sub: 'Enlarge and read', onClick: () => zoomCard(c.data, { instance: c, game: this.game }), kind: 'is-view' },
       ],
     );
     void ev;
+  }
+
+  /**
+   * Why your card in hand (or Set on the field) can't be summoned, Set or activated right now, for
+   * the action menu. Empty when nothing is blocked or the card has no such use.
+   */
+  private playBlockedNotes(c: CardInstance, acts: Action[] | undefined): { label: string; sub?: string }[] {
+    if (this.spectator || c.controller !== this.me) return [];
+    const g = this.game;
+    const me = this.me;
+    const has = (t: string) => !!acts?.some((a) => a.type === t);
+    const mainPhase = g.turnPlayer === me && (g.phase === 'main1' || g.phase === 'main2') && !g.chain.length;
+    const out: { label: string; sub?: string }[] = [];
+    // on the opponent's turn a tap on a hand card just reads it (nothing to explain)
+    if (c.location === 'hand' && g.turnPlayer !== me) return out;
+    if (c.location === 'hand' && c.isMonster && !c.isExtra) {
+      if (!has('summon') && !has('set') && !has('proc')) {
+        const procs = (c.data.effects ?? []).some((ef) => ef.kind === 'proc');
+        if (c.data.cannotNormalSummon) {
+          out.push(procs ? { label: "Summon: its condition isn't met", sub: 'It can only be Special Summoned by its own condition' } : { label: "Summon: can't be Normal Summoned", sub: 'Special Summon it with a card effect' });
+        } else if (!mainPhase) {
+          out.push({ label: 'Summon: only in your Main Phase', sub: g.chain.length ? 'Not while a chain is resolving' : 'Move to Main Phase 1 or 2' });
+        } else if (g.players[me].normalSummonsLeft <= 0) {
+          out.push({ label: 'Summon: already Normal Summoned this turn', sub: 'One Normal Summon or Set per turn' });
+        } else if (g.queryPlayer(me, 'cannotNormalSummon') && g.queryPlayer(me, 'cannotSet')) {
+          out.push({ label: 'Summon: blocked by a card effect', sub: 'You cannot Normal Summon or Set right now' });
+        } else {
+          const need = g.tributesNeeded(c);
+          const have = g.tributeCandidates(me, c).length;
+          if (need > 0 && have < need && !g.altTributeCandidates(me, c).length)
+            out.push({ label: `Summon: needs ${need} Tribute${need > 1 ? 's' : ''}`, sub: have ? `You control ${have} monster${have > 1 ? 's' : ''} you can Tribute` : 'You control no monsters to Tribute' });
+          else if (need === 0 && g.freeMZones(me) <= 0) out.push({ label: 'Summon: your Monster Zones are full' });
+        }
+      }
+      // an effect that only works once the monster is on the field (Test Tiger, Card Trooper...)
+      const fieldOnly = (c.data.effects ?? []).some((ef) => (ef.kind === 'ignition' || ef.kind === 'quick') && !g.defaultRange(c, ef).includes('hand') && g.defaultRange(c, ef).includes('mzone'));
+      if (fieldOnly && !has('activate')) out.push({ label: 'Effect: works once it is face-up on the field', sub: 'Summon it first' });
+    } else if (c.location === 'hand' && (c.isSpell || c.isTrap)) {
+      if (c.isTrap) {
+        if (!has('setST')) out.push(g.freeSZones(me) <= 0 ? { label: 'Set: your Spell & Trap Zones are full' } : { label: 'Set: only in your Main Phase' });
+        out.push({ label: 'Activate: Set it first', sub: 'Traps can be activated from your next turn' });
+      } else if (!has('activate')) {
+        const quick = c.data.stype === 'quickplay';
+        if (g.queryPlayer(me, 'cannotActivateSpells')) out.push({ label: 'Activate: Spells are blocked by a card effect' });
+        else if (!quick && !mainPhase) out.push({ label: 'Activate: only in your Main Phase', sub: g.chain.length ? 'Normal Spells cannot be chained' : undefined });
+        else if (c.data.stype !== 'field' && g.freeSZones(me) <= 0) out.push({ label: 'Activate: your Spell & Trap Zones are full' });
+        else out.push({ label: "Activate: its condition isn't met", sub: 'Check the card text: it needs a target or a cost you cannot pay' });
+      }
+    } else if (c.location === 'szone' && !c.faceUp && !has('activate')) {
+      const waits = c.isTrap || c.data.stype === 'quickplay';
+      if (waits && c.setTurn === g.turn) out.push({ label: 'Activate: Set this turn', sub: `${c.isTrap ? 'Traps' : 'Quick-Play Spells'} Set this turn can be activated from the next turn` });
+      else if (c.isTrap && g.queryPlayer(me, 'cannotActivateTraps')) out.push({ label: 'Activate: Traps are blocked by a card effect' });
+      else if (c.isSpell && !waits && !mainPhase) out.push({ label: 'Activate: only in your Main Phase' });
+      else out.push({ label: "Activate: its condition isn't met", sub: 'It needs a trigger, a target or a cost that is not there right now' });
+    }
+    return out;
   }
 
   /**
