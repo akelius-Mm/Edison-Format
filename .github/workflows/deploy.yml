@@ -33,12 +33,13 @@ jobs:
       # Home-screen icon: the Dark Armed Dragon artwork, saved next to the site so iOS can use it.
       - name: App icon (Dark Armed Dragon)
         continue-on-error: true
+        timeout-minutes: 3
         run: |
           set -euo pipefail
           command -v convert >/dev/null || (sudo apt-get update -qq && sudo apt-get install -y -qq imagemagick)
-          URL=$(curl -fsSL "https://db.ygoprodeck.com/api/v7/cardinfo.php?id=65192027" | python3 -c "import json,sys; print(json.load(sys.stdin)['data'][0]['card_images'][0]['image_url_cropped'])")
+          URL=$(curl -fsSL --max-time 30 "https://db.ygoprodeck.com/api/v7/cardinfo.php?id=65192027" | python3 -c "import json,sys; print(json.load(sys.stdin)['data'][0]['card_images'][0]['image_url_cropped'])")
           echo "Artwork: $URL"
-          curl -fsSL "$URL" -o /tmp/dad.jpg
+          curl -fsSL --max-time 30 "$URL" -o /tmp/dad.jpg
           for s in 180 192 512; do convert /tmp/dad.jpg -resize ${s}x${s}^ -gravity center -extent ${s}x${s} -strip /tmp/icon-$s.png; done
           cp /tmp/icon-180.png dist/apple-touch-icon.png
           cp /tmp/icon-192.png dist/icon-192.png
