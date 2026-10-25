@@ -208,9 +208,19 @@ class DuelScreen implements HumanUI {
   // ------------------------------------------------------------------ phone
   /** Long-press any card to read it; tap the sheet to close. Portrait phones only. */
   private setupPhoneGestures(center: HTMLElement) {
-    const hint = h('div', 'phone-hint', 'Hold a card to read it · ⓘ shows the last card');
-    center.appendChild(hint);
-    window.setTimeout(() => hint.classList.add('is-gone'), 6000);
+    // Show the tip only the first time.
+    let seen = false;
+    try {
+      seen = localStorage.getItem('edison.hint.hold') === '1';
+      localStorage.setItem('edison.hint.hold', '1');
+    } catch {
+      /* ignore */
+    }
+    if (!seen) {
+      const hint = h('div', 'phone-hint', 'Hold a card to read it');
+      center.appendChild(hint);
+      window.setTimeout(() => hint.classList.add('is-gone'), 5000);
+    }
     let timer = 0;
     let startX = 0;
     let startY = 0;
