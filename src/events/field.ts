@@ -17,7 +17,7 @@ export interface EventEntrant extends LocalsEntrant {
   circuitId?: string;
 }
 
-export type CircuitTier = 'local' | 'regional' | 'pro' | 'world';
+export type CircuitTier = 'local' | 'regional' | 'pro';
 
 export interface CircuitDuelist {
   id: string;
@@ -33,8 +33,6 @@ export interface CircuitDuelist {
   /** Locals regular id (reuses the Locals Night cast). */
   regular?: string;
   blurb?: string;
-  /** Country, for the international Worlds field. */
-  country?: string;
   /** Chance to show up at each kind of open event. */
   attend: { locals: number; regional: number; sjc: number };
 }
@@ -76,7 +74,7 @@ const TIER_TITLES: string[][] = [
   ['Store Champion', 'Road Warrior', 'Regional Regular', 'Weekend Grinder', 'Deck Tinkerer', 'Locals Legend', 'First Big Event'],
   ['Regional Top 8', 'Former SJC Top 32', 'Road Warrior', 'Store Champion', 'Team Captain', 'Grinder', 'National Qualifier'],
   ['National Qualifier', 'Regional Champion', 'SJC Top 8', 'Circuit Grinder', 'Former Top 16'],
-  ['National Champion', 'National Finalist', 'World Qualifier'],
+  ['National Champion', 'National Finalist', 'Circuit Leader'],
 ];
 
 export function difficultyForTier(s: RngState, tier: number, skill: number): Difficulty {
@@ -137,7 +135,7 @@ export function duelistEntrant(d: CircuitDuelist, id: string, seed: number, slee
     name: d.name,
     avatar: d.avatar,
     sleeve: sleeves.length ? sleeves[hash(d.id) % sleeves.length] : 'classic-red',
-    title: d.country ? `${d.title} · ${d.country}` : d.title,
+    title: d.title,
     deck: snapshot(deck),
     meta: classifyDeck(deck),
     difficulty: d.difficulty,
@@ -153,18 +151,17 @@ export function duelistEntrant(d: CircuitDuelist, id: string, seed: number, slee
 
 // ------------------------------------------------------------------ the AI circuit
 
-const COUNTRIES = ['Japan', 'Germany', 'Italy', 'France', 'United Kingdom', 'Spain', 'Mexico', 'Brazil', 'Canada', 'Australia', 'Netherlands', 'Sweden', 'Portugal', 'Chile', 'Belgium', 'Peru'];
 
 const LOCAL_TITLES = ['Locals regular', 'Binder trader', 'Friday grinder', 'New to the scene', 'Deck tinkerer', 'Weekend duelist', 'Store veteran'];
 const REGIONAL_TITLES = ['Road warrior', 'Regional regular', 'Store champion', 'Team captain', 'Weekend grinder', 'Regional Top 16'];
 const PRO_TITLES = ['National qualifier', 'SJC Top 8', 'Regional champion', 'Circuit grinder', 'Former Top 16 at Nationals', 'Feature-match regular'];
 
 /** Circuit sizes by tier (local includes the nine Locals regulars). */
-export const CIRCUIT_SHAPE = { local: 60, regional: 90, pro: 50, world: 24 } as const;
+export const CIRCUIT_SHAPE = { local: 60, regional: 90, pro: 50 } as const;
 
 const circuitCache = new Map<number, CircuitDuelist[]>();
 
-/** ~200 domestic duelists plus the international Worlds field, rebuilt from the season seed. */
+/** ~200 circuit duelists, rebuilt from the season seed. */
 export function buildCircuit(seed: number): CircuitDuelist[] {
   const hit = circuitCache.get(seed);
   if (hit) return hit;
@@ -196,11 +193,10 @@ export function buildCircuit(seed: number): CircuitDuelist[] {
       const skill = Math.round(lo + rand(s) * (hi - lo));
       const difficulty = tier === 'local' ? difficultyFor('mixed', rng, skill) : tier === 'regional' ? (skill > 30 ? 'hard' : 'normal') : 'hard';
       const { meta, deck } = drawTierDeck(s, deckTier);
-      const country = tier === 'world' ? COUNTRIES[i % COUNTRIES.length] : undefined;
       out.push({
         id: `${tier[0]}${i + 1}`,
         name: personaName(rng, used),
-        title: tier === 'world' ? (i < COUNTRIES.length ? 'National Champion' : 'National Finalist') : pickOne(s, titles),
+        title: pickOne(s, titles),
         tier,
         rating: aiRating(difficulty, skill),
         skill,
@@ -208,7 +204,6 @@ export function buildCircuit(seed: number): CircuitDuelist[] {
         meta,
         deckId: deck.id,
         avatar: `persona-${Math.floor(rand(s) * 1e6)}`,
-        country,
         attend: {
           locals: attend.locals * (0.6 + rand(s) * 0.8),
           regional: attend.regional * (0.6 + rand(s) * 0.8),
@@ -220,12 +215,9 @@ export function buildCircuit(seed: number): CircuitDuelist[] {
   add('local', CIRCUIT_SHAPE.local - out.length, 0, -45, 35, LOCAL_TITLES, { locals: 0.33, regional: 0.15, sjc: 0.05 });
   add('regional', CIRCUIT_SHAPE.regional, 1, -5, 60, REGIONAL_TITLES, { locals: 0.04, regional: 0.45, sjc: 0.45 });
   add('pro', CIRCUIT_SHAPE.pro, 3, 35, 100, PRO_TITLES, { locals: 0, regional: 0.35, sjc: 0.9 });
-  add('world', CIRCUIT_SHAPE.world, 4, 60, 110, [], { locals: 0, regional: 0, sjc: 0 });
   circuitCache.set(seed, out);
   return out;
 }
 
-/** Domestic circuit (standings exclude the international Worlds field). */
-export const domestic = (all: CircuitDuelist[]) => all.filter((d) => d.tier !== 'world');
 
 export { skillForRating };
