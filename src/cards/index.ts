@@ -14,6 +14,7 @@ import './sets/monarchs';
 import './sets/teledad';
 import './sets/heroes';
 import './sets/tournament-extras';
+import './sets/abpf';
 import { applyBanlist } from './banlist';
 
 applyBanlist();
