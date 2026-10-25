@@ -45,7 +45,7 @@ export function autoBuild(pool: CardData[], opts: { size?: number; fillers?: Car
   const mainPool = pool.filter((c) => !isExtraDeck(c));
   const ranked = mainPool.map((c, i) => ({ c, i, s: deckScore(c, p) })).sort((a, b) => b.s - a.s || a.i - b.i);
 
-  const caps = { monster: 21, spell: 15, trap: 12, high: 3, mid: 5 };
+  const caps = { monster: 21, spell: 15, trap: 12, high: 3, mid: 4 };
   const chosen: typeof ranked = [];
   const rest: typeof ranked = [];
   const count = { monster: 0, spell: 0, trap: 0, high: 0, mid: 0 };
