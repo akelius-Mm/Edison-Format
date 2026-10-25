@@ -1551,6 +1551,21 @@ async function crmsTests() {
     eq(other.location, 'grave', 'other monster destroyed');
   });
 
+  await test('Plaguespreader Zombie: offered in your Standby Phase only (a hand card goes on top of the Deck); not in the Main Phase', async () => {
+    const { g, c0, place } = setup();
+    const pz = place(0, cardByName('Plaguespreader Zombie'), 'grave');
+    const h1 = place(0, T.brute, 'hand');
+    let asked = 0;
+    c0.confirmTrigger = async () => (asked++, true);
+    eq(g.legalMainActions(0).some((x) => x.type === 'activate' && x.card === pz), false, 'no Main Phase activation from the GY');
+    g.turn = 3;
+    await (g as any).setPhase('standby');
+    eq(asked, 1, 'asked once in the Standby Phase');
+    eq(pz.location, 'mzone', 'Special Summoned');
+    eq(pz.banishOnLeave, true, 'banished when it leaves the field');
+    eq(g.players[0].deck[g.players[0].deck.length - 1] === h1 || g.players[0].deck[0] === h1, true, 'hand card on top of the Deck');
+  });
+
   await test('CRMS: Alien Kid places A-Counters; the countered monster loses 300 ATK when battling an Alien', async () => {
     const { g, place } = setup();
     const kid = place(0, cardByName('Alien Kid'), 'mzone');

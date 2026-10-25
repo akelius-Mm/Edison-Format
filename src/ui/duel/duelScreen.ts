@@ -905,7 +905,26 @@ class DuelScreen implements HumanUI {
         const acts = st && this.actionState === st ? st.byCard.get(c.uid) ?? [] : [];
         return acts.map((a) => ({ label: this.actionLabel(a).label, onClick: () => this.resolveAction(a) }));
       },
+      notes: (c) => this.pileEffectNote(c),
     });
+  }
+
+  /**
+   * For your own card in the Graveyard / banished with an effect that works from there but can't be
+   * used right now: when it can be (from the card's own condition, e.g. "During your Standby Phase").
+   */
+  private pileEffectNote(c: CardInstance): string | null {
+    if (this.spectator || c.owner !== this.me || (c.location !== 'grave' && c.location !== 'banished')) return null;
+    const g = this.game;
+    const effs = (c.data.effects ?? []).filter((ef) => ef.kind !== 'continuous' && ef.kind !== 'activate' && (ef.range ?? []).includes(c.location));
+    if (!effs.length) return null;
+    const ef = effs[0];
+    if (effs.every((e) => e.opt && g.isOptUsed(g.optKey(c, e, (c.data.effects ?? []).indexOf(e), this.me)))) return 'Already used this turn.';
+    const when = ef.kind === 'proc' ? null : pileWhen(c.data.text, c.location);
+    if (ef.kind === 'trigger') return `${when ?? 'It activates at a set time'}. You'll be asked then.`;
+    if (ef.kind === 'ignition') return when ? `${when}, in your Main Phase.` : 'Only in your Main Phase.';
+    if (ef.kind === 'proc') return 'Summon it in your Main Phase once its condition is met.';
+    return when ? `${when}.` : 'Usable once its condition is met.';
   }
 
   private toast(text: string) {
@@ -1068,6 +1087,20 @@ function isPhonePortrait() {
 }
 
 /** The Life Point cost of an effect: from its cost code (payLp(N)) or, failing that, the card text. */
+/**
+ * The card's own timing for an effect that works from the Graveyard / banished pile, e.g. "During your
+ * Standby Phase, if this card is in your GY": the clause before ':' of the sentence naming the pile.
+ */
+function pileWhen(text: string, loc: 'grave' | 'banished'): string | null {
+  const pile = loc === 'grave' ? /\b(GY|Graveyard)\b/ : /\bbanished\b/i;
+  for (const s of text.split(/\n|(?<=\.)\s+/)) {
+    if (!pile.test(s) || !/this card/i.test(s) || !s.includes(':')) continue;
+    const c = s.split(':')[0].trim();
+    if (/^(once per turn, )?(during|if this card is|while this card is|when you take)/i.test(c) && c.length < 110) return c.replace(/\.$/, '');
+  }
+  return null;
+}
+
 function lpCost(ef: EffectDef, text: string): number | null {
   const code = ef.activate ? String(ef.activate) : '';
   const m = code.match(/payLp\(\s*([\d.e]+)\s*\)/);

@@ -2345,3 +2345,5 @@
 @media (max-width: 600px) {
   .duel-root .dlg--leave .dlg-actions .btn { flex: 1 1 100%; }
 }
+/* pile viewer: when a card's Graveyard / banished effect can be used */
+.tile-note { width: 100%; margin-top: 4px; padding: 5px 8px; border-radius: 8px; background: rgba(255, 255, 255, 0.06); color: rgba(236, 235, 231, 0.78); font-size: 11.5px; line-height: 1.3; text-align: center; }
