@@ -758,3 +758,280 @@ body.has-tabbar .frame:has(.lob-bar) {
   width: 15px;
   height: 15px;
 }
+
+/* ---------------------------------------------------------------- deck carousel extras */
+.lob-count {
+  font: 500 15px var(--font);
+  color: var(--faint);
+}
+.dkc-tag--event {
+  background: rgba(242, 239, 232, 0.92);
+  color: #111;
+}
+.dkc-new .dkc-art {
+  background: transparent;
+  color: var(--muted);
+}
+.dkc-new {
+  background: transparent;
+  box-shadow: inset 0 0 0 1.5px rgba(255, 255, 255, 0.14);
+}
+.dkc-new .dkc-art .icon {
+  width: 34px;
+  height: 34px;
+  margin-bottom: 30px;
+}
+.dkc-new .dkc-text b {
+  color: var(--text-2);
+}
+.shelf {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+.shelf-rows {
+  min-width: 0;
+}
+
+/* ---------------------------------------------------------------- duel setup: two-step flow */
+.flow-steps {
+  position: sticky;
+  top: calc(52px + env(safe-area-inset-top, 0px));
+  z-index: 35;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 calc(-1 * var(--gutter-r)) 6px calc(-1 * var(--gutter));
+  padding: 8px var(--gutter-r) 10px var(--gutter);
+  background: rgba(11, 12, 14, 0.9);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  backdrop-filter: saturate(180%) blur(20px);
+}
+.duel-flow .frame-body {
+  padding-top: 0 !important;
+}
+.duel-flow .frame-head {
+  border-bottom-color: transparent !important;
+}
+.flow-step-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 4px;
+  border: 0;
+  background: none;
+  color: var(--faint);
+  font: 600 15px var(--font);
+  cursor: pointer;
+  transition: color 0.2s ease;
+}
+.flow-num {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--fill);
+  color: var(--muted);
+  font: 700 13px var(--font);
+  transition:
+    background 0.2s ease,
+    color 0.2s ease;
+}
+.flow-step-btn.on {
+  color: var(--text);
+}
+.flow-step-btn.on .flow-num {
+  background: var(--cta);
+  color: #111;
+}
+.flow-step-btn.done {
+  color: var(--text-2);
+}
+.flow-step-btn.done .flow-num {
+  background: var(--fill-2);
+  color: var(--text);
+}
+.flow-line {
+  flex: 1;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--fill);
+  max-width: 120px;
+}
+.flow-pane {
+  display: grid;
+  min-width: 0;
+}
+.flow-fwd {
+  animation: flowIn 0.32s var(--ease-out);
+}
+.flow-back {
+  animation: flowBack 0.32s var(--ease-out);
+}
+@keyframes flowIn {
+  from {
+    opacity: 0;
+    transform: translateX(28px);
+  }
+}
+@keyframes flowBack {
+  from {
+    opacity: 0;
+    transform: translateX(-28px);
+  }
+}
+.duel-flow .lob-sec {
+  margin-bottom: 14px;
+  gap: 8px;
+}
+.duel-flow .lob-h h2 {
+  font-size: 18px;
+}
+.duel-flow .dkc-box {
+  width: 124px;
+  aspect-ratio: 4 / 5;
+}
+@media (min-width: 700px) {
+  .duel-flow .dkc-box {
+    width: 150px;
+  }
+}
+
+/* matchup strip (step 2) */
+.mu {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  margin: 2px 0 18px;
+  padding: 10px;
+  border-radius: 18px;
+  background: var(--grp);
+}
+.mu-side {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  min-height: 44px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+}
+.mu-side:last-child {
+  flex-direction: row-reverse;
+  text-align: right;
+}
+button.mu-side {
+  cursor: pointer;
+  border-radius: 12px;
+}
+button.mu-side:active {
+  opacity: 0.6;
+}
+.mu-art {
+  --deck: #555;
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  border-radius: 12px;
+  background: linear-gradient(160deg, color-mix(in srgb, var(--deck) 60%, #222), #141518);
+  background-size: cover;
+  background-position: center 30%;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+.mu-art--random {
+  background: #26272c;
+  color: var(--text-2);
+}
+.mu-art--random .icon {
+  width: 22px;
+  height: 22px;
+}
+.mu-text {
+  display: grid;
+  min-width: 0;
+}
+.mu-who {
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.mu-text b {
+  font: 600 15px/1.2 var(--font);
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.mu-vs {
+  font: 700 12px var(--font);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+.opp-diff + .opp-diff {
+  padding-top: 0;
+}
+.flow-build {
+  border-radius: 14px;
+  background: var(--grp) !important;
+  margin-bottom: 14px;
+  border: 0 !important;
+}
+.flow-opp .dkc-box {
+  width: 112px;
+}
+.flow-opp .mu {
+  padding: 8px;
+  margin-bottom: 14px;
+}
+.flow-opp .mu-art {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+}
+.flow-opp .opp-row {
+  min-height: 50px;
+}
+.flow-opp .opp-diff {
+  padding: 8px 10px 8px;
+}
+.flow-opp .opp-diff:last-child {
+  padding-bottom: 10px;
+}
+.flow-opp .lob-sec:has(.opp-group) .lob-h {
+  display: none;
+}
+.flow-opts {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  gap: 8px;
+}
+.flow-opp .dkc-box {
+  width: 124px;
+}
+.flow-opp .opp-group {
+  margin-bottom: 8px;
+}
+.flow-roomy .dkc-box {
+  width: 148px;
+  aspect-ratio: 3 / 4;
+}
+.flow-roomy .lob-sec {
+  margin-bottom: 20px;
+}
+@media (max-width: 360px) {
+  .flow-opts {
+    grid-template-columns: 1fr;
+  }
+}

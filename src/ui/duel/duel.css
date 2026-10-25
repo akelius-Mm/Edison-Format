@@ -1524,3 +1524,26 @@
 [data-mat-labels='1'] .zone--m::after,
 [data-mat-labels='1'] .zone--s::after { opacity: 0.25; }
 .side-opp .zone-print { transform: rotate(180deg); }
+
+/* Two mats on one table: each player's mat covers only their own half. */
+.duel-mat.mats-split {
+  background:
+    radial-gradient(ellipse at 50% 50%, rgba(255, 255, 255, 0.035), transparent 70%),
+    linear-gradient(180deg, #16171a, #0d0e10);
+}
+.duel-mat.mats-split::after { border-color: rgba(255, 255, 255, 0.05) !important; }
+.mats-split .side::before {
+  content: '';
+  position: absolute;
+  inset: calc(var(--gap) * -1.4) calc(var(--gap) * -1.6);
+  border-radius: calc(var(--gap) * 1.6);
+  background: var(--mat-bg);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.05) inset, 0 8px 22px rgba(0, 0, 0, 0.55);
+  pointer-events: none;
+}
+/* The opponent's mat faces them. */
+.mats-split .side-opp::before { transform: rotate(180deg); }
+.mats-split .midline-glow { display: none; }
+/* Wide boards show the banished pile beside the grid: the mat extends to cover it. */
+.mats-split .stage:not(.stage--compact) .side-me::before { right: calc(var(--zw) * -0.64 - var(--gap) * 3.2); }
+.mats-split .stage:not(.stage--compact) .side-opp::before { left: calc(var(--zw) * -0.64 - var(--gap) * 3.2); }

@@ -242,8 +242,7 @@ export function draftScreen(): Screen {
     dock(el) {
       el.classList.add('dr-dock');
       document.body.appendChild(el);
-      const fr = root.querySelector('.frame');
-      fr?.classList.add('dr-has-dock');
+      root.querySelector('.frame-body')?.append(h('div', { class: 'dr-dock-spacer', 'aria-hidden': 'true' }));
       const sync = () => root.style.setProperty('--dock-h', `${el.offsetHeight}px`);
       const ro = typeof ResizeObserver === 'function' ? new ResizeObserver(sync) : null;
       ro?.observe(el);
@@ -332,7 +331,7 @@ function homeView(ctl: Ctl) {
   const packsOpt = h('div', { class: 'dr-opt' }, h('span', { class: 'dr-opt-label' }, 'Packs'), segmented<number>([{ value: 3, label: '3 packs' }, { value: 4, label: '4 packs' }], form.packs, (v) => ((form.packs = v as 3 | 4), saveForm(), sync()), 'Packs'));
   const heroTitle = h('h2', { class: 'dr-h2' });
   const heroText = h('p');
-  const startBtn = button('', () => void start(), { variant: 'primary', icon: 'play', cls: 'dr-btn-wide' });
+  const startBtn = button('Start draft', () => void start(), { variant: 'primary', icon: 'play', cls: 'dr-btn-wide' });
   const sync = () => {
     const sealed = form.mode === 'sealed';
     packsOpt.style.display = sealed ? 'none' : '';
@@ -394,7 +393,7 @@ function openView(ctl: Ctl, s: DraftState) {
   const burst = h('div', { class: 'dr-burst' });
   const packBtn = h('button', { type: 'button', class: 'dr-pack-btn', 'aria-label': 'Open pack' }, packArt(n, `Pack ${n + 1}`, `${modeLabel(s)} · 15 cards`), h('div', { class: 'dr-tap-hint' }, 'Tap to open'));
   const stage = h('div', { class: 'dr-stage' }, burst, packBtn);
-  const fr = frame(`Pack ${n + 1} of ${s.packCount}`, { subtitle: modeLabel(s), cls: 'dr-open', ...backToHome(ctl) }, stage);
+  const fr = frame(`Pack ${n + 1} of ${s.packCount}`, { cls: 'dr-open', compact: true, ...backToHome(ctl) }, stage);
   const note = h('div', { class: 'dr-dock-note' }, 'Tap the pack to open it');
   const actions = h('div', { class: 'dr-btn-row' });
   const dock = h('div', null, h('div', { class: 'dr-dock-in' }, note, actions));
@@ -554,9 +553,8 @@ function pickView(ctl: Ctl, s: DraftState) {
     h('div', { class: 'dr-pickhead' }, h('div', { class: 'dr-progress' }, progress), h('div', { class: 'dr-pickhead-row' }, pickLine, passChip)),
     grid,
   );
-  const fr = frame('', { subtitle: '', cls: 'dr-pick', ...backToHome(ctl) }, body);
-  const titleEl = fr.querySelector('.frame-title') as HTMLElement;
-  const subEl = fr.querySelector('.frame-sub') as HTMLElement;
+  const fr = frame('Pick', { cls: 'dr-pick', compact: true, ...backToHome(ctl) }, body);
+  const setTitle = (t: string) => fr.querySelectorAll('.frame-title, .frame-large-title').forEach((x) => (x.textContent = t));
 
   // dock: picks drawer + selection + actions
   const countsEl = h('span', { class: 'dr-muted' });
@@ -600,9 +598,8 @@ function pickView(ctl: Ctl, s: DraftState) {
 
   const updateHeader = () => {
     const pack = humanPack(s);
-    titleEl.textContent = `Pack ${s.round + 1} · Pick ${s.pick + 1}`;
-    subEl.textContent = `${plural(pack.length, 'card')} left in this pack`;
-    pickLine.textContent = `Pick ${s.picks[0].length + 1} of ${totalPicks(s)}`;
+    setTitle(`Pack ${s.round + 1} · Pick ${s.pick + 1}`);
+    pickLine.textContent = `${plural(pack.length, 'card')} · pick ${s.picks[0].length + 1} of ${totalPicks(s)}`;
     progress.style.setProperty('--p', `${(s.picks[0].length / totalPicks(s)) * 100}%`);
     const left = passDir(s.round) === 1;
     passChip.className = `dr-pass ${left ? 'left' : 'right'}`;
@@ -791,7 +788,7 @@ function buildView(ctl: Ctl, s: DraftState) {
     hint,
     content,
   );
-  const fr = frame('Build your deck', { subtitle: `${modeLabel(s)} · ${plural(s.picks[0].length, 'card')} to choose from`, cls: 'dr-build', ...backToHome(ctl) }, body);
+  const fr = frame('Build your deck', { cls: 'dr-build', compact: true, ...backToHome(ctl) }, body);
   const note = h('div', { class: 'dr-dock-note' });
   const startBtn = button('Start tournament', () => void start(), { variant: 'primary', icon: 'trophy', cls: 'dr-btn-wide' });
   const dock = h('div', null, h('div', { class: 'dr-dock-in' }, note, startBtn));
@@ -874,10 +871,12 @@ function buildView(ctl: Ctl, s: DraftState) {
       const mainGrid = groupTiles(deck.main, remove);
       const extraGrid = groupTiles(deck.extra, remove);
       content.replaceChildren(
+        ...([
         mainGrid || filter !== 'extra' ? h('div', { class: 'dr-section-title' }, h('span', null, 'Main Deck'), h('b', null, String(deck.main.length))) : null,
         mainGrid ?? (filter !== 'extra' ? h('div', { class: 'dr-empty' }, 'No cards here. Add some from your pool.') : null),
         extraGrid || filter === 'all' || filter === 'extra' ? h('div', { class: 'dr-section-title' }, h('span', null, 'Extra Deck'), h('b', null, `${deck.extra.length} / 15`)) : null,
         extraGrid ?? (filter === 'all' || filter === 'extra' ? h('div', { class: 'dr-empty' }, 'No Synchro or Fusion monsters in your deck.') : null),
+        ].filter(Boolean) as HTMLElement[]),
       );
       content.firstElementChild?.setAttribute('style', 'margin-top:0');
     } else {

@@ -1,7 +1,8 @@
 /* ==========================================================================
    Draft mode — phone-first. Uses the clean theme tokens from clean.css.
    ========================================================================== */
-.dr-root {
+.dr-root,
+.dr-dock {
   --dr-gutter: max(16px, env(safe-area-inset-left, 0px));
   --dr-gutter-r: max(16px, env(safe-area-inset-right, 0px));
   --dr-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
@@ -16,12 +17,10 @@
   font-family: var(--font);
 }
 .dr-root .frame-body {
-  width: 100%;
-  max-width: 980px;
-  padding: 14px var(--dr-gutter-r) 24px var(--dr-gutter);
+  padding-bottom: 28px;
 }
-.dr-root .dr-has-dock .frame-body {
-  padding-bottom: calc(var(--dock-h) + 20px);
+.dr-dock-spacer {
+  height: calc(var(--dock-h) + 8px);
 }
 /* While opening / picking / building, the screen owns the bottom edge. */
 body.dr-immersive .tabbar {
@@ -110,7 +109,7 @@ body.dr-immersive.has-tabbar .dr-root .frame {
 }
 .dr-dock-in {
   width: 100%;
-  max-width: 980px;
+  max-width: var(--page-max, 760px);
   margin: 0 auto;
   display: grid;
   gap: 10px;
