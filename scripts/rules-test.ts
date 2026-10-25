@@ -7,11 +7,13 @@ import type { CardData, CardInstance } from '../src/engine/card';
 import type { Action, Activation, PlayerController, ResponseRequest, SelectRequest } from '../src/engine/controller';
 import { Game, GameOver } from '../src/engine/game';
 import type { BattlePos, Location, PlayerId } from '../src/engine/types';
+import { ensureAnprPatches } from '../src/cards/sets/anpr';
 
 const T = {
   brute: findCard('Rules Test Brute') ?? normal('Rules Test Brute', 'EARTH', 'Warrior', 4, 1800, 1000),
   wall: findCard('Rules Test Wall') ?? normal('Rules Test Wall', 'EARTH', 'Rock', 4, 500, 2000),
   dark: findCard('Rules Test Shade') ?? normal('Rules Test Shade', 'DARK', 'Fiend', 4, 1600, 1200),
+  giant: findCard('Rules Test Giant') ?? normal('Rules Test Giant', 'EARTH', 'Warrior', 8, 3000, 2500),
 };
 const tuner = findCard('Rules Test Tuner') ?? normal('Rules Test Tuner', 'EARTH', 'Warrior', 2, 800, 800);
 if (!tuner.mtypes!.includes('tuner')) tuner.mtypes!.push('tuner');
@@ -244,6 +246,216 @@ function eq(a: unknown, b: unknown, msg: string) {
       lost = e instanceof GameOver && e.winner === 1;
     }
     eq(lost, true, 'player 0 lost');
+  });
+
+  // ---------------------------------------------------------------- Ancient Prophecy (ANPR)
+  const activateCard = async (g: Game, p: PlayerId, card: CardInstance) => {
+    const act = g.getActivations(p, { open: true }).find((a) => a.card === card);
+    if (!act) throw new Error(`${card.name} cannot be activated`);
+    await g.performAction(p, { type: 'activate', card, act });
+  };
+
+  await test('ANPR Card Guard: summon places a counter; a moved counter stops destruction', async () => {
+    const { g, place } = setup();
+    const cg = place(0, cardByName('Card Guard'), 'hand');
+    const b = place(0, T.brute, 'mzone');
+    await g.performAction(0, { type: 'summon', card: cg });
+    eq(cg.counters.guard, 1, 'counter on summon');
+    eq(g.getAtk(cg), 1900, 'Card Guard ATK with 1 counter');
+    await activateCard(g, 0, cg);
+    eq(b.counters.guard, 1, 'counter moved to target');
+    eq(g.getAtk(cg), 1600, 'Card Guard ATK without counter');
+    await activateCard(g, 0, place(0, cardByName('Dark Hole'), 'hand'));
+    eq(b.location, 'mzone', 'guarded monster survives Dark Hole');
+    eq(b.counters.guard, 0, 'counter removed instead');
+    eq(cg.location, 'grave', 'Card Guard itself destroyed');
+  });
+
+  await test('ANPR Earthbound Immortal Cusillu: Tribute another monster instead of battle destruction, halve LP', async () => {
+    const { g, place } = setup();
+    place(0, cardByName('Ancient Forest'), 'fzone');
+    const cus = place(0, cardByName('Earthbound Immortal Cusillu'), 'mzone');
+    const fodder = place(0, T.wall, 'mzone');
+    place(1, T.giant, 'mzone');
+    await g.conductAttack(0, cus);
+    eq(cus.location, 'mzone', 'Cusillu survives');
+    eq(fodder.location, 'grave', 'other monster Tributed');
+    eq(g.players[0].lp, 8000 - 200, 'battle damage taken');
+    eq(g.players[1].lp, 4000, "opponent's LP halved");
+  });
+
+  await test('ANPR Earthbound Immortal: cannot be attacked (opponent attacks directly), destroyed without a Field Spell', async () => {
+    const { g, place } = setup();
+    const field = place(1, cardByName('Ancient Forest'), 'fzone');
+    const chacu = place(1, cardByName('Earthbound Immortal Chacu Challhua'), 'mzone');
+    const a = place(0, T.brute, 'mzone');
+    const t = g.attackTargets(a);
+    eq(t.targets.length, 0, 'no attack targets');
+    eq(t.direct, true, 'may attack directly');
+    await g.destroy([field], 'effect', 0);
+    await g.processTriggers(true);
+    eq(chacu.location, 'grave', 'destroyed when no Field Spell is face-up');
+  });
+
+  await test('ANPR Silver Wing: equipped Synchro survives battle twice per turn', async () => {
+    const { g, place } = setup();
+    const sd = place(0, cardByName('Stardust Dragon'), 'mzone');
+    const sw = place(0, cardByName('Silver Wing'), 'szone', { faceUp: true });
+    sw.activeOnField = true;
+    g.equip(sw, sd);
+    place(1, T.giant, 'mzone');
+    await g.conductAttack(0, sd);
+    await g.conductAttack(0, sd);
+    eq(sd.location, 'mzone', 'survives two battles');
+    await g.conductAttack(0, sd);
+    eq(sd.location, 'grave', 'third battle destroys it');
+    eq(sw.location, 'grave', 'Silver Wing leaves with it');
+  });
+
+  await test('ANPR Barbaros Ur: no battle damage to the opponent; Sauropod Brachion doubles reflected damage', async () => {
+    const { g, place } = setup();
+    ensureAnprPatches(g);
+    const bar = place(0, cardByName('Beast Machine King Barbaros Ür'), 'mzone');
+    const b = place(1, T.brute, 'mzone');
+    await g.conductAttack(0, bar);
+    eq(b.location, 'grave', 'attacked monster destroyed');
+    eq(g.players[1].lp, 8000, 'opponent takes no battle damage');
+    place(1, cardByName('Sauropod Brachion'), 'mzone', { pos: 'def' });
+    const a = place(0, T.brute, 'mzone');
+    await g.conductAttack(0, a);
+    eq(g.players[0].lp, 8000 - 2 * (3000 - 1800), 'reflected damage doubled');
+  });
+
+  await test('ANPR Kuribon: returns to hand in the Damage Step, attacker controller gains LP', async () => {
+    const { g, c1, place } = setup();
+    const k = place(1, cardByName('Kuribon'), 'mzone');
+    const a = place(0, T.brute, 'mzone');
+    c1.respond = respondWith('Kuribon');
+    await g.conductAttack(0, a);
+    eq(k.location, 'hand', 'Kuribon in hand');
+    eq(g.players[1].lp, 8000, 'no battle damage');
+    eq(g.players[0].lp, 8000 + 1800, 'opponent gains attacker ATK');
+  });
+
+  await test('ANPR Fortune Lady Light leaves by effect -> Fortune Lady Fire destroys and burns', async () => {
+    const { g, place } = setup();
+    const light = place(0, cardByName('Fortune Lady Light'), 'mzone');
+    eq(g.getAtk(light), 200, 'Level 1 x 200 ATK');
+    const fire = place(0, cardByName('Fortune Lady Fire'), 'deck');
+    const b = place(1, T.brute, 'mzone');
+    await g.destroy([light], 'effect', 1);
+    await g.processTriggers(true);
+    eq(fire.location, 'mzone', 'Fire Special Summoned');
+    eq(fire.pos, 'atk', 'in Attack Position');
+    eq(g.getAtk(fire), 400, 'Level 2 x 200 ATK');
+    eq(b.location, 'grave', 'target destroyed');
+    eq(g.players[1].lp, 8000 - 1800, 'burn equal to its ATK');
+  });
+
+  await test('ANPR Scary Moth: one Special Summon per player per turn', async () => {
+    const { g, place } = setup();
+    place(0, cardByName('Scary Moth'), 'mzone');
+    eq(g.queryPlayer(0, 'cannotSpecialSummon'), false, 'first summon allowed');
+    await g.specialSummon([place(0, T.brute, 'grave')], 0, { pos: 'atk' });
+    eq(g.queryPlayer(0, 'cannotSpecialSummon'), true, 'second summon blocked');
+    eq(g.queryPlayer(1, 'cannotSpecialSummon'), false, 'other player unaffected');
+  });
+
+  await test('ANPR Turbo Rocket: survives attacking, burns half the target ATK', async () => {
+    const { g, place } = setup();
+    const r = place(0, cardByName('Turbo Rocket'), 'mzone');
+    place(1, T.brute, 'mzone');
+    await g.conductAttack(0, r);
+    eq(r.location, 'mzone', 'Turbo Rocket not destroyed');
+    eq(g.players[0].lp, 8000 - 1800, 'battle damage taken');
+    eq(g.players[1].lp, 8000 - 900, 'half ATK burn');
+  });
+
+  await test('ANPR Damage Translation: halves effect damage, Ghost Tokens at End Phase', async () => {
+    const { g, place } = setup();
+    await activateCard(g, 0, place(0, cardByName('Damage Translation'), 'szone', { faceUp: false }));
+    await g.damage(0, 1000, 'effect');
+    eq(g.players[0].lp, 7500, 'damage halved');
+    await (g as any).setPhase('end');
+    eq(g.monsters(0).filter((c) => c.name === 'Ghost Token').length, 1, '1 Ghost Token');
+  });
+
+  await test("ANPR Koa'ki Meiru maintenance: destroyed unless a monster of its Type is revealed", async () => {
+    const a = setup();
+    const kept = a.place(0, cardByName("Koa'ki Meiru Crusader"), 'mzone');
+    a.place(0, cardByName('XX-Saber Ragigura'), 'hand');
+    await (a.g as any).setPhase('end');
+    eq(kept.location, 'mzone', 'kept by revealing a Beast-Warrior');
+    const b = setup();
+    const lost = b.place(0, cardByName("Koa'ki Meiru Crusader"), 'mzone');
+    await (b.g as any).setPhase('end');
+    eq(lost.location, 'grave', 'destroyed with nothing to reveal');
+  });
+
+  await test('ANPR Blackwing - Vayu: banish with a Blackwing, summon a Blackwing Synchro with negated effects', async () => {
+    const { g, place } = setup();
+    const vayu = place(0, cardByName('Blackwing - Vayu the Emblem of Honor'), 'grave');
+    const elphin = place(0, cardByName('Blackwing - Elphin the Raven'), 'grave');
+    const am = place(0, cardByName('Blackwing Armor Master'), 'extra');
+    await activateCard(g, 0, vayu);
+    eq(vayu.location, 'banished', 'Vayu banished');
+    eq(elphin.location, 'banished', 'target banished');
+    eq(am.location, 'mzone', 'Level 7 Blackwing Synchro summoned');
+    eq(g.isNegated(am), true, 'its effects are negated');
+  });
+
+  await test('ANPR Flamvell Commando: Tribute Summon only with a Flamvell monster', async () => {
+    const { g, place } = setup();
+    ensureAnprPatches(g);
+    const cmd = place(0, cardByName('Flamvell Commando'), 'hand');
+    place(0, T.brute, 'mzone');
+    eq(g.canNormalSummon(0, cmd), false, 'cannot Tribute a non-Flamvell');
+    const dog = place(0, cardByName('Flamvell Firedog'), 'mzone');
+    eq(g.canNormalSummon(0, cmd), true, 'can Tribute a Flamvell');
+    eq(g.tributeCandidates(0, cmd).join(), [dog].join(), 'only Flamvell candidates');
+  });
+
+  await test('ANPR Discord: no Synchro Summons', async () => {
+    const { g, place } = setup();
+    place(0, tuner, 'mzone');
+    place(0, T.brute, 'mzone');
+    const goyo = g.players[0].extra[0];
+    eq(g.canSynchro(0, goyo), true, 'Synchro possible');
+    const d = place(1, cardByName('Discord'), 'szone', { faceUp: true });
+    d.activeOnField = true;
+    eq(g.canSynchro(0, goyo), false, 'Synchro blocked by Discord');
+  });
+
+  await test('ANPR Kasha: shuffles all other monsters, ATK 1000 per face-up Zombie', async () => {
+    const { g, place } = setup();
+    const z1 = place(0, cardByName('Zombie Master'), 'mzone');
+    const z2 = place(0, cardByName('Plaguespreader Zombie'), 'mzone');
+    const b = place(1, T.brute, 'mzone');
+    const k = place(0, cardByName('Kasha'), 'hand');
+    const act = g.legalMainActions(0).find((a) => a.type === 'proc' && a.card === k);
+    if (!act) throw new Error('Kasha proc not available');
+    await g.performAction(0, act);
+    eq(k.location, 'mzone', 'Kasha summoned');
+    eq([z1, z2, b].every((c) => c.location === 'deck'), true, 'others shuffled into the Deck');
+    eq(g.getAtk(k), 2000, 'ATK = 1000 x 2 Zombies');
+  });
+
+  await test('ANPR Armed Sea Hunter: destroy a Level 3 or lower WATER monster instead', async () => {
+    const { g, place } = setup();
+    const h = place(0, cardByName('Armed Sea Hunter'), 'mzone');
+    const f = place(0, cardByName('Fishborg Blaster'), 'mzone');
+    await g.destroy([h], 'effect', 1);
+    eq(h.location, 'mzone', 'Armed Sea Hunter survives');
+    eq(f.location, 'grave', 'WATER monster destroyed instead');
+  });
+
+  await test('ANPR Gaia Plate: the battling monster has halved ATK during the Damage Step', async () => {
+    const { g, place } = setup();
+    const gp = place(0, cardByName('Gaia Plate the Earth Giant'), 'mzone');
+    const t = place(1, T.giant, 'mzone');
+    await g.conductAttack(0, gp);
+    eq(t.location, 'grave', '1500-ATK giant destroyed');
+    eq(g.players[1].lp, 8000 - 1300, 'damage uses halved ATK');
   });
 
   console.log(`\n${pass} passed, ${fail} failed`);
