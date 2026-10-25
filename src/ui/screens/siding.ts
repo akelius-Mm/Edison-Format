@@ -156,7 +156,7 @@ export function sidingScreen(host: HTMLElement, o: SidingOptions): Promise<DeckI
       ),
       oppEl,
       body,
-      h('footer', { class: 'sd-bar' }, h('div', { class: 'sd-info' }, status, counts), h('div', { class: 'sd-tools' }, resetBtn, moveBtn), h('div', { class: 'sd-actions' }, skipBtn, doneBtn)),
+      h('footer', { class: 'sd-bar' }, h('div', { class: 'sd-info' }, status), h('div', { class: 'sd-tools' }, counts, moveBtn, resetBtn), h('div', { class: 'sd-actions' }, skipBtn, doneBtn)),
     );
     host.append(bg, root);
 
@@ -207,6 +207,14 @@ export function sidingScreen(host: HTMLElement, o: SidingOptions): Promise<DeckI
       sel = { sec, id };
       haptic('selection');
       render();
+      // bring the cards it can swap with into view
+      const other = body.querySelector(sec === 'side' ? (isExtraDeckCard(c) ? '.sd-sec--extra' : '.sd-sec--main') : '.sd-sec--side');
+      const target = other?.querySelector('.sd-tile.can') ?? other;
+      if (target) {
+        const b = body.getBoundingClientRect();
+        const r = target.getBoundingClientRect();
+        if (r.top < b.top || r.top > b.bottom - 60) target.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      }
     }
 
     function limitedMove() {
@@ -285,7 +293,7 @@ export function sidingScreen(host: HTMLElement, o: SidingOptions): Promise<DeckI
       } else {
         status.textContent = limited ? 'Tap a pool card to add it, or a deck card then a pool card to swap.' : 'No swaps. Tap a deck card, then a Side card to swap them.';
       }
-      counts.textContent = `Main ${deck.main.length} · Extra ${deck.extra.length} · Side ${deck.side.length}`;
+      counts.textContent = limited ? `Main ${deck.main.length} · Extra ${deck.extra.length} · Pool ${deck.side.length}` : `Main ${deck.main.length} · Extra ${deck.extra.length} · Side ${deck.side.length}`;
       resetBtn.disabled = sameCounts(deck, o.original);
       if (limited && sel) {
         moveBtn.style.display = '';
