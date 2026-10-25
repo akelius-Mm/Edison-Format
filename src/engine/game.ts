@@ -751,8 +751,9 @@ export class Game {
   async destroy(cards: CardInstance[], reason: Reason, reasonPlayer?: PlayerId, reasonCard?: CardInstance, battleWith?: CardInstance) {
     let list = cards.filter((c) => this.canDestroy(c, reason) && !this.isUnaffected(c, reasonCard, reasonPlayer));
     if (!list.length) return [];
-    // ANPR: destruction replacement effects (EffectDef.replaceDestroy).
+    // ANPR: destruction replacement effects (EffectDef.replaceDestroy), then ABPF per-card ones (replaceDestroyOne).
     list = await this.applyDestroyReplacements(list, reason, reasonPlayer, reasonCard);
+    list = await this.applyDestroyReplacementsOne(list, reason, reasonCard);
     if (!list.length) return [];
     for (const c of list) this.log(`${c.name} is destroyed.`, 'action', c.controller);
     return this.moveCards(list, 'grave', { reason, reasons: [reason, 'destroy'], reasonPlayer, reasonCard, destroyed: true, battleWith });
@@ -796,6 +797,40 @@ export class Game {
       this.replacingDestroy--;
     }
     return rest;
+  }
+
+  // ABPF: destruction replacement hooks (EffectDef.replaceDestroyOne). With no hook on any card this returns `cards` unchanged.
+  private replacingDestroyOne = new Set<number>();
+  async applyDestroyReplacementsOne(cards: CardInstance[], reason: Reason, reasonCard?: CardInstance): Promise<CardInstance[]> {
+    const hooks: { src: CardInstance; ef: EffectDef }[] = [];
+    for (const src of this.continuousSources) {
+      for (const ef of src.data.effects ?? []) if (ef.kind === 'continuous' && ef.replaceDestroyOne) hooks.push({ src, ef });
+    }
+    if (!hooks.length) return cards;
+    const out: CardInstance[] = [];
+    for (const c of cards) {
+      let replaced = false;
+      if (!this.replacingDestroyOne.has(c.uid) && c.onField) {
+        this.replacingDestroyOne.add(c.uid);
+        try {
+          for (const h of hooks) {
+            if (!this.sourceActive(h.src, h.ef, 'indestructibleEffect')) continue;
+            const ctx = this.effectCtx(h.src, h.ef);
+            try {
+              replaced = await h.ef.replaceDestroyOne!(ctx, c, reason, reasonCard);
+            } catch (e) {
+              if (e instanceof GameOver) throw e;
+              console.error('replaceDestroy error', h.src.name, e);
+            }
+            if (replaced) break;
+          }
+        } finally {
+          this.replacingDestroyOne.delete(c.uid);
+        }
+      }
+      if (!replaced && c.onField) out.push(c);
+    }
+    return out;
   }
 
   isUnaffected(card: CardInstance, by?: CardInstance, byPlayer?: PlayerId): boolean {
@@ -1585,7 +1620,28 @@ export class Game {
   }
 
   tributeCandidates(p: PlayerId, forCard?: CardInstance) {
-    return this.monsters(p).filter((c) => !this.queryCard(c, 'cannotBeTributed') && !c.flags.noTributeSummonFodder);
+    return this.monsters(p).filter(
+      (c) =>
+        (!this.queryCard(c, 'cannotBeTributed') && !c.flags.noTributeSummonFodder) ||
+        // ABPF: monsters that can only be Tributed for specific Tribute Summons (Ceremonial Token → "Earthbound Immortal")
+        (!!forCard && typeof c.flags.tributeFodderFor === 'function' && !!c.flags.tributeFodderFor(forCard)),
+    );
+  }
+
+  /** ABPF: monsters `p` can Tribute as the single Tribute of an alternative rule (EffectDef.altTribute) for `card`. */
+  altTributeCandidates(p: PlayerId, card: CardInstance): CardInstance[] {
+    if (this.tributesNeeded(card) < 2) return [];
+    const rules: ((c: CardInstance) => boolean)[] = [];
+    for (const src of this.continuousSources) {
+      if (src !== card && !(src.onField && src.controller === p)) continue;
+      for (const ef of src.data.effects ?? []) {
+        if (ef.kind !== 'continuous' || !ef.altTribute || !this.sourceActive(src, ef, 'cannotBeTributed')) continue;
+        const ctx = this.effectCtx(src, ef);
+        rules.push((c) => ef.altTribute!(ctx, card, c));
+      }
+    }
+    if (!rules.length) return [];
+    return this.tributeCandidates(p, card).filter((c) => rules.some((r) => r(c)));
   }
 
   canNormalSummon(p: PlayerId, card: CardInstance, set = false): boolean {
@@ -1597,7 +1653,7 @@ export class Game {
     const need = this.tributesNeeded(card);
     if (need === 0) return this.freeMZones(p) > 0;
     const trib = this.tributeCandidates(p, card);
-    return trib.length >= need;
+    return trib.length >= need || this.altTributeCandidates(p, card).length > 0; // ABPF: alternative Tribute rule
   }
 
   /** Normal Summon or Set a monster (handles tributes). */
@@ -1605,8 +1661,20 @@ export class Game {
     const need = this.tributesNeeded(card);
     let tributes: CardInstance[] = [];
     if (need > 0) {
-      tributes = await this.select(p, this.tributeCandidates(p, card), need, need, `Select ${need} monster(s) to Tribute for ${card.name}.`, 'tribute');
-      if (tributes.length < need) return;
+      // ABPF: alternative 1-Tribute rule (EffectDef.altTribute). Without one, this is the plain N-Tribute selection.
+      const alt = this.altTributeCandidates(p, card);
+      let n = need;
+      let pool = this.tributeCandidates(p, card);
+      if (alt.length) {
+        const plainOk = pool.length >= need;
+        const useAlt = !plainOk || (await this.option(p, `Tribute Summon ${card.name}:`, [`Tribute ${need} monsters`, 'Tribute 1 monster (card effect)'], card, (i) => i)) === 1;
+        if (useAlt) {
+          n = 1;
+          pool = alt;
+        }
+      }
+      tributes = await this.select(p, pool, n, n, `Select ${n} monster(s) to Tribute for ${card.name}.`, 'tribute');
+      if (tributes.length < n) return;
       this.log(`${this.players[p].name} Tributes ${tributes.map((t) => t.name).join(', ')}.`, 'action', p);
       await this.moveCards(tributes, 'grave', { reason: 'tribute', reasons: ['tribute', 'cost'], reasonPlayer: p, reasonCard: card });
     }
@@ -1743,6 +1811,7 @@ export class Game {
         if (total !== lv) continue;
         const combo = [t, ...sel];
         if (combo.some((c) => c.data.synchroMaterialCheck && !c.data.synchroMaterialCheck(synchro, combo, c))) continue;
+        if (req.check && !req.check(combo)) continue; // ABPF
         if (mustInclude && !combo.includes(mustInclude)) continue;
         combos.push(combo);
       }
@@ -1753,6 +1822,7 @@ export class Game {
   canSynchro(p: PlayerId, synchro: CardInstance) {
     if (synchro.location !== 'extra' || !synchro.hasType('synchro')) return false;
     if (this.queryPlayer(p, 'cannotSpecialSummon')) return false;
+    if (this.queryPlayer(p, 'cannotSynchroSummon')) return false; // ABPF
     return this.synchroCombos(p, synchro).length > 0;
   }
 
@@ -2321,9 +2391,10 @@ export class Game {
     }
     // Destroy losers
     let destroyGroup = losers.filter((l) => l.card.location === 'mzone' && this.canDestroy(l.card, 'battle'));
-    // ANPR: destruction replacement effects also apply to battle destruction.
+    // ANPR + ABPF: destruction replacement effects also apply to battle destruction.
     if (destroyGroup.length) {
-      const keep = await this.applyDestroyReplacements(destroyGroup.map((l) => l.card), 'battle', p, attacker);
+      let keep = await this.applyDestroyReplacements(destroyGroup.map((l) => l.card), 'battle', p, attacker);
+      keep = await this.applyDestroyReplacementsOne(keep, 'battle', attacker);
       destroyGroup = destroyGroup.filter((l) => keep.includes(l.card) && l.card.location === 'mzone');
     }
     if (destroyGroup.length) {

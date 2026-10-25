@@ -17,6 +17,7 @@ import './sets/tournament-extras';
 import './sets/ha01';
 import './sets/anpr';
 import './sets/sovr';
+import './sets/abpf';
 import { applyBanlist } from './banlist';
 
 applyBanlist();

@@ -1680,7 +1680,7 @@ monster('Djinn Releaser of Rituals', {
   level: 3,
   atk: 1200,
   def: 2000,
-  sets: ['djinn'],
+  sets: ['djinn', 'djinn-of-rituals'],
   aiValue: 500,
   text: 'When you Ritual Summon a monster, you can banish this card from your Graveyard as 1 of the monsters required for the Ritual Summon. If a player Ritual Summons using this card, the other player cannot Special Summon while that Ritual Summoned monster is face-up on the field.',
   effects: [
@@ -1708,7 +1708,7 @@ monster('Djinn Presider of Rituals', {
   level: 4,
   atk: 1800,
   def: 1400,
-  sets: ['djinn'],
+  sets: ['djinn', 'djinn-of-rituals'],
   aiValue: 400,
   text: 'When you Ritual Summon a monster, you can banish this card from your Graveyard as 1 of the monsters required for the Ritual Summon. If the monster Ritual Summoned using this card destroys a monster by battle, the controller of the Ritual Monster draws 1 card.',
   effects: [

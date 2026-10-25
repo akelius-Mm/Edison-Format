@@ -159,7 +159,7 @@ monster('Light and Darkness Dragon', {
 monster('Super-Nimble Mega Hamster', {
   attribute: 'EARTH',
   race: 'Beast',
-  level: 3,
+  level: 4, // ABPF: printed Level 4 (YGOJSON), so it cannot fetch another copy of itself
   atk: 1100,
   def: 1800,
   types: ['flip'],
@@ -876,8 +876,9 @@ monster('Zeman the Ape King', {
   def: 1800,
   types: ['synchro'],
   aiValue: 800,
-  text: '1 DARK Tuner + 1 or more non-Tuner Beast monsters\nIf this card attacks, your opponent cannot activate Spell/Trap Cards until the end of the Damage Step. When an opponent\'s monster declares an attack: You can send 1 monster from your hand or your side of the field to the GY, except this card; negate the attack.',
-  synchro: { tuner: attr('DARK'), nonTuner: race('Beast'), desc: '1 DARK Tuner + 1+ non-Tuner Beast monsters' },
+  // ABPF: official text / materials (exactly 1 non-Tuner Beast-Type monster).
+  text: '1 DARK Tuner + 1 non-Tuner Beast-Type monster\nIf this card attacks, your opponent cannot activate any Spell or Trap Cards until the end of the Damage Step. When an opponent\'s monster declares an attack, you can select that monster and send 1 monster from your hand or your side of the field to the Graveyard to negate the attack.',
+  synchro: { tuner: attr('DARK'), nonTuner: race('Beast'), minNonTuners: 1, maxNonTuners: 1, desc: '1 DARK Tuner + 1 non-Tuner Beast-Type monster' },
   effects: [
     {
       kind: 'continuous',
@@ -1106,23 +1107,55 @@ spell('Prohibition', 'continuous', {
 
 // ============================================================ TRAPS
 
-trap('Consecrated Light', 'continuous', {
-  text: 'Neither player can Summon DARK monsters. DARK monsters cannot declare an attack.',
+// ABPF: Consecrated Light (ABPF-EN035) is a LIGHT Fairy Effect Monster, not a Continuous Trap (YGOJSON, passcode 02980764).
+const consecratedActive = (ctx: Ctx) => ctx.self.location === 'mzone' && ctx.self.faceUp && !ctx.game.isNegated(ctx.self);
+const battlingDark = (ctx: Ctx) => {
+  const b = ctx.game.battle;
+  const o = !b ? null : b.attacker === ctx.self ? b.target : b.target === ctx.self ? b.attacker : null;
+  return !!o && o.data.attribute === 'DARK';
+};
+monster('Consecrated Light', {
+  attribute: 'LIGHT',
+  race: 'Fairy',
+  level: 1,
+  atk: 0,
+  def: 0,
+  aiValue: 600,
+  text: 'Neither player can Normal or Special Summon DARK monsters or declare an attack with a DARK monster. This card cannot be destroyed by battle with a DARK monster, also you take no battle damage from that battle.',
   effects: [
     {
-      kind: 'activate',
-      categories: ['lockdown'],
-      ai: {
-        score: (ctx) => {
-          if (ctx.spellTraps('me', (c) => c !== ctx.self && c.name === ctx.self.name && c.faceUp).length) return 0;
-          const theirs = ctx.faceUpMonsters('opp', attr('DARK')).length;
-          const mine = ctx.faceUpMonsters('me', attr('DARK')).length;
-          return theirs > mine ? 40 : 0;
-        },
+      kind: 'continuous',
+      mods: [
+        { q: 'cannotAttack', to: 'cards', filter: (_ctx, c: C) => c.location === 'mzone' && c.data.attribute === 'DARK' },
+        { q: 'indestructibleBattle', value: (ctx) => battlingDark(ctx) },
+        { q: 'noBattleDamageFrom', value: (ctx) => battlingDark(ctx) },
+      ],
+    },
+    {
+      // Approximation (as summonLock): a DARK monster that still gets Normal/Special Summoned is returned at once.
+      kind: 'trigger',
+      event: 'summoned',
+      range: ['mzone'],
+      mandatory: true,
+      label: 'Consecrated Light (no DARK Summons)',
+      categories: ['toDeck'],
+      eventFilter: (ctx, ev) => {
+        const c = evc(ev);
+        return !!c && ev.method !== 'flip' && c !== ctx.self && c.location === 'mzone' && c.faceUp && c.data.attribute === 'DARK' && consecratedActive(ctx);
+      },
+      activate: async (ctx) => {
+        const c = evc(ctx.event!)!;
+        ctx.data.mon = c;
+        ctx.data.mid = c.moveId;
+      },
+      resolve: async (ctx) => {
+        const c = ctx.data.mon as C;
+        if (!c || c.location !== 'mzone' || c.moveId !== ctx.data.mid) return;
+        ctx.log(`${c.name} cannot be Summoned while ${ctx.self.name} applies.`);
+        if (c.isExtra) await ctx.game.toDeck([c], 'rule', 'shuffle', ctx.player, ctx.self);
+        else await ctx.game.moveCards([c], 'grave', { reason: 'rule', reasonPlayer: ctx.player, reasonCard: ctx.self });
       },
     },
-    { kind: 'continuous', mods: [{ q: 'cannotAttack', to: 'cards', filter: (_ctx, c: C) => c.location === 'mzone' && c.data.attribute === 'DARK' }] },
-    summonLock('Consecrated Light (no DARK Summons)', (_ctx, c) => c.data.attribute === 'DARK'),
   ],
 });
 
