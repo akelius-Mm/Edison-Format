@@ -2,6 +2,7 @@
 // ("power", 0–100), its pack rarity and its archetype families for synergy.
 import { allCards } from '../cards';
 import type { CardData } from '../engine/card';
+import { playableSet } from '../collection/catalog';
 
 export type Rarity = 'C' | 'R' | 'SR' | 'UR' | 'ScR';
 export const RARITIES: Rarity[] = ['C', 'R', 'SR', 'UR', 'ScR'];
@@ -122,6 +123,24 @@ let byId: Map<string, CardData> | null = null;
 export function draftPool(): CardData[] {
   if (!poolCache) poolCache = allCards().filter((c) => c.limit !== 0 && !c.isToken && !c.mtypes?.includes('token'));
   return poolCache;
+}
+
+const subPools = new Map<string, CardData[]>();
+
+/**
+ * The Edison Pack's pool limited to cards printed in `sets` (era set codes), or the whole
+ * draft pool when `sets` is null.
+ */
+export function edisonPoolFor(sets: string[] | null): CardData[] {
+  if (!sets) return draftPool();
+  const key = [...sets].sort().join(',');
+  const hit = subPools.get(key);
+  if (hit) return hit;
+  const names = new Set<string>();
+  for (const code of sets) for (const n of playableSet(code)?.playable ?? []) names.add(n);
+  const out = draftPool().filter((c) => names.has(c.name));
+  subPools.set(key, out);
+  return out;
 }
 
 export function draftCard(id: string): CardData | undefined {
