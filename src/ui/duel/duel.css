@@ -1547,3 +1547,20 @@
 /* Wide boards show the banished pile beside the grid: the mat extends to cover it. */
 .mats-split .stage:not(.stage--compact) .side-me::before { right: calc(var(--zw) * -0.64 - var(--gap) * 3.2); }
 .mats-split .stage:not(.stage--compact) .side-opp::before { left: calc(var(--zw) * -0.64 - var(--gap) * 3.2); }
+
+/* Phone sheets: fully hidden when closed (the notch and home-bar insets used to let their edges peek in). */
+@media (max-width: 600px) and (orientation: portrait) {
+  .preview,
+  .log {
+    visibility: hidden;
+    transition: transform 220ms ease, visibility 0s linear 220ms;
+  }
+  .preview { transform: translateY(calc(100% + 60px + env(safe-area-inset-bottom, 0px))); }
+  .log { transform: translateY(calc(-100% - 100px - env(safe-area-inset-top, 0px))); }
+  .duel-root.show-preview-sheet .preview,
+  .duel-root.show-log-sheet .log {
+    visibility: visible;
+    transform: none;
+    transition: transform 220ms ease;
+  }
+}
