@@ -11,7 +11,7 @@ import type { BattlePos, PlayerId } from '../../engine/types';
 import { ICONS } from '../cards/icons';
 import { zoomCard } from '../cards/zoom';
 import { getSettings, onSettingsChange, updateSettings } from '../settings';
-import { applyPlaymat } from '../theme/playmats';
+import { applyMatVars, applyPlaymat, opponentMat } from '../theme/playmats';
 import { esc } from '../theme/util';
 import type { DuelOptions, DuelResult } from './api';
 import { BoardView, type RenderOpts } from './board';
@@ -146,6 +146,13 @@ class DuelScreen implements HumanUI {
     container.innerHTML = '';
     container.appendChild(this.root);
     this.board.mount(mat);
+    // Each player has their own mat on their half of the table, like at a real event.
+    mat.classList.add('mats-split');
+    mat.style.background = '';
+    const sideMe = mat.querySelector<HTMLElement>('.side-me');
+    const sideOpp = mat.querySelector<HTMLElement>('.side-opp');
+    if (sideMe) applyMatVars(sideMe, opts.playmat);
+    if (sideOpp) applyMatVars(sideOpp, opts.oppPlaymat ?? opponentMat(opts.sides[1].name, opts.playmat));
 
     this.fx = new FxDirector({
       game: this.game,
