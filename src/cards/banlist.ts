@@ -59,7 +59,6 @@ export const LIMITED = [
   'Rescue Cat',
   'Sangan',
   'Spirit Reaper',
-  'Treeborn Frog',
   'Tribe-Infecting Virus',
   'Tsukuyomi',
   'Night Assailant',
@@ -78,7 +77,6 @@ export const LIMITED = [
   // both main-decked 1 in the SJC Edison 2010 Top 16 (src/decks/tournament2.ts).
   'Giant Trunade',
   'Heavy Storm',
-  'Lightning Vortex',
   'Limiter Removal',
   'Mass Driver',
   'Megamorph',
@@ -121,6 +119,12 @@ export const SEMI_LIMITED = [
   'Gold Sarcophagus',
   'Royal Decree',
   'Ultimate Offering',
+  // Corrections from real 2010 decklists played under the March 2010 list (it ran until 1 September 2010), from the
+  // YugiohTopDecks archive (https://github.com/CalciumKid/YTDDecks): Treeborn Frog was Semi-Limited, not Limited
+  // (2 copies: Devin Djuricin and Jason Hoang, YCS Washington DC, May 2010; Levi Nissen, YCS Chicago, June 2010;
+  // Rodrigo Togores, 1st at the 2010 European Championship). Lightning Vortex was off the list (Brenden Beckmann
+  // ran 3 at YCS Indianapolis, August 2010), so it is Unlimited.
+  'Treeborn Frog',
 ];
 
 // Cards scripted for the simulator (TSHD packs, Draft, Sealed, the collection) that had no English TCG

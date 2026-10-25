@@ -10,6 +10,7 @@ import type { DeckDef } from './types';
 //
 // Two SJC Edison Top 16 lists are not included because the published Main Deck is short of 40 cards
 // (incomplete transcription): Ira D. Jones' Gladiator Beasts (38, deck 2311) and Thai Bui's Lightsworn (39, deck 2316).
+// Both are in tournament3.ts, completed from Format Library's copy of the Konami deck lists.
 //
 // Cards still waiting on other card batches (these decks validate once they are merged):
 //   Archlord Kristya (Stardust Overdrive) - LaMartina; Blackwing - Vayu the Emblem of Honor (Ancient Prophecy) - Ortiz;
