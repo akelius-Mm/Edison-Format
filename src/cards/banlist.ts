@@ -86,13 +86,10 @@ export const LIMITED = [
   'Mind Control',
   'Monster Reborn',
   'Mystical Space Typhoon',
-  'Nobleman of Crossout',
   'Overload Fusion',
-  'Pot of Avarice',
   'Premature Burial',
   'Reinforcement of the Army',
   'Scapegoat',
-  'Book of Moon',
   // Traps
   'Call of the Haunted',
   'Ceasefire',
@@ -101,7 +98,6 @@ export const LIMITED = [
   'Mirror Force',
   'Return from the Different Dimension',
   'Royal Decree',
-  'Royal Oppression',
   'Solemn Judgment',
   'Torrential Tribute',
   'Trap Dustshoot',
@@ -109,7 +105,11 @@ export const LIMITED = [
   'Wall of Revealing Light',
 ];
 
+// Corrections from the real SJC Edison decklists (src/decks/tournament.ts) and the March 2010 TCG list:
+// Book of Moon, Pot of Avarice and Nobleman of Crossout were Unlimited (Jeff Jones won with 3 Pot of Avarice,
+// Jake Mattern sided 3 Nobleman), and Royal Oppression was Semi-Limited (Renaldo Lainez played 2).
 export const SEMI_LIMITED = [
+  'Royal Oppression',
   'Burial from a Different Dimension',
   'Chaos Sorcerer',
   'Cyber Dragon',

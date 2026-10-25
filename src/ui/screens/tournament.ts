@@ -31,15 +31,21 @@ import {
 import { finalPlacements, roundComplete } from '../../tournament/swiss';
 import type { DuelSide } from '../duel/api';
 import { getSettings, loadJSON, saveJSON } from '../settings';
-import { deckPicker, tierBadge } from './components';
+import { artInto, ctaButton, deckArt, deckShelf, iosGroup, iosRow, linkButton, lobbySection, signatureCard, stickyBar } from './components';
 import { badge, button, clear, confirmDialog, h, icon, modal, pct, segmented, toast } from './dom';
 import { AVATAR_PRESETS, SLEEVES, renderAvatar } from './ext';
 import { runMatch } from './match';
 import { frame, go, lockNav, type Screen } from './nav';
 import { gameRow, showResults } from './results';
-import { allDeckInfos, getProfile, ordinal, recordMatch, recordTournament, toDeckList, tournamentSummary } from './store';
+import { allDeckInfos, getProfile, ordinal, recordMatch, recordTournament, toDeckList, tournamentSummary, type DeckInfo } from './store';
 
 const FORM_KEY = 'edison.tournament.form.v1';
+
+/** Enough of a DeckInfo to draw a deck's artwork. */
+function snapInfo(d: DeckSnapshot): DeckInfo {
+  const ref = d.id.includes(':') ? { kind: d.id.split(':')[0] as 'premade' | 'custom', id: d.id.split(':').slice(1).join(':') } : { kind: 'premade' as const, id: d.id };
+  return { ref, key: `${ref.kind}:${ref.id}`, name: d.name, archetype: d.archetype, description: '', tier: d.tier, color: d.color, main: d.main, extra: d.extra, side: [], problems: [] };
+}
 
 interface FormState {
   name: string;
