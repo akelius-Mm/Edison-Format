@@ -126,6 +126,11 @@ body.dr-immersive.has-tabbar .dr-root .frame {
   color: var(--text);
   font-weight: 600;
 }
+.dr-dock-note.intro {
+  color: var(--text-2);
+  white-space: normal;
+  line-height: 1.4;
+}
 .dr-dock-note.warn {
   color: #e2a99a;
 }
@@ -595,7 +600,7 @@ body.dr-immersive.has-tabbar .dr-root .frame {
   animation: drHolo 4.5s ease-in-out infinite;
 }
 [data-r='ScR'] .dr-holo {
-  opacity: 0.5;
+  opacity: 0.42;
   background:
     linear-gradient(120deg, transparent 28%, rgba(255, 255, 255, 0.65) 46%, transparent 64%),
     repeating-linear-gradient(60deg, rgba(255, 120, 160, 0.3) 0 6%, rgba(255, 230, 140, 0.3) 6% 12%, rgba(120, 255, 200, 0.3) 12% 18%, rgba(140, 180, 255, 0.3) 18% 24%),

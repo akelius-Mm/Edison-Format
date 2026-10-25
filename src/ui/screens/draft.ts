@@ -207,6 +207,8 @@ function packArt(n: number, label: string, sub: string) {
 interface Ctl {
   root: HTMLElement;
   view: string;
+  /** Changes every time a view is shown; async work checks it before touching the screen. */
+  token: number;
   show: (el: HTMLElement, view: string, opts?: { immersive?: boolean }) => void;
   /** A fixed bottom bar for the current view (lives on <body>, removed with the view). */
   dock: (el: HTMLElement) => void;
@@ -229,9 +231,11 @@ export function draftScreen(): Screen {
   const ctl: Ctl = {
     root,
     view: '',
+    token: 0,
     show(el, view, opts = {}) {
       runLeave();
       ctl.view = view;
+      ctl.token++;
       document.body.classList.toggle('dr-immersive', !!opts.immersive);
       el.classList.add('dr-view-enter');
       root.replaceChildren(el);
@@ -260,6 +264,7 @@ export function draftScreen(): Screen {
   return {
     el: root,
     dispose() {
+      ctl.token++;
       runLeave();
       document.body.classList.remove('dr-immersive');
     },
@@ -391,7 +396,7 @@ function openView(ctl: Ctl, s: DraftState) {
   const packBtn = h('button', { type: 'button', class: 'dr-pack-btn', 'aria-label': 'Open pack' }, packArt(n, `Pack ${n + 1}`, `${modeLabel(s)} · 15 cards`), h('div', { class: 'dr-tap-hint' }, 'Tap to open'));
   const stage = h('div', { class: 'dr-stage' }, burst, packBtn);
   const fr = frame(`Pack ${n + 1} of ${s.packCount}`, { cls: 'dr-open', compact: true, ...backToHome(ctl) }, stage);
-  const note = h('div', { class: 'dr-dock-note' }, 'Tap the pack to open it');
+  const note = h('div', { class: 'dr-dock-note' }, s.mode === 'draft' ? `Tap the pack to open it · this pack passes ${passDir(n) === 1 ? 'left' : 'right'}` : `Tap the pack to open it · ${s.packCount - n - 1} more after this one`);
   const actions = h('div', { class: 'dr-btn-row' });
   const dock = h('div', null, h('div', { class: 'dr-dock-in' }, note, actions));
   ctl.show(fr, 'open', { immersive: true });
@@ -425,13 +430,12 @@ function openView(ctl: Ctl, s: DraftState) {
         button('Open all', () => {
           while (s.phase === 'draft') markOpened(s);
           persist(s);
-          toast(`All ${s.packCount} packs opened · ${s.picks[0].length} cards`, 'gold');
-          buildView(ctl, s);
+          buildView(ctl, s, `All ${s.packCount} packs opened · ${s.picks[0].length} cards. Your best 40 are in — tap cards to swap.`);
         }, { variant: 'ghost' }),
         button('Next pack', () => openView(ctl, s), { variant: 'primary', icon: 'cards' }),
       );
     } else {
-      actions.append(button('Build your deck', () => buildView(ctl, s), { variant: 'primary', icon: 'edit', cls: 'dr-btn-wide' }));
+      actions.append(button('Build your deck', () => buildView(ctl, s, `${s.picks[0].length} cards opened. Your best 40 are in — tap cards to swap.`), { variant: 'primary', icon: 'edit', cls: 'dr-btn-wide' }));
     }
   };
   setActions();
@@ -455,6 +459,8 @@ function openView(ctl: Ctl, s: DraftState) {
 
   const open = async () => {
     if (state !== 'closed') return;
+    const token = ctl.token;
+    const alive = () => ctl.token === token;
     state = 'opening';
     setActions();
     note.textContent = 'Tap to reveal everything';
@@ -472,6 +478,7 @@ function openView(ctl: Ctl, s: DraftState) {
       packBtn.classList.add('is-torn');
       burst.classList.add('go');
       await sleep(ms(430));
+      if (!alive()) return;
     }
     tiles = pack.map(makeCard);
     const grid = h('div', { class: 'dr-reveal' }, tiles);
@@ -499,6 +506,7 @@ function openView(ctl: Ctl, s: DraftState) {
         t.style.opacity = '';
       });
       await sleep(ms(480) + step * tiles.length);
+      if (!alive()) return;
     }
     // flip one by one; the rare slot slows down and shines
     for (const t of tiles) {
@@ -512,6 +520,7 @@ function openView(ctl: Ctl, s: DraftState) {
       t.classList.add('is-up');
       if (foil) t.classList.add('is-foil');
       await sleep(foil ? ms(big ? 900 : 560) : ms(80));
+      if (!alive()) return;
     }
     for (const t of tiles) {
       if (!t.classList.contains('is-up')) {
@@ -595,8 +604,8 @@ function pickView(ctl: Ctl, s: DraftState) {
 
   const updateHeader = () => {
     const pack = humanPack(s);
-    setTitle(`Pack ${s.round + 1} · Pick ${s.pick + 1}`);
-    pickLine.textContent = `${plural(pack.length, 'card')} · pick ${s.picks[0].length + 1} of ${totalPicks(s)}`;
+    setTitle(`Pack ${s.round + 1} · Pick ${s.pick + 1} of ${pack.length + s.pick}`);
+    pickLine.textContent = `Pick ${s.picks[0].length + 1} of ${totalPicks(s)} overall`;
     progress.style.setProperty('--p', `${(s.picks[0].length / totalPicks(s)) * 100}%`);
     const left = passDir(s.round) === 1;
     passChip.className = `dr-pass ${left ? 'left' : 'right'}`;
@@ -657,6 +666,10 @@ function pickView(ctl: Ctl, s: DraftState) {
     const t = tiles[i];
     const dir = passDir(s.round);
     const awayDir = dir === 1 ? -1 : 1;
+    const token = ctl.token;
+    const prevRound = s.round;
+    makePick(s, i);
+    persist(s);
     if (speed() > 0) {
       const tr = t.getBoundingClientRect();
       const br = picksBar.getBoundingClientRect();
@@ -665,10 +678,8 @@ function pickView(ctl: Ctl, s: DraftState) {
       t.style.setProperty('--t-take', `${ms(420)}ms`);
       t.classList.add('is-taken');
       await sleep(ms(330));
+      if (ctl.token !== token) return;
     }
-    const prevRound = s.round;
-    makePick(s, i);
-    persist(s);
     // picks drawer
     const first = scroller.querySelector('.dr-empty-strip');
     if (first) first.remove();
@@ -689,10 +700,10 @@ function pickView(ctl: Ctl, s: DraftState) {
         x.classList.add('is-away');
       });
       await sleep(ms(300) + ms(12) * tiles.length);
+      if (ctl.token !== token) return;
     }
     if (s.phase === 'build') {
-      toast(`Draft complete · ${s.picks[0].length} cards`, 'gold');
-      buildView(ctl, s);
+      buildView(ctl, s, `Draft complete · ${s.picks[0].length} cards. Your best 40 are in — tap cards to swap.`);
       return;
     }
     if (s.round !== prevRound) {
@@ -700,12 +711,14 @@ function pickView(ctl: Ctl, s: DraftState) {
       return;
     }
     await renderPack(-awayDir);
+    if (ctl.token !== token) return;
     busy = false;
     // the last card of a pack is taken automatically
     if (humanPack(s).length === 1) {
-      await sleep(ms(450) || 60);
-      if (ctl.view !== 'pick') return;
-      toast(`Last card: ${card(humanPack(s)[0].id).name}`);
+      select(0);
+      selName.replaceChildren(h('b', null, card(humanPack(s)[0].id).name), ' · last card, added for you');
+      await sleep(Math.max(ms(700), 250));
+      if (ctl.token !== token) return;
       void confirm(0);
     }
   };
@@ -720,7 +733,7 @@ function pickView(ctl: Ctl, s: DraftState) {
 type BuildTab = 'deck' | 'pool';
 type BuildFilter = 'all' | 'monster' | 'spell' | 'trap' | 'extra';
 
-function buildView(ctl: Ctl, s: DraftState) {
+function buildView(ctl: Ctl, s: DraftState, intro?: string) {
   if (!s.deck) {
     s.deck = autoBuildHuman(s);
     persist(s);
@@ -881,8 +894,11 @@ function buildView(ctl: Ctl, s: DraftState) {
       content.replaceChildren(groupTiles(pool, add) ?? h('div', { class: 'dr-empty' }, pool.length ? 'Nothing matches this filter.' : 'Every card you picked is in your deck.'));
     }
     const problems = deckProblems(s, deck);
-    note.className = ['dr-dock-note', problems.length && 'warn'].filter(Boolean).join(' ');
-    note.replaceChildren(problems.length ? problems[0] : h('span', null, h('b', null, 'Ready'), ` · ${main.length} + ${deck.extra.length} Extra · ${modeLabel(s)}`));
+    note.className = ['dr-dock-note', problems.length && 'warn', intro && 'intro'].filter(Boolean).join(' ');
+    note.replaceChildren(
+      intro ? intro : problems.length ? problems[0] : h('span', null, h('b', null, 'Ready'), ` · ${main.length} + ${deck.extra.length} Extra · ${modeLabel(s)}`),
+    );
+    intro = undefined;
     startBtn.disabled = problems.length > 0;
   };
 
@@ -1081,7 +1097,7 @@ function hubView(ctl: Ctl, s: DraftState) {
       caption: `Draft · Round ${n} – vs ${opp.name}`,
       stats: s.savedDeckId ? { deckKey: `custom:${s.savedDeckId}`, deckName } : undefined,
     });
-    if (ctl.view !== 'hub') return;
+    const token = ctl.token;
     actions.style.display = 'none';
     busy.style.display = '';
     await recordHumanMatch(s, out.games, out.result);
@@ -1096,7 +1112,7 @@ function hubView(ctl: Ctl, s: DraftState) {
       score: `${r.a}-${r.b}`,
       context: `Draft · Round ${n}`,
     });
-    if (ctl.view === 'hub') hubView(ctl, s);
+    if (ctl.token === token) hubView(ctl, s);
   }
 }
 
@@ -1122,7 +1138,7 @@ function finalView(ctl: Ctl, s: DraftState) {
       champion: champ.human ? 'You' : champ.name,
     });
   }
-  const headline = place === 1 ? 'You won the draft' : `${ordinal(place)} place`;
+  const headline = place === 1 ? `Champion · ${rec.text}` : `Record ${rec.text}`;
   const body = h(
     'div',
     { class: 'dr-final' },
@@ -1131,7 +1147,7 @@ function finalView(ctl: Ctl, s: DraftState) {
       { class: 'dr-place' },
       h('div', { class: 'dr-eyebrow' }, `${modeLabel(s)} · ${SEATS} players`),
       h('div', { class: 'dr-place-big' }, ordinal(place)),
-      h('div', { class: 'dr-place-sub' }, `${headline} · ${rec.text}`),
+      h('div', { class: 'dr-place-sub' }, headline),
       h('div', { class: 'dr-place-deck' }, `Your deck is saved as “${deckNameOf(s)}”.`),
     ),
     h(
@@ -1145,7 +1161,7 @@ function finalView(ctl: Ctl, s: DraftState) {
         },
         { variant: 'primary', icon: 'cards' },
       ),
-      button('Open in Deck Builder', () => go('deck-builder', s.savedDeckId ? { deck: s.savedDeckId } : {}), { variant: 'ghost', icon: 'edit' }),
+      button('Deck Builder', () => go('deck-builder', s.savedDeckId ? { deck: s.savedDeckId } : {}), { variant: 'ghost', icon: 'edit' }),
     ),
     h('div', { class: 'dr-section-title' }, h('span', null, 'Final standings'), h('b', null, rec.text)),
     standingsList(s),
