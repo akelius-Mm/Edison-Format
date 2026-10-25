@@ -162,7 +162,7 @@ monster(BESTIARI, {
 
 monster('Gladiator Beast Darius', {
   attribute: 'EARTH',
-  race: 'Beast',
+  race: 'Beast-Warrior', // PTDN: Darius is a Beast-Warrior (YGOJSON), not a Beast
   level: 4,
   atk: 1700,
   def: 300,
@@ -334,15 +334,16 @@ monster('Gladiator Beast Secutor', {
   effects: [tagOut(2)],
 });
 
+// PTDN: Gladiator Beast Andal (PTDN-EN002) is a Normal Monster (Beast-Warrior/EARTH/Level 4/ATK 1900/DEF 1500) per
+// YGOJSON; the previous definition gave it an effect, the Beast Type and 1100 DEF.
 monster('Gladiator Beast Andal', {
   attribute: 'EARTH',
-  race: 'Beast',
+  race: 'Beast-Warrior',
   level: 4,
   atk: 1900,
-  def: 1100,
+  def: 1500,
   sets: GB,
-  text: `If this card is Special Summoned by the effect of a "Gladiator Beast" monster, it gains 300 ATK and DEF. ${TAG_TEXT} "Gladiator Beast Andal".`,
-  effects: [markGB, { kind: 'continuous', active: (ctx) => !!ctx.self.flags.gbSummoned, mods: [{ q: 'atk', value: 300 }, { q: 'def', value: 300 }] }, tagOut()],
+  text: 'This one-eyed warrior bear is an aggressive hunter that strikes down its prey with the powerful swipes of its claws. No one can bear the brunt of his tremendously fast and heavy blows.',
 });
 
 monster('Test Tiger', {
