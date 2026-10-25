@@ -106,9 +106,11 @@ export function audioContext(): AudioContext | null {
     const AC = (window as any).AudioContext || (window as any).webkitAudioContext;
     if (!AC) return null;
     live = new AC({ latencyHint: 'interactive' }) as AudioContext;
-    live.onstatechange = () => {
+    const notify = () => {
       if (live?.state === 'running') for (const f of [...readyListeners]) f();
     };
+    live.onstatechange = notify;
+    queueMicrotask(notify);
     installAudioUnlock();
     return live;
   } catch {

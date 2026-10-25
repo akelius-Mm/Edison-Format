@@ -723,7 +723,6 @@ export function bracket(t: Tournament): HTMLElement {
           'div',
           { class: ['br-slot', win && 'win', e?.human && 'me', !e && 'tbd'] },
           e ? h('span', { class: 'br-seed' }, String(seedOf.get(e.id) ?? '')) : null,
-          e ? renderAvatar(e.avatar, 24) : null,
           h('span', { class: 'br-name' }, e ? e.name : 'TBD'),
           e ? h('span', { class: 'br-deck', style: { '--deck': e.deck.color } }) : null,
           h('span', { class: 'br-score' }, score == null ? '' : String(score)),
@@ -742,7 +741,7 @@ export function bracket(t: Tournament): HTMLElement {
       'div',
       { class: 'br-col champ' },
       h('div', { class: 'br-label' }, 'Champion'),
-      h('div', { class: 'br-matches' }, h('div', { class: ['br-champ', champ && 'set'] }, trophySVG('br-trophy'), champ ? h('div', null, renderAvatar(champ.avatar, 40), h('b', null, champ.name), h('span', null, champ.deck.name)) : h('span', { class: 'muted' }, 'To be decided'))),
+      h('div', { class: 'br-matches' }, h('div', { class: ['br-champ', champ && 'set'] }, champ ? [deckArt(snapInfo(champ.deck), 'br-champ-art'), h('div', null, h('b', null, champ.name), h('span', null, champ.deck.name))] : h('span', { class: 'muted' }, 'To be decided'))),
     ),
   );
   if (!t.top.length) {
@@ -812,44 +811,50 @@ function finalScreen(t: Tournament): Screen {
             ? { title: `Top ${t.topCut}`, text: 'A top-cut medal for making it out of Swiss.', cls: 'bronze' }
             : { title: `${ordinal(myPlace)} place`, text: 'No hardware this time — tune the side deck and come back stronger.', cls: 'plain' };
 
-  const medal = (i: number) => (i === 0 ? 'gold' : i === 1 ? 'silver' : i < 4 ? 'bronze' : '');
+  const art = h('div', { class: 'res-art' });
+  artInto(art, signatureCard(entrant(t, t.humanId)!.deck));
+  const stat = (v: string, l: string) => h('div', { class: 'res-stat' }, h('b', null, v), h('span', null, l));
   const podium = placements.slice(0, t.topCut).map((id, i) => {
     const e = entrant(t, id)!;
     return h(
       'div',
-      { class: ['fin-row', e.human && 'me', medal(i)] },
-      h('span', { class: 'fin-place' }, i < 4 ? icon(i === 0 ? 'trophy' : 'medal') : null, ordinal(i + 1)),
-      renderAvatar(e.avatar, 36),
-      h('span', { class: 'fin-who' }, h('span', { class: 'fin-name' }, e.name, e.human ? badge('You', 'gold') : null), h('span', { class: 'mm-deck', style: { '--deck': e.deck.color } }, h('i'), e.deck.name)),
+      { class: ['ios-row', 'fin-row', e.human && 'me'] },
+      h('span', { class: ['place-pill', i === 0 && 'first'] }, ordinal(i + 1)),
+      h('div', { class: 'ios-row-text' }, h('div', { class: 'ios-label' }, e.name, e.human ? h('span', { class: 'you-tag' }, 'You') : null), h('div', { class: 'ios-desc' }, e.deck.name)),
     );
   });
 
   const el = h(
     'div',
-    { class: ['final-screen', `prize-${prize.cls}`], tabindex: '-1' },
-    h('div', { class: 'res-rays', 'aria-hidden': 'true' }),
+    { class: ['results', 'final-screen', `prize-${prize.cls}`, myPlace === 1 ? 'results-victory' : 'results-neutral'], tabindex: '-1' },
     h(
-      'div',
-      { class: 'fin-inner' },
-      h('div', { class: 'res-context' }, `${t.name} · ${t.size} players`),
-      h('div', { class: 'fin-hero' }, trophySVG(`fin-trophy ${prize.cls}`), h('div', null, h('div', { class: 'fin-place-big' }, ordinal(myPlace)), h('h1', { class: 'fin-title' }, prize.title), h('p', { class: 'fin-text' }, prize.text))),
+      'section',
+      { class: 'res-hero' },
+      art,
+      h('div', { class: 'res-shade' }),
       h(
         'div',
-        { class: 'res-stats' },
-        h('span', { class: 'stat-chip' }, h('b', null, record), h('span', null, 'Your record')),
-        h('span', { class: 'stat-chip' }, h('b', null, `${me.rank}`), h('span', null, 'Swiss rank')),
-        h('span', { class: 'stat-chip' }, h('b', null, pct(me.omw)), h('span', null, 'OMW%')),
-        h('span', { class: 'stat-chip' }, h('b', null, champ.human ? 'You!' : champ.name), h('span', null, 'Champion')),
+        { class: 'res-hero-body' },
+        h('div', { class: 'res-context' }, `${t.name} · ${t.size} players`),
+        h('h1', { class: 'res-headline' }, ordinal(myPlace)),
+        h('div', { class: 'fin-title' }, prize.title),
+        h('div', { class: 'res-sub' }, prize.text),
       ),
-      h('div', { class: 'fin-grid' }, h('section', { class: 'panel fin-podium' }, h('header', { class: 'panel-head' }, h('h2', { class: 'panel-title' }, `Final Top ${t.topCut}`)), h('div', { class: 'panel-body' }, podium)), h('section', { class: 'panel fin-bracket' }, h('header', { class: 'panel-head' }, h('h2', { class: 'panel-title' }, 'Bracket')), h('div', { class: 'panel-body' }, bracket(t)))),
+    ),
+    h(
+      'div',
+      { class: 'res-inner' },
+      h('div', { class: 'res-stats' }, stat(record, 'Record'), stat(`${me.rank}`, 'Swiss rank'), stat(pct(me.omw), 'OMW%')),
+      iosGroup(`Final Top ${t.topCut}`, podium, champ.human ? 'You are the champion.' : `${champ.name} won with ${champ.deck.name}.`),
+      h('section', { class: 'ios-group' }, h('h2', { class: 'ios-group-h' }, 'Bracket'), bracket(t)),
       h(
         'div',
         { class: 'res-actions' },
-        button('New tournament', () => {
+        ctaButton('New tournament', () => {
           clearActiveTournament();
           go('tournament', {}, { replace: true });
-        }, { variant: 'primary', icon: 'trophy', cls: 'ui-btn-lg' }),
-        button('Main menu', () => go('title'), { variant: 'ghost', icon: 'back', cls: 'ui-btn-lg' }),
+        }, 'trophy'),
+        h('button', { type: 'button', class: 'cta cta--dark', onclick: () => go('title') }, icon('home'), h('span', null, 'Home')),
       ),
     ),
   );

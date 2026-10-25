@@ -13,6 +13,7 @@ export interface Settings {
   animationSpeed: number;
   sound: boolean;
   volume: number;
+  /** Original background music generated in the app: a menu theme and a duel theme. */
   music: boolean;
   /** When to stop and ask the player to respond: smart = only when it is likely relevant. */
   responsePrompts: 'smart' | 'always';
@@ -33,7 +34,7 @@ export const DEFAULT_SETTINGS: Settings = {
   animationSpeed: 1,
   sound: true,
   volume: 0.6,
-  music: false,
+  music: true,
   responsePrompts: 'smart',
   defaultDifficulty: 'normal',
   skipFirstDraw: true,
@@ -43,6 +44,8 @@ export const DEFAULT_SETTINGS: Settings = {
 };
 
 const KEY = 'edison.settings.v1';
+/** One-time switch: Music used to be off and did nothing, so saved profiles get the new default once. */
+const MUSIC_ON_KEY = 'edison.settings.musicOn.v1';
 let current: Settings | null = null;
 const listeners = new Set<(s: Settings) => void>();
 
@@ -65,7 +68,14 @@ export function saveJSON(key: string, value: unknown) {
 }
 
 export function getSettings(): Settings {
-  if (!current) current = { ...DEFAULT_SETTINGS, ...loadJSON<Partial<Settings>>(KEY, {}) };
+  if (!current) {
+    const saved = loadJSON<Partial<Settings>>(KEY, {});
+    if (!loadJSON(MUSIC_ON_KEY, false)) {
+      delete saved.music;
+      saveJSON(MUSIC_ON_KEY, true);
+    }
+    current = { ...DEFAULT_SETTINGS, ...saved };
+  }
   return current;
 }
 

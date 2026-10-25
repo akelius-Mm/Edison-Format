@@ -19,7 +19,7 @@ export interface VoiceOpts {
   hold?: number;
   /** -1 (left) … 1 (right). */
   pan?: number;
-  send?: Send | null;
+  send?: Send | Send[] | null;
 }
 
 /** Percussive envelope: fast exponential attack, optional hold, exponential decay to silence at t+dur. */
@@ -35,7 +35,7 @@ export function envelope(ac: Ctx, t: number, dur: number, v: number, attack = 0.
 }
 
 /** Route a voice to its destination, with optional pan and effect send. */
-export function route(ac: Ctx, node: AudioNode, out: AudioNode, pan?: number, send?: Send | null) {
+export function route(ac: Ctx, node: AudioNode, out: AudioNode, pan?: number, send?: Send | Send[] | null) {
   let last = node;
   if (pan && (ac as any).createStereoPanner) {
     const p = ac.createStereoPanner();
@@ -44,10 +44,12 @@ export function route(ac: Ctx, node: AudioNode, out: AudioNode, pan?: number, se
     last = p;
   }
   last.connect(out);
-  if (send && send.amount > 0) {
+  if (!send) return;
+  for (const sd of Array.isArray(send) ? send : [send]) {
+    if (!(sd.amount > 0)) continue;
     const s = ac.createGain();
-    s.gain.value = send.amount;
-    last.connect(s).connect(send.to);
+    s.gain.value = sd.amount;
+    last.connect(s).connect(sd.to);
   }
 }
 

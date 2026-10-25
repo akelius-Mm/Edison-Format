@@ -494,3 +494,32 @@ body::after {
     --hw: calc(var(--cw) * 0.6) !important;
   }
 }
+
+/* "Update ready" banner shown while a duel is in progress */
+.update-banner {
+  position: fixed;
+  z-index: 9999;
+  left: 50%;
+  top: calc(env(safe-area-inset-top, 0px) + 8px);
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: calc(100vw - 24px);
+  padding: 8px 8px 8px 14px;
+  border-radius: 12px;
+  background: rgba(18, 19, 22, 0.97);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  font: 500 13px/1.3 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  color: #e9e6df;
+}
+.update-banner button {
+  flex: none;
+  border: 0;
+  border-radius: 8px;
+  padding: 7px 12px;
+  font: 600 13px/1 inherit;
+  background: #c9b68e;
+  color: #111;
+}
