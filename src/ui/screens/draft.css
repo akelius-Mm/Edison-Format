@@ -188,11 +188,254 @@ body.dr-immersive.has-tabbar .dr-root .frame {
 .dr-hero .dr-h2 {
   font-size: 19px;
 }
-.dr-hero .dr-pack {
-  --pw: 84px;
+.dr-hero-art {
   width: 84px;
   transform: rotate(-4deg);
   filter: drop-shadow(0 8px 14px rgba(0, 0, 0, 0.5));
+}
+.dr-hero-art .dr-pack {
+  --pw: 84px;
+  width: 84px;
+  filter: none;
+}
+
+/* small packs in menus (Edison Pack design or the real set's art) */
+.dr-root .pk {
+  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.4);
+}
+.dr-presets {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+.dr-preset {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  align-content: start;
+  gap: 8px;
+  min-height: 112px;
+  padding: 12px 6px 10px;
+  border-radius: 14px;
+  border: 1px solid var(--line-2);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text-2);
+  font: 600 12.5px/1.25 var(--font);
+  text-align: center;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    border-color 0.18s,
+    background 0.18s;
+}
+.dr-preset.on {
+  border-color: var(--gold);
+  background: rgba(201, 182, 142, 0.08);
+  color: var(--text);
+}
+.dr-preset:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+.dr-preset-art {
+  display: flex;
+  justify-content: center;
+  height: 58px;
+}
+.dr-preset-art > * {
+  width: 36px;
+  --pw: 36px;
+  flex: none;
+}
+.dr-preset-art > * + * {
+  margin-left: -16px;
+}
+.dr-preset-art > :nth-child(1) {
+  z-index: 3;
+}
+.dr-preset-art > :nth-child(2) {
+  z-index: 2;
+  transform: translateY(3px) rotate(6deg);
+}
+.dr-preset-art > :nth-child(3) {
+  z-index: 1;
+  transform: translateY(6px) rotate(12deg);
+}
+.dr-preset-art .dr-pack {
+  filter: none;
+}
+.dr-preset-soon {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.dr-packstrip {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  padding: 4px 2px 6px;
+  scrollbar-width: none;
+}
+.dr-packstrip::-webkit-scrollbar {
+  display: none;
+}
+.dr-striptile {
+  flex: 0 0 56px;
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font: 600 11px var(--font);
+  white-space: nowrap;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.dr-striptile > .pk,
+.dr-striptile > .dr-pack {
+  width: 56px;
+  --pw: 56px;
+  filter: none;
+  transition: transform 0.18s var(--dr-spring);
+}
+.dr-striptile:active > :first-child {
+  transform: scale(0.94);
+}
+.dr-plan-summary {
+  font-size: 13px;
+  color: var(--text-2);
+}
+.dr-plan-summary.warn {
+  color: #e2a99a;
+}
+.dr-sets {
+  display: grid;
+  gap: 4px;
+}
+.dr-setlist {
+  display: grid;
+  gap: 6px;
+}
+.dr-setrow {
+  display: grid;
+  grid-template-columns: 52px 1fr auto;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  padding: 10px 8px;
+  border: 1px solid transparent;
+  border-radius: 14px;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.dr-setrow.static {
+  cursor: default;
+  padding: 8px 0;
+}
+.dr-setrow.on {
+  border-color: var(--gold-line);
+  background: rgba(201, 182, 142, 0.06);
+}
+.dr-setrow .icon {
+  width: 20px;
+  height: 20px;
+  color: var(--gold);
+}
+.dr-setrow:disabled {
+  cursor: default;
+}
+.dr-setrow.soon .dr-setrow-art {
+  opacity: 0.5;
+  filter: grayscale(0.6);
+}
+.dr-setrow-art > * {
+  width: 52px;
+  --pw: 52px;
+  filter: none;
+}
+.dr-setrow-text {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.dr-setrow-text b {
+  font-size: 15px;
+  font-weight: 600;
+}
+.dr-setrow-text > span {
+  font-size: 12.5px;
+  color: var(--muted);
+}
+.dr-setstatus {
+  margin-top: 2px;
+  font-size: 12px !important;
+  font-weight: 600;
+  color: var(--faint) !important;
+}
+.dr-setstatus.ready {
+  color: var(--gold) !important;
+}
+.dr-setstatus.dev {
+  color: #a9c3e0 !important;
+}
+
+/* a real booster on the opening stage */
+.dr-rpack {
+  position: relative;
+  width: min(58vw, 240px);
+  aspect-ratio: 0.6;
+  filter: drop-shadow(0 18px 30px rgba(0, 0, 0, 0.55));
+}
+.dr-rpack-top,
+.dr-rpack-body {
+  position: absolute;
+  inset: 0;
+}
+.dr-rpack-top {
+  clip-path: inset(0 0 90% 0);
+  transform-origin: 85% 10%;
+}
+.dr-rpack-body {
+  clip-path: inset(10% 0 0 0);
+}
+.dr-rpack .pk {
+  box-shadow: none;
+}
+.dr-pack-btn .dr-rpack {
+  animation: drFloat 3.2s ease-in-out infinite;
+}
+.dr-pack-btn.is-shake .dr-rpack {
+  animation: drShake var(--t-shake, 220ms) ease-in-out;
+}
+.dr-pack-btn.is-torn .dr-rpack {
+  animation: none;
+}
+.dr-pack-btn.is-torn .dr-rpack-top {
+  transition:
+    transform var(--t-tear, 420ms) var(--dr-ease),
+    opacity var(--t-tear, 420ms) ease-in;
+  transform: translate(26%, -60%) rotate(16deg);
+  opacity: 0;
+}
+.dr-pack-btn.is-torn .dr-rpack-body,
+.dr-pack-btn.is-torn .dr-rpack .dr-pack-sheen {
+  transition:
+    transform var(--t-drop, 520ms) cubic-bezier(0.5, 0, 0.75, 0) calc(var(--t-tear, 420ms) * 0.35),
+    opacity var(--t-drop, 520ms) ease-in calc(var(--t-tear, 420ms) * 0.35);
+  transform: translateY(70%);
+  opacity: 0;
+}
+.dr-reveal--9 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  max-width: 330px;
+  margin: 0 auto;
+  gap: 14px 10px;
 }
 .dr-opts {
   display: grid;
@@ -1271,6 +1514,7 @@ body.dr-immersive.has-tabbar .dr-root .frame {
 
 @media (prefers-reduced-motion: reduce) {
   .dr-pack-btn .dr-pack,
+  .dr-pack-btn .dr-rpack,
   .dr-stage .dr-pack-sheen,
   .dr-holo {
     animation: none !important;

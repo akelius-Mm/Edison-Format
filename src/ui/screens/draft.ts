@@ -32,6 +32,24 @@ import {
   startTournament,
   totalPicks,
   TOURNEY_ROUNDS,
+  countOptions,
+  defaultCount,
+  DRAFT_READY_SHARE,
+  EDISON_PACK,
+  eventPacksLabel,
+  fillerIds,
+  isRealPack,
+  MIN_EVENT_CARDS,
+  packOption,
+  packOptions,
+  packSize,
+  planCards,
+  planOf,
+  presetOf,
+  presetPlan,
+  PRESETS,
+  resizePlan,
+  type PackOption,
   type DeckIds,
   type DraftState,
   type PackCard,
@@ -45,7 +63,8 @@ import { getSettings, loadJSON, saveJSON } from '../settings';
 import { button, confirmDialog, h, icon, modal, segmented, toast } from './dom';
 import { AVATAR_PRESETS, SLEEVES } from './ext';
 import { runMatch } from './match';
-import { frame, go, type Screen } from './nav';
+import { frame, go, type Params, type Screen } from './nav';
+import { packArt as setPackArt } from './collectionUi';
 import { grantPrize } from '../../collection/api';
 import { getCustomDeck, newDeckId, ordinal, recordMatch, recordTournament, saveCustomDeck, uniqueDeckName, type Entry } from './store';
 
@@ -54,8 +73,20 @@ const FORM_KEY = 'edison.draft.form.v1';
 
 interface DraftForm {
   mode: 'draft' | 'sealed';
+  /** Old saves: number of Edison Packs in a draft. */
   packs: 3 | 4;
   bestOf: 1 | 3;
+  plans: Partial<Record<'draft' | 'sealed', string[]>>;
+}
+
+const DEV_KEY = 'edison.draft.devSets';
+/** Dev override: offer incomplete real sets (turn on with #/draft?devsets=1). */
+function devSetsOn() {
+  try {
+    return localStorage.getItem(DEV_KEY) === '1';
+  } catch {
+    return false;
+  }
 }
 
 // ------------------------------------------------------------------ persistence
@@ -216,7 +247,15 @@ interface Ctl {
   onLeave: (fn: () => void) => void;
 }
 
-export function draftScreen(): Screen {
+export function draftScreen(params: Params = {}): Screen {
+  if (params.devsets === '1' || params.devsets === '0') {
+    try {
+      if (params.devsets === '1') localStorage.setItem(DEV_KEY, '1');
+      else localStorage.removeItem(DEV_KEY);
+    } catch {
+      /* ignore */
+    }
+  }
   const root = h('div', { class: 'dr-root' });
   let leave: (() => void)[] = [];
   const runLeave = () => {
@@ -300,10 +339,93 @@ function progressOf(s: DraftState): { line: string; p: number } {
   return { line: `Finished ${ordinal(place)} of ${SEATS} · ${rec.text}`, p: 1 };
 }
 
+interface SetupState {
+  mode: 'draft' | 'sealed';
+  bestOf: 1 | 3;
+  plan: string[];
+}
+
+/** Setup form: one plan per format, remembered between visits. */
+function loadForm(dev: boolean): { mode: 'draft' | 'sealed'; bestOf: 1 | 3; plans: Record<'draft' | 'sealed', string[]> } {
+  const raw = loadJSON<Partial<DraftForm>>(FORM_KEY, {});
+  const ok = (plan: unknown, mode: 'draft' | 'sealed'): string[] => {
+    const p = Array.isArray(plan) ? plan.filter((c): c is string => typeof c === 'string') : [];
+    const real = p.some(isRealPack);
+    if (!p.length || !countOptions(mode, real).includes(p.length) || p.some((c) => !packOption(c, dev).ready))
+      return presetPlan('edison', mode === 'draft' ? (raw.packs === 3 ? 3 : 4) : 6);
+    return p;
+  };
+  return {
+    mode: raw.mode === 'sealed' ? 'sealed' : 'draft',
+    bestOf: raw.bestOf === 3 ? 3 : 1,
+    plans: { draft: ok(raw.plans?.draft, 'draft'), sealed: ok(raw.plans?.sealed, 'sealed') },
+  };
+}
+
+/** A small booster for menus: the Edison Pack design or the real set's pack art. */
+function packThumb(code: string, n = 0) {
+  if (code === EDISON_PACK) return packArt(n, 'Edison Pack', '15 cards');
+  return setPackArt(code);
+}
+
+/** Choose the booster for one pack round. Resolves with a set code, or null if dismissed. */
+function choosePack(round: number, current: string, dev: boolean): Promise<string | null> {
+  return new Promise((resolve) => {
+    let done = false;
+    const opts = packOptions(dev);
+    const list = h(
+      'div',
+      { class: 'dr-root dr-setlist' },
+      opts.map((o) =>
+        h(
+          'button',
+          {
+            type: 'button',
+            class: ['dr-setrow', o.code === current && 'on', !o.ready && 'soon'],
+            disabled: !o.ready,
+            onclick: () => {
+              done = true;
+              resolve(o.code);
+              m.close();
+            },
+          },
+          h('span', { class: 'dr-setrow-art' }, packThumb(o.code)),
+          h(
+            'span',
+            { class: 'dr-setrow-text' },
+            h('b', null, o.name),
+            h('span', null, o.code === EDISON_PACK ? '15 cards · the whole Edison pool' : `${o.code} · ${o.cardsPerPack} cards · ${releaseYear(o.released)}`),
+            o.code !== EDISON_PACK ? setStatus(o) : null,
+          ),
+          o.code === current ? icon('check') : null,
+        ),
+      ),
+    );
+    const m = modal(`Pack ${round + 1}`, list, [], { onClose: () => !done && resolve(null) });
+  });
+}
+
+const releaseYear = (iso?: string) => (iso ? new Date(iso).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' }) : '');
+
+function setStatus(o: PackOption) {
+  const pct = Math.round((o.playable / o.printed) * 100);
+  return o.ready && o.playable / o.printed >= DRAFT_READY_SHARE
+    ? h('span', { class: 'dr-setstatus ready' }, 'Ready')
+    : o.ready
+      ? h('span', { class: 'dr-setstatus dev' }, `Dev override · ${o.playable} of ${o.printed} cards`)
+      : h('span', { class: 'dr-setstatus' }, `Coming soon · ${pct}% of cards ready`);
+}
+
 function homeView(ctl: Ctl) {
   const s = loadDraft();
-  const form: DraftForm = { mode: 'draft', packs: 4, bestOf: 1, ...loadJSON<Partial<DraftForm>>(FORM_KEY, {}) };
-  const saveForm = () => saveJSON(FORM_KEY, form);
+  const dev = devSetsOn();
+  const stored = loadForm(dev);
+  const form: SetupState = { mode: stored.mode, bestOf: stored.bestOf, plan: stored.plans[stored.mode] };
+  const plans = stored.plans;
+  const saveForm = () => {
+    plans[form.mode] = form.plan;
+    saveJSON(FORM_KEY, { mode: form.mode, bestOf: form.bestOf, plans, packs: plans.draft.length === 3 ? 3 : 4 });
+  };
 
   const resumeCard = s
     ? (() => {
@@ -313,7 +435,7 @@ function homeView(ctl: Ctl) {
           'section',
           { class: 'dr-card dr-resume' },
           h('div', { class: 'dr-eyebrow' }, done ? 'Last event' : 'In progress'),
-          h('div', { class: 'dr-resume-title' }, `${modeLabel(s)}${s.mode === 'draft' ? ` · ${s.packCount} packs` : ''}`),
+          h('div', { class: 'dr-resume-title' }, `${modeLabel(s)} · ${eventPacksLabel(s)}`),
           h('div', { class: 'dr-muted' }, pr.line),
           h('div', { class: 'dr-progress' }, h('i', { style: { '--p': `${Math.round(pr.p * 100)}%` } })),
           h(
@@ -334,17 +456,103 @@ function homeView(ctl: Ctl) {
       })()
     : null;
 
-  const packsOpt = h('div', { class: 'dr-opt' }, h('span', { class: 'dr-opt-label' }, 'Packs'), segmented<number>([{ value: 3, label: '3 packs' }, { value: 4, label: '4 packs' }], form.packs, (v) => ((form.packs = v as 3 | 4), saveForm(), sync()), 'Packs'));
+  const heroArt = h('div', { class: 'dr-hero-art' });
   const heroTitle = h('h2', { class: 'dr-h2' });
   const heroText = h('p');
+  const presetRow = h('div', { class: 'dr-presets', role: 'radiogroup', 'aria-label': 'Boosters' });
+  const strip = h('div', { class: 'dr-packstrip', 'aria-label': 'Pack for each round' });
+  const countWrap = h('div');
+  const summary = h('div', { class: 'dr-plan-summary' });
+  const foot = h('p', { class: 'dr-foot' });
   const startBtn = button('Start draft', () => void start(), { variant: 'primary', icon: 'play', cls: 'dr-btn-wide' });
+
+  const anyReal = () => form.plan.some(isRealPack);
+  const setPlan = (plan: string[]) => {
+    form.plan = plan;
+    saveForm();
+    sync();
+  };
+
   const sync = () => {
     const sealed = form.mode === 'sealed';
-    packsOpt.style.display = sealed ? 'none' : '';
+    const real = anyReal();
+    const cards = planCards(form.plan);
+    const n = form.plan.length;
+    const sizes = [...new Set(form.plan.map(packSize))];
+    heroArt.replaceChildren(packThumb(form.plan[0] ?? EDISON_PACK));
     heroTitle.textContent = sealed ? 'Sealed' : 'Booster Draft';
     heroText.textContent = sealed
-      ? 'Open six packs and build a 40-card deck from everything you pull. Then play three rounds against the AI duelists.'
-      : `Eight duelists, ${form.packs} packs each. Take one card, pass the rest. Build 40 cards from your ${form.packs * 15} picks, then play three rounds.`;
+      ? `Open ${n} packs — ${cards} cards — and build a 40-card deck from everything you pull. Then play three rounds against the AI duelists.`
+      : `Eight duelists, ${n} packs each. Take one card, pass the rest. Build 40 cards from your ${cards} picks, then play three rounds.`;
+    // presets
+    const cur = presetOf(form.plan);
+    presetRow.replaceChildren(
+      ...PRESETS.map((p) => {
+        const ready = p.sets.every((c) => packOption(c, dev).ready);
+        return h(
+          'button',
+          {
+            type: 'button',
+            role: 'radio',
+            'aria-checked': String(cur === p.id),
+            class: ['dr-preset', cur === p.id && 'on'],
+            disabled: !ready,
+            onclick: () => {
+              const wantReal = p.sets.some(isRealPack);
+              const count = wantReal === real ? n : defaultCount(form.mode, wantReal);
+              setPlan(presetPlan(p.id, countOptions(form.mode, wantReal).includes(count) ? count : defaultCount(form.mode, wantReal)));
+            },
+          },
+          h('span', { class: 'dr-preset-art' }, p.sets.map((c) => packThumb(c))),
+          h('span', { class: 'dr-preset-label' }, p.label),
+          ready ? null : h('span', { class: 'dr-preset-soon' }, 'Coming soon'),
+        );
+      }),
+    );
+    // one tile per pack round
+    strip.replaceChildren(
+      ...form.plan.map((code, i) =>
+        h(
+          'button',
+          {
+            type: 'button',
+            class: 'dr-striptile',
+            'aria-label': `Pack ${i + 1}: ${packOption(code).name}. Change`,
+            onclick: async () => {
+              const pick = await choosePack(i, code, dev);
+              if (!pick || pick === code) return;
+              const next = [...form.plan];
+              next[i] = pick;
+              const real2 = next.some(isRealPack);
+              setPlan(countOptions(form.mode, real2).includes(next.length) ? next : resizePlan(next, defaultCount(form.mode, real2)));
+            },
+          },
+          packThumb(code, i),
+          h('span', { class: 'dr-striptile-n' }, `${i + 1} · ${code === EDISON_PACK ? 'Edison' : code}`),
+        ),
+      ),
+    );
+    const counts = countOptions(form.mode, real);
+    countWrap.replaceChildren(
+      counts.length > 1
+        ? segmented<number>(
+            counts.map((c) => ({ value: c, label: `${c} packs` })),
+            n,
+            (v) => setPlan(resizePlan(form.plan, v)),
+            'Number of packs',
+          )
+        : h('div', { class: 'dr-muted', style: { fontSize: '13px' } }, `${n} packs`),
+    );
+    summary.textContent = sealed
+      ? `${n} packs · ${cards} cards to build from`
+      : `${n} packs × ${sizes.length === 1 ? sizes[0] : sizes.join('/')} cards · ${cards} picks · 8 players`;
+    const tooFew = cards < MIN_EVENT_CARDS[form.mode];
+    if (tooFew) summary.textContent += ` · needs at least ${MIN_EVENT_CARDS[form.mode]}`;
+    summary.classList.toggle('warn', tooFew);
+    startBtn.disabled = tooFew || form.plan.some((c) => !packOption(c, dev).ready);
+    foot.textContent = real
+      ? 'Real boosters have 9 cards with the set’s printed rarities and pack odds. The Edison Pack has 15: 11 Commons, 2 Rares, 1 Super Rare or better and a bonus card. Forbidden cards are never in packs.'
+      : 'Each pack: 11 Commons, 2 Rares, 1 Super Rare or better and 1 bonus card that is often an Extra Deck monster. Forbidden cards are not in packs.';
     startBtn.querySelector('.ui-btn-label')!.textContent = sealed ? 'Open sealed pool' : 'Start draft';
   };
 
@@ -353,7 +561,7 @@ function homeView(ctl: Ctl) {
     const st = getSettings();
     const ns = createDraft({
       mode: form.mode,
-      packCount: form.packs,
+      plan: form.plan,
       bestOf: form.bestOf,
       human: { name: st.playerName?.trim() || 'You', avatar: st.avatar, sleeve: st.sleeve },
       avatars: AVATAR_PRESETS,
@@ -363,6 +571,23 @@ function homeView(ctl: Ctl) {
     openView(ctl, ns);
   };
 
+  const setsInfo = h(
+    'section',
+    { class: 'dr-card dr-sets' },
+    h('div', { class: 'dr-opt-label' }, 'Real boosters · spring 2010'),
+    packOptions(dev)
+      .filter((o) => o.code !== EDISON_PACK)
+      .map((o) =>
+        h(
+          'div',
+          { class: ['dr-setrow', 'static', !o.ready && 'soon'] },
+          h('span', { class: 'dr-setrow-art' }, packThumb(o.code)),
+          h('span', { class: 'dr-setrow-text' }, h('b', null, o.name), h('span', null, `${o.code} · ${o.cardsPerPack} cards · ${releaseYear(o.released)}`), setStatus(o)),
+        ),
+      ),
+    dev ? h('p', { class: 'dr-foot', style: { textAlign: 'left', margin: '0' } }, 'Dev override is on: incomplete sets can be drafted (packs repeat cards). Open #/draft?devsets=0 to turn it off.') : null,
+  );
+
   const body = h(
     'div',
     { class: 'dr-home' },
@@ -371,18 +596,39 @@ function homeView(ctl: Ctl) {
     h(
       'section',
       { class: 'dr-card dr-opts' },
-      h('div', { class: 'dr-hero' }, packArt(0, 'Booster Pack', '15 cards'), h('div', null, heroTitle, heroText)),
-      h('div', { class: 'dr-opt' }, h('span', { class: 'dr-opt-label' }, 'Format'), segmented([{ value: 'draft', label: 'Draft' }, { value: 'sealed', label: 'Sealed' }], form.mode, (v) => ((form.mode = v as DraftForm['mode']), saveForm(), sync()), 'Format')),
-      packsOpt,
+      h('div', { class: 'dr-hero' }, heroArt, h('div', null, heroTitle, heroText)),
+      h(
+        'div',
+        { class: 'dr-opt' },
+        h('span', { class: 'dr-opt-label' }, 'Format'),
+        segmented(
+          [
+            { value: 'draft', label: 'Draft' },
+            { value: 'sealed', label: 'Sealed' },
+          ],
+          form.mode,
+          (v) => {
+            saveForm();
+            form.mode = v as SetupState['mode'];
+            form.plan = plans[form.mode];
+            saveForm();
+            sync();
+          },
+          'Format',
+        ),
+      ),
+      h('div', { class: 'dr-opt' }, h('span', { class: 'dr-opt-label' }, 'Boosters'), presetRow),
+      h('div', { class: 'dr-opt' }, h('span', { class: 'dr-opt-label' }, 'Packs · tap one to change it'), strip, countWrap, summary),
       h('div', { class: 'dr-opt' }, h('span', { class: 'dr-opt-label' }, 'Matches'), segmented<number>([{ value: 1, label: 'Best of 1' }, { value: 3, label: 'Best of 3' }], form.bestOf, (v) => ((form.bestOf = v as 1 | 3), saveForm()), 'Matches')),
       startBtn,
     ),
-    h('p', { class: 'dr-foot' }, 'Each pack: 11 Commons, 2 Rares, 1 Super Rare or better and 1 bonus card that is often an Extra Deck monster. Forbidden cards are not in packs.'),
+    foot,
     h(
       'div',
       { class: 'dr-rarity-key', 'aria-label': 'Rarities' },
       (['C', 'R', 'SR', 'UR', 'ScR'] as Rarity[]).map((r) => h('span', null, h('i', { class: 'dr-pip', dataset: { r } }), RARITY_NAME[r])),
     ),
+    setsInfo,
   );
   sync();
   ctl.show(frame('Draft', { subtitle: 'Booster Draft and Sealed' }, body), 'home');
@@ -394,10 +640,17 @@ function openView(ctl: Ctl, s: DraftState) {
   const n = s.mode === 'sealed' ? s.opened : s.round;
   const pack: PackCard[] = s.packs[n][0];
   const burst = h('div', { class: 'dr-burst' });
-  const packBtn = h('button', { type: 'button', class: 'dr-pack-btn', 'aria-label': 'Open pack' }, packArt(n, `Pack ${n + 1}`, `${modeLabel(s)} · 15 cards`), h('div', { class: 'dr-tap-hint' }, 'Tap to open'));
+  const code = planOf(s)[n] ?? EDISON_PACK;
+  const opt = packOption(code);
+  // A real booster tears like the Edison Pack: two clipped copies of its art, top strip and body.
+  const visual =
+    code === EDISON_PACK
+      ? packArt(n, `Pack ${n + 1}`, `${modeLabel(s)} · ${pack.length} cards`)
+      : h('div', { class: 'dr-rpack' }, h('div', { class: 'dr-rpack-body' }, setPackArt(code)), h('div', { class: 'dr-rpack-top' }, setPackArt(code)), h('div', { class: 'dr-pack-sheen' }));
+  const packBtn = h('button', { type: 'button', class: 'dr-pack-btn', 'aria-label': `Open ${opt.name} pack` }, visual, h('div', { class: 'dr-tap-hint' }, code === EDISON_PACK ? 'Tap to open' : `${opt.name} · tap to open`));
   const stage = h('div', { class: 'dr-stage' }, burst, packBtn);
   const fr = frame(`Pack ${n + 1} of ${s.packCount}`, { cls: 'dr-open', compact: true, ...backToHome(ctl) }, stage);
-  const note = h('div', { class: 'dr-dock-note' }, s.mode === 'draft' ? `Tap the pack to open it · this pack passes ${passDir(n) === 1 ? 'left' : 'right'}` : `Tap the pack to open it · ${s.packCount - n - 1} more after this one`);
+  const note = h('div', { class: 'dr-dock-note' }, s.mode === 'draft' ? `${pack.length} cards · this pack passes ${passDir(n) === 1 ? 'left' : 'right'}` : `${pack.length} cards · ${s.packCount - n - 1} more after this one`);
   const actions = h('div', { class: 'dr-btn-row' });
   const dock = h('div', null, h('div', { class: 'dr-dock-in' }, note, actions));
   ctl.show(fr, 'open', { immersive: true });
@@ -482,7 +735,7 @@ function openView(ctl: Ctl, s: DraftState) {
       if (!alive()) return;
     }
     tiles = pack.map(makeCard);
-    const grid = h('div', { class: 'dr-reveal' }, tiles);
+    const grid = h('div', { class: ['dr-reveal', tiles.length <= 9 && 'dr-reveal--9'] }, tiles);
     packBtn.remove();
     stage.append(grid);
     state = 'flipping';
@@ -893,6 +1146,24 @@ function buildView(ctl: Ctl, s: DraftState, intro?: string) {
       content.firstElementChild?.setAttribute('style', 'margin-top:0');
     } else {
       content.replaceChildren(groupTiles(pool, add) ?? h('div', { class: 'dr-empty' }, pool.length ? 'Nothing matches this filter.' : 'Every card you picked is in your deck.'));
+      // Small pools (9-card boosters) may not reach 40: plain monsters are free to add, like basic lands.
+      const mainPicks = s.picks[0].filter((p) => !isExtraDeck(card(p.id))).length;
+      if (mainPicks < 40 && (filter === 'all' || filter === 'monster')) {
+        const fill = fillerIds();
+        content.append(
+          h('div', { class: 'dr-section-title' }, h('span', null, 'Basic monsters'), h('span', null, 'free · any number')),
+          h(
+            'div',
+            { class: 'dr-grid' },
+            fill.map((id) => {
+              const c = card(id);
+              const t = tile(c, null);
+              press(t, { tap: () => add(id), long: () => zoomCard(c) });
+              return t;
+            }),
+          ),
+        );
+      }
     }
     const problems = deckProblems(s, deck);
     note.className = ['dr-dock-note', problems.length && 'warn', intro && 'intro'].filter(Boolean).join(' ');

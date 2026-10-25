@@ -9,7 +9,8 @@ import type { GameResult, Match, Standing, Tournament } from '../tournament/type
 import { aiPick, randomBias, type DrafterBias } from './ai';
 import { autoBuild, deckRating, fillerMonsters, type BuiltDeck } from './build';
 import { draftCard, draftPool, isExtraDeck } from './cards';
-import { generateEventPacks, PACK_SIZE, type PackCard } from './packs';
+import { generateEventPacks, type PackCard } from './packs';
+import { EDISON_PACK, planLabel } from './sets';
 
 export type DraftMode = 'draft' | 'sealed';
 export type DraftPhase = 'draft' | 'build' | 'tournament' | 'done';
@@ -41,8 +42,10 @@ export interface DraftState {
   seed: number;
   mode: DraftMode;
   created: number;
-  /** Packs per player: 3 or 4 in a draft, 6 in sealed. */
+  /** Packs per player. */
   packCount: number;
+  /** Booster for each pack round: EDISON_PACK or a real set code (missing in old saves = Edison). */
+  plan?: string[];
   bestOf: 1 | 3;
   players: DraftPlayer[];
   /** Packs as opened: [pack number][seat]. */
@@ -70,7 +73,10 @@ export interface DraftState {
 
 export interface NewDraftOptions {
   mode: DraftMode;
-  packCount?: 3 | 4;
+  /** Number of Edison Packs (ignored when `plan` is given). */
+  packCount?: number;
+  /** Booster per pack round; overrides packCount. */
+  plan?: string[];
   bestOf?: 1 | 3;
   seed?: number;
   human: { name: string; avatar: string; sleeve: string };
@@ -113,8 +119,9 @@ export function createDraft(o: NewDraftOptions): DraftState {
       skill: Math.round(t.skill / 2),
     });
   }
-  const packCount = o.mode === 'sealed' ? SEALED_PACKS : (o.packCount ?? 4);
-  const packs = generateEventPacks(seed, packCount, SEATS);
+  const plan = o.plan?.length ? [...o.plan] : Array.from({ length: o.mode === 'sealed' ? SEALED_PACKS : (o.packCount ?? 4) }, () => EDISON_PACK);
+  const packCount = plan.length;
+  const packs = generateEventPacks(seed, plan, SEATS);
   const s: DraftState = {
     version: 1,
     id: `draft-${seed.toString(36)}-${Date.now().toString(36)}`,
@@ -122,6 +129,7 @@ export function createDraft(o: NewDraftOptions): DraftState {
     mode: o.mode,
     created: Date.now(),
     packCount,
+    plan,
     bestOf: o.bestOf ?? 1,
     players,
     packs,
@@ -152,9 +160,14 @@ export function humanPack(s: DraftState): PackCard[] {
   return s.current[0] ?? [];
 }
 
+/** Cards the human ends up with: every pick (Draft) or every card opened (Sealed). */
 export function totalPicks(s: DraftState) {
-  return s.packCount * PACK_SIZE;
+  return s.packs.reduce((a, round) => a + (round[0]?.length ?? 0), 0);
 }
+
+/** Booster of each pack round. */
+export const planOf = (s: DraftState): string[] => s.plan ?? Array.from({ length: s.packCount }, () => EDISON_PACK);
+export const eventPacksLabel = (s: DraftState) => planLabel(planOf(s));
 
 /** Human takes card `index` from their pack; every AI picks; packs are passed. */
 export function makePick(s: DraftState, index: number) {
@@ -193,6 +206,14 @@ export function markOpened(s: DraftState) {
 
 // ------------------------------------------------------------------ decks
 
+/**
+ * Plain vanilla monsters anyone may add to a deck, like basic lands: they keep a deck playable
+ * when a pool (e.g. 45 picks from 9-card boosters) has fewer than 40 Main Deck cards.
+ */
+export function fillerIds(): string[] {
+  return fillerMonsters(draftPool()).map((c) => c.id);
+}
+
 export function buildFromPool(pool: CardData[]): BuiltDeck {
   return autoBuild(pool, { fillers: fillerMonsters(draftPool()) });
 }
@@ -215,7 +236,8 @@ export function deckProblems(s: DraftState, d: DeckIds): string[] {
   for (const p of s.picks[0]) have.set(p.id, (have.get(p.id) ?? 0) + 1);
   const used = new Map<string, number>();
   for (const id of [...d.main, ...d.extra]) used.set(id, (used.get(id) ?? 0) + 1);
-  for (const [id, n] of used) if (n > (have.get(id) ?? 0)) out.push(`${card(id).name}: ${n} used, ${have.get(id) ?? 0} drafted.`);
+  const free = new Set(fillerIds());
+  for (const [id, n] of used) if (n > (have.get(id) ?? 0) && !free.has(id)) out.push(`${card(id).name}: ${n} used, ${have.get(id) ?? 0} drafted.`);
   for (const id of d.main) if (isExtraDeck(card(id))) out.push(`${card(id).name} belongs in the Extra Deck.`);
   return [...new Set(out)];
 }

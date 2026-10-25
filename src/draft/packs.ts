@@ -1,9 +1,12 @@
-// Booster pack generation. A pack has 15 cards:
+// Booster pack generation. The Edison Pack has 15 cards (real-set packs come from
+// src/collection/draft.ts and have 9):
 //   11 Commons · 2 Rares · 1 foil slot (Super / Ultra / Secret) · 1 bonus slot
 // The bonus slot is often an Extra Deck monster (any rarity), otherwise another Rare.
 // Commons and Rares are Main Deck cards; the foil slot can be anything.
 import type { CardData } from '../engine/card';
 import { Rng } from '../engine/rng';
+import { generateSetPack } from '../collection/draft';
+import { EDISON_PACK } from './sets';
 import { cardPower, draftPool, isExtraDeck, rarityOf, rarityRank, type Rarity } from './cards';
 
 export const PACK_SIZE = 15;
@@ -92,13 +95,23 @@ function draftPoolCard(id: string): CardData {
   return poolIndex.get(id)!;
 }
 
-/** Packs for a whole event: [round][seat]. */
-export function generateEventPacks(seed: number, rounds: number, seats: number): PackCard[][][] {
+/**
+ * Packs for a whole event: [round][seat]. `plan` lists the booster for each round: the Edison
+ * Pack (EDISON_PACK) or a real set code (9-card packs with the set's printed rarities).
+ * A number means that many Edison Packs.
+ */
+export function generateEventPacks(seed: number, plan: string[] | number, seats: number): PackCard[][][] {
+  const rounds = typeof plan === 'number' ? Array.from({ length: plan }, () => EDISON_PACK) : plan;
   const rng = new Rng(seed ^ 0x5bd1e995);
   const out: PackCard[][][] = [];
-  for (let r = 0; r < rounds; r++) {
+  for (const code of rounds) {
     const row: PackCard[][] = [];
-    for (let s = 0; s < seats; s++) row.push(generatePack(rng));
+    for (let s = 0; s < seats; s++) {
+      let pack = code === EDISON_PACK ? [] : generateSetPack(code, rng);
+      // Unknown or empty set: fall back to an Edison Pack so the event can still run.
+      if (!pack.length) pack = generatePack(rng);
+      row.push(pack);
+    }
     out.push(row);
   }
   return out;
