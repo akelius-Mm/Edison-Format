@@ -93,8 +93,6 @@ async function returnToField(g: Game, c: C, controller: PlayerId, pos: BattlePos
   return true;
 }
 
-/** Take a (non-cost) end-of-turn style "send to GY or destroy" choice for the AI: higher = keep. */
-const keepValue = (ctx: Ctx, c: C) => cardValue(ctx.game, c);
 
 /** Equip Spell activation: target 1 face-up monster passing `filter`. */
 function equipActivate(filter: (ctx: Ctx, c: C) => boolean, score: (ctx: Ctx) => number, aiTarget?: (ctx: Ctx, c: C) => number): EffectDef {
@@ -210,7 +208,8 @@ export function ensureAnprPatches(g: Game) {
     if (isEI(card) && !faceUpFieldSpell(g) && !g.controllers[p].isHuman) return false;
     if (!set && card.name === 'Jester Confit' && g.faceUpMonsters(p).some((c) => c.name === 'Jester Confit')) return false;
     const lab = g.turnData[`anpr:brl:${p}`];
-    if (lab?.pending && g.players[p].normalSummonsLeft <= 1 && card.data.race !== 'Psychic') return false;
+    // Brain Research Lab's extra Normal Summon: a Psychic-Type monster, face-up (not a Set).
+    if (lab?.pending && g.players[p].normalSummonsLeft <= 1 && (set || card.data.race !== 'Psychic')) return false;
     return true;
   };
 
@@ -1370,6 +1369,7 @@ monster('Armored Axon Kicker', {
       eventFilter: selfDestroysByBattle,
       resolve: async (ctx) => {
         const v = evc(ctx.event!)!;
+        // APPROX: uses the destroyed monster's printed ATK (its ATK on the field is gone once it is in the GY).
         const dmg = await ctx.damage(ctx.player, Math.floor((v.data.atk ?? 0) / 2));
         const cands = ctx.grave('me', (c) => c.isMonster && (c.data.atk ?? 0) <= dmg && ctx.canSummonCard(c));
         if (!dmg || !cands.length || !ctx.canSpecialSummon()) return;
