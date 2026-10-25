@@ -203,7 +203,8 @@ export function eventShort(e: DeckEvent) {
     .replace(/World Championship Qualifier/i, 'WCQ')
     .replace(/National Championships?/i, 'Nationals')
     .replace(/Regional Qualifier/i, 'Regional');
-  const dt = new Date(`${e.date}T12:00:00`);
+  // Month-only dates ("2010-05") are allowed when a source gives no day.
+  const dt = new Date(`${/^\d{4}-\d{2}$/.test(e.date) ? `${e.date}-15` : e.date}T12:00:00`);
   const when = isNaN(dt.getTime()) ? e.date : dt.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
   return `${name} · ${when}`;
 }

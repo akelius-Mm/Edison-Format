@@ -19,7 +19,8 @@ function triedFor(id: string) {
   }
 }
 
-const busy = () => document.body.classList.contains('in-duel');
+// a duel, or an online room (reloading would drop the connection to the friend)
+const busy = () => document.body.classList.contains('in-duel') || /^#\/?friend\b/.test(location.hash);
 
 function reloadNow() {
   if (reloading) return;
@@ -74,6 +75,10 @@ export function startUpdater() {
   new MutationObserver(() => {
     if (pending && !busy()) reloadNow();
   }).observe(document.body, { attributes: true, attributeFilter: ['class'] });
+  // ...or the moment the player leaves the online room
+  window.addEventListener('hashchange', () => {
+    if (pending && !busy()) reloadNow();
+  });
 
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState !== 'visible') return;

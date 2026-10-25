@@ -1,5 +1,6 @@
 // Contract between the app shell (menus/tournament) and the duel screen.
 import type { Difficulty } from '../../ai/ai';
+import type { PlayerController } from '../../engine/controller';
 import type { DeckList, Game } from '../../engine/game';
 import type { Decision } from '../../engine/replay';
 import type { PlayerId } from '../../engine/types';
@@ -43,6 +44,29 @@ export interface DuelOptions {
   onGameOver?: (result: DuelResult) => void;
   /** The duel is saved: the exit button offers "Leave and save" next to "Concede". */
   resumable?: boolean;
+
+  // ---- Play a friend (src/net, src/ui/screens/friend.ts) ---------------------------------
+  /** Controller for the seat that is not 'human' in place of an AI: the friend's phone. */
+  remote?: PlayerController;
+  /** Test hook: answers the local human's decisions (still recorded) instead of taps. */
+  localDriver?: PlayerController;
+  /** Called once the screen is built: lets the caller end the game and decorate the board. */
+  onMount?: (ctl: DuelControl) => void;
+  /** Overrides the result screen title (e.g. "Out of sync"). */
+  resultTitle?: (res: { winner: PlayerId | null; reason: string }) => string | undefined;
+}
+
+export interface DuelControl {
+  game: Game;
+  root: HTMLElement;
+  /** The seat this phone plays. */
+  me: PlayerId;
+  /** End the game now with this result (the friend conceded, a desync, a claimed win). */
+  abort(winner: PlayerId | null, reason: string): void;
+  /** Called whenever the game is ended from outside the engine, including the player surrendering. */
+  onAbort(fn: (winner: PlayerId | null, reason: string) => void): void;
+  /** The duel is replaying saved decisions (no animation yet). */
+  readonly restoring: boolean;
 }
 
 export interface DuelResult {

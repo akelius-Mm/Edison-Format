@@ -10,20 +10,26 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "sim": "tsx scripts/sim.ts",
-    "test": "tsx scripts/rules-test.ts && tsx scripts/replay-test.ts --games 40 && tsx scripts/pack-odds-test.ts && tsx scripts/sim.ts --games 40 && tsx scripts/locals-test.ts && tsx scripts/draft-setup-test.ts && tsx scripts/events-test.ts && tsx scripts/side-deck-test.ts",
+    "test": "tsx scripts/rules-test.ts && tsx scripts/replay-test.ts --games 40 && tsx scripts/pack-odds-test.ts && tsx scripts/sim.ts --games 40 && tsx scripts/locals-test.ts && tsx scripts/draft-setup-test.ts && tsx scripts/events-test.ts && tsx scripts/side-deck-test.ts && tsx scripts/net-test.ts",
     "test:draft": "tsx scripts/draft-setup-test.ts",
     "test:rules": "tsx scripts/rules-test.ts",
     "test:replay": "tsx scripts/replay-test.ts --games 40",
     "test:sim": "tsx scripts/sim.ts --games 40",
     "test:packs": "tsx scripts/pack-odds-test.ts",
     "test:locals": "tsx scripts/locals-test.ts --nights 120",
-    "test:events": "tsx scripts/events-test.ts --seasons 4"
+    "test:events": "tsx scripts/events-test.ts --seasons 4",
+    "test:net": "tsx scripts/net-test.ts",
+    "test:friend-e2e": "node scripts/friend-e2e.cjs"
   },
   "devDependencies": {
     "@types/node": "^22.20.5",
+    "peer": "^1.0.2",
     "tsx": "^4.23.15",
     "typescript": "^5.9.3",
     "vite": "^5.4.21",
     "vite-plugin-singlefile": "^2.3.4"
+  },
+  "dependencies": {
+    "peerjs": "^1.5.5"
   }
 }
