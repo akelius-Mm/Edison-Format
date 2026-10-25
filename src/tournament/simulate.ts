@@ -84,7 +84,7 @@ export async function headlessGame(
       seed,
       names: [a.name, b.name],
       maxTurns: opts.maxTurns ?? 50,
-      skipFirstDraw: opts.skipFirstDraw ?? true,
+      skipFirstDraw: opts.skipFirstDraw ?? false,
       ...(opts.firstPlayer != null ? { firstPlayer: opts.firstPlayer } : {}),
     });
   } catch (e) {

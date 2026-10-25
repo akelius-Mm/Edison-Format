@@ -180,7 +180,7 @@ export class Game {
     this.options = {
       seed: opts.seed ?? Math.floor(Math.random() * 2 ** 31),
       startLP: opts.startLP ?? 8000,
-      skipFirstDraw: opts.skipFirstDraw ?? true,
+      skipFirstDraw: opts.skipFirstDraw ?? false,
       names: opts.names ?? ['Player', 'Opponent'],
       firstPlayer: opts.firstPlayer ?? (-1 as any),
       maxTurns: opts.maxTurns ?? 120,

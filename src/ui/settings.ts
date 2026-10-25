@@ -37,7 +37,8 @@ export const DEFAULT_SETTINGS: Settings = {
   music: true,
   responsePrompts: 'smart',
   defaultDifficulty: 'normal',
-  skipFirstDraw: true,
+  // Edison (2008 TCG rules): the player going first draws on turn 1.
+  skipFirstDraw: false,
   showLog: true,
   confirmEndTurn: false,
   officialImages: true,
@@ -46,6 +47,8 @@ export const DEFAULT_SETTINGS: Settings = {
 const KEY = 'edison.settings.v1';
 /** One-time switch: Music used to be off and did nothing, so saved profiles get the new default once. */
 const MUSIC_ON_KEY = 'edison.settings.musicOn.v1';
+/** One-time switch: the first-turn draw used to default to the modern rule; saved profiles get the Edison rule once. */
+const EDISON_DRAW_KEY = 'edison.settings.firstDraw.v1';
 let current: Settings | null = null;
 const listeners = new Set<(s: Settings) => void>();
 
@@ -73,6 +76,10 @@ export function getSettings(): Settings {
     if (!loadJSON(MUSIC_ON_KEY, false)) {
       delete saved.music;
       saveJSON(MUSIC_ON_KEY, true);
+    }
+    if (!loadJSON(EDISON_DRAW_KEY, false)) {
+      delete saved.skipFirstDraw;
+      saveJSON(EDISON_DRAW_KEY, true);
     }
     current = { ...DEFAULT_SETTINGS, ...saved };
   }
