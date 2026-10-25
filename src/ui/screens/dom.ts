@@ -112,6 +112,7 @@ export const ICONS = {
   clipboard: I('<rect x="6" y="4" width="12" height="17" rx="2"/><path d="M9 4V3h6v1"/><path d="M9 10h6M9 14h6M9 18h3"/>'),
   door: I('<path d="M14 3H6v18h8"/><path d="M10 12h11"/><path d="m18 8 4 4-4 4"/>'),
   keyboard: I('<rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M7 14h10"/>'),
+  music: I('<path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>'),
 };
 
 export function icon(name: keyof typeof ICONS, cls = 'icon') {

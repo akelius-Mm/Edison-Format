@@ -1682,6 +1682,87 @@ a.ios-row {
   align-items: center;
   gap: 10px;
 }
+
+/* Settings → Your music */
+.ym-ctl {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.ym-ctl .ios-inline-btn:disabled {
+  opacity: 0.5;
+}
+.ym-remove {
+  color: var(--loss) !important;
+}
+.ym-desc {
+  display: block;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.ym-name {
+  color: var(--text-2);
+}
+
+/* Audio credits sheet */
+.credits-list {
+  display: grid;
+  gap: 14px;
+  max-height: min(64vh, 640px);
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+.credits-intro {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--muted);
+}
+.credit {
+  display: grid;
+  gap: 3px;
+  padding-top: 12px;
+  border-top: 1px solid var(--sep);
+  min-width: 0;
+}
+.credit-use {
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.credit-title {
+  font-weight: 600;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+.credit-meta,
+.credit-edit,
+.credit-files {
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--text-2);
+}
+.credit a {
+  color: var(--gold-hi);
+}
+.credit-src summary {
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--muted);
+}
+.credit-src ul {
+  margin: 4px 0 0;
+  padding-left: 18px;
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.credit code {
+  font-size: 12px;
+}
 .pf-res {
   display: inline-grid !important;
   place-items: center;

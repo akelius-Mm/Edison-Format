@@ -13,7 +13,7 @@ export interface Settings {
   animationSpeed: number;
   sound: boolean;
   volume: number;
-  /** Original background music generated in the app: a menu theme and a duel theme. */
+  /** Background music: menu, duel and pinch tracks (built-in CC0 recordings or the player's own files). */
   music: boolean;
   /** When to stop and ask the player to respond: smart = only when it is likely relevant. */
   responsePrompts: 'smart' | 'always';
