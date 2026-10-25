@@ -18,7 +18,6 @@ export const FORBIDDEN = [
   'Dimension Fusion',
   'Exchange of the Spirit',
   'Fiber Jar',
-  'Giant Trunade',
   'Graceful Charity',
   "Harpie's Feather Duster",
   'Imperial Order',
@@ -45,7 +44,6 @@ export const FORBIDDEN = [
 export const LIMITED = [
   // Monsters
   'Brionac, Dragon of the Ice Barrier',
-  'Breaker the Magical Warrior',
   'Card Trooper',
   'Dark Armed Dragon',
   'Destiny Hero - Disk Commander',
@@ -76,7 +74,9 @@ export const LIMITED = [
   'Emergency Teleport',
   'Foolish Burial',
   'Future Fusion',
-  'Gold Sarcophagus',
+  // Giant Trunade was Limited (not Forbidden) on the March 2010 TCG list: Ira D. Jones and Daniel LaMartina
+  // both main-decked 1 in the SJC Edison 2010 Top 16 (src/decks/tournament2.ts).
+  'Giant Trunade',
   'Heavy Storm',
   'Lightning Vortex',
   'Limiter Removal',
@@ -97,11 +97,9 @@ export const LIMITED = [
   'Magical Explosion',
   'Mirror Force',
   'Return from the Different Dimension',
-  'Royal Decree',
   'Solemn Judgment',
   'Torrential Tribute',
   'Trap Dustshoot',
-  'Ultimate Offering',
   'Wall of Revealing Light',
 ];
 
@@ -116,6 +114,13 @@ export const SEMI_LIMITED = [
   'Reasoning',
   'Swords of Revealing Light',
   'Destiny Hero - Malicious',
+  // Corrections from the SJC Edison 2010 Top 16 lists (src/decks/tournament2.ts) and Yugipedia's March 2010 TCG list:
+  // Gold Sarcophagus (2 in Daniel LaMartina's and Miguel Garcia's mains), Royal Decree (2 sided by LaMartina and Thai Bui)
+  // and Ultimate Offering (2 in Enye Gilmore's main) were Semi-Limited. Breaker the Magical Warrior had left the list in
+  // September 2009 (Garcia sided 2), so it is Unlimited.
+  'Gold Sarcophagus',
+  'Royal Decree',
+  'Ultimate Offering',
 ];
 
 // Cards scripted for the simulator (TSHD packs, Draft, Sealed, the collection) that had no English TCG

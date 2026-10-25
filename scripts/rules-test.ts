@@ -387,6 +387,66 @@ function eq(a: unknown, b: unknown, msg: string) {
     eq(next.location, 'hand', 'Dragnov searched');
   });
 
+  // ---------------------------------------------------------------- SJC Edison Top 16 extras (tournament-extras2.ts)
+  await test('Extras2: Proto-Cyber Dragon is named "Cyber Dragon" only while face-up on the field', async () => {
+    const { g, place } = setup();
+    const proto = place(0, cardByName('Proto-Cyber Dragon'), 'hand');
+    await g.specialSummon([proto], 0, { pos: 'atk' });
+    eq(proto.name, 'Cyber Dragon', 'name on the field');
+    await g.destroy([proto], 'effect');
+    eq(proto.name, 'Proto-Cyber Dragon', 'name in the GY');
+  });
+
+  await test('Extras2: Machina Gearframe equips to Machina Fortress and is destroyed by battle instead of it', async () => {
+    const { g, place } = setup();
+    const fortress = place(0, cardByName('Machina Fortress'), 'mzone');
+    const gear = place(0, cardByName('Machina Gearframe'), 'mzone');
+    await activateCard(g, 0, gear);
+    eq(gear.location, 'szone', 'Gearframe in the S/T zone');
+    eq(gear.equippedTo, fortress.uid, 'equipped to Fortress');
+    const giant = findCard('Rules Test Giant') ?? normal('Rules Test Giant', 'EARTH', 'Warrior', 8, 3000, 2500);
+    const a = place(1, giant, 'mzone');
+    g.turnPlayer = 1;
+    await g.conductAttack(1, a);
+    eq(fortress.location, 'mzone', 'Fortress survives');
+    eq(gear.location, 'grave', 'Gearframe destroyed instead');
+    eq(g.players[0].lp, 8000 - 500, 'battle damage still applies');
+  });
+
+  await test('Extras2: Necrovalley negates Monster Reborn targeting a monster in the GY', async () => {
+    const { g, place } = setup();
+    const valley = place(0, cardByName('Necrovalley'), 'fzone', { faceUp: true });
+    valley.activeOnField = true;
+    const dead = place(1, T.brute, 'grave');
+    const reborn = place(1, cardByName('Monster Reborn'), 'hand');
+    g.turnPlayer = 1;
+    await activateCard(g, 1, reborn);
+    eq(dead.location, 'grave', 'target stays in the GY');
+    eq(reborn.location, 'grave', 'Monster Reborn used up');
+  });
+
+  await test('Extras2: Gravekeeper\'s Guard FLIP returns an opponent\'s monster to the hand; Necrovalley gives +500', async () => {
+    const { g, place } = setup();
+    const guard = place(0, cardByName("Gravekeeper's Guard"), 'mzone', { faceUp: false, pos: 'def' });
+    const opp = place(1, T.brute, 'mzone');
+    await g.performAction(0, { type: 'flip', card: guard });
+    eq(opp.location, 'hand', 'opponent monster returned');
+    const valley = place(0, cardByName('Necrovalley'), 'fzone', { faceUp: true });
+    valley.activeOnField = true;
+    eq(g.getAtk(guard), 1500, 'Guard gains 500 ATK');
+  });
+
+  await test('Extras2: Tempest Magician removes every Spell Counter to burn 500 each', async () => {
+    const { g, place } = setup();
+    const tempest = place(0, cardByName('Tempest Magician'), 'mzone');
+    tempest.counters.spell = 2;
+    const arcanite = place(1, cardByName('Arcanite Magician'), 'mzone');
+    arcanite.counters.spell = 1;
+    await activateCard(g, 0, tempest);
+    eq(g.players[1].lp, 8000 - 1500, '3 counters, 1500 damage');
+    eq(arcanite.counters.spell, 0, 'opponent counters removed too');
+  });
+
   await test('Deck out loses the duel', async () => {
     const { g } = setup();
     g.players[0].deck.length = 0;
