@@ -1628,6 +1628,7 @@ monster('Lord British Space Fighter', {
       },
       resolve: async (ctx) => {
         if (ctx.data.kind === 'attack') {
+          // APPROX: "a second attack in a row" is an extra attack this Battle Phase (not forced to be next).
           if (ctx.self.location === 'mzone' && ctx.self.faceUp) ctx.addTempMod(ctx.self, 'extraAttacks', 1, 'turn');
         } else if (ctx.data.kind === 'destroy') {
           const t = ctx.validTargets((c) => c.onField && !c.faceUp);
@@ -3727,6 +3728,8 @@ trap('Gemini Booster', 'normal', {
 });
 
 trap('Ritual Buster', 'normal', {
+  // APPROX: the engine's 'cannotActivateSpells' stops Spell Card activations but not the effects of face-up
+  // Continuous Spells; Trap Cards and their effects are fully stopped.
   text: 'Activate only when a Ritual Monster is Ritual Summoned. Your opponent cannot activate any Spell or Trap Cards or use their effects until your next Standby Phase.',
   effects: [
     {
