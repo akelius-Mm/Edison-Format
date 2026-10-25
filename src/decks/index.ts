@@ -6,6 +6,7 @@ import type { DeckList } from '../engine/game';
 import { DECKS as A } from './group-a';
 import { DECKS as B } from './group-b';
 import { DECKS as C } from './group-c';
+import { DECKS as D } from './group-d';
 import { DECKS as T } from './tournament';
 import { DECKS as T2 } from './tournament2';
 import { DECKS as T3 } from './tournament3';
@@ -14,7 +15,7 @@ import type { DeckDef } from './types';
 export type { DeckDef };
 export * from './siding';
 
-export const PREMADE_DECKS: DeckDef[] = [...A, ...B, ...C, ...T, ...T2, ...T3];
+export const PREMADE_DECKS: DeckDef[] = [...A, ...B, ...C, ...D, ...T, ...T2, ...T3];
 
 export function deckById(id: string) {
   return PREMADE_DECKS.find((d) => d.id === id);
