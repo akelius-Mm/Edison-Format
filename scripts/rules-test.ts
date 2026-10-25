@@ -18,6 +18,7 @@ import { PREMADE_DECKS, aiSideDeck, buildDeckList, canSwap, moveToDeck, moveToSi
 import { ensureTdgsPatches } from '../src/cards/sets/tdgs';
 import { ensureArchetypeExtrasPatches } from '../src/cards/sets/archetype-extras';
 import { ensureArchetypeExtras2Patches } from '../src/cards/sets/archetype-extras2';
+import { AIController } from '../src/ai/ai';
 
 const T = {
   brute: findCard('Rules Test Brute') ?? normal('Rules Test Brute', 'EARTH', 'Warrior', 4, 1800, 1000),
@@ -879,6 +880,7 @@ function eq(a: unknown, b: unknown, msg: string) {
   await tdgsTests();
   await archetypeExtrasTests();
   await archetypeExtras2Tests();
+  await fuzzRegressionTests();
 
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
@@ -3642,5 +3644,121 @@ async function archetypeExtras2Tests() {
     eq([vl, rk].filter((c) => c.location === 'mzone').length, 1, 'one Zombie Special Summoned');
     await g.sendToGrave(g.monsters(0), 'effect');
     eq(g.getActivations(0, { open: true }).some((a) => a.card === mummy), false, 'once per turn');
+  });
+}
+
+// Regressions for bugs found by the self-play fuzz (scripts/fuzz.ts).
+async function fuzzRegressionTests() {
+  console.log('Fuzz regressions');
+
+  await test('AI: no Tribute Summon of Raiza / Caius when their mandatory trigger could only hit its own cards', async () => {
+    for (const name of ['Raiza the Storm Monarch', 'Caius the Shadow Monarch']) {
+      const { g, place } = setup();
+      place(0, cardByName('Treeborn Frog'), 'mzone');
+      const monarch = place(0, cardByName(name), 'hand');
+      const ai = new AIController('hard', 7);
+      const isMonarchSummon = (a: Action) => a.type === 'summon' && a.card === monarch;
+      eq(g.legalMainActions(0).some(isMonarchSummon), true, `${name} can be Tribute Summoned`);
+      eq(isMonarchSummon(await ai.chooseAction(g, 0, g.legalMainActions(0))), false, `${name} not summoned onto an empty opposing field`);
+      place(1, T.brute, 'mzone');
+      eq(isMonarchSummon(await ai.chooseAction(g, 0, g.legalMainActions(0))), true, `${name} summoned when the opponent has a target`);
+    }
+  });
+
+  await test('Bad Reaction to Simochi + Prime Material Dragon / Rainbow Life: the LP gain is converted once (no endless loop)', async () => {
+    const { g, place } = setup();
+    g.turnPlayer = 1;
+    await activateCard(g, 1, place(1, cardByName('Bad Reaction to Simochi'), 'szone', { faceUp: false }));
+    eq(g.spellTraps(1).some((c) => c.name === 'Bad Reaction to Simochi' && c.faceUp), true, 'Simochi is active');
+    ensurePtdnPatches(g);
+    place(1, cardByName('Prime Material Dragon'), 'mzone');
+    await g.recover(0, 500);
+    eq(g.players[0].lp, 8500, 'gain -> Simochi damage -> Prime Material gain');
+    await g.damage(0, 300, 'effect');
+    eq(g.players[0].lp, 8800, 'damage -> Prime Material gain -> Simochi damage -> gain');
+    await g.sendToGrave(g.monsters(1), 'effect');
+    g.turnData['ptdn:rainbowLife:0'] = true;
+    await g.recover(0, 200);
+    eq(g.players[0].lp, 9000, 'Rainbow Life: gain -> Simochi damage -> gain');
+  });
+
+  const procAct = (g: Game, c: CardInstance) => g.legalMainActions(0).find((a) => a.type === 'proc' && a.card === c);
+
+  await test('Chimeratech Fortress Dragon: with full Monster Zones it needs one of your own monsters as material', async () => {
+    const { g, place } = setup();
+    const cfd = place(0, cardByName('Chimeratech Fortress Dragon'), 'extra');
+    const mine = [0, 1, 2, 3].map(() => place(0, T.brute, 'mzone'));
+    const fifth = place(0, T.brute, 'mzone');
+    const cd = place(1, cardByName('Cyber Dragon'), 'mzone');
+    const gadget = place(1, cardByName('Yellow Gadget'), 'mzone');
+    eq(g.freeMZones(0), 0, 'Monster Zones full');
+    eq(!!procAct(g, cfd), false, 'not offered when only the opponent has the materials');
+    await g.sendToGrave([fifth], 'effect');
+    const own = place(0, cardByName('Green Gadget'), 'mzone');
+    eq(g.freeMZones(0), 0, 'Monster Zones full again');
+    const act = procAct(g, cfd);
+    if (!act) throw new Error('Contact Fusion not offered with an own Machine');
+    await g.performAction(0, act);
+    eq(cfd.location, 'mzone', 'Chimeratech Fortress Dragon Special Summoned');
+    eq(own.location, 'grave', 'own Machine used');
+    eq(cd.location, 'grave', "opponent's Cyber Dragon used");
+    eq(gadget.location, 'mzone', 'unpicked Machine stays');
+    eq(g.getAtk(cfd), 2000, '1000 x 2 materials');
+    void mine;
+  });
+
+  await test('Reptilianne Vaskii: with full Monster Zones it must Tribute one of your own 0-ATK monsters', async () => {
+    const { g, c0, place } = setup();
+    // A player who picks the opponent's monsters first: before the fix that Tributed 2 of theirs and summoned nothing.
+    c0.pick = (_g, req) => [...req.candidates].sort((a, b) => b.controller - a.controller).slice(0, req.min);
+    const vaskii = place(0, cardByName('Reptilianne Vaskii'), 'hand');
+    const zero = findCard('Rules Test Zero') ?? normal('Rules Test Zero', 'EARTH', 'Rock', 4, 0, 0);
+    [0, 1, 2, 3].forEach(() => place(0, T.brute, 'mzone'));
+    const own = place(0, zero, 'mzone');
+    const opp = [place(1, zero, 'mzone'), place(1, zero, 'mzone')];
+    const act = procAct(g, vaskii);
+    if (!act) throw new Error('Vaskii not offered');
+    await g.performAction(0, act);
+    eq(vaskii.location, 'mzone', 'Vaskii Special Summoned');
+    eq(own.location, 'grave', 'own 0-ATK monster Tributed');
+    eq(opp.filter((c) => c.location === 'grave').length, 1, 'one opponent monster Tributed');
+  });
+
+  await test('Synchro Summon is not lost when using a material switches a Special Summon lock back on (Brain Golem / Archlord Kristya)', async () => {
+    const { g, place } = setup();
+    place(1, cardByName('Archlord Kristya'), 'mzone');
+    const golem = place(0, cardByName('Brain Golem'), 'mzone');
+    const tune = place(0, tuner, 'mzone');
+    eq(g.queryPlayer(0, 'cannotSpecialSummon'), false, "Brain Golem negates Kristya's lock");
+    const goyo = place(0, cardByName('Stardust Dragon'), 'extra');
+    const act = g.legalMainActions(0).find((a) => a.type === 'synchro' && a.card === goyo);
+    if (!act) throw new Error('Synchro Summon not offered');
+    await g.performAction(0, act);
+    eq(golem.location, 'grave', 'Brain Golem used');
+    eq(tune.location, 'grave', 'Tuner used');
+    eq(goyo.location, 'mzone', 'Stardust Dragon Synchro Summoned');
+    eq(g.queryPlayer(0, 'cannotSpecialSummon'), true, 'the lock applies again afterwards');
+  });
+
+  await test('Star Blast is not offered when the only monster in hand is already Level 1 from an earlier Star Blast', async () => {
+    const { g, place } = setup();
+    const low = place(0, tuner, 'hand');
+    await activateCard(g, 0, place(0, cardByName('Star Blast'), 'hand'));
+    eq(g.getLevel(low), 1, 'Level 2 -> 1');
+    const second = place(0, cardByName('Star Blast'), 'hand');
+    eq(g.getActivations(0, { open: true }).some((a) => a.card === second), false, 'second Star Blast not offered');
+  });
+
+  await test('D.D. Warrior Lady banishes a monster it destroys before it reaches the GY (no Sangan search)', async () => {
+    const { g, place } = setup();
+    const lady = place(0, cardByName('D.D. Warrior Lady'), 'mzone');
+    const sangan = place(1, cardByName('Sangan'), 'mzone');
+    place(1, T.dark, 'deck');
+    const hand = g.players[1].hand.length;
+    await g.conductAttack(0, lady);
+    await g.processTriggers(true);
+    eq(sangan.location, 'banished', 'Sangan banished');
+    eq(lady.location, 'banished', 'D.D. Warrior Lady banished');
+    eq(g.players[1].hand.length, hand, 'Sangan never reached the GY, so no search');
   });
 }

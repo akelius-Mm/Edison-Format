@@ -17,6 +17,12 @@ import { cardValue } from '../cards/helpers';
 
 export type Difficulty = 'easy' | 'normal' | 'hard';
 
+/**
+ * Test hook: card AI hints that throw are skipped silently in play (the AI just scores them 0);
+ * the fuzz sets this to report them as card-script bugs.
+ */
+export const aiDebug: { onHintError?: (card: string, e: unknown) => void } = {};
+
 const HARMFUL = new Set(['destroy', 'banish', 'bounce', 'control', 'negate', 'toDeck', 'position']);
 const COSTLY = new Set(['discard', 'tribute', 'cost', 'material', 'toGrave']);
 
@@ -123,6 +129,7 @@ export class AIController implements PlayerController {
     try {
       s = act.effect.ai?.score ? act.effect.ai.score(ctx) : this.defaultEffectScore(game, p, act, ctx, window);
     } catch (e) {
+      aiDebug.onHintError?.(act.card.name, e);
       s = 0;
     }
     // Don't stack a second copy of the same kind of protection on one chain.
@@ -298,10 +305,12 @@ export class AIController implements PlayerController {
       if (!e.ai?.summon) continue;
       try {
         summonBonus += e.ai.summon(new Ctx(game, c, e, p));
-      } catch {
-        /* ignore */
+      } catch (err) {
+        aiDebug.onHintError?.(c.name, err);
       }
     }
+    // A negative hint vetoes the face-up Normal Summon (e.g. a mandatory "on summon" effect that would hit our own cards).
+    if (summonBonus < 0 && !set) return -1;
     if (summonBonus > 0) return set ? 5 : 35 + summonBonus + ai / 100 - tribLoss / 200;
     if (set) {
       if (isFlip) return 45 + ai / 100;
@@ -467,7 +476,8 @@ export class AIController implements PlayerController {
     if (act.effect.ai?.score) {
       try {
         return act.effect.ai.score(this.ctxFor(game, p, act)) > 0;
-      } catch {
+      } catch (e) {
+        aiDebug.onHintError?.(act.card.name, e);
         return true;
       }
     }

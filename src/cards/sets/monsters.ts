@@ -562,22 +562,24 @@ monster('D.D. Warrior Lady', {
   aiValue: 700,
   effects: [
     {
+      // "After damage calculation": resolves before battle-destroyed monsters leave the field, so a monster that
+      // would be destroyed is banished instead and its "sent to the GY" effects never happen.
       kind: 'trigger',
-      event: 'damageStepEnd',
+      event: 'damageCalculated',
       label: 'Banish both',
       categories: ['banish'],
       eventFilter: (ctx, ev) => {
         const me = ctx.self;
         const opp = ev.card === me ? evO(ev) : ev.other === me ? evC(ev) : undefined;
-        return !!opp && opp.owner !== me.owner && (me.location === 'mzone' || me.location === 'grave');
+        return !!opp && me.location === 'mzone' && opp.location === 'mzone' && opp.controller !== me.controller;
       },
       resolve: async (ctx) => {
         const ev = ctx.event!;
         const me = ctx.self;
         const opp = ev.card === me ? evO(ev) : evC(ev);
         const list: CardInstance[] = [];
-        if (opp && (opp.location === 'mzone' || opp.location === 'grave')) list.push(opp);
-        if (me.location === 'mzone' || me.location === 'grave') list.push(me);
+        if (opp && opp.location === 'mzone') list.push(opp);
+        if (me.location === 'mzone') list.push(me);
         if (list.length) await ctx.banish(list);
       },
       ai: {
@@ -585,7 +587,8 @@ monster('D.D. Warrior Lady', {
           const ev = ctx.event!;
           const opp = ev.card === ctx.self ? evO(ev) : evC(ev);
           if (!opp) return 0;
-          if (ctx.self.location !== 'mzone') return 1;
+          // Lady loses the battle anyway: always take the other monster with her.
+          if (ctx.game.battle?.calc?.losers.includes(ctx.self)) return 1;
           return cardValue(ctx.game, opp) >= cardValue(ctx.game, ctx.self) ? 1 : 0;
         },
       },

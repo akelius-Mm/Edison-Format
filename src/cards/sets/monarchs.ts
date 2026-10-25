@@ -23,6 +23,13 @@ function monarchReady(ctx: Ctx, extraBodies = 0) {
   return ctx.hand('me', (c) => isMonarch(c) && bodies >= ctx.game.tributesNeeded(c)).length > 0;
 }
 
+/**
+ * AI hint for a Monarch whose Tribute Summon trigger is mandatory and targets "1 card on the field" (Caius, Raiza):
+ * with no opponent card to hit it would have to banish / spin one of our own cards (itself, if nothing else),
+ * so don't Tribute Summon it face-up. Two AIs with Treeborn Frog otherwise re-summon and re-spin Raiza forever.
+ */
+const mandatoryMonarchSummon = (ctx: Ctx) => (ctx.field('opp', (c) => ctx.canTarget(c)).length ? 0 : -1);
+
 /** Tribute monsters for a card effect's cost. */
 async function tributeForCost(ctx: Ctx, cards: CardInstance[]) {
   if (!cards.length) return [];
@@ -67,6 +74,7 @@ monster('Caius the Shadow Monarch', {
     monarchTrigger({
       mandatory: true,
       label: 'Banish 1 card',
+      ai: { summon: mandatoryMonarchSummon },
       categories: ['banish', 'damage'],
       canActivate: (ctx) => ctx.field('both', (c) => ctx.canTarget(c)).length > 0,
       activate: async (ctx) => {
@@ -103,6 +111,7 @@ monster('Raiza the Storm Monarch', {
     monarchTrigger({
       mandatory: true,
       label: 'Spin 1 card to the top of the Deck',
+      ai: { summon: mandatoryMonarchSummon },
       categories: ['toDeck'],
       canActivate: (ctx) => ctx.field('both', (c) => ctx.canTarget(c)).length > 0,
       activate: async (ctx) => {
