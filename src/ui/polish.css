@@ -3636,6 +3636,8 @@ body.in-duel .ui-toast-host {
   .flow-opp > .lob-sec {
     grid-column: 1;
     grid-row: 2;
+    min-width: 0;
+    overflow: hidden; /* the deck row scrolls inside its own column, not under the right one */
   }
   .flow-opp > .opp-group {
     grid-column: 2;
