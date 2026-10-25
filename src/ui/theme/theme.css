@@ -1,0 +1,28 @@
+/* Shared design tokens for the duel UI and card graphics. Prefixed to avoid clashing with the app shell. */
+:root {
+  --ef-bg-0: #06080f;
+  --ef-bg-1: #0d1222;
+  --ef-bg-2: #161d33;
+  --ef-panel: rgba(14, 19, 36, 0.86);
+  --ef-panel-solid: #11172b;
+  --ef-panel-border: rgba(216, 180, 90, 0.28);
+  --ef-gold: #d8b45a;
+  --ef-gold-hi: #f6dc8e;
+  --ef-gold-lo: #8a6420;
+  --ef-text: #e9ecf5;
+  --ef-text-dim: #9aa3bd;
+  --ef-text-faint: #646d88;
+  --ef-blue: #4d8dff;
+  --ef-red: #ff4d5e;
+  --ef-green: #3fdc8a;
+  --ef-violet: #b07bff;
+  --ef-me: #4da3ff;
+  --ef-opp: #ff5d6c;
+  --ef-radius: 10px;
+  --ef-radius-sm: 6px;
+  --ef-shadow: 0 10px 30px rgba(0, 0, 0, 0.55);
+  --ef-font-ui: 'Segoe UI', system-ui, -apple-system, 'Helvetica Neue', Arial, sans-serif;
+  --ef-font-display: 'Palatino Linotype', 'Book Antiqua', Palatino, Georgia, 'Times New Roman', serif;
+  --ef-ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ef-ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+}
