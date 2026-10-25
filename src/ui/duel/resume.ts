@@ -69,6 +69,8 @@ export interface SavedDuel {
   games: GameResult[];
   /** The game in progress; null between games (the next game has not started). */
   game: SavedGame | null;
+  /** The duel screen was open when this was saved (the app was closed mid-duel, not left). */
+  live?: boolean;
 }
 
 export function loadActiveDuel(): SavedDuel | null {

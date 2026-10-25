@@ -57,6 +57,8 @@ import { artInto, ctaButton, deckShelf, linkButton, lobbySection, signatureCard,
 import { confirmDialog, h, icon, segmented, toast, type Child } from './dom';
 import { AVATAR_PRESETS, SLEEVES, sleevePreview } from './ext';
 import { runMatch, type MatchSetup } from './match';
+import { reconcileActiveDuel, type SavedDuel } from '../duel/resume';
+import { resumeDuelCard } from './resumeCard';
 import { frame, go, type Screen } from './nav';
 import { showResults } from './results';
 import { allDeckInfos, ordinal, recordMatch, toDeckList, type DeckInfo } from './store';
@@ -82,9 +84,16 @@ let postRound: string | null = null;
 export function localsScreen(params: Record<string, string>): Screen {
   if (params.view === 'history') return historyScreen();
   const n = loadActiveNight();
-  if (!n) return checkInScreen();
-  return hubScreen(n);
+  if (params.resume) history.replaceState(null, '', '#/locals');
+  if (!n) {
+    reconcileActiveDuel('locals', null);
+    return checkInScreen();
+  }
+  return hubScreen(n, params.resume === '1');
 }
+
+/** The saved-duel key of a Locals match. */
+const duelKey = (n: LocalsNight, m: LocalsMatch) => `locals:${n.id}:${m.id}`;
 
 // =================================================================== small pieces
 
@@ -316,7 +325,7 @@ function historyLine(hs: HistoryEntry[]) {
 
 type Tab = 'round' | 'standings' | 'bracket' | 'prizes';
 
-function hubScreen(n: LocalsNight): Screen {
+function hubScreen(n: LocalsNight, autoResume = false): Screen {
   if (n.phase === 'done') finalizeNight(n);
   let tab: Tab = n.phase === 'done' ? 'prizes' : n.step === 'standings' ? 'standings' : 'round';
   const timers: (() => void)[] = [];
@@ -337,10 +346,18 @@ function hubScreen(n: LocalsNight): Screen {
   const dropBtn = h('button', { type: 'button', class: 'lx-head-btn', 'aria-label': 'Drop from the event', title: 'Drop', onclick: () => void drop() }, icon('door'));
   const el = frame('Locals Night', { compact: true, cls: 'lobby-screen lx-screen lx-hub', actions: dropBtn }, header, tabsHost, content, bar);
 
+  /** A duel of this night's current match that was left (or cut off) mid-game. */
+  let saved: SavedDuel | null = null;
+  const syncSaved = () => {
+    const m = pendingHumanMatch(n);
+    saved = reconcileActiveDuel('locals', m && m.b != null ? duelKey(n, m) : null);
+  };
+
   function redraw() {
     timers.length = 0;
     revealTimers.forEach(clearTimeout);
     revealTimers = [];
+    syncSaved();
     dropBtn.hidden = n.phase === 'done' || humanEliminated(n);
     drawHeader();
     drawTabs();
@@ -401,7 +418,7 @@ function hubScreen(n: LocalsNight): Screen {
       sheetEl.classList.add('is-posting');
       postRound = null;
     }
-    return h('div', { class: 'lx-round' }, seatCard(m), sheetEl);
+    return h('div', { class: 'lx-round' }, saved ? resumeDuelCard(saved, { onResume: () => void playMine(), cls: 'mode-resume' }) : null, seatCard(m), sheetEl);
   }
 
   function seatCard(m: LocalsMatch | null): HTMLElement {
@@ -571,7 +588,7 @@ function hubScreen(n: LocalsNight): Screen {
       const opp = opponentOf(n, m)!;
       const revealed = n.revealed.includes(m.id);
       sum = h('span', null, m.stage === 'top' ? `${m.label} · ` : `Table ${m.table} · `, 'vs ', h('b', null, opp.name));
-      cta = revealed ? ctaButton('Play match', () => void playMine(), 'swords') : ctaButton('Sit down', () => sitDown(m), 'hand');
+      cta = saved ? ctaButton('Resume match', () => void playMine(), 'play') : revealed ? ctaButton('Play match', () => void playMine(), 'swords') : ctaButton('Sit down', () => sitDown(m), 'hand');
     } else if (n.step === 'pairings') {
       const mine = humanMatch(n);
       sum = mine?.b == null && mine ? h('span', null, 'Bye this round') : h('span', null, `${currentRound(n).length} table${currentRound(n).length === 1 ? '' : 's'} in play`);
@@ -657,7 +674,14 @@ function hubScreen(n: LocalsNight): Screen {
       { name: opp.name, deck: toDeckList(opp.deck), avatar: opp.avatar, sleeve: opp.sleeve, control: opp.difficulty, title: deckLabel(opp) },
     ];
     const where = m.stage === 'top' ? m.label : `Round ${m.round} · Table ${m.table}`;
-    const setup: MatchSetup = { sides, bestOf: 3, caption: `${where} – vs ${opp.name}`, requireWinner: m.stage === 'top', stats: { deckKey: me.deck.id, deckName: me.deck.name } };
+    const setup: MatchSetup = {
+      sides,
+      bestOf: 3,
+      caption: `${where} – vs ${opp.name}`,
+      requireWinner: m.stage === 'top',
+      stats: { deckKey: me.deck.id, deckName: me.deck.name },
+      resume: { kind: 'locals', key: duelKey(n, m), route: 'locals' },
+    };
     try {
       const outcome = await runMatch(setup);
       const games = outcome.games.map((g) => (meA ? g : { ...g, winner: g.winner == null ? null : ((1 - g.winner) as 0 | 1) }));
@@ -699,6 +723,10 @@ function hubScreen(n: LocalsNight): Screen {
   }
 
   redraw();
+  if (autoResume) {
+    if (saved) setTimeout(() => void playMine(), 0);
+    else toast('That duel can no longer be resumed.', 'error');
+  }
   return {
     el,
     dispose: () => {

@@ -13,11 +13,11 @@ import {
   EVENT_KINDS,
   EVENT_SPECS,
   INVITE_DEADLINE_WEEK,
+  NATIONALS_WEEK,
   PRIZES,
   RANK_WINDOW,
   SEASON_WEEKS,
   SJC_INVITE_CUT,
-  WORLDS_INVITE_CUT,
   YOU,
   abandonSeason,
   advanceBlocked,
@@ -52,6 +52,7 @@ import {
 import { getSettings, loadJSON, saveJSON } from '../settings';
 import { artInto, ctaButton, deckShelf, iosGroup, iosNav, linkButton, lobbySection, stickyBar } from './components';
 import { confirmDialog, h, icon, segmented, toast, type Child } from './dom';
+import { reconcileActiveDuel } from '../duel/resume';
 import { eventRunScreen } from './eventRun';
 import { AVATAR_PRESETS, SLEEVES } from './ext';
 import { avatar, packIcon } from './locals';
@@ -70,9 +71,11 @@ interface CheckInForm {
 
 export function eventsScreen(params: Record<string, string>): Screen {
   const run = loadActiveEvent();
+  if (!run) reconcileActiveDuel('events', null);
+  if (params.resume) history.replaceState(null, '', `#/events${params.view ? `?view=${params.view}` : ''}`);
   switch (params.view) {
     case 'run':
-      return run ? eventRunScreen(run) : hubScreen();
+      return run ? eventRunScreen(run, params.resume === '1') : hubScreen();
     case 'checkin':
       return checkInScreen(params);
     case 'season': {
@@ -106,10 +109,9 @@ function kindDesc(k: EventKind) {
   return [`${s.sizeRange}\u00a0players`, `${rounds.join('–')}\u00a0rounds`, `Top\u00a0${cuts.join('/')}`].join('\u00a0· ');
 }
 
-function inviteTags(inv: { nationals?: string; worlds?: string } | undefined) {
+function inviteTags(inv: { nationals?: string } | undefined) {
   return [
     inv?.nationals ? h('span', { class: 'ev-tag is-gold' }, icon('medal'), 'Nationals') : null,
-    inv?.worlds ? h('span', { class: 'ev-tag is-gold' }, icon('crown'), 'Worlds') : null,
   ];
 }
 
@@ -200,7 +202,6 @@ function ladder(active?: EventKind) {
     ['regional', 'Regionals'],
     ['sjc', 'SJC'],
     ['nationals', 'Nationals'],
-    ['worlds', 'Worlds'],
   ];
   return h(
     'ol',
@@ -216,7 +217,7 @@ function circuitCard(s: Season | null) {
       { class: 'ev-circuit', 'aria-label': 'The Circuit' },
       h('div', { class: 'ev-circuit-eyebrow' }, 'The Circuit · Optional'),
       h('h2', null, 'Play a 12-week season'),
-      h('p', null, `Locals every Friday, Regional Qualifiers, an SJC mid-season, then Nationals and Worlds by invitation. Your rank counts your best ${BEST_OF} results from the last ${RANK_WINDOW} weeks, so every week you need to prove yourself.`),
+      h('p', null, `Locals every Friday, Regional Qualifiers, an SJC mid-season, then an invite-only Nationals to close it out. Your rank counts your best ${BEST_OF} results from the last ${RANK_WINDOW} weeks, so every week you need to prove yourself.`),
       ladder(),
       ctaButton('Start a season', () => void begin(), 'flag'),
     );
@@ -246,7 +247,7 @@ function circuitCard(s: Season | null) {
       h('div', null, h('b', null, String(me.score)), h('span', null, `Pts · ${RANK_WINDOW} wk`)),
       h('div', null, h('b', null, String(loadRatings().constructed.rating)), h('span', null, 'Rating')),
     ),
-    (s.invites[YOU]?.nationals || s.invites[YOU]?.worlds) ? h('div', { class: 'ev-circuit-tags' }, inviteTags(s.invites[YOU])) : null,
+    s.invites[YOU]?.nationals ? h('div', { class: 'ev-circuit-tags' }, inviteTags(s.invites[YOU])) : null,
     ctaButton('Open season', () => go('events', { view: 'season' }), 'flag'),
   );
 }
@@ -359,9 +360,7 @@ function checkInScreen(params: Record<string, string>): Screen {
       ? `Top ${regionalInviteCut(size)} earn a Nationals invite during a season.`
       : kind === 'sjc'
         ? `Top ${SJC_INVITE_CUT} earn a Nationals invite during a season.`
-        : kind === 'nationals'
-          ? `Top ${WORLDS_INVITE_CUT} are invited to Worlds during a season.`
-          : null;
+        : null;
 
   const summary = h('div', { class: 'lob-bar-sum' });
   const drawBar = () => {
@@ -488,15 +487,8 @@ function seasonScreen(s: Season): Screen {
         'div',
         { class: 'ios-row' },
         h('span', { class: 'ios-icon' }, icon('medal')),
-        h('span', { class: 'ios-row-text' }, h('span', { class: 'ios-label' }, 'Nationals · week 11'), h('span', { class: 'ios-desc' }, inv.nationals ?? `Regional Top 8/16, SJC Top ${SJC_INVITE_CUT}, or circuit Top ${CIRCUIT_INVITE_RANK} after week ${INVITE_DEADLINE_WEEK}`)),
+        h('span', { class: 'ios-row-text' }, h('span', { class: 'ios-label' }, `Nationals · week ${NATIONALS_WEEK}`), h('span', { class: 'ios-desc' }, inv.nationals ?? `Regional Top 8/16, SJC Top ${SJC_INVITE_CUT}, or circuit Top ${CIRCUIT_INVITE_RANK} after week ${INVITE_DEADLINE_WEEK}`)),
         h('span', { class: ['ev-tag', inv.nationals ? 'is-gold' : 'is-lock'] }, inv.nationals ? 'Invited' : 'Not yet'),
-      ),
-      h(
-        'div',
-        { class: 'ios-row' },
-        h('span', { class: 'ios-icon' }, icon('crown')),
-        h('span', { class: 'ios-row-text' }, h('span', { class: 'ios-label' }, 'Worlds · week 12'), h('span', { class: 'ios-desc' }, inv.worlds ?? `Top ${WORLDS_INVITE_CUT} at Nationals`)),
-        h('span', { class: ['ev-tag', inv.worlds ? 'is-gold' : 'is-lock'] }, inv.worlds ? 'Invited' : 'Not yet'),
       ),
     ],
   );
@@ -524,7 +516,7 @@ function seasonScreen(s: Season): Screen {
         h(
           'span',
           { class: 'ios-row-text' },
-          h('span', { class: 'ios-label' }, big ? big.title : (loc?.title ?? 'Locals'), big?.kind === 'nationals' || big?.kind === 'worlds' ? h('span', { class: 'ev-tag is-lock' }, icon('flag'), 'Invite') : null),
+          h('span', { class: 'ios-label' }, big ? big.title : (loc?.title ?? 'Locals'), big?.kind === 'nationals' ? h('span', { class: 'ev-tag is-lock' }, icon('flag'), 'Invite') : null),
           h('span', { class: 'ios-desc' }, mine.length ? mine.map((e) => `${EVENT_SPECS[e.kind].short} ${ordinal(e.result!.place)} (+${e.result!.points})`).join(' · ') : w < s.week ? 'Skipped' : big ? `${eventDate(big.kind, w).label.replace(/^\w+, /, '').replace(/, 2010$/, '')} · ${big.size} players · plus Locals` : `${eventDate('locals', w).label.replace(/, 2010$/, '')} · Locals`),
         ),
       );
@@ -591,7 +583,7 @@ function weekCard(s: Season, ev: SeasonEvent, run: ReturnType<typeof loadActiveE
   } else if (ev.status === 'active' && run?.season?.eventId === ev.id) {
     body = h('div', { class: 'ev-card-actions' }, h('button', { type: 'button', class: 'lx-btn lx-btn--primary', onclick: () => go('events', { view: 'run' }) }, icon('play'), run.phase === 'done' ? 'Collect prizes' : `Continue · ${roundLabel(run)}`));
   } else if (!canEnter(s, ev)) {
-    body = h('p', { class: 'ev-card-note' }, icon('flag'), ` ${spec.short} is invitation only. ${ev.kind === 'nationals' ? 'Earn an invite at a Regional, the SJC, or by ranking in the circuit Top 16.' : `Finish Top ${WORLDS_INVITE_CUT} at Nationals to play.`} The field plays without you.`);
+    body = h('p', { class: 'ev-card-note' }, icon('flag'), ` ${spec.short} is invitation only. Earn an invite at a Regional, the SJC, or by ranking in the circuit Top ${CIRCUIT_INVITE_RANK}. The field plays without you.`);
   } else {
     body = h('div', { class: 'ev-card-actions' }, h('button', { type: 'button', class: 'lx-btn lx-btn--primary', onclick: () => go('events', { view: 'checkin', event: ev.id }) }, icon('clipboard'), 'Register'));
   }
@@ -634,7 +626,7 @@ function standingsScreen(s: Season): Screen {
   let filter = 'all' as Filter;
   const list = h('div', { class: 'ios-list' });
   const draw = () => {
-    const rows = st.filter((r) => filter === 'all' || r.you || (filter === 'invited' ? !!(r.invite.nationals || r.invite.worlds) : !!r.duelist?.regular));
+    const rows = st.filter((r) => filter === 'all' || r.you || (filter === 'invited' ? !!r.invite.nationals : !!r.duelist?.regular));
     list.replaceChildren(...rows.map(circuitRowEl));
   };
   draw();
@@ -674,7 +666,7 @@ function seasonSummaryScreen(s: Season): Screen {
       h('span', { class: 'lx-k' }, 'Final circuit rank'),
       sum.score ? h('div', { class: 'ev-summary-rank' }, ordinal(sum.finalRank), h('small', null, ` of ${sum.field}`)) : h('div', { class: 'ev-summary-rank is-none' }, 'Unranked'),
       h('p', null, `${sum.score} points in the final ${RANK_WINDOW} weeks · ${sum.totalPoints} all season · ${sum.played} events played`),
-      sum.invites.nationals || sum.invites.worlds ? h('div', { class: 'ev-circuit-tags', style: { marginTop: '10px' } }, inviteTags(sum.invites)) : null,
+      sum.invites.nationals ? h('div', { class: 'ev-circuit-tags', style: { marginTop: '10px' } }, inviteTags(sum.invites)) : null,
     ),
     iosGroup(
       'Trophies',

@@ -1,11 +1,11 @@
 // The 2010 Organized Play ladder: Locals → Regional Qualifier → Shonen Jump Championship →
-// Nationals → Worlds. Field sizes, Swiss rounds, top cuts, venues, prize support and circuit points.
+// Nationals. Field sizes, Swiss rounds, top cuts, venues, prize support and circuit points.
 import { SHOPS, swissRoundsFor as localsSwiss, topCutFor as localsCut } from '../locals/shops';
 import { hash } from '../locals/rng';
 import type { Shop } from '../locals/types';
 
-export type EventKind = 'locals' | 'regional' | 'sjc' | 'nationals' | 'worlds';
-export const EVENT_KINDS: EventKind[] = ['locals', 'regional', 'sjc', 'nationals', 'worlds'];
+export type EventKind = 'locals' | 'regional' | 'sjc' | 'nationals';
+export const EVENT_KINDS: EventKind[] = ['locals', 'regional', 'sjc', 'nationals'];
 
 export interface Venue extends Shop {
   /** Real city name, e.g. "Edison, NJ". Empty for a local card shop. */
@@ -77,7 +77,7 @@ export const EVENT_SPECS: Record<EventKind, EventSpec> = {
     kind: 'nationals',
     label: 'National Championship',
     short: 'Nationals',
-    pitch: 'Invite-only: the best of the country, Worlds invites to the Top 4',
+    pitch: 'Invite-only: the best of the country, one National Champion',
     sizes: [128],
     defaultSize: 128,
     sizeRange: '128',
@@ -86,20 +86,6 @@ export const EVENT_SPECS: Record<EventKind, EventSpec> = {
     inviteOnly: true,
     icon: 'medal',
     art: 'Stardust Dragon',
-  },
-  worlds: {
-    kind: 'worlds',
-    label: 'World Championship',
-    short: 'Worlds',
-    pitch: 'National champions from around the globe. One weekend, one title.',
-    sizes: [24],
-    defaultSize: 24,
-    sizeRange: '24',
-    roundMinutes: 50,
-    tier: 4,
-    inviteOnly: true,
-    icon: 'crown',
-    art: 'Red Dragon Archfiend',
   },
 };
 
@@ -114,8 +100,6 @@ export function swissRoundsFor(kind: EventKind, size: number) {
       return size <= 300 ? 9 : 10;
     case 'nationals':
       return 8;
-    case 'worlds':
-      return 6;
   }
 }
 
@@ -129,8 +113,6 @@ export function topCutFor(kind: EventKind, size: number): number {
       return size <= 256 ? 32 : 64;
     case 'nationals':
       return 32;
-    case 'worlds':
-      return 8;
   }
 }
 
@@ -140,8 +122,6 @@ export function regionalInviteCut(size: number) {
 }
 /** SJC finishes that also earn a Nationals invite. */
 export const SJC_INVITE_CUT = 32;
-/** Nationals Top 4 go to Worlds. */
-export const WORLDS_INVITE_CUT = 4;
 /** Circuit standings at-large invites: the Top 16 when Nationals registration closes. */
 export const CIRCUIT_INVITE_RANK = 16;
 
@@ -171,15 +151,7 @@ const NATIONALS_VENUE: Venue = {
   city: 'Indianapolis, IN',
   name: 'National Championship · Indianapolis, IN',
   where: 'Convention center · Invitation only',
-  blurb: 'Regional qualifiers, SJC finishers and the circuit leaders. Top 4 represent the country at Worlds.',
-};
-
-const WORLDS_VENUE: Venue = {
-  id: 'worlds',
-  city: 'Tokyo, Japan',
-  name: 'World Championship · Tokyo',
-  where: 'Exhibition hall · Invitation only',
-  blurb: 'National champions from every region. Six rounds of Swiss, then a Top 8 on the main stage.',
+  blurb: 'Regional qualifiers, SJC finishers and the circuit leaders. The season ends here: one National Champion.',
 };
 
 /** Pick a venue for an event (stable per key). */
@@ -196,8 +168,6 @@ export function venueFor(kind: EventKind, key: string): Venue {
       return SJC_VENUES[k % SJC_VENUES.length];
     case 'nationals':
       return NATIONALS_VENUE;
-    case 'worlds':
-      return WORLDS_VENUE;
   }
 }
 
@@ -283,12 +253,6 @@ export const PRIZES: Record<EventKind, PrizeTable> = {
     xLosses: 2,
     x: { label: 'X-2 finish', points: 20, packs: 3, coins: 250 },
     participation: { label: 'Participation', points: 12, packs: 2, coins: 200 },
-  },
-  worlds: {
-    cut: [band(1, 'World Champion', 250, 60, 4000), band(2, 'Finalist', 200, 45, 3000), band(4, 'Top 4', 160, 32, 2000), band(8, 'Top 8', 120, 20, 1200)],
-    xLosses: 1,
-    x: { label: 'X-1 finish', points: 80, packs: 10, coins: 800 },
-    participation: { label: 'Participation', points: 60, packs: 6, coins: 600 },
   },
 };
 

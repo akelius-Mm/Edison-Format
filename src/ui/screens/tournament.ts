@@ -34,7 +34,9 @@ import { getSettings, loadJSON, saveJSON } from '../settings';
 import { artInto, ctaButton, deckArt, deckShelf, iosGroup, iosRow, linkButton, lobbySection, signatureCard, stickyBar } from './components';
 import { badge, button, clear, confirmDialog, h, icon, modal, pct, segmented, toast } from './dom';
 import { AVATAR_PRESETS, SLEEVES, renderAvatar } from './ext';
-import { runMatch } from './match';
+import { runMatch, type MatchSetup } from './match';
+import { reconcileActiveDuel, type SavedDuel } from '../duel/resume';
+import { resumeDuelCard } from './resumeCard';
 import { frame, go, lockNav, scrollToTop, type Screen } from './nav';
 import { gameRow, showResults } from './results';
 import { rewardForDuel } from '../../collection';
@@ -60,12 +62,18 @@ interface FormState {
 
 type HubTab = 'round' | 'standings' | 'bracket' | 'entrants';
 
-export function tournamentScreen(): Screen {
+export function tournamentScreen(params: Record<string, string> = {}): Screen {
   const t = loadActiveTournament();
+  const autoResume = params.resume === '1';
+  if (params.resume) history.replaceState(null, '', '#/tournament');
+  if (!t || t.phase === 'done') reconcileActiveDuel('tournament', null);
   if (!t) return createScreen();
   if (t.phase === 'done') return finalScreen(t);
-  return hubScreen(t);
+  return hubScreen(t, autoResume);
 }
+
+/** The saved-duel key of a tournament match. */
+const duelKey = (t: Tournament, m: Match) => `tournament:${t.id}:${m.id}`;
 
 // =================================================================== creation
 
@@ -187,7 +195,7 @@ function createScreen(): Screen {
 
 // =================================================================== hub
 
-function hubScreen(t: Tournament): Screen {
+function hubScreen(t: Tournament, autoResume = false): Screen {
   let tab: HubTab = 'round';
   let simulating = false;
   let disposed = false;
@@ -202,8 +210,17 @@ function hubScreen(t: Tournament): Screen {
   const headActions = h('div', { class: 'tour-head-actions' });
 
   const subtitle = () => `${t.size} players · ${t.bestOf === 3 ? 'Best of 3' : 'Best of 1'} · ${t.simMode === 'full' ? 'Full' : 'Fast'} simulation · ${currentRoundLabel(t)}`;
+  /** A duel of the current match that was left (or cut off) mid-game. */
+  let savedNow: SavedDuel | null = null;
+  const syncSaved = () => {
+    const m = pendingHumanMatch(t);
+    savedNow = reconcileActiveDuel('tournament', m && m.a && m.b ? duelKey(t, m) : null);
+  };
+  const savedFor = (m: Match | null | undefined) => (m && savedNow?.tag.key === duelKey(t, m) ? savedNow : null);
+
   function redraw() {
     if (disposed) return;
+    syncSaved();
     const sub = el.querySelector('.frame-sub');
     if (sub) sub.textContent = subtitle();
     drawStepper();
@@ -318,6 +335,8 @@ function hubScreen(t: Tournament): Screen {
     if (simulating) return c;
     const pending = pendingHumanMatch(t);
     const complete = isRoundComplete(t);
+    const saved = savedFor(pending);
+    if (saved && pending) c.appendChild(resumeDuelCard(saved, { onResume: () => void playMine(pending), cls: 'mode-resume' }));
     const othersLeft = currentMatches(t).some((m) => m.result == null && m.a !== t.humanId && m.b !== t.humanId);
     if (!complete && !pending) c.appendChild(ctaButton('Simulate remaining tables', () => void simulateRest(), 'robot'));
     else if (!complete && othersLeft) c.appendChild(button('Simulate other tables first', () => void simulateRest(), { variant: 'subtle', small: true, icon: 'robot', title: 'Resolve the other matches before playing yours' }));
@@ -399,7 +418,7 @@ function hubScreen(t: Tournament): Screen {
         : h(
             'div',
             { class: 'mm2-actions' },
-            ctaButton('Play match', () => void playMine(m), 'swords'),
+            savedFor(m) ? ctaButton('Resume match', () => void playMine(m), 'play') : ctaButton('Play match', () => void playMine(m), 'swords'),
             h(
               'div',
               { class: 'mm2-alt' },
@@ -559,7 +578,14 @@ function hubScreen(t: Tournament): Screen {
       { name: opp.name, deck: toDeckList(opp.deck), avatar: opp.avatar, sleeve: opp.sleeve, control: opp.difficulty as Difficulty, title: opp.deck.name },
     ];
     const caption = `${m.label === `Round ${m.round}` ? `Round ${m.round}` : m.label} – vs ${opp.name} (${opp.deck.name})`;
-    const setup = { sides, bestOf: t.bestOf, caption, requireWinner: m.stage === 'top', stats: { deckKey: me.deck.id, deckName: me.deck.name } };
+    const setup: MatchSetup = {
+      sides,
+      bestOf: t.bestOf,
+      caption,
+      requireWinner: m.stage === 'top',
+      stats: { deckKey: me.deck.id, deckName: me.deck.name },
+      resume: { kind: 'tournament', key: duelKey(t, m), route: 'tournament' },
+    };
     const outcome = await runMatch(setup);
     const games = outcome.games.map((g) => (meA ? g : { ...g, winner: g.winner == null ? null : ((1 - g.winner) as 0 | 1) }));
     const res = outcome.result === 'draw' ? 'draw' : (outcome.result === 'a') === meA ? 'a' : 'b';
@@ -697,6 +723,11 @@ function hubScreen(t: Tournament): Screen {
   );
   redraw();
   setTimeout(maybeAutoSimulate, 400);
+  if (autoResume) {
+    const m = pendingHumanMatch(t);
+    if (m && savedFor(m)) setTimeout(() => void playMine(m), 0);
+    else toast('That duel can no longer be resumed.', 'error');
+  }
   return {
     el,
     dispose: () => {

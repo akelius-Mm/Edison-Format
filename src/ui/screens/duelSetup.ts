@@ -7,7 +7,8 @@ import { ctaButton, deckArt, deckCarousel, deckGroups, deckShelf, linkButton, lo
 import { confirmDialog, h, icon, segmented, toast } from './dom';
 import { SLEEVES } from './ext';
 import { rewardForDuel } from '../../collection';
-import { runMatch, type MatchSetup } from './match';
+import { runMatch, setupFromSaved, type MatchSetup } from './match';
+import { clearActiveDuel, loadActiveDuel } from '../duel/resume';
 import { announceReward } from './rewards';
 import { frame, go, scrollToTop, type Screen } from './nav';
 import { showResults } from './results';
@@ -61,7 +62,14 @@ export async function confirmDeckProblems(d: DeckInfo) {
   );
 }
 
-export function duelSetupScreen(): Screen {
+export function duelSetupScreen(params: Record<string, string> = {}): Screen {
+  if (params.resume === '1') {
+    // Home's "Duel in progress" card: pick the saved duel up straight away
+    history.replaceState(null, '', '#/duel');
+    setTimeout(() => {
+      if (!resumeVsAI()) toast('That duel can no longer be resumed.', 'error');
+    }, 0);
+  }
   const s = getSettings();
   const saved = loadJSON<Partial<DuelSetupState>>(SETUP_KEY, {});
   const decks = allDeckInfos();
@@ -224,31 +232,68 @@ export function duelSetupScreen(): Screen {
   };
 }
 
+interface VsAIMeta {
+  mine: string;
+  mineName: string;
+  opp: string;
+  oppName: string;
+  persona: PersonaState;
+  ranked: boolean;
+}
+
 export async function playVsAI(mine: DeckInfo, opp: DeckInfo, persona: PersonaState, bestOf: 1 | 3, ranked = false) {
   const s = getSettings();
   const sides: [DuelSide, DuelSide] = [
     { name: s.playerName, deck: toDeckList(mine), avatar: s.avatar, sleeve: s.sleeve, control: 'human', title: mine.name },
     { name: persona.name, deck: toDeckList(opp), avatar: persona.avatar, sleeve: randomSleeve(), control: persona.difficulty, title: opp.name },
   ];
+  const meta: VsAIMeta = { mine: mine.key, mineName: mine.name, opp: opp.key, oppName: opp.name, persona: { ...persona }, ranked };
   const setup: MatchSetup = {
     sides,
     bestOf,
     caption: `vs ${persona.name} (${opp.name})`,
     stats: { deckKey: mine.key, deckName: mine.name },
+    resume: { kind: 'vsai', key: `vsai:${Date.now().toString(36)}`, route: 'duel', meta: meta as unknown as Record<string, unknown> },
   };
+  await playVsAISetup(setup);
+}
+
+/** Resume the saved Duel vs AI (Home's "Duel in progress" card). False when there is none. */
+export function resumeVsAI(): boolean {
+  const d = loadActiveDuel();
+  if (!d || d.tag.kind !== 'vsai' || !d.tag.meta) return false;
+  const setup = setupFromSaved(d);
+  if (!setup) {
+    clearActiveDuel();
+    return false;
+  }
+  void playVsAISetup(setup);
+  return true;
+}
+
+async function playVsAISetup(setup: MatchSetup) {
+  const m = setup.resume!.meta as unknown as VsAIMeta;
+  const { persona, ranked } = m;
+  const bestOf = setup.bestOf;
   const outcome = await runMatch(setup);
   const res = outcome.result === 'a' ? 'W' : outcome.result === 'b' ? 'L' : 'D';
   const wa = outcome.games.filter((g) => g.winner === 0).length;
   const wb = outcome.games.filter((g) => g.winner === 1).length;
-  recordMatch({ date: Date.now(), deckName: mine.name, oppName: persona.name, oppDeck: opp.name, result: res, score: `${wa}-${wb}`, context: ranked ? 'Duel vs AI · Ranked' : 'Duel vs AI' });
+  recordMatch({ date: Date.now(), deckName: m.mineName, oppName: persona.name, oppDeck: m.oppName, result: res, score: `${wa}-${wb}`, context: ranked ? 'Duel vs AI · Ranked' : 'Duel vs AI' });
   const rated = ranked ? recordConstructedResult(aiRating(persona.difficulty), res) : null;
+  const rematch = () => {
+    const mine = deckFromKey(m.mine);
+    const opp = deckFromKey(m.opp);
+    if (mine && opp) void playVsAI(mine, opp, persona, bestOf, ranked);
+    else go('duel');
+  };
   showResults({
     setup,
     outcome,
     human: 0,
     context: `Duel vs AI · ${persona.difficulty[0].toUpperCase() + persona.difficulty.slice(1)}${rated ? ` · Ranked · Rating ${rated.after} (${signed(rated.delta)})` : ''}`,
     actions: [
-      { label: 'Rematch', variant: 'primary', icon: 'refresh', onClick: () => void playVsAI(mine, opp, persona, bestOf, ranked) },
+      { label: 'Rematch', variant: 'primary', icon: 'refresh', onClick: rematch },
       { label: 'New duel', icon: 'swords', onClick: () => go('duel') },
       { label: 'Home', icon: 'home', onClick: () => go('title') },
     ],
