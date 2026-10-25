@@ -23,6 +23,7 @@ import './sets/rgbt';
 import './sets/crms';
 import './sets/ptdn';
 import './sets/lodt';
+import './sets/tdgs';
 import { applyBanlist } from './banlist';
 
 applyBanlist();

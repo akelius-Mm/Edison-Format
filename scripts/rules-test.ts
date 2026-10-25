@@ -13,6 +13,7 @@ import { ensureCrmsPatches } from '../src/cards/sets/crms';
 import { ensurePtdnPatches } from '../src/cards/sets/ptdn';
 import { ensureLodtPatches } from '../src/cards/sets/lodt';
 import { PREMADE_DECKS, aiSideDeck, buildDeckList, canSwap, moveToDeck, moveToSide, sideSummary, sidedDeckProblems, swapCards, validateDeck, type DeckIds } from '../src/decks';
+import { ensureTdgsPatches } from '../src/cards/sets/tdgs';
 
 const T = {
   brute: findCard('Rules Test Brute') ?? normal('Rules Test Brute', 'EARTH', 'Warrior', 4, 1800, 1000),
@@ -869,6 +870,7 @@ function eq(a: unknown, b: unknown, msg: string) {
   await ptdnTests();
   await lodtTests();
   await sidingTests();
+  await tdgsTests();
 
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
@@ -2571,5 +2573,213 @@ async function sidingTests() {
         if (probs.length) throw new Error(`${x.id} vs ${y.id}: ${probs.join(' ')}`);
       }
     }
+  });
+}
+
+// ---------------------------------------------------------------- The Duelist Genesis (TDGS)
+
+async function tdgsTests() {
+  const tdgsSetup = () => {
+    const s = setup();
+    ensureTdgsPatches(s.g);
+    return s;
+  };
+  const live = (c: CardInstance) => {
+    c.activeOnField = true;
+    return c;
+  };
+  const setPhase = (g: Game, ph: string) => (g as any).setPhase(ph);
+
+  await test('TDGS: Big Piece Golem — Normal Summon without Tributing only when you control no monsters', async () => {
+    const { g, place } = tdgsSetup();
+    const bpg = place(0, cardByName('Big Piece Golem'), 'hand');
+    eq(g.canNormalSummon(0, bpg), false, 'opponent controls no monster: needs a Tribute');
+    place(1, T.brute, 'mzone');
+    eq(g.canNormalSummon(0, bpg), true, 'opponent controls a monster, you control none');
+    eq(g.canNormalSummon(0, bpg, true), false, 'cannot be Set without Tributing');
+    await g.performAction(0, { type: 'summon', card: bpg });
+    eq(bpg.location, 'mzone', 'Normal Summoned with no Tribute');
+  });
+
+  await test('TDGS: Power Filter — monsters with 1000 or less ATK cannot be Special Summoned', async () => {
+    const { g, place } = tdgsSetup();
+    live(place(1, cardByName('Power Filter'), 'szone', { faceUp: true }));
+    const w = place(0, T.wall, 'grave');
+    eq((await g.specialSummon([w], 0, { pos: 'atk' })).length, 0, '500 ATK blocked');
+    const b = place(0, T.brute, 'grave');
+    eq((await g.specialSummon([b], 0, { pos: 'atk' })).length, 1, '1800 ATK allowed');
+  });
+
+  await test('TDGS: Quillbolt Hedgehog — revives with a Tuner, removed from play when it leaves the field', async () => {
+    const { g, place } = tdgsSetup();
+    const q = place(0, cardByName('Quillbolt Hedgehog'), 'grave');
+    eq(g.getActivations(0, { open: true }).some((a) => a.card === q), false, 'no Tuner: cannot activate');
+    place(0, tuner, 'mzone');
+    await activateCard(g, 0, q);
+    eq(q.location, 'mzone', 'Special Summoned');
+    await g.destroy([q], 'effect', 1);
+    eq(q.location, 'banished', 'removed from play');
+  });
+
+  await test('TDGS: Handcuffs Dragon — equips to its attacker (-1800 ATK), revives when that monster is destroyed', async () => {
+    const { g, c1, place } = tdgsSetup();
+    const hd = place(0, cardByName('Handcuffs Dragon'), 'mzone');
+    const a = place(1, T.giant, 'mzone');
+    g.turnPlayer = 1;
+    c1.chooseAttackTarget = async () => hd;
+    await g.conductAttack(1, a);
+    eq(hd.location, 'szone', 'equipped from the GY');
+    eq(g.getAtk(a), 1200, '3000 - 1800');
+    await g.destroy([a], 'effect', 0);
+    await g.processTriggers(false);
+    eq(hd.location, 'mzone', 'Special Summoned after the equipped monster was destroyed');
+  });
+
+  await test('TDGS: Montage Dragon — sends 3 monsters, ATK = their Levels x 300', async () => {
+    const { g, place } = tdgsSetup();
+    const md = place(0, cardByName('Montage Dragon'), 'hand');
+    const fodder = [place(0, T.giant, 'hand'), place(0, T.brute, 'hand'), place(0, tuner, 'hand')];
+    const proc = g.legalMainActions(0).find((a) => a.type === 'proc' && a.card === md);
+    if (!proc) throw new Error('no summoning procedure');
+    await g.performAction(0, proc);
+    eq(md.location, 'mzone', 'Special Summoned');
+    eq(fodder.every((c) => c.location === 'grave'), true, '3 monsters sent');
+    eq(g.getAtk(md), (8 + 4 + 2) * 300, 'ATK from the Levels');
+  });
+
+  await test('TDGS: Dharc the Dark Charmer — takes a DARK monster while face-up, control returns when it leaves', async () => {
+    const { g, place } = tdgsSetup();
+    const dh = place(0, cardByName('Dharc the Dark Charmer'), 'mzone', { faceUp: false, pos: 'def' });
+    const shade = place(1, T.dark, 'mzone');
+    await g.performAction(0, { type: 'flip', card: dh });
+    eq(shade.controller, 0, 'control taken');
+    await g.destroy([dh], 'effect', 1);
+    eq(shade.controller, 1, 'control returned');
+  });
+
+  await test('TDGS: Telekinetic Shocker — pays 500 and is destroyed instead of a Psychic', async () => {
+    const { g, place } = tdgsSetup();
+    const ts = place(0, cardByName('Telekinetic Shocker'), 'mzone');
+    const snail = place(0, cardByName('Psychic Snail'), 'mzone');
+    await g.destroy([snail], 'effect', 1);
+    eq(snail.location, 'mzone', 'Psychic saved');
+    eq(ts.location, 'grave', 'Shocker destroyed instead');
+    eq(g.players[0].lp, 7500, '500 LP paid');
+  });
+
+  await test('TDGS: Defense Draw — no battle damage from this battle, draw 1', async () => {
+    const { g, c0, place } = tdgsSetup();
+    const dd = place(0, cardByName('Defense Draw'), 'szone', { faceUp: false });
+    const a = place(1, T.brute, 'mzone');
+    g.turnPlayer = 1;
+    c0.respond = (_g, req) => (req.kind === 'damage' ? req.options.find((o) => o.card === dd) ?? null : null);
+    const hand = g.players[0].hand.length;
+    await g.conductAttack(1, a);
+    eq(dd.location, 'grave', 'Defense Draw used');
+    eq(g.players[0].lp, 8000, 'no battle damage');
+    eq(g.players[0].hand.length, hand + 1, 'drew 1');
+  });
+
+  await test("TDGS: Splendid Venus — Solemn Judgment cannot negate (or destroy) your Trap's activation", async () => {
+    const { g, c1, place } = tdgsSetup();
+    const venus = place(0, cardByName('Splendid Venus'), 'mzone');
+    const b = place(1, T.brute, 'mzone');
+    eq(g.getAtk(b), 1300, 'non-Fairy monsters lose 500 ATK');
+    eq(g.getAtk(venus), 2800, 'Fairy unaffected');
+    const nest = place(0, cardByName('Needlebug Nest'), 'szone', { faceUp: false });
+    const sj = place(1, cardByName('Solemn Judgment'), 'szone', { faceUp: false });
+    c1.respond = respondWith('Solemn Judgment');
+    const deck = g.players[0].deck.length;
+    await activateCard(g, 0, nest);
+    eq(sj.location, 'grave', 'Solemn Judgment was activated');
+    eq(g.players[1].lp, 4000, 'Solemn cost paid');
+    eq(g.players[0].deck.length, deck - 5, 'Needlebug Nest still resolved');
+  });
+
+  await test('TDGS: Kinka-byo — revives a Level 1; Izanagi lets it stay; without Izanagi it returns and the monster is removed', async () => {
+    const { g, place } = tdgsSetup();
+    const iz = place(0, cardByName('Izanagi'), 'mzone');
+    const kb = place(0, cardByName('Kinka-byo'), 'hand');
+    const dc = place(0, cardByName('Doctor Cranium'), 'grave');
+    await g.performAction(0, { type: 'summon', card: kb });
+    eq(dc.location, 'mzone', 'Level 1 monster Special Summoned');
+    await setPhase(g, 'end');
+    eq(kb.location, 'mzone', 'Izanagi: the Spirit stays');
+    await g.destroy([iz], 'effect', 1);
+    g.turn += 2;
+    kb.flags.spiritTurn = g.turn;
+    await setPhase(g, 'end');
+    eq(kb.location, 'hand', 'returned to the hand');
+    eq(dc.location, 'banished', 'the revived monster is removed from play');
+  });
+
+  await test('TDGS: Trap of Darkness — pays 1000, copies Needlebug Nest from the GY and removes it', async () => {
+    const { g, place } = tdgsSetup();
+    g.players[0].lp = 3000;
+    const nest = place(0, cardByName('Needlebug Nest'), 'grave');
+    const tod = place(0, cardByName('Trap of Darkness'), 'szone', { faceUp: false });
+    const deck = g.players[0].deck.length;
+    await activateCard(g, 0, tod);
+    eq(g.players[0].lp, 2000, '1000 LP paid');
+    eq(nest.location, 'banished', 'copied card removed from play');
+    eq(g.players[0].deck.length, deck - 5, 'the copied effect resolved');
+  });
+
+  await test('TDGS: Telekinetic Charging Cell — Destructotron activates without paying LP', async () => {
+    const { g, place } = tdgsSetup();
+    const d = place(0, cardByName('Destructotron'), 'mzone');
+    const cell = live(place(0, cardByName('Telekinetic Charging Cell'), 'szone', { faceUp: true }));
+    g.equip(cell, d);
+    const mf = place(1, cardByName('Mirror Force'), 'szone', { faceUp: false });
+    await activateCard(g, 0, d);
+    eq(mf.location, 'grave', 'face-down card destroyed');
+    eq(g.players[0].lp, 8000, 'no LP paid');
+  });
+
+  await test('TDGS: Ghost Gardna — takes the attack, then the attacker loses 1000 ATK', async () => {
+    const { g, c1, place } = tdgsSetup();
+    const gg = place(0, cardByName('Ghost Gardna'), 'mzone', { pos: 'def' });
+    const b = place(0, T.brute, 'mzone');
+    const a = place(1, T.giant, 'mzone');
+    g.turnPlayer = 1;
+    c1.chooseAttackTarget = async () => b;
+    await g.conductAttack(1, a);
+    eq(b.location, 'mzone', 'original target untouched');
+    eq(gg.location, 'grave', 'Ghost Gardna destroyed instead');
+    eq(g.getAtk(a), 2000, 'attacker lost 1000 ATK');
+  });
+
+  await test('TDGS: Toy Magician — Set as a Spell, destroyed by the opponent, Special Summoned in the End Phase', async () => {
+    const { g, place } = tdgsSetup();
+    const tm = place(0, cardByName('Toy Magician'), 'hand');
+    const set = g.legalMainActions(0).find((a) => a.type === 'setST' && a.card === tm);
+    if (!set) throw new Error('cannot be Set in the Spell & Trap Zone');
+    await g.performAction(0, set);
+    eq(tm.location, 'szone', 'Set as a Spell');
+    await g.destroy([tm], 'effect', 1);
+    eq(tm.location, 'grave', 'destroyed');
+    await setPhase(g, 'end');
+    eq(tm.location, 'mzone', 'Special Summoned during the End Phase');
+  });
+
+  await test('TDGS: De-Synchro — returns the Synchro Monster and Special Summons its materials', async () => {
+    const { g, place } = tdgsSetup();
+    const t = place(0, tuner, 'mzone');
+    const b = place(0, T.brute, 'mzone');
+    const goyo = g.players[0].extra.find((c) => c.name === 'Goyo Guardian')!;
+    await g.synchroSummon(0, goyo, [t, b]);
+    eq(goyo.location, 'mzone', 'Synchro Summoned');
+    await activateCard(g, 0, place(0, cardByName('De-Synchro'), 'hand'));
+    eq(goyo.location, 'extra', 'returned to the Extra Deck');
+    eq(t.location === 'mzone' && b.location === 'mzone', true, 'materials Special Summoned');
+  });
+
+  await test('TDGS: Geartown — "Ancient Gear" monsters need 1 less Tribute to Normal Summon', async () => {
+    const { g, place } = tdgsSetup();
+    const ag = findCard('Ancient Gear Golem');
+    if (!ag) return;
+    live(place(1, cardByName('Geartown'), 'fzone'));
+    const agg = place(0, ag, 'hand');
+    eq(g.tributesNeeded(agg), 1, 'Level 8: 1 Tribute');
   });
 }
