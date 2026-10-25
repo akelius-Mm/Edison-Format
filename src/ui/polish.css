@@ -41,7 +41,7 @@ a,
   -webkit-tap-highlight-color: transparent;
 }
 :focus-visible {
-  outline: 2px solid var(--gold);
+  outline: 2px solid rgba(242, 239, 232, 0.55);
   outline-offset: 2px;
 }
 
@@ -407,6 +407,23 @@ body.has-tabbar .frame {
 }
 .select {
   padding-right: 30px;
+}
+/* decklist boxes: same quiet field, monospace; 16px so iOS doesn't zoom */
+.textarea {
+  border-radius: 12px !important;
+  background: var(--fill) !important;
+  border: 1px solid transparent !important;
+  box-shadow: none !important;
+  font-size: 16px !important;
+}
+.textarea:focus,
+.textarea:focus-visible {
+  border-color: rgba(255, 255, 255, 0.22) !important;
+  outline: none;
+  box-shadow: none !important;
+}
+::selection {
+  background: rgba(201, 182, 142, 0.32);
 }
 
 /* ---------------------------------------------------------------- lobby sections */
@@ -1681,6 +1698,87 @@ a.ios-row {
   display: inline-flex;
   align-items: center;
   gap: 10px;
+}
+
+/* Settings → Your music */
+.ym-ctl {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.ym-ctl .ios-inline-btn:disabled {
+  opacity: 0.5;
+}
+.ym-remove {
+  color: var(--loss) !important;
+}
+.ym-desc {
+  display: block;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.ym-name {
+  color: var(--text-2);
+}
+
+/* Audio credits sheet */
+.credits-list {
+  display: grid;
+  gap: 14px;
+  max-height: min(64vh, 640px);
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+.credits-intro {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--muted);
+}
+.credit {
+  display: grid;
+  gap: 3px;
+  padding-top: 12px;
+  border-top: 1px solid var(--sep);
+  min-width: 0;
+}
+.credit-use {
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.credit-title {
+  font-weight: 600;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+.credit-meta,
+.credit-edit,
+.credit-files {
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--text-2);
+}
+.credit a {
+  color: var(--gold-hi);
+}
+.credit-src summary {
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--muted);
+}
+.credit-src ul {
+  margin: 4px 0 0;
+  padding-left: 18px;
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.credit code {
+  font-size: 12px;
 }
 .pf-res {
   display: inline-grid !important;
@@ -3861,4 +3959,50 @@ body.in-duel .ui-toast-host {
   border-radius: 14px !important;
   background: var(--grp-hi) !important;
   box-shadow: none !important;
+}
+
+/* Loading screen (shown for a moment before the app starts) */
+.boot {
+  font: 500 13px var(--font);
+  letter-spacing: 0;
+  text-transform: none;
+}
+.boot-ring {
+  width: 28px;
+  height: 28px;
+  border: 2px solid rgba(255, 255, 255, 0.12);
+  border-top-color: var(--cta);
+}
+
+/* Badges: quiet filled tags, no outlines; colour only where it carries meaning */
+.badge {
+  height: 22px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-2);
+  font: 600 12px/1 var(--font);
+  letter-spacing: 0;
+}
+.badge-gold,
+.badge-blue,
+.badge-violet,
+.badge-green {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-2);
+}
+.badge-red {
+  background: rgba(227, 139, 139, 0.16);
+  color: #f0b0b0;
+}
+.badge-orange {
+  background: rgba(224, 176, 122, 0.16);
+  color: #e8c49c;
+}
+
+/* Dialogs focus their main button when they open: show that with a quiet light ring, not a gold one */
+.modal :focus-visible {
+  outline: 2px solid rgba(242, 239, 232, 0.55);
+  outline-offset: 2px;
 }

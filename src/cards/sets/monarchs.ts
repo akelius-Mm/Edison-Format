@@ -459,10 +459,10 @@ monster('Flip Flop Frog', {
   level: 2,
   atk: 500,
   def: 200,
-  types: ['flip'],
+  // CRMS: an Effect Monster (not a FLIP monster) per YGOJSON; the bounce is a "when flipped face-up" trigger (same timing as the flip() helper).
   sets: ['frog'],
   aiValue: 500,
-  text: 'FLIP: You can return monsters your opponent controls to the hand, up to the number of face-up "Frog" monsters you control. Once per turn: You can change this card to face-down Defense Position.',
+  text: 'Once per turn, you can flip this card into face-down Defense Position. When this card is flipped face-up, you can return monsters your opponent controls to their owners\' hand up to the number of face-up "Frog" monsters you control, except "Frog the Jam".',
   effects: [
     flip({
       optional: true,

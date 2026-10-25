@@ -196,6 +196,24 @@ function banlistTab() {
 function controlsTab() {
   const k = (...keys: string[]) => h('span', { class: 'keys' }, keys.map((x) => h('span', { class: 'kbd' }, x)));
   const r = (keys: Node, what: string) => h('div', { class: 'ctl-row' }, keys, h('span', null, what));
+  // Phones and tablets: touch gestures instead of keys and clicks.
+  if (typeof matchMedia === 'function' && matchMedia('(hover: none)').matches)
+    return h(
+      'div',
+      { class: 'rules-grid' },
+      card('Deck Builder', ul('Tap a card in Add cards to put it in your deck.', 'Tap a card in your deck to select it, then use the bar to add or remove copies or move it to the Side Deck.', 'Press and hold a deck card to remove one copy.')),
+      card(
+        'Duels',
+        ul(
+          'Tap a card to see what you can do with it (summon, set, activate, attack).',
+          'Press and hold a card to read it. In card lists, tap the magnifier or hold the card.',
+          'Tap a Graveyard, Banished or Extra Deck pile to look through it.',
+          'When you can respond to your opponent, a prompt appears — choose a card or pass.',
+          'Settings → Response prompts controls how often the game stops to ask you.',
+          'You can surrender from the flag button; in a best-of-three you may also concede the match between games.',
+        ),
+      ),
+    );
   return h(
     'div',
     { class: 'rules-grid' },

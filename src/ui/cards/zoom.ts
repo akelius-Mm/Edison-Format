@@ -15,7 +15,7 @@ function addStyle() {
   position: fixed; inset: 0; z-index: 10000;
   display: grid; place-items: center;
   padding: max(16px, env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) max(16px, env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px));
-  background: rgba(3, 5, 12, 0.82);
+  background: rgba(8, 9, 11, 0.86);
   backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
   animation: czIn 160ms ease-out;
   cursor: zoom-out;
@@ -23,7 +23,7 @@ function addStyle() {
 .card-zoom-inner { position: relative; display: grid; justify-items: center; gap: 10px; animation: czPop 220ms cubic-bezier(.2,1.3,.4,1); }
 .card-zoom .yc { --yc-w: min(88vw, calc((100dvh - 90px) * 59 / 86), 560px); box-shadow: 0 20px 60px rgba(0,0,0,.8), 0 0 0 1px rgba(255,255,255,.08); }
 .card-zoom-scan { width: min(88vw, calc((100dvh - 90px) * 59 / 86), 560px); aspect-ratio: 59 / 86; border-radius: 3.5%; box-shadow: 0 20px 60px rgba(0,0,0,.8); display: block; }
-.card-zoom-hint { font: 600 12px system-ui, sans-serif; color: rgba(230, 225, 210, .7); letter-spacing: .04em; }
+.card-zoom-hint { font: 500 13px -apple-system, BlinkMacSystemFont, system-ui, sans-serif; color: rgba(236, 235, 231, .6); }
 @keyframes czIn { from { opacity: 0; } }
 @keyframes czPop { from { transform: scale(.82); opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { .card-zoom, .card-zoom-inner { animation: none; } }
@@ -77,7 +77,12 @@ export function zoomCard(data: CardData, opts: { instance?: CardInstance; game?:
   const onKey = (ev: KeyboardEvent) => {
     if (ev.key === 'Escape' || ev.key === 'Enter' || ev.key === ' ') close(ev);
   };
-  ov.addEventListener('click', close);
+  // Ignore the tap that opened it (a long-press ends with a click on whatever is underneath).
+  const opened = performance.now();
+  ov.addEventListener('click', (ev) => {
+    if (performance.now() - opened < 350) return;
+    close(ev);
+  });
   window.addEventListener('keydown', onKey, true);
   document.body.appendChild(ov);
   open = ov;

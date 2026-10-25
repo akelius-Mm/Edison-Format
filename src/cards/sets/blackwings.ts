@@ -40,8 +40,9 @@ function bwProc(selfName: string): EffectDef {
 monster('Blackwing - Kalut the Moon Shadow', {
   attribute: 'DARK',
   race: 'Winged Beast',
-  level: 1,
-  atk: 400,
+  // RGBT: Level 3, 1400 ATK (YGOJSON; was Level 1 / 400 ATK).
+  level: 3,
+  atk: 1400,
   def: 1000,
   sets: BW,
   aiValue: 500,
@@ -92,12 +93,12 @@ monster('Blackwing - Shura the Blue Flame', {
   def: 1200,
   sets: BW,
   aiValue: 300,
-  text: 'Once per turn, when this card destroys an opponent\'s monster by battle and sends it to the GY: You can Special Summon 1 "Blackwing" monster with 1500 or less ATK from your Deck.',
+  // RGBT: no "once per turn", and the summoned monster's effects are negated (YGOJSON text).
+  text: 'When this card destroys an opponent\'s monster by battle and sends it to the Graveyard: You can Special Summon 1 "Blackwing" monster with 1500 or less ATK from your Deck, but its effects are negated.',
   effects: [
     {
       kind: 'trigger',
       event: 'battleDestroyed',
-      opt: true,
       label: 'Summon Blackwing from Deck',
       categories: ['specialSummon'],
       eventFilter: (ctx, ev) => selfDestroysByBattle(ctx, ev) && (ev.card as CardInstance).location === 'grave',
@@ -108,7 +109,10 @@ monster('Blackwing - Shura the Blue Flame', {
         const sel = await ctx.select(cands, 1, 1, 'Special Summon 1 "Blackwing" monster with 1500 or less ATK from your Deck.', 'specialSummon', {
           aiScore: (c) => ({ 'Blackwing - Gale the Whirlwind': 30, 'Blackwing - Blizzard the Far North': 20, 'Blackwing - Mistral the Silver Shield': 10, 'Blackwing - Fane the Steel Chain': 8 })[c.name] ?? 0,
         });
-        if (sel.length) await ctx.specialSummon(sel[0]);
+        if (sel.length) {
+          const [m] = await ctx.specialSummon(sel[0]);
+          if (m) ctx.negateEffects(m, 'field'); // RGBT
+        }
         ctx.game.shuffleDeck(ctx.player);
       },
     },
@@ -135,13 +139,23 @@ monster('Blackwing - Sirocco the Dawn', {
   def: 900,
   sets: BW,
   aiValue: 300,
-  text: 'If your opponent controls a monster and you control no monsters, you can Special Summon this card (from your hand). Once per turn, during your Main Phase 1: You can target 1 "Blackwing" monster you control; it gains ATK equal to the combined ATK of all other face-up "Blackwing" monsters you control, until the End Phase. Only that monster can attack this turn.',
+  // CRMS: the first effect is a Normal Summon/Set without Tributing (YGOJSON), not a Special Summon.
+  text: 'If only your opponent controls a monster, you can Normal Summon/Set this card without Tributing. Once per turn, during your Main Phase 1: You can target 1 "Blackwing" monster you control; until the end of this turn, it gains ATK equal to the combined ATK of all "Blackwing" monsters currently on the field, except itself, also for the rest of this turn, you can only attack with that monster.',
   effects: [
     {
-      kind: 'proc',
-      label: 'Special Summon',
-      categories: ['specialSummon'],
-      condition: (ctx) => ctx.monsters('opp').length > 0 && ctx.monsters('me').length === 0 && ctx.freeMZones() > 0,
+      // CRMS: same workaround as Power Invader: refresh the noTribute flag whenever Normal Summon legality is checked.
+      kind: 'continuous',
+      range: ['hand'],
+      mods: [
+        {
+          q: 'cannotNormalSummon',
+          to: 'players',
+          filter: (ctx, p) => {
+            if (p === ctx.player) ctx.self.flags.noTribute = ctx.monsters('opp').length > 0 && ctx.monsters('me').length === 0;
+            return false;
+          },
+        },
+      ],
     },
     {
       kind: 'ignition',
@@ -157,7 +171,8 @@ monster('Blackwing - Sirocco the Dawn', {
       resolve: async (ctx) => {
         const t = ctx.validTargets((c) => c.location === 'mzone' && c.faceUp);
         if (!t.length) return;
-        const others = faceUpBW(ctx).filter((c) => c !== t[0]);
+        // CRMS: every face-up "Blackwing" monster on the field (either side) except the target.
+        const others = ctx.faceUpMonsters('both', isBW).filter((c) => c !== t[0]);
         const sum = others.reduce((a, c) => a + ctx.atk(c), 0);
         ctx.addTempMod(t[0], 'atk', sum, 'turn');
         for (const m of ctx.monsters('me')) if (m !== t[0]) m.flags.cannotAttackTurn = ctx.turn;
@@ -229,7 +244,9 @@ monster('Blackwing - Blizzard the Far North', {
   types: ['tuner'],
   sets: BW,
   aiValue: 400,
-  text: 'When this card is Normal Summoned: You can target 1 Level 4 or lower "Blackwing" monster in your GY; Special Summon it in face-up Defense Position.',
+  // RGBT: "Cannot be Special Summoned" was missing (nomi blocks every Special Summon).
+  nomi: true,
+  text: 'Cannot be Special Summoned. When this card is Normal Summoned: You can target 1 Level 4 or lower "Blackwing" monster in your GY; Special Summon that target in Defense Position.',
   effects: [
     {
       kind: 'trigger',
@@ -257,7 +274,8 @@ monster('Blackwing - Elphin the Raven', {
   atk: 2200,
   def: 1200,
   sets: BW,
-  text: 'If you control a face-up "Blackwing" monster, you can Normal Summon this card without Tributing. When this card is Normal Summoned: You can target 1 face-up monster your opponent controls; change its battle position.',
+  // RGBT: the position change can target any monster the opponent controls, face-down ones included (YGOJSON text).
+  text: 'If you control a "Blackwing" monster, you can Normal Summon this card without Tributing. When this card is Normal Summoned: You can target 1 monster your opponent controls; change that target\'s battle position.',
   effects: [
     {
       // Workaround (see docs/engine-requests/group-b.md): the engine has no "summon without Tributing"
@@ -281,15 +299,16 @@ monster('Blackwing - Elphin the Raven', {
       event: 'normalSummoned',
       label: 'Change position',
       categories: ['position'],
-      canActivate: (ctx) => ctx.faceUpMonsters('opp', (c) => ctx.canTarget(c)).length > 0,
+      canActivate: (ctx) => ctx.monsters('opp', (c) => ctx.canTarget(c)).length > 0,
       activate: async (ctx) => {
-        await ctx.selectTargets(ctx.faceUpMonsters('opp'), 1, 1, 'Target 1 face-up monster to change its battle position.', 'position', {
-          aiScore: (c) => (c.pos === 'atk' ? ctx.atk(c) - ctx.def(c) : ctx.def(c) - ctx.atk(c)),
+        await ctx.selectTargets(ctx.monsters('opp'), 1, 1, 'Target 1 monster your opponent controls to change its battle position.', 'position', {
+          aiScore: (c) => (!c.faceUp ? 300 : c.pos === 'atk' ? ctx.atk(c) - ctx.def(c) : ctx.def(c) - ctx.atk(c)),
         });
       },
       resolve: async (ctx) => {
-        const t = ctx.validTargets((c) => c.location === 'mzone' && c.faceUp);
-        if (t.length) await ctx.changePos(t[0], t[0].pos === 'atk' ? 'def' : 'atk');
+        const t = ctx.validTargets((c) => c.location === 'mzone');
+        // A face-down Defense Position monster is changed to face-up Attack Position.
+        if (t.length) await ctx.changePos(t[0], t[0].pos === 'atk' ? 'def' : 'atk', true);
       },
     },
   ],
@@ -468,17 +487,20 @@ trap('Icarus Attack', 'normal', {
   ],
 });
 
+// RGBT: rewritten to the YGOJSON text: it needs only 1 "Blackwing" monster, and can be activated from the hand
+// while you control exactly 3 "Blackwing" monsters.
 trap('Delta Crow - Anti Reverse', 'normal', {
   sets: BW,
-  text: 'Activate only if you control 3 or more face-up "Blackwing" monsters. Destroy all Set Spell and Trap Cards your opponent controls.',
+  text: 'If you control a "Blackwing" monster: Destroy all face-down Spells and Traps your opponent controls. If you control exactly 3 "Blackwing" monsters, you can activate this card from your hand.',
   effects: [
     {
       kind: 'activate',
+      range: ['szone', 'hand'],
       categories: ['destroy', 'destroyMulti'],
-      condition: (ctx) => faceUpBW(ctx).length >= 3,
-      canActivate: (ctx) => ctx.spellTraps('opp', (c) => !c.faceUp).length > 0,
+      condition: (ctx) => faceUpBW(ctx).length > 0 && (ctx.self.location !== 'hand' || faceUpBW(ctx).length === 3),
+      canActivate: (ctx) => ctx.spellTraps('opp', (c) => !c.faceUp).length > 0 && (ctx.self.location !== 'hand' || ctx.freeSZones() > 0),
       resolve: async (ctx) => {
-        if (faceUpBW(ctx).length < 3) return;
+        if (!faceUpBW(ctx).length) return;
         await ctx.destroy(ctx.spellTraps('opp', (c) => !c.faceUp));
       },
       ai: { score: (ctx) => (ctx.spellTraps('opp', (c) => !c.faceUp).length ? 50 + 10 * ctx.spellTraps('opp', (c) => !c.faceUp).length : 0) },

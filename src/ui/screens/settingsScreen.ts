@@ -2,7 +2,9 @@
 import type { Difficulty } from '../../ai/ai';
 import { clearOfficialArtCache } from '../cards/officialArt';
 import { DEFAULT_SETTINGS, getSettings, updateSettings, type Settings } from '../settings';
+import { showAudioCredits, yourMusicGroup } from './audioSettings';
 import { iosAction, iosGroup, iosNav, iosRow } from './components';
+import { packsDraftSettingsGroup } from './draftSetup';
 import { confirmDialog, h, segmented, toast, toggle } from './dom';
 import { frame, go, type Screen } from './nav';
 import { getProfile, resetAllData } from './store';
@@ -45,6 +47,7 @@ export function settingsScreen(): Screen {
       iosNav('Sleeves & Playmat', () => go('customize'), { icon: 'palette' }),
       iosNav('How to Play & Banlist', () => go('rules'), { icon: 'book' }),
     ]),
+    packsDraftSettingsGroup(),
     iosGroup(
       'Gameplay',
       [
@@ -92,7 +95,9 @@ export function settingsScreen(): Screen {
       iosRow('Sound effects', null, toggle(s.sound, (v) => set({ sound: v }), 'Sound effects')),
       iosRow('Music', null, toggle(s.music, (v) => set({ music: v }), 'Music')),
       iosRow('Volume', null, h('div', { class: 'ios-range-wrap' }, vol, volOut), { stack: true }),
+      iosNav('Audio credits', showAudioCredits, { icon: 'music' }),
     ]),
+    yourMusicGroup(),
     iosGroup(
       'Data',
       [

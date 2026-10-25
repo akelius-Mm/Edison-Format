@@ -573,10 +573,24 @@ monster('Power Tool Dragon', {
   atk: 2300,
   def: 2500,
   types: ['synchro'],
-  text: '1 Tuner + 1 or more non-Tuner monsters\nOnce per turn: You can reveal 3 Equip Spell Cards from your Deck; your opponent randomly picks 1 to add to your hand and the rest are shuffled back. If this card would be destroyed, you can send 1 Equip Spell equipped to it to the GY instead.',
+  text: '1 Tuner + 1 or more non-Tuner monsters\nOnce per turn: You can reveal 3 Equip Spell Cards from your Deck; your opponent randomly picks 1 to add to your hand and the rest are shuffled back. If this card would be destroyed while equipped with an Equip Spell(s), you can send 1 of those cards to the GY instead.',
   synchro: { desc: '1 Tuner + 1+ non-Tuner monsters' },
   aiValue: 500,
   effects: [
+    {
+      // RGBT: the destruction replacement was in the text but not scripted (ABPF replaceDestroyOne hook).
+      kind: 'continuous',
+      replaceDestroyOne: async (ctx, card) => {
+        if (card !== ctx.self) return false;
+        const eqs = ctx.game.equipsOf(ctx.self).filter((c) => c.isSpell && c.data.stype === 'equip' && c.faceUp);
+        if (!eqs.length) return false;
+        if (!(await ctx.confirm(`Send an Equip Spell to the GY instead of destroying ${ctx.self.name}?`, true))) return false;
+        const [e] = await ctx.select(eqs, 1, 1, 'Send 1 Equip Spell equipped to this card to the GY.', 'cost');
+        if (!e) return false;
+        await ctx.sendToGrave(e, 'effect');
+        return true;
+      },
+    },
     {
       kind: 'ignition',
       opt: true,
@@ -900,8 +914,9 @@ monster('Exploder Dragonwing', {
   atk: 2400,
   def: 1600,
   types: ['synchro'],
-  text: '1 Tuner + 1 or more non-Tuner monsters\nWhen this card battles an opponent\'s monster whose ATK is less than or equal to this card\'s ATK: You can destroy that monster without damage calculation, and if you do, inflict damage to your opponent equal to its ATK.',
-  synchro: { desc: '1 Tuner + 1+ non-Tuner monsters' },
+  // RGBT: the non-Tuner material must be Dragon-Type (YGOJSON text).
+  text: '1 Tuner + 1 or more non-Tuner Dragon-Type monsters\nAt the start of the Damage Step, if this card battles a monster: You can destroy that monster, and if you do, inflict damage to your opponent equal to the ATK the destroyed monster had on the field. This card\'s ATK must be greater than or equal to the ATK of that monster to activate and to resolve this effect.',
+  synchro: { nonTuner: (c) => c.isMonster && c.data.race === 'Dragon', desc: '1 Tuner + 1+ non-Tuner Dragon-Type monsters' },
   aiValue: 700,
   effects: [
     {

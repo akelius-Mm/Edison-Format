@@ -118,6 +118,19 @@ export interface FusionSummonOpts {
   categories?: Category[];
   /** Override the AI score of the generated effect. */
   ai?: AiHints;
+  /** PTDN: called after the Fusion Monster is summoned (Chain Material marks it for destruction). */
+  onSummoned?: (ctx: Ctx, fusion: CardInstance) => void;
+}
+
+// PTDN: "Chain Material" (ptdn.ts) changes every Fusion Summon of the turn (wider material pool,
+// materials banished). Each hook returns replacement options, or null to leave them unchanged.
+export const fusionOptionHooks: ((ctx: Ctx, o: FusionSummonOpts) => FusionSummonOpts | null)[] = [];
+function hookedFusionOpts(ctx: Ctx, o: FusionSummonOpts): FusionSummonOpts {
+  for (const h of fusionOptionHooks) {
+    const r = h(ctx, o);
+    if (r) return r;
+  }
+  return o;
 }
 
 const defaultExtraMaterials = (f: CardInstance): CF | null =>
@@ -141,6 +154,7 @@ export interface FusionChoice {
 /** Every Fusion Monster you could summon right now with its possible material sets. */
 export function fusionChoices(ctx: Ctx, o: FusionSummonOpts = {}): FusionChoice[] {
   if (ctx.game.queryPlayer(ctx.player, 'cannotSpecialSummon')) return [];
+  o = hookedFusionOpts(ctx, o); // PTDN
   const pool = fusionMaterialPool(ctx, o);
   if (!pool.length) return [];
   const out: FusionChoice[] = [];
@@ -166,6 +180,7 @@ export function fusionGain(ctx: Ctx, ch: FusionChoice) {
 
 /** Perform a Fusion Summon at resolution. Returns the summoned Fusion Monster (or null). */
 export async function performFusionSummon(ctx: Ctx, o: FusionSummonOpts = {}): Promise<CardInstance | null> {
+  o = hookedFusionOpts(ctx, o); // PTDN
   const choices = fusionChoices(ctx, o);
   if (!choices.length) return null;
   const [f] = await ctx.select(
@@ -203,6 +218,7 @@ export async function performFusionSummon(ctx: Ctx, o: FusionSummonOpts = {}): P
   if (!r.length) return null;
   fusion.flags.materials = info;
   fusion.flags.materialCount = info.length;
+  o.onSummoned?.(ctx, fusion); // PTDN
   return fusion;
 }
 

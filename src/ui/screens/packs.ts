@@ -17,7 +17,7 @@ import {
   type Grant,
   type OpenedPull,
 } from '../../collection';
-import { playableSet, playableSets, rarityRank, structureDeckCards } from '../../collection/catalog';
+import { olderLegalSets, playableSet, playableSets, rarityRank, setShopShows, shopShows, structureDeckCards, type ShopShows } from '../../collection/catalog';
 import { oddsLines, PACK_FORMATS } from '../../collection/packs';
 import { STRUCTURE_DECKS } from '../../collection/sets';
 import { RARITY_NAMES, type Rarity } from '../../collection/types';
@@ -274,9 +274,34 @@ export function packsScreen(params: Params): Screen {
           h('div', { class: 'lob-group ps-list' }, prize.map((s) => row(s.code, s.data.name, `${s.code} · ${s.data.released.slice(0, 4)} · 3 cards`, null, () => {}, packArt(s.code)))),
         )
       : null;
+    const shows = shopShows();
+    const older = olderLegalSets();
+    const showsSeg = segmented<ShopShows>(
+      [
+        { value: 'shelf', label: '2010 shelf' },
+        { value: 'legal', label: 'All Edison-legal sets' },
+      ],
+      shows,
+      (v) => {
+        setShopShows(v);
+        draw();
+      },
+      'Shop shows',
+    );
+    const soonNote =
+      shows === 'legal'
+        ? h(
+            'p',
+            { class: 'ps-shows-note' },
+            older.ready.length ? `Older sets on sale: ${older.ready.map((x) => x.code).join(', ')}. ` : '',
+            older.soon.length ? `Joining once their cards are ready: ${older.soon.filter((x) => x.data.format === 'core').map((x) => x.code).join(', ')}.` : '',
+          )
+        : null;
     wrap.append(
       h('div', { class: 'ps-balance' }, h('div', { class: 'ps-balance-label' }, 'Balance'), h('div', { class: 'ps-balance-n' }, fmtDP(dp()))),
       h('div', { class: 'lob-h' }, h('h2', null, 'Booster packs')),
+      h('div', { class: 'ps-shows' }, showsSeg),
+      soonNote ?? '',
       h(
         'div',
         { class: 'lob-group ps-list' },

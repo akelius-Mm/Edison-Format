@@ -138,16 +138,13 @@ body {
   text-shadow: none !important;
 }
 .ui-btn-primary,
-.ui-btn-gold,
-.btn--primary,
-.phasebar.is-active .btn--end:not(:disabled) {
+.ui-btn-gold {
   background: var(--gold) !important;
   color: #141210 !important;
   border-color: transparent !important;
 }
 .ui-btn-primary:hover,
-.ui-btn-gold:hover,
-.btn--primary:hover {
+.ui-btn-gold:hover {
   background: var(--gold-hi) !important;
 }
 
@@ -171,9 +168,10 @@ body {
   letter-spacing: -0.02em;
 }
 .ph.is-current {
-  background: var(--gold) !important;
-  color: #141210 !important;
+  background: rgba(255, 255, 255, 0.14) !important;
+  color: #f2efe8 !important;
   box-shadow: none !important;
+  transform: none !important;
 }
 .duel-root {
   background: var(--bg-0) !important;

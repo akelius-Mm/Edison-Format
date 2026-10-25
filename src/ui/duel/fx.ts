@@ -19,6 +19,8 @@ export interface FxHost {
   me: PlayerId;
   spectator: boolean;
   names: [string, string];
+  /** The first player was chosen (games 2 and 3 of a match), not rolled for. */
+  firstChosen?: boolean;
   speed(): number;
   /** Render everything now (board + panels). */
   flush(opts?: RenderOpts): void;
@@ -58,7 +60,7 @@ export class FxDirector {
     switch (a.type) {
       case 'coin':
         h.flush();
-        return this.coin(a.player as PlayerId);
+        return this.h.firstChosen ? this.firstCaption(a.player as PlayerId) : this.diceRoll(a.player as PlayerId);
       case 'turn': {
         h.flush();
         h.sfx.play('turn');
@@ -499,18 +501,136 @@ export class FxDirector {
     this.autoRemove(wrap, 1300);
   }
 
-  private async coin(first: PlayerId) {
-    const sp = this.h.speed();
+  /** Who goes first, as a sentence for the viewer. */
+  private firstLabel(first: PlayerId) {
     const mine = first === this.h.me;
-    const label = this.h.spectator ? `${this.h.names[first]} goes first` : mine ? 'You go first!' : 'Opponent goes first';
-    const wrap = el('fx-coin-wrap', `<div class="fx-coin ${mine ? 'heads' : 'tails'}"><div class="coin-face coin-h"><span>★</span></div><div class="coin-face coin-t"><span>☾</span></div></div><div class="fx-coin-label">${label}</div>`);
-    this.h.overlay.appendChild(wrap);
-    if (sp > 0) {
-      this.h.sfx.play('coin');
-      window.setTimeout(() => this.h.sfx.play('coin'), 900 * sp);
+    return this.h.spectator ? `${this.h.names[first]} goes first` : mine ? 'You go first' : 'Opponent goes first';
+  }
+
+  /** Games 2 and 3: the loser chose, so there is nothing to roll. A short caption only. */
+  private async firstCaption(first: PlayerId) {
+    if (this.h.speed() <= 0) return;
+    this.banner(`<b>${this.firstLabel(first)}</b>`, `banner--phase ${first === this.h.me ? 'is-me' : 'is-opp'}`, 1100);
+    await this.wait(900);
+  }
+
+  /**
+   * High roll for the first turn, like at locals: each player rolls one die, the higher roll
+   * goes first and a tie is rolled again. The engine has already decided; the dice agree with it.
+   */
+  private async diceRoll(first: PlayerId) {
+    const sp = this.h.speed();
+    const reduce = sp <= 0 || matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const d6 = () => 1 + Math.floor(Math.random() * 6);
+    // Rounds of [player 0, player 1]. Ties re-roll (at most two shown), the last round agrees with the engine.
+    const rounds: [number, number][] = [];
+    for (;;) {
+      const r: [number, number] = [d6(), d6()];
+      if (r[0] === r[1] && rounds.length < 2) {
+        rounds.push(r);
+        continue;
+      }
+      if (r[0] === r[1]) {
+        if (r[first] < 6) r[first]++;
+        else r[1 - first]--;
+      }
+      if (r[first] < r[1 - first]) r.reverse();
+      rounds.push(r);
+      break;
     }
-    await this.wait(1900);
+    const top = (1 - this.h.me) as PlayerId;
+    const who = (p: PlayerId) => (this.h.spectator ? this.h.names[p] : p === this.h.me ? 'You' : 'Opponent');
+    const slot = (p: PlayerId) => {
+      const s = el(`dice-slot ${p === this.h.me ? 'is-me' : 'is-opp'}`);
+      const tray = el('dice-tray');
+      const thrower = el('die-throw');
+      const cube = el('die', DIE_FACES);
+      thrower.append(el('die-shadow'), el('die-tilt'));
+      thrower.lastElementChild!.appendChild(cube);
+      tray.appendChild(thrower);
+      s.append(tray, el('dice-who', who(p)));
+      return { s, thrower, cube, shadow: thrower.firstElementChild as HTMLElement };
+    };
+    const slots = { [top]: slot(top), [this.h.me]: slot(this.h.me) } as Record<PlayerId, ReturnType<typeof slot>>;
+    const caption = el('dice-caption');
+    const wrap = el('fx-dice-wrap');
+    wrap.append(slots[top].s, caption, slots[this.h.me].s);
+    this.h.overlay.appendChild(wrap);
+    const rollMs = 1250 * sp;
+    for (let i = 0; i < rounds.length; i++) {
+      const r = rounds[i];
+      caption.innerHTML = i ? '<span>Tie · roll again</span>' : '';
+      caption.classList.remove('is-shown');
+      if (!reduce) this.h.sfx.play('coin');
+      for (const p of [0, 1] as PlayerId[]) this.tumble(slots[p], r[p], reduce ? 0 : rollMs, p === top);
+      if (!reduce) {
+        await sleep(rollMs);
+        this.h.sfx.play('coin');
+      }
+      const tie = r[0] === r[1];
+      const line = this.h.spectator
+        ? `${this.h.names[0]} rolled ${r[0]} · ${this.h.names[1]} rolled ${r[1]}`
+        : `You rolled ${r[this.h.me]} · Opponent rolled ${r[top]}`;
+      caption.innerHTML = `<span>${line}</span><b>${tie ? 'Tie · roll again' : this.firstLabel(first)}</b>`;
+      caption.classList.add('is-shown');
+      if (!tie) for (const p of [0, 1] as PlayerId[]) slots[p].s.classList.toggle('is-winner', p === first);
+      await this.wait(tie ? 900 : 1500);
+    }
     wrap.classList.add('out');
     window.setTimeout(() => wrap.remove(), 400);
   }
+
+  /** Throw one die so it comes to rest showing `value`. */
+  private tumble(s: { thrower: HTMLElement; cube: HTMLElement; shadow: HTMLElement }, value: number, ms: number, fromTop: boolean) {
+    const rest = DIE_REST[value];
+    const spinX = 360 * (2 + Math.floor(Math.random() * 2)) * (Math.random() < 0.5 ? 1 : -1);
+    const spinY = 360 * (1 + Math.floor(Math.random() * 2)) * (Math.random() < 0.5 ? 1 : -1);
+    const endZ = Math.round(Math.random() * 40 - 20);
+    const final = `rotateZ(${endZ}deg) rotateX(0deg) rotateY(0deg) ${rest}`;
+    s.cube.getAnimations().forEach((a) => a.cancel());
+    s.thrower.getAnimations().forEach((a) => a.cancel());
+    s.shadow.getAnimations().forEach((a) => a.cancel());
+    s.cube.style.transform = final;
+    if (ms <= 0) return;
+    const dir = Math.random() < 0.5 ? -1 : 1;
+    const y0 = fromTop ? -1 : 1;
+    s.cube.animate(
+      [
+        { transform: `rotateZ(${endZ + 200 * dir}deg) rotateX(${spinX}deg) rotateY(${spinY}deg) ${rest}` },
+        { transform: `rotateZ(${endZ + 30 * dir}deg) rotateX(${spinX * 0.12}deg) rotateY(${spinY * 0.12}deg) ${rest}`, offset: 0.7 },
+        { transform: final },
+      ],
+      { duration: ms, easing: 'cubic-bezier(.2,.65,.3,1)' },
+    );
+    // travel across the table with two small bounces before settling
+    s.thrower.animate(
+      [
+        { transform: `translate(${-150 * dir}%, ${60 * y0}%) translateZ(0) scale(1.15)`, opacity: 0 },
+        { transform: `translate(${-60 * dir}%, ${-30 * y0}%) scale(1.1)`, opacity: 1, offset: 0.25 },
+        { transform: `translate(${-18 * dir}%, 0) scale(1)`, offset: 0.5 },
+        { transform: `translate(${-6 * dir}%, -8%) scale(1.03)`, offset: 0.68 },
+        { transform: 'translate(0, 0) scale(1)', offset: 0.85 },
+        { transform: 'translate(0, -2%) scale(1.005)', offset: 0.92 },
+        { transform: 'translate(0, 0) scale(1)' },
+      ],
+      { duration: ms, easing: 'ease-out' },
+    );
+    s.shadow.animate([{ opacity: 0, transform: 'scale(.6)' }, { opacity: 0.5, transform: 'scale(.8)', offset: 0.5 }, { opacity: 1, transform: 'scale(1)' }], { duration: ms, easing: 'ease-out' });
+  }
 }
+
+/** Pip positions on a 3 × 3 grid, numbered 1-9 left to right, top to bottom. */
+const PIPS: Record<number, number[]> = { 1: [5], 2: [3, 7], 3: [3, 5, 7], 4: [1, 3, 7, 9], 5: [1, 3, 5, 7, 9], 6: [1, 3, 4, 6, 7, 9] };
+/** Faces as on a real die (opposite faces add up to 7). */
+const DIE_FACES =
+  '<i class="die-core die-core--x"></i><i class="die-core die-core--y"></i><i class="die-core die-core--z"></i>' +
+  [1, 2, 3, 4, 5, 6].map((n) => `<div class="die-face die-f${n}">${PIPS[n].map((p) => `<i style="grid-area:p${p}"></i>`).join('')}</div>`).join('');
+/** Rotation that brings each face to the front. */
+const DIE_REST: Record<number, string> = {
+  1: 'rotateX(0deg) rotateY(0deg)',
+  2: 'rotateX(90deg) rotateY(0deg)',
+  3: 'rotateX(0deg) rotateY(-90deg)',
+  4: 'rotateX(0deg) rotateY(90deg)',
+  5: 'rotateX(-90deg) rotateY(0deg)',
+  6: 'rotateX(0deg) rotateY(180deg)',
+};
