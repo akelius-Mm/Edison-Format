@@ -59,7 +59,24 @@ const quickdrawPlant: DeckDef = {
     ['Thought Ruler Archfiend', 1],
     ['Colossal Fighter', 1],
     ['Magical Android', 1],
-    ['Armory Arm', 1],
+    ['Goyo Guardian', 1],
+  ],
+  side: [
+    // Graveyard hate for Lightsworn, Zombies and opposing Debris Dragon lines.
+    ['D.D. Crow', 2],
+    // Machine answers and big bodies for Gadgets and the mirror.
+    ['Cyber Dragon', 2],
+    ['Legendary Jujitsu Master', 2],
+    // Shuts off searches (Black Whirlwind, Charge, Sarcophagus) and Synchro Summons in the mirror.
+    ['Thunder King Rai-Oh', 2],
+    // Backrow answers for Gladiator Beasts and trap-heavy control.
+    ['Dust Tornado', 2],
+    // LIGHT floodgate for Lightsworn and Judgment Dragon (the Plants are WIND / FIRE).
+    ['Light-Imprisoning Mirror', 2],
+    // Protects a synchro board from Judgment Dragon, Heavy Storm and Black Rose Dragon.
+    ['Starlight Road', 1],
+    // Treeborn Frog, Gladiator sets and flip monsters.
+    ['Nobleman of Crossout', 2],
   ],
 };
 
@@ -117,6 +134,27 @@ const zombies: DeckDef = {
     ['Ally of Justice Catastor', 1],
     ['Magical Android', 1],
     ['Mist Wurm', 1],
+    ['Goyo Guardian', 1],
+    ['Stardust Dragon', 1],
+    ['Red Dragon Archfiend', 1],
+    ['Colossal Fighter', 1],
+    ['Iron Chain Dragon', 1],
+  ],
+  side: [
+    // Lightsworn and opposing Zombie / DAD graveyards (Kycoo banishes only the opponent's cards).
+    ['D.D. Crow', 2],
+    ['Kycoo the Ghost Destroyer', 2],
+    // Machine answers for Gadgets.
+    ['Cyber Dragon', 2],
+    // LIGHT floodgate for Lightsworn and Judgment Dragon.
+    ['Light-Imprisoning Mirror', 2],
+    // Treeborn Frog and set monsters.
+    ['Nobleman of Crossout', 2],
+    // Backrow answers and anti-trap for Gladiator Beasts' War Chariot and control.
+    ['Dust Tornado', 2],
+    ['Trap Stun', 2],
+    // Name the opponent's key card (Black Whirlwind, Solar Recharge, Gottoms' Emergency Call).
+    ['Prohibition', 1],
   ],
 };
 
@@ -163,7 +201,7 @@ const lightsworn: DeckDef = {
     ['Dimensional Prison', 1],
   ],
   extra: [
-    ['Stardust Dragon', 1],
+    ['Stardust Dragon', 2],
     ['Red Dragon Archfiend', 1],
     ['Colossal Fighter', 1],
     ['Brionac, Dragon of the Ice Barrier', 1],
@@ -174,6 +212,24 @@ const lightsworn: DeckDef = {
     ['Mist Wurm', 1],
     ['Ally of Justice Catastor', 1],
     ['Magical Android', 1],
+    ['Goyo Guardian', 1],
+    ['Exploder Dragonwing', 1],
+    ['Iron Chain Dragon', 1],
+  ],
+  side: [
+    // Mirror-match and Zombie graveyard hate that does not touch your own mill.
+    ['D.D. Crow', 2],
+    // Machine answers for Gadgets.
+    ['Cyber Dragon', 2],
+    // DARK floodgates and removal for Blackwings, Tele-DAD and Caius.
+    ['Consecrated Light', 3],
+    // Anti-trap for Gladiator Beasts (War Chariot) and trap-heavy control.
+    ['Royal Decree', 2],
+    ['Dust Tornado', 2],
+    // Treeborn Frog and set monsters.
+    ['Nobleman of Crossout', 2],
+    // Stalls Blackwing and X-Saber beatdown.
+    ['Legendary Jujitsu Master', 2],
   ],
 };
 
