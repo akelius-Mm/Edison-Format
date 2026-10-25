@@ -35,7 +35,7 @@ import { artInto, ctaButton, deckArt, deckShelf, iosGroup, iosRow, linkButton, l
 import { badge, button, clear, confirmDialog, h, icon, modal, pct, segmented, toast } from './dom';
 import { AVATAR_PRESETS, SLEEVES, renderAvatar } from './ext';
 import { runMatch } from './match';
-import { frame, go, lockNav, type Screen } from './nav';
+import { frame, go, lockNav, scrollToTop, type Screen } from './nav';
 import { gameRow, showResults } from './results';
 import { allDeckInfos, getProfile, ordinal, recordMatch, recordTournament, toDeckList, tournamentSummary, type DeckInfo } from './store';
 
@@ -335,7 +335,7 @@ function hubScreen(t: Tournament): Screen {
             if (t.phase === 'done') return go('tournament', { t: t.id, done: '1' }, { replace: true });
             tab = 'round';
             redraw();
-            window.scrollTo(0, 0);
+            scrollToTop();
             maybeAutoSimulate();
           },
           isFinal ? 'trophy' : 'play',

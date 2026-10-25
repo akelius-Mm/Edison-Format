@@ -2561,6 +2561,9 @@ a.ios-row {
   font-weight: 600;
   white-space: nowrap;
 }
+.standings-table .pt-deck {
+  display: block !important;
+}
 .pt-deck {
   font-size: 12.5px;
   color: var(--muted);
@@ -2704,6 +2707,7 @@ a.ios-row {
   margin: 0 calc(-1 * var(--gutter-r)) 0 calc(-1 * var(--gutter));
   padding: 4px var(--gutter-r) 8px var(--gutter) !important;
   scroll-snap-type: x proximity;
+  scroll-padding: 0 var(--gutter);
   scrollbar-width: none;
 }
 .bracket::-webkit-scrollbar {
@@ -2792,7 +2796,10 @@ a.ios-row {
 
 /* final standings screen (shares the results look) */
 .final-screen .fin-title {
-  font: 700 22px/1.2 var(--font-display);
+  text-transform: none !important;
+  letter-spacing: -0.02em !important;
+  margin: 0 !important;
+  font: 700 22px/1.2 var(--font-display) !important;
   letter-spacing: -0.02em;
   color: var(--text);
 }

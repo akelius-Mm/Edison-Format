@@ -43,6 +43,13 @@ export function go(name: string, params: Params = {}, opts: { replace?: boolean 
   } else location.hash = hash;
 }
 
+/** Reset scrolling (the page may scroll on the window or on <body>). */
+export function scrollToTop() {
+  window.scrollTo(0, 0);
+  document.body.scrollTop = 0;
+  document.documentElement.scrollTop = 0;
+}
+
 export function back() {
   go('title');
 }
@@ -76,7 +83,7 @@ function mount(screen: Screen, key: string) {
   current = { screen, key };
   screen.el.classList.add('screen', 'screen-enter');
   root.appendChild(screen.el);
-  window.scrollTo(0, 0);
+  scrollToTop();
   requestAnimationFrame(() => {
     requestAnimationFrame(() => screen.el.classList.remove('screen-enter'));
   });

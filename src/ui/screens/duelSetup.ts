@@ -7,7 +7,7 @@ import { ctaButton, deckArt, deckCarousel, deckGroups, deckShelf, linkButton, lo
 import { confirmDialog, h, icon, segmented, toast } from './dom';
 import { SLEEVES } from './ext';
 import { runMatch, type MatchSetup } from './match';
-import { frame, go, type Screen } from './nav';
+import { frame, go, scrollToTop, type Screen } from './nav';
 import { showResults } from './results';
 import { allDeckInfos, premadeInfo, recordMatch, resolveDeck, toDeckList, type DeckInfo } from './store';
 
@@ -190,7 +190,7 @@ export function duelSetupScreen(): Screen {
     const lbl = el.querySelector('.frame-back-label');
     if (lbl) lbl.textContent = n === 2 ? 'Deck' : 'Home';
     el.querySelector('.frame-back')?.setAttribute('aria-label', n === 2 ? 'Back to deck choice' : 'Back to Home');
-    if (dir) window.scrollTo(0, 0);
+    if (dir) scrollToTop();
   }
 
   async function start() {
