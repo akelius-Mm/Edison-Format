@@ -3941,4 +3941,19 @@ async function fuzzRegressionTests() {
   await test('gy-costs table: every card and effect index resolves', async () => {
     eq(GY_BANISH_COST_PROBLEMS.join('; '), '', 'problems');
   });
+
+  await test('Gozen Match: no Synchro Summon that would leave monsters of another Attribute', async () => {
+    const darkTuner = findCard('Rules Test Dark Tuner') ?? normal('Rules Test Dark Tuner', 'DARK', 'Fiend', 2, 800, 800);
+    if (!darkTuner.mtypes!.includes('tuner')) darkTuner.mtypes!.push('tuner');
+    const { g, place } = setup();
+    ensureCsocPatches(g);
+    live(place(1, cardByName('Gozen Match'), 'szone', { faceUp: true }));
+    const dark6 = findCard('Rules Test Dark Six') ?? normal('Rules Test Dark Six', 'DARK', 'Fiend', 6, 2000, 1000);
+    const stardust = place(0, cardByName('Stardust Dragon'), 'extra');
+    place(0, darkTuner, 'mzone');
+    place(0, dark6, 'mzone');
+    eq(g.canSynchro(0, stardust), true, 'WIND Synchro using both DARK monsters');
+    place(0, T.dark, 'mzone');
+    eq(g.canSynchro(0, stardust), false, 'a DARK monster would stay beside the WIND Synchro');
+  });
 }
