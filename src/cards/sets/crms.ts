@@ -2350,10 +2350,11 @@ spell('Star Blast', 'normal', {
     {
       kind: 'activate',
       categories: [],
-      canActivate: (ctx) => ctx.lp > 500 && (ctx.faceUpMonsters('me', (c) => ctx.level(c) > 1).length > 0 || ctx.hand('me', (c) => c.isMonster && lvl(c) > 1).length > 0),
+      // Current Level (a monster in hand may already be lowered by another Star Blast), as the activation uses.
+      canActivate: (ctx) => ctx.lp > 500 && (ctx.faceUpMonsters('me', (c) => ctx.level(c) > 1).length > 0 || ctx.hand('me', (c) => c.isMonster && ctx.level(c) > 1).length > 0),
       activate: async (ctx) => {
         ensureCrmsPatches(ctx.game);
-        const cands = [...ctx.faceUpMonsters('me', (c) => ctx.level(c) > 1), ...ctx.hand('me', (c) => c.isMonster && lvl(c) > 1 && c !== ctx.self)];
+        const cands = [...ctx.faceUpMonsters('me', (c) => ctx.level(c) > 1), ...ctx.hand('me', (c) => c.isMonster && ctx.level(c) > 1 && c !== ctx.self)];
         const [m] = await ctx.select(cands, 1, 1, 'Choose 1 monster you control or in your hand.', 'buff', { aiScore: (c) => starBlastAiValue(ctx, c) });
         if (!m) return false;
         const lvNow = ctx.level(m);

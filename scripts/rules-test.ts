@@ -3713,4 +3713,13 @@ async function fuzzRegressionTests() {
     eq(goyo.location, 'mzone', 'Stardust Dragon Synchro Summoned');
     eq(g.queryPlayer(0, 'cannotSpecialSummon'), true, 'the lock applies again afterwards');
   });
+
+  await test('Star Blast is not offered when the only monster in hand is already Level 1 from an earlier Star Blast', async () => {
+    const { g, place } = setup();
+    const low = place(0, tuner, 'hand');
+    await activateCard(g, 0, place(0, cardByName('Star Blast'), 'hand'));
+    eq(g.getLevel(low), 1, 'Level 2 -> 1');
+    const second = place(0, cardByName('Star Blast'), 'hand');
+    eq(g.getActivations(0, { open: true }).some((a) => a.card === second), false, 'second Star Blast not offered');
+  });
 }
