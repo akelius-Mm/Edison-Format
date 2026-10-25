@@ -12,6 +12,7 @@ import { getProfile, resetAllData } from './store';
 import { loadActiveTournament, currentRoundLabel } from '../../tournament/tournament';
 // Play a friend: connection server (advanced).
 import { onlineSettingsGroup } from './friend';
+import { openReportSheet } from './report';
 
 export function settingsScreen(): Screen {
   const s = getSettings();
@@ -117,6 +118,11 @@ export function settingsScreen(): Screen {
     ]),
     yourMusicGroup(),
     onlineSettingsGroup(),
+    iosGroup(
+      'Help',
+      [iosNav('Report a problem', () => openReportSheet(), { icon: 'warn' })],
+      'Makes a report with what went wrong (and the duel, to replay it) to share or copy. Nothing is sent automatically.',
+    ),
     iosGroup(
       'Data',
       [

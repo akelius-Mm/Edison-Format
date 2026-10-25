@@ -1,0 +1,311 @@
+/* "Report a problem" sheet, the error toast, and the in-app browser banner (report.ts). */
+
+/* ---------------------------------------------------------------- report sheet */
+.rp-sheet .modal {
+  width: min(520px, 100%);
+}
+.rp-sheet .modal-body {
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.rp {
+  display: grid;
+  gap: 14px;
+  padding: 4px 4px 6px;
+  min-width: 0;
+}
+.rp-reason {
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+}
+.rp-label {
+  display: grid;
+  gap: 8px;
+  font: 600 13px var(--font);
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+.rp-note {
+  width: 100%;
+  min-height: 96px;
+  resize: vertical;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text);
+  font: 400 16px/1.4 var(--font); /* 16px: iOS does not zoom into the field */
+  text-transform: none;
+  letter-spacing: normal;
+}
+.rp-note:focus {
+  outline: none;
+  border-color: rgba(212, 175, 55, 0.55);
+}
+.rp-h {
+  margin: 2px 0 -6px 4px;
+  font: 400 13px var(--font);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  color: var(--muted);
+}
+.rp-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.05);
+  overflow: hidden;
+}
+.rp-list li {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  min-width: 0;
+}
+.rp-list li + li::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 52px;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.07);
+}
+.rp-ic {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: rgba(212, 175, 55, 0.14);
+  color: #d9b96f;
+}
+.rp-ic .icon {
+  width: 16px;
+  height: 16px;
+}
+.rp-it {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+.rp-it b {
+  font: 500 15px var(--font);
+  color: var(--text);
+}
+.rp-it span {
+  font-size: 13px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rp-details summary {
+  cursor: pointer;
+  color: #d9b96f;
+  font-size: 14px;
+  padding: 2px 4px;
+}
+.rp-json {
+  margin: 8px 0 0;
+  max-height: 220px;
+  overflow: auto;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.35);
+  color: var(--text-2);
+  font: 11px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+  white-space: pre-wrap;
+  word-break: break-all;
+  user-select: text;
+  -webkit-user-select: text;
+}
+.rp-foot {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.4;
+}
+.rp-foot .icon {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin-top: 1px;
+}
+.rp-copy {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+@media (max-width: 600px) {
+  .rp-sheet .modal-foot {
+    grid-template-columns: 1fr 1fr;
+    grid-auto-flow: column !important;
+  }
+  .rp-sheet .modal-foot .ui-btn-primary {
+    order: 1 !important;
+  }
+}
+/* phones in landscape: little height, so a compact sheet */
+@media (max-height: 500px) {
+  .rp-sheet .modal {
+    max-height: calc(100dvh - 16px) !important;
+  }
+  .rp-note {
+    min-height: 64px;
+    height: 64px;
+  }
+  .rp {
+    gap: 10px;
+  }
+  .rp-sheet .modal-foot {
+    display: flex !important;
+    grid-auto-flow: column;
+  }
+  .rp-sheet .modal-foot .ui-btn {
+    flex: 1;
+    min-height: 44px;
+  }
+}
+
+/* ---------------------------------------------------------------- error toast */
+.err-toast {
+  position: fixed;
+  z-index: 1001;
+  left: 50%;
+  bottom: calc(var(--tabbar-h, 0px) + 12px + env(safe-area-inset-bottom, 0px));
+  transform: translate(-50%, 16px);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: max-content;
+  max-width: calc(100vw - 32px);
+  padding: 8px 6px 8px 16px;
+  border-radius: 16px;
+  background: rgba(40, 41, 46, 0.96);
+  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(16px);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+  color: var(--text);
+  font: 500 15px var(--font);
+  opacity: 0;
+  transition:
+    opacity 0.25s ease,
+    transform 0.25s ease;
+}
+body.in-duel .err-toast {
+  bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+}
+.err-toast.in {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+.err-toast-text {
+  min-width: 0;
+}
+.err-toast-report {
+  flex: none;
+}
+.err-toast-x {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  color: var(--muted);
+}
+.err-toast-x .icon {
+  width: 16px;
+  height: 16px;
+}
+
+/* ---------------------------------------------------------------- in-app browser banner (Home) */
+.br-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 8px 14px 14px;
+  border-radius: 16px;
+  background: var(--bg-2, #15171d);
+  border: 1px solid rgba(90, 169, 255, 0.35);
+  color: var(--text);
+  transition:
+    opacity 0.25s ease,
+    transform 0.25s ease;
+  min-width: 0;
+}
+.br-banner.is-gone {
+  opacity: 0;
+  transform: scale(0.98);
+}
+.br-icon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  background: rgba(90, 169, 255, 0.16);
+  color: #8cc4ff;
+}
+.br-icon .icon {
+  width: 18px;
+  height: 18px;
+}
+.br-text {
+  flex: 1;
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+.br-text > b {
+  font: 600 15px/1.3 var(--font);
+}
+.br-steps {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 2px;
+  font-size: 14px;
+  color: var(--text-2);
+}
+.br-steps b {
+  color: var(--text);
+  font-weight: 600;
+}
+.br-text small {
+  font-size: 12.5px;
+  line-height: 1.35;
+  color: var(--muted);
+}
+.br-x {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  margin-top: -6px;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  color: var(--muted);
+}
+.br-x .icon {
+  width: 16px;
+  height: 16px;
+}

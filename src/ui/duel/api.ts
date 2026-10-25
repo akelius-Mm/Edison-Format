@@ -69,6 +69,8 @@ export interface DuelControl {
   me: PlayerId;
   /** End the game now with this result (the friend conceded, a desync, a claimed win). */
   abort(winner: PlayerId | null, reason: string): void;
+  /** Leave without deciding the game (the duel stays saved): the duel resolves with `left`. */
+  leave(): void;
   /** Called whenever the game is ended from outside the engine, including the player surrendering. */
   onAbort(fn: (winner: PlayerId | null, reason: string) => void): void;
   /** The duel is replaying saved decisions (no animation yet). */

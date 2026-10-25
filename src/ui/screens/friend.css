@@ -483,3 +483,12 @@
   gap: 8px;
   justify-content: flex-end;
 }
+.fr-offline-actions {
+  flex-wrap: wrap;
+}
+.fr-offline-hint {
+  margin: 0;
+  color: var(--muted, #8f9095);
+  font-size: 13px;
+  line-height: 1.35;
+}
