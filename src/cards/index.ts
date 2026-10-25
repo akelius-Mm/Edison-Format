@@ -26,6 +26,7 @@ import './sets/lodt';
 import './sets/glas';
 import './sets/csoc';
 import './sets/tdgs';
+import './sets/archetype-extras';
 import { applyBanlist } from './banlist';
 
 applyBanlist();
