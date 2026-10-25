@@ -1135,7 +1135,8 @@ class DuelScreen implements HumanUI {
   private pileEffectNote(c: CardInstance): string | null {
     if (this.spectator || c.owner !== this.me || (c.location !== 'grave' && c.location !== 'banished')) return null;
     const g = this.game;
-    const effs = (c.data.effects ?? []).filter((ef) => ef.kind !== 'continuous' && ef.kind !== 'activate' && (ef.range ?? []).includes(c.location));
+    // rules listeners that watch every zone (their range includes 'deck') are not Graveyard effects
+    const effs = (c.data.effects ?? []).filter((ef) => ef.kind !== 'continuous' && ef.kind !== 'activate' && (ef.range ?? []).includes(c.location) && !(ef.range ?? []).includes('deck'));
     if (!effs.length) return null;
     const ef = effs[0];
     if (effs.every((e) => e.opt && g.isOptUsed(g.optKey(c, e, (c.data.effects ?? []).indexOf(e), this.me)))) return 'Already used this turn.';
