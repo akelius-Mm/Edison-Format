@@ -108,6 +108,10 @@ self.addEventListener('fetch', (e) => {
   // The version check must always reach the network.
   if (url.origin === self.location.origin && url.pathname.endsWith('/version.json')) return;
 
+  // Play a friend: PeerJS signalling (id requests, long-polling) must never be cached or answered
+  // from the cache, whichever server it runs on. WebRTC and WebSocket traffic never reaches here.
+  if (url.pathname.includes('/peerjs/') || (url.searchParams.has('ts') && url.pathname.endsWith('/id'))) return;
+
   // Pages: network first (skipping the browser cache) so updates arrive; cache as fallback offline.
   if (req.mode === 'navigate') {
     e.respondWith(

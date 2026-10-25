@@ -10,6 +10,8 @@ import { confirmDialog, h, segmented, toast, toggle } from './dom';
 import { frame, go, type Screen } from './nav';
 import { getProfile, resetAllData } from './store';
 import { loadActiveTournament, currentRoundLabel } from '../../tournament/tournament';
+// Play a friend: connection server (advanced).
+import { onlineSettingsGroup } from './friend';
 
 export function settingsScreen(): Screen {
   const s = getSettings();
@@ -114,6 +116,7 @@ export function settingsScreen(): Screen {
       iosNav('Audio credits', showAudioCredits, { icon: 'music' }),
     ]),
     yourMusicGroup(),
+    onlineSettingsGroup(),
     iosGroup(
       'Data',
       [
