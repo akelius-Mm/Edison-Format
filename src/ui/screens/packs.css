@@ -1723,3 +1723,13 @@ body.po-open .tabbar {
   opacity: 0;
   transition: opacity 0.2s ease;
 }
+
+/* "Shop shows": the 2010 shelf or every complete Edison-legal set */
+.ps-shows {
+  margin: 0 0 10px;
+}
+.ps-shows-note {
+  margin: -2px 4px 10px;
+  font: 400 13px/1.45 var(--font);
+  color: var(--muted);
+}

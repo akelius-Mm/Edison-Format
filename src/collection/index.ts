@@ -119,12 +119,12 @@ function S(): CollectionState {
 
 /** Unopened packs from sets no longer on the shelf (older boosters, given before the Edison-era shelf) become current boosters. */
 function swapOffShelfPacks(s: CollectionState) {
-  const core = playableSets().filter((p) => p.available && p.data.format.startsWith('core'));
+  const core = playableSets().filter((p) => p.onShelf && p.data.format.startsWith('core'));
   if (!core.length) return;
   let i = 0;
   for (const [code, n] of Object.entries(s.packs)) {
     const set = playableSet(code);
-    if (set?.available || !n) continue;
+    if (set?.openable || !n) continue;
     delete s.packs[code];
     for (let k = 0; k < n; k++, i++) {
       const to = core[i % core.length].code;
@@ -378,10 +378,10 @@ export function convertExtras(apply = true): { copies: number; dp: number } {
 
 // ------------------------------------------------------------------ prizes & rewards
 
-/** Core booster sets that can currently be opened (prize packs default to these). */
+/** Core boosters on the 2010 shelf (prize packs default to these, whatever the shop shows). */
 function prizeSets(): string[] {
   return playableSets()
-    .filter((p) => p.available && (p.data.format === 'core' || p.data.format === 'core-tshd'))
+    .filter((p) => p.onShelf && (p.data.format === 'core' || p.data.format === 'core-tshd'))
     .map((p) => p.code);
 }
 
@@ -478,7 +478,7 @@ export function rewardForDuel(o: { won: boolean; mode: DuelMode; place?: number;
 }
 
 function turboSet(s: CollectionState): string | undefined {
-  const t = playableSets().filter((p) => p.available && p.data.format === 'turbo');
+  const t = playableSets().filter((p) => p.onShelf && p.data.format === 'turbo');
   if (!t.length) return undefined;
   return t[mixSeed(s.seed ^ 0x165667b1, s.rolls++) % t.length].code;
 }
@@ -503,7 +503,7 @@ function giveStarter(s: CollectionState) {
     for (const c of structureDeckCards(d)) addCard(s, c.name, c.rarity, c.copies * STARTER.copiesEach);
   }
   // Mostly the current boosters (3 each), then Hidden Arsenal and a Turbo Pack, up to 12.
-  const avail = playableSets().filter((p) => p.available);
+  const avail = playableSets().filter((p) => p.onShelf);
   const core = avail.filter((p) => p.data.format.startsWith('core'));
   const ha = avail.filter((p) => p.data.format === 'hidden-arsenal');
   const order = [...core, ...core, ...core, ...ha, ...ha, ...avail.filter((p) => p.data.format === 'turbo')];

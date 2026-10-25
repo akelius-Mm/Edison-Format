@@ -3,6 +3,7 @@ import type { Difficulty } from '../../ai/ai';
 import { clearOfficialArtCache } from '../cards/officialArt';
 import { DEFAULT_SETTINGS, getSettings, updateSettings, type Settings } from '../settings';
 import { iosAction, iosGroup, iosNav, iosRow } from './components';
+import { packsDraftSettingsGroup } from './draftSetup';
 import { confirmDialog, h, segmented, toast, toggle } from './dom';
 import { frame, go, type Screen } from './nav';
 import { getProfile, resetAllData } from './store';
@@ -45,6 +46,7 @@ export function settingsScreen(): Screen {
       iosNav('Sleeves & Playmat', () => go('customize'), { icon: 'palette' }),
       iosNav('How to Play & Banlist', () => go('rules'), { icon: 'book' }),
     ]),
+    packsDraftSettingsGroup(),
     iosGroup(
       'Gameplay',
       [

@@ -54,8 +54,16 @@ export interface PlayableSet {
   printed: number;
   /** Printed cards that aren't implemented yet. */
   leftOut: number;
-  /** Enough playable cards to make opening a pack worthwhile. */
-  available: boolean;
+  /** Released by the Edison cut-off (TSHD and later never are). */
+  legal: boolean;
+  /** Complete enough to sell and draft: at least READY_SHARE of its printed cards are playable. */
+  ready: boolean;
+  /** On the spring-2010 shelf (EDISON_SHELF) with enough playable cards. Starter gifts and prizes use these. */
+  onShelf: boolean;
+  /** Sold in the shop: the shelf, plus complete older legal sets when "Shop shows" is "All Edison-legal sets". */
+  readonly available: boolean;
+  /** Unopened packs of this set can be kept and opened (shelf, or any complete legal set). */
+  readonly openable: boolean;
 }
 
 /** A set needs at least this many playable cards before its packs are offered. */
@@ -67,6 +75,47 @@ export const MIN_PLAYABLE = 5;
  * The Shining Darkness, Gold Series 3 and Turbo Pack 3 came out after Edison.
  */
 export const EDISON_SHELF = new Set(['ABPF', 'SOVR', 'ANPR', 'HA01', 'TU01', 'TU02']);
+
+/** Last day of the Edison Format (the April 2010 list); later products are never offered. */
+export const EDISON_CUTOFF = '2010-04-24';
+
+/** A set counts as complete (shop and draft) once this share of its printed cards is playable. */
+export const READY_SHARE = 0.85;
+
+export const isEdisonLegalDate = (iso: string) => iso <= EDISON_CUTOFF;
+
+// ------------------------------------------------------------------ shop preference
+
+/** What the Packs shop sells: the spring-2010 shelf (default) or every complete Edison-legal set. */
+export type ShopShows = 'shelf' | 'legal';
+const SHOP_KEY = 'edison.shop.shows.v1';
+let shopPref: ShopShows | null = null;
+
+export function shopShows(): ShopShows {
+  if (shopPref) return shopPref;
+  try {
+    shopPref = typeof localStorage !== 'undefined' && localStorage.getItem(SHOP_KEY) === 'legal' ? 'legal' : 'shelf';
+  } catch {
+    shopPref = 'shelf';
+  }
+  return shopPref;
+}
+
+export function setShopShows(v: ShopShows) {
+  shopPref = v;
+  try {
+    if (v === 'legal') localStorage.setItem(SHOP_KEY, 'legal');
+    else localStorage.removeItem(SHOP_KEY);
+  } catch {
+    /* storage unavailable: keep for this session */
+  }
+}
+
+/** Complete Edison-legal sets that are not on the 2010 shelf (what "All Edison-legal sets" adds). */
+export function olderLegalSets(): { ready: PlayableSet[]; soon: PlayableSet[] } {
+  const older = playableSets().filter((s) => s.legal && !s.onShelf && s.data.format !== 'turbo');
+  return { ready: older.filter((s) => s.ready), soon: older.filter((s) => !s.ready) };
+}
 
 let cache: Map<string, PlayableSet> | null = null;
 
@@ -83,6 +132,10 @@ function build(): Map<string, PlayableSet> {
       rarities.set(name, [...(rarities.get(name) ?? []), ...rs]);
       for (const r of rs) (pools[r] ??= []).push(name);
     }
+    const enough = playable.length >= MIN_PLAYABLE;
+    const legal = isEdisonLegalDate(data.released);
+    const ready = legal && enough && playable.length / Math.max(1, data.cards.length) >= READY_SHARE;
+    const onShelf = EDISON_SHELF.has(data.code) && enough;
     m.set(data.code, {
       data,
       code: data.code,
@@ -91,7 +144,15 @@ function build(): Map<string, PlayableSet> {
       rarities,
       printed: data.cards.length,
       leftOut: data.cards.length - playable.length,
-      available: EDISON_SHELF.has(data.code) && playable.length >= MIN_PLAYABLE,
+      legal,
+      ready,
+      onShelf,
+      get available() {
+        return onShelf || (ready && shopShows() === 'legal');
+      },
+      get openable() {
+        return onShelf || ready;
+      },
     });
   }
   return m;

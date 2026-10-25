@@ -7,7 +7,7 @@ import type { CardData } from '../engine/card';
 import { Rng } from '../engine/rng';
 import { generateSetPack } from '../collection/draft';
 import { EDISON_PACK } from './sets';
-import { cardPower, draftPool, isExtraDeck, rarityOf, rarityRank, type Rarity } from './cards';
+import { cardPower, draftPool, edisonPoolFor, isExtraDeck, rarityOf, rarityRank, RARITIES, type Rarity } from './cards';
 
 export const PACK_SIZE = 15;
 
@@ -22,13 +22,15 @@ interface Buckets {
   extra: CardData[];
   all: Record<Rarity, CardData[]>;
 }
-let buckets: Buckets | null = null;
+const bucketCache = new Map<string, Buckets>();
 
-function getBuckets(): Buckets {
-  if (buckets) return buckets;
+function getBuckets(sets: string[] | null = null): Buckets {
+  const key = sets ? [...sets].sort().join(',') : '*';
+  const hit = bucketCache.get(key);
+  if (hit) return hit;
   const empty = () => ({ C: [], R: [], SR: [], UR: [], ScR: [] }) as Record<Rarity, CardData[]>;
   const b: Buckets = { main: empty(), extra: [], all: empty() };
-  for (const c of draftPool()) {
+  for (const c of edisonPoolFor(sets)) {
     const r = rarityOf(c);
     b.all[r].push(c);
     if (isExtraDeck(c)) b.extra.push(c);
@@ -41,7 +43,16 @@ function getBuckets(): Buckets {
     b.all[r].sort(byName);
   }
   b.extra.sort(byName);
-  buckets = b;
+  // A pool limited to a few sets can miss a rarity: borrow the nearest one that has cards.
+  for (const group of [b.main, b.all]) {
+    const filled = RARITIES.filter((r) => group[r].length);
+    for (const r of RARITIES) {
+      if (group[r].length || !filled.length) continue;
+      const near = [...filled].sort((x, y) => Math.abs(rarityRank(x) - rarityRank(r)) - Math.abs(rarityRank(y) - rarityRank(r)) || rarityRank(x) - rarityRank(y))[0];
+      group[r] = group[near];
+    }
+  }
+  bucketCache.set(key, b);
   return b;
 }
 
@@ -65,9 +76,12 @@ function pickExtra(rng: Rng, list: CardData[], taken: Set<string>): CardData {
   return list[list.length - 1];
 }
 
-/** Generate one pack. Cards are ordered commons first, the best card last (reveal order). */
-export function generatePack(rng: Rng): PackCard[] {
-  const b = getBuckets();
+/**
+ * Generate one Edison Pack, optionally limited to cards printed in `sets`. Cards are ordered
+ * commons first, the best card last (reveal order).
+ */
+export function generatePack(rng: Rng, sets: string[] | null = null): PackCard[] {
+  const b = getBuckets(sets);
   const taken = new Set<string>();
   const out: PackCard[] = [];
   const add = (c: CardData, r: Rarity = rarityOf(c)) => {
@@ -96,20 +110,47 @@ function draftPoolCard(id: string): CardData {
 }
 
 /**
+ * A 15-card "draft booster" of a real set: one printed pack plus commons from further packs of
+ * the same set (distinct while the set allows), commons first.
+ */
+export function generateDraftBooster(code: string, rng: Rng, size = 15): PackCard[] {
+  const pack = generateSetPack(code, rng);
+  if (!pack.length) return pack;
+  const have = new Set(pack.map((p) => p.id));
+  for (let tries = 0; pack.length < size && tries < 12; tries++) {
+    for (const p of generateSetPack(code, rng)) {
+      if (pack.length >= size) break;
+      if (p.r !== 'C' || (have.has(p.id) && tries < 8)) continue;
+      have.add(p.id);
+      pack.push(p);
+    }
+  }
+  return pack.map((p, i) => [p, i] as const).sort((a, b) => rarityRank(a[0].r) - rarityRank(b[0].r) || a[1] - b[1]).map(([p]) => p);
+}
+
+export interface EventPackOptions {
+  /** Cards in a real booster: 9 as printed, or 15 (draft booster). */
+  realSize?: 9 | 15;
+  /** Limit the Edison Pack to cards from these era sets (null = the whole Edison pool). */
+  edisonSets?: string[] | null;
+}
+
+/**
  * Packs for a whole event: [round][seat]. `plan` lists the booster for each round: the Edison
- * Pack (EDISON_PACK) or a real set code (9-card packs with the set's printed rarities).
+ * Pack (EDISON_PACK) or a real set code (packs with the set's printed rarities).
  * A number means that many Edison Packs.
  */
-export function generateEventPacks(seed: number, plan: string[] | number, seats: number): PackCard[][][] {
+export function generateEventPacks(seed: number, plan: string[] | number, seats: number, opts: EventPackOptions = {}): PackCard[][][] {
   const rounds = typeof plan === 'number' ? Array.from({ length: plan }, () => EDISON_PACK) : plan;
   const rng = new Rng(seed ^ 0x5bd1e995);
+  const edisonSets = opts.edisonSets?.length ? opts.edisonSets : null;
   const out: PackCard[][][] = [];
   for (const code of rounds) {
     const row: PackCard[][] = [];
     for (let s = 0; s < seats; s++) {
-      let pack = code === EDISON_PACK ? [] : generateSetPack(code, rng);
+      let pack = code === EDISON_PACK ? [] : opts.realSize === 15 ? generateDraftBooster(code, rng) : generateSetPack(code, rng);
       // Unknown or empty set: fall back to an Edison Pack so the event can still run.
-      if (!pack.length) pack = generatePack(rng);
+      if (!pack.length) pack = generatePack(rng, edisonSets);
       row.push(pack);
     }
     out.push(row);
