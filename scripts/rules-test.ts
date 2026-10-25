@@ -8,6 +8,7 @@ import type { Action, Activation, PlayerController, ResponseRequest, SelectReque
 import { Game, GameOver } from '../src/engine/game';
 import type { BattlePos, Location, PlayerId } from '../src/engine/types';
 import { ensureAnprPatches } from '../src/cards/sets/anpr';
+import { ensureRgbtPatches } from '../src/cards/sets/rgbt';
 
 const T = {
   brute: findCard('Rules Test Brute') ?? normal('Rules Test Brute', 'EARTH', 'Warrior', 4, 1800, 1000),
@@ -859,6 +860,7 @@ function eq(a: unknown, b: unknown, msg: string) {
     eq(g.getAtk(cvd), 0, '? ATK outside damage calculation');
   });
   await abpfTests();
+  await rgbtTests();
 
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
@@ -1090,5 +1092,295 @@ async function abpfTests() {
     await g.performAction(0, { type: 'summon', card: w });
     eq(top.location, 'grave', 'drawn Spell sent to the GY');
     eq(w.location, 'grave', 'Witch destroyed');
+  });
+}
+
+// ---------------------------------------------------------------- Raging Battle (RGBT)
+
+async function rgbtTests() {
+  const pebble = findCard('Rules Test Pebble') ?? normal('Rules Test Pebble', 'EARTH', 'Rock', 2, 400, 400);
+  const CORE = "Iron Core of Koa'ki Meiru";
+
+  await test("RGBT: Iron Core of Koa'ki Meiru — replaces the draw from the GY, then pays a Koa'ki Meiru upkeep", async () => {
+    const { g, place } = setup();
+    g.turnPlayer = 1;
+    g.turn = 3;
+    const core = place(0, cardByName(CORE), 'grave');
+    const crusader = place(0, cardByName("Koa'ki Meiru Crusader"), 'mzone');
+    const deckBefore = g.players[0].deck.length;
+    await g.playTurn();
+    eq(g.players[0].deck.length, deckBefore, 'no normal draw');
+    eq(crusader.location, 'mzone', 'Crusader kept');
+    eq(core.location, 'grave', 'Iron Core sent for the upkeep');
+  });
+
+  await test("RGBT: Iron Core works with Boulder, Core Compression and Koa'ki Meiru Tornado", async () => {
+    const a = setup();
+    const boulder = a.place(1, cardByName("Koa'ki Meiru Boulder"), 'mzone');
+    const deckCore = a.place(1, cardByName(CORE), 'deck');
+    await a.g.conductAttack(0, a.place(0, T.brute, 'mzone'));
+    eq(boulder.location, 'grave', 'Boulder destroyed');
+    eq(deckCore.location, 'hand', 'Boulder searched Iron Core');
+
+    const b = setup();
+    const cc = b.place(0, cardByName('Core Compression'), 'hand');
+    const core = b.place(0, cardByName(CORE), 'hand');
+    const drago = b.place(0, cardByName("Koa'ki Meiru Drago"), 'hand');
+    await activateCard(b.g, 0, cc);
+    eq(drago.location, 'grave', "Koa'ki Meiru discarded");
+    eq(core.location, 'hand', 'Iron Core only revealed');
+    eq(b.g.players[0].hand.length, 3, 'drew 2');
+
+    const c = setup();
+    const tornado = c.place(0, cardByName("Koa'ki Meiru Tornado"), 'mzone');
+    const core2 = c.place(0, cardByName(CORE), 'hand');
+    const ss = c.place(1, T.brute, 'mzone');
+    ss.summonMethod = 'special';
+    await activateCard(c.g, 0, tornado);
+    eq(ss.location, 'grave', 'Special Summoned monster destroyed');
+    const deck = c.g.players[0].deck;
+    eq(deck[deck.length - 1], core2, 'Iron Core on top of the Deck');
+  });
+
+  await test("RGBT: Iron Core cannot be activated; Koa'ki Meiru Valafar — 1-Tribute Summon, immune to Trap destruction", async () => {
+    const { g, place } = setup();
+    const core = place(0, cardByName(CORE), 'hand');
+    eq(g.getActivations(0, { open: true }).some((a) => a.card === core), false, 'Iron Core has no activation');
+    const ice = place(0, cardByName("Koa'ki Meiru Ice"), 'mzone');
+    const val = place(0, cardByName("Koa'ki Meiru Valafar"), 'hand');
+    eq(g.canNormalSummon(0, val), true, "can Tribute Summon with 1 Koa'ki Meiru");
+    await g.performAction(0, { type: 'summon', card: val });
+    eq(val.location, 'mzone', 'Valafar summoned');
+    eq(ice.location, 'grave', 'Ice tributed');
+    const mf = place(1, cardByName('Mirror Force'), 'szone', { faceUp: false });
+    await g.destroy([val], 'effect', 1, mf);
+    eq(val.location, 'mzone', 'not destroyed by a Trap');
+    const dh = place(1, cardByName('Dark Hole'), 'hand');
+    await g.destroy([val], 'effect', 1, dh);
+    eq(val.location, 'grave', 'destroyed by a Spell');
+  });
+
+  await test("RGBT: Koa'ki Meiru Drago — no LIGHT/DARK Special Summons; G.B. Hunter — field cards stay out of the Deck", async () => {
+    const { g, place } = setup();
+    ensureRgbtPatches(g);
+    place(0, cardByName("Koa'ki Meiru Drago"), 'mzone');
+    const dark = place(0, T.dark, 'grave');
+    const earth = place(0, T.brute, 'grave');
+    eq((await g.specialSummon([dark], 0, { pos: 'atk' })).length, 0, 'DARK monster not summoned');
+    eq((await g.specialSummon([earth], 0, { pos: 'atk' })).length, 1, 'EARTH monster summoned');
+    place(1, cardByName('G.B. Hunter'), 'mzone');
+    const victim = place(1, T.wall, 'mzone');
+    const inHand = place(1, T.wall, 'hand');
+    await g.toDeck([victim, inHand], 'effect', 'shuffle', 0);
+    eq(victim.location, 'mzone', 'field card not returned');
+    eq(inHand.location, 'deck', 'hand card returned');
+  });
+
+  await test('RGBT: Grave of the Super Ancient Organism — Special Summoned Level 6+ monsters cannot attack or activate effects', async () => {
+    const { g, place } = setup();
+    ensureRgbtPatches(g);
+    const st = place(1, cardByName('Grave of the Super Ancient Organism'), 'szone', { faceUp: true });
+    st.activeOnField = true;
+    const gig = place(0, cardByName('Master Gig'), 'mzone');
+    place(1, T.wall, 'mzone');
+    gig.summonMethod = 'special';
+    eq(g.canAttack(gig), false, 'cannot attack');
+    eq(g.getActivations(0, { open: true }).some((a) => a.card === gig), false, 'cannot activate');
+    gig.summonMethod = 'tribute';
+    eq(g.canAttack(gig), true, 'Tribute Summoned one can attack');
+    eq(g.getActivations(0, { open: true }).some((a) => a.card === gig), true, 'and activate');
+  });
+
+  await test("RGBT: Fake Feather copies Mirror Force from the opponent's GY", async () => {
+    const { g, c1, place } = setup();
+    const a = place(0, T.brute, 'mzone');
+    const b = place(0, T.dark, 'mzone');
+    place(0, cardByName('Mirror Force'), 'grave');
+    const ff = place(1, cardByName('Fake Feather'), 'szone', { faceUp: false });
+    const bw = place(1, cardByName('Blackwing - Gale the Whirlwind'), 'hand');
+    c1.respond = respondWith('Fake Feather');
+    await g.conductAttack(0, a);
+    eq(bw.location, 'grave', 'Blackwing sent as cost');
+    eq(a.location, 'grave', 'attacker destroyed');
+    eq(b.location, 'grave', 'other attacker destroyed');
+    eq(ff.location, 'grave', 'Fake Feather to GY');
+    eq(g.players[1].lp, 8000, 'no damage');
+  });
+
+  await test('RGBT: Crimson Fire doubles and reflects burn; Spell of Pain reflects it', async () => {
+    const { g, c1, place } = setup();
+    ensureRgbtPatches(g);
+    place(1, cardByName('Red Dragon Archfiend'), 'mzone');
+    place(1, cardByName('Crimson Fire'), 'szone', { faceUp: false });
+    c1.respond = respondWith('Crimson Fire');
+    await activateCard(g, 0, place(0, cardByName('Ookazi'), 'hand'));
+    eq(g.players[1].lp, 8000, 'no damage to the Crimson Fire player');
+    eq(g.players[0].lp, 8000 - 1600, 'twice the damage reflected');
+    c1.respond = respondWith('Spell of Pain');
+    place(1, cardByName('Spell of Pain'), 'szone', { faceUp: false });
+    await activateCard(g, 0, place(0, cardByName('Ookazi'), 'hand'));
+    eq(g.players[1].lp, 8000, 'Spell of Pain: no damage');
+    eq(g.players[0].lp, 8000 - 1600 - 800, 'damage reflected');
+  });
+
+  await test('RGBT: Hardened Armed Dragon — the Level 7+ monster Tributed with it cannot be destroyed by card effects', async () => {
+    const { g, place } = setup();
+    place(0, cardByName('Hardened Armed Dragon'), 'mzone');
+    place(0, T.brute, 'mzone');
+    const giant = place(0, T.giant, 'hand');
+    await g.performAction(0, { type: 'summon', card: giant });
+    eq(giant.location, 'mzone', 'Tribute Summoned');
+    await g.destroy([giant], 'effect', 1);
+    eq(giant.location, 'mzone', 'not destroyed by a card effect');
+  });
+
+  await test('RGBT: Emissary from Pandemonium — 1 Tribute: Level 5, 1300/900; Level Warrior Levels', async () => {
+    const { g, place } = setup();
+    place(0, T.brute, 'mzone');
+    const em = place(0, cardByName('Emissary from Pandemonium'), 'hand');
+    eq(g.canNormalSummon(0, em), true, 'summonable with 1 Tribute');
+    await g.performAction(0, { type: 'summon', card: em });
+    eq(em.location, 'mzone', 'summoned');
+    eq(g.getLevel(em), 5, 'Level 5');
+    eq(g.getAtk(em), 1300, 'ATK halved');
+    eq(g.getDef(em), 900, 'DEF halved');
+
+    const b = setup();
+    const lw = b.place(0, cardByName('Level Warrior'), 'hand');
+    await b.g.performAction(0, { type: 'summon', card: lw });
+    eq(b.g.getLevel(lw), 2, 'Normal Summoned onto an empty field: Level 2');
+    const c = setup();
+    c.place(1, T.brute, 'mzone');
+    const lw2 = c.place(0, cardByName('Level Warrior'), 'hand');
+    const proc = c.g.legalMainActions(0).find((x) => x.type === 'proc' && x.card === lw2)!;
+    await c.g.performAction(0, proc);
+    eq(lw2.location, 'mzone', 'Special Summoned');
+    eq(c.g.getLevel(lw2), 4, 'Level 4');
+  });
+
+  await test('RGBT: Mermaid Archer equips a Level 3 monster (+800) and destroys it instead', async () => {
+    const { g, place } = setup();
+    const ma = place(0, cardByName('Mermaid Archer'), 'mzone');
+    const small = place(0, cardByName('Spined Gillman'), 'mzone');
+    await activateCard(g, 0, ma);
+    eq(small.location, 'szone', 'equipped');
+    eq(g.getAtk(ma), 2000, '1200 + 800');
+    await g.destroy([ma], 'effect', 1);
+    eq(ma.location, 'mzone', 'Archer survives');
+    eq(small.location, 'grave', 'equipped monster destroyed instead');
+  });
+
+  await test('RGBT: Sphere of Chaos survives one battle per turn', async () => {
+    const { g, place } = setup();
+    const sp = place(1, cardByName('Sphere of Chaos'), 'mzone', { pos: 'def' });
+    const a1 = place(0, T.brute, 'mzone');
+    const a2 = place(0, T.brute, 'mzone');
+    await g.conductAttack(0, a1);
+    eq(sp.location, 'mzone', 'first battle: survives');
+    await g.conductAttack(0, a2);
+    eq(sp.location, 'grave', 'second battle: destroyed');
+  });
+
+  await test('RGBT: Torapart — Warrior Synchros only; their attacks cannot be answered with Traps', async () => {
+    const { g, c1, place } = setup();
+    place(0, cardByName('Torapart'), 'mzone');
+    place(0, T.brute, 'mzone');
+    const goyo = place(0, cardByName('Gaia Knight, the Force of Earth'), 'extra');
+    eq(g.canSynchro(0, goyo), true, 'Gaia Knight (Warrior) can use Torapart');
+    await g.performAction(0, { type: 'synchro', card: goyo });
+    eq(goyo.location, 'mzone', 'Gaia Knight summoned');
+    place(1, T.wall, 'mzone', { pos: 'def' });
+    const mf = place(1, cardByName('Mirror Force'), 'szone', { faceUp: false });
+    c1.respond = respondWith('Mirror Force');
+    await g.conductAttack(0, goyo);
+    eq(mf.location, 'szone', 'Mirror Force could not be activated');
+    eq(goyo.location, 'mzone', 'Gaia Knight survives');
+
+    const b = setup();
+    b.place(0, cardByName('Torapart'), 'mzone');
+    const gish = b.place(0, cardByName('Sea Dragon Lord Gishilnodon'), 'extra');
+    b.place(0, cardByName('Spined Gillman'), 'mzone');
+    eq(b.g.canSynchro(0, gish), false, 'not for a non-Warrior Synchro');
+  });
+
+  await test('RGBT: Natural Tune makes a Normal Monster a Tuner; Sea Dragon Lord Gishilnodon becomes 3000 ATK', async () => {
+    const { g, place } = setup();
+    const brute = place(0, T.brute, 'mzone');
+    const peb = place(0, pebble, 'mzone');
+    const goyo = g.players[0].extra[0];
+    eq(g.canSynchro(0, goyo), false, 'no Tuner yet');
+    await activateCard(g, 0, place(0, cardByName('Natural Tune'), 'hand'));
+    eq([brute, peb].filter((c) => c.isTuner).length, 1, 'one Normal Monster treated as a Tuner');
+    eq(g.canSynchro(0, goyo), true, 'Synchro now possible');
+
+    const b = setup();
+    const gish = b.place(0, cardByName('Sea Dragon Lord Gishilnodon'), 'mzone');
+    const small = b.place(1, pebble, 'mzone');
+    await b.g.destroy([small], 'effect', 0);
+    await b.g.processTriggers(false);
+    eq(b.g.getAtk(gish), 3000, 'ATK becomes 3000');
+  });
+
+  await test("RGBT: Koa'ki Meiru Doom negates a DARK monster's effect in the Main Phase", async () => {
+    const { g, place } = setup();
+    place(1, cardByName("Koa'ki Meiru Doom"), 'mzone');
+    const thorn = place(0, cardByName('Evil Thorn'), 'mzone');
+    await activateCard(g, 0, thorn);
+    eq(thorn.location, 'grave', 'Evil Thorn Tributed (cost)');
+    eq(g.players[1].lp, 8000, 'its 300 damage was negated');
+  });
+
+  await test('RGBT: Wicked Rebirth — Synchro revived with negated effects, destroyed with the Trap', async () => {
+    const { g, place } = setup();
+    const goyo = g.players[0].extra[0];
+    g.rawMove(goyo, 'grave');
+    goyo.properlySummoned = true;
+    const wr = place(0, cardByName('Wicked Rebirth'), 'szone', { faceUp: false });
+    await activateCard(g, 0, wr);
+    eq(goyo.location, 'mzone', 'Synchro revived');
+    eq(g.players[0].lp, 7200, '800 LP paid');
+    eq(g.isNegated(goyo), true, 'effects negated');
+    eq(g.canAttack(goyo), false, 'cannot attack this turn');
+    await g.destroy([wr], 'effect', 1);
+    eq(goyo.location, 'grave', 'destroyed with Wicked Rebirth');
+  });
+
+  await test('RGBT: Miracle Locus — +1000, a second attack only on monsters, no battle damage to the opponent', async () => {
+    const { g, place } = setup();
+    ensureRgbtPatches(g);
+    const a = place(0, T.brute, 'mzone');
+    place(1, T.wall, 'mzone');
+    const ml = place(0, cardByName('Miracle Locus'), 'szone', { faceUp: false });
+    await activateCard(g, 0, ml);
+    eq(g.getAtk(a), 2800, '+1000 ATK');
+    eq(g.players[1].hand.length, 1, 'opponent drew 1');
+    await g.conductAttack(0, a);
+    eq(g.players[1].lp, 8000, 'no battle damage');
+    eq(g.canAttack(a), true, 'can attack again');
+    eq(g.attackTargets(a).direct, false, 'second attack cannot be direct');
+  });
+
+  await test('RGBT: Rockstone Warrior — no battle damage; 2 Rockstone Tokens when destroyed attacking', async () => {
+    const { g, place } = setup();
+    const rw = place(0, cardByName('Rockstone Warrior'), 'mzone');
+    place(1, T.giant, 'mzone');
+    await g.conductAttack(0, rw);
+    eq(rw.location, 'grave', 'destroyed');
+    eq(g.players[0].lp, 8000, 'no battle damage');
+    const toks = g.monsters(0).filter((c) => c.name === 'Rockstone Token');
+    eq(toks.length, 2, '2 Tokens');
+    eq(g.tributeCandidates(0).filter((c) => toks.includes(c)).length, 0, 'cannot be Tributed for a Tribute Summon');
+  });
+
+  await test('RGBT: Delta Crow - Anti Reverse from the hand with exactly 3 Blackwings', async () => {
+    const { g, place } = setup();
+    const dc = place(0, cardByName('Delta Crow - Anti Reverse'), 'hand');
+    const set1 = place(1, cardByName('Mirror Force'), 'szone', { faceUp: false });
+    place(0, cardByName('Blackwing - Gale the Whirlwind'), 'mzone');
+    place(0, cardByName('Blackwing - Bora the Spear'), 'mzone');
+    eq(g.getActivations(0, { open: true }).some((a) => a.card === dc), false, 'not from the hand with 2 Blackwings');
+    place(0, cardByName('Blackwing - Shura the Blue Flame'), 'mzone');
+    await activateCard(g, 0, dc);
+    eq(set1.location, 'grave', 'Set card destroyed');
   });
 }
