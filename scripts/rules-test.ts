@@ -387,6 +387,66 @@ function eq(a: unknown, b: unknown, msg: string) {
     eq(next.location, 'hand', 'Dragnov searched');
   });
 
+  // ---------------------------------------------------------------- SJC Edison Top 16 extras (tournament-extras2.ts)
+  await test('Extras2: Proto-Cyber Dragon is named "Cyber Dragon" only while face-up on the field', async () => {
+    const { g, place } = setup();
+    const proto = place(0, cardByName('Proto-Cyber Dragon'), 'hand');
+    await g.specialSummon([proto], 0, { pos: 'atk' });
+    eq(proto.name, 'Cyber Dragon', 'name on the field');
+    await g.destroy([proto], 'effect');
+    eq(proto.name, 'Proto-Cyber Dragon', 'name in the GY');
+  });
+
+  await test('Extras2: Machina Gearframe equips to Machina Fortress and is destroyed by battle instead of it', async () => {
+    const { g, place } = setup();
+    const fortress = place(0, cardByName('Machina Fortress'), 'mzone');
+    const gear = place(0, cardByName('Machina Gearframe'), 'mzone');
+    await activateCard(g, 0, gear);
+    eq(gear.location, 'szone', 'Gearframe in the S/T zone');
+    eq(gear.equippedTo, fortress.uid, 'equipped to Fortress');
+    const giant = findCard('Rules Test Giant') ?? normal('Rules Test Giant', 'EARTH', 'Warrior', 8, 3000, 2500);
+    const a = place(1, giant, 'mzone');
+    g.turnPlayer = 1;
+    await g.conductAttack(1, a);
+    eq(fortress.location, 'mzone', 'Fortress survives');
+    eq(gear.location, 'grave', 'Gearframe destroyed instead');
+    eq(g.players[0].lp, 8000 - 500, 'battle damage still applies');
+  });
+
+  await test('Extras2: Necrovalley negates Monster Reborn targeting a monster in the GY', async () => {
+    const { g, place } = setup();
+    const valley = place(0, cardByName('Necrovalley'), 'fzone', { faceUp: true });
+    valley.activeOnField = true;
+    const dead = place(1, T.brute, 'grave');
+    const reborn = place(1, cardByName('Monster Reborn'), 'hand');
+    g.turnPlayer = 1;
+    await activateCard(g, 1, reborn);
+    eq(dead.location, 'grave', 'target stays in the GY');
+    eq(reborn.location, 'grave', 'Monster Reborn used up');
+  });
+
+  await test('Extras2: Gravekeeper\'s Guard FLIP returns an opponent\'s monster to the hand; Necrovalley gives +500', async () => {
+    const { g, place } = setup();
+    const guard = place(0, cardByName("Gravekeeper's Guard"), 'mzone', { faceUp: false, pos: 'def' });
+    const opp = place(1, T.brute, 'mzone');
+    await g.performAction(0, { type: 'flip', card: guard });
+    eq(opp.location, 'hand', 'opponent monster returned');
+    const valley = place(0, cardByName('Necrovalley'), 'fzone', { faceUp: true });
+    valley.activeOnField = true;
+    eq(g.getAtk(guard), 1500, 'Guard gains 500 ATK');
+  });
+
+  await test('Extras2: Tempest Magician removes every Spell Counter to burn 500 each', async () => {
+    const { g, place } = setup();
+    const tempest = place(0, cardByName('Tempest Magician'), 'mzone');
+    tempest.counters.spell = 2;
+    const arcanite = place(1, cardByName('Arcanite Magician'), 'mzone');
+    arcanite.counters.spell = 1;
+    await activateCard(g, 0, tempest);
+    eq(g.players[1].lp, 8000 - 1500, '3 counters, 1500 damage');
+    eq(arcanite.counters.spell, 0, 'opponent counters removed too');
+  });
+
   await test('Deck out loses the duel', async () => {
     const { g } = setup();
     g.players[0].deck.length = 0;
@@ -605,6 +665,430 @@ function eq(a: unknown, b: unknown, msg: string) {
     eq(g.players[1].lp, 8000 - 1300, 'damage uses halved ATK');
   });
 
+  // ---------------------------------------------------------------- SOVR (Stardust Overdrive)
+  const activate = async (g: Game, p: PlayerId, card: CardInstance) => {
+    const act = g.getActivations(p, { open: true }).find((a) => a.card === card);
+    if (!act) throw new Error(`${card.name} cannot be activated`);
+    await g.performAction(p, { type: 'activate', card, act });
+  };
+
+  await test('SOVR: Reptilianne Medusa sets ATK to 0 until the monster is flipped face-down', async () => {
+    const { g, place } = setup();
+    const med = place(0, cardByName('Reptilianne Medusa'), 'mzone');
+    place(0, T.wall, 'hand');
+    const v = place(1, T.brute, 'mzone');
+    await activate(g, 0, med);
+    eq(g.getAtk(v), 0, 'ATK becomes 0');
+    eq(g.queryCard(v, 'cannotChangePos'), true, 'cannot change position');
+    g.turn++;
+    eq(g.getAtk(v), 0, 'still 0 on the next turn');
+    g.addTempMod(v, 'atk', 500, 'turn');
+    eq(g.getAtk(v), 500, 'later ATK changes still apply');
+    await g.changePosition(v, 'def', false);
+    await g.changePosition(v, 'atk', true);
+    eq(g.getAtk(v), 1800, 'reset after being flipped face-down');
+  });
+
+  await test('SOVR: Fortune Lady Earth ATK = Level x 400; Time Passage raises it and burns 400', async () => {
+    const { g, place } = setup();
+    const earth = place(0, cardByName('Fortune Lady Earth'), 'mzone');
+    eq(g.getAtk(earth), 2400, 'Level 6 x 400');
+    const tp = place(0, cardByName('Time Passage'), 'hand');
+    await activate(g, 0, tp);
+    eq(g.getLevel(earth), 9, 'Level 9');
+    eq(g.getAtk(earth), 3600, 'ATK follows the Level');
+    eq(g.players[1].lp, 7600, 'Level increase inflicted 400');
+  });
+
+  await test('SOVR: Fortune Lady gains a Level in its Standby Phase (max 12)', async () => {
+    const { g, place } = setup();
+    const water = place(0, cardByName('Fortune Lady Water'), 'mzone');
+    g.turn = 3;
+    g.turnPlayer = 1; // playTurn passes the turn to player 0
+    await g.playTurn();
+    eq(g.getLevel(water), 5, 'Level 5 after the Standby Phase');
+    eq(g.getAtk(water), 1500, 'ATK = 5 x 300');
+  });
+
+  await test('SOVR: Earthbound Immortal cannot be attacked (direct attack instead) and dies without a Field Spell', async () => {
+    const { g, place } = setup();
+    const uru = place(0, cardByName('Earthbound Immortal Uru'), 'mzone');
+    const web = place(0, cardByName('Spider Web'), 'fzone');
+    web.activeOnField = true;
+    const opp = place(1, T.brute, 'mzone');
+    const t = g.attackTargets(opp);
+    eq(t.targets.length, 0, 'Uru cannot be targeted for attacks');
+    eq(t.direct, true, 'the opponent attacks directly instead');
+    eq(g.attackTargets(uru).direct, true, 'Uru attacks directly');
+    await g.destroy([web], 'effect', 1);
+    await g.processTriggers(false);
+    eq(uru.location, 'grave', 'destroyed with no face-up Field Spell');
+  });
+
+  await test('SOVR: Earthbound Immortal Ccarayhua destroyed by a card effect destroys all cards on the field', async () => {
+    const { g, place } = setup();
+    const cc = place(0, cardByName('Earthbound Immortal Ccarayhua'), 'mzone');
+    const web = place(0, cardByName('Spider Web'), 'fzone');
+    web.activeOnField = true;
+    const a = place(1, T.brute, 'mzone');
+    const s = place(1, cardByName('Mirror Force'), 'szone', { faceUp: false });
+    await g.destroy([cc], 'effect', 1);
+    await g.processTriggers(false);
+    eq(cc.location, 'grave', 'Ccarayhua destroyed');
+    eq(a.location, 'grave', 'opponent monster destroyed');
+    eq(s.location, 'grave', 'opponent Set card destroyed');
+    eq(web.location, 'grave', 'Field Spell destroyed');
+  });
+
+  await test('SOVR: Archlord Kristya goes to the top of the Deck instead of the GY and stops Special Summons', async () => {
+    const { g, place } = setup();
+    const k = place(0, cardByName('Archlord Kristya'), 'mzone');
+    eq(g.queryPlayer(1, 'cannotSpecialSummon'), true, 'opponent cannot Special Summon');
+    eq(g.queryPlayer(0, 'cannotSpecialSummon'), true, 'controller cannot Special Summon');
+    await g.destroy([k], 'effect', 1);
+    eq(k.location, 'deck', 'placed in the Deck');
+    eq(g.players[0].deck[g.players[0].deck.length - 1], k, 'on top');
+    eq(g.queryPlayer(1, 'cannotSpecialSummon'), false, 'lock gone');
+  });
+
+  await test('SOVR: Ritual of Grace Ritual Summons Northwemko, banishing Djinn Releaser from the GY', async () => {
+    const { g, place } = setup();
+    const rog = place(0, cardByName('Ritual of Grace'), 'hand');
+    const nw = place(0, cardByName('Divine Grace - Northwemko'), 'hand');
+    const fodder = place(0, T.brute, 'hand');
+    const djinn = place(0, cardByName('Djinn Releaser of Rituals'), 'grave');
+    const shield = place(0, cardByName('Gravity Bind'), 'szone', { faceUp: true });
+    shield.activeOnField = true;
+    await activate(g, 0, rog);
+    eq(nw.location, 'mzone', 'Northwemko Ritual Summoned');
+    eq(fodder.location, 'grave', 'hand monster Tributed');
+    eq(djinn.location, 'banished', 'Djinn banished from the GY');
+    eq(g.queryPlayer(1, 'cannotSpecialSummon'), true, 'opponent cannot Special Summon (Djinn Releaser)');
+    eq(g.queryPlayer(0, 'cannotSpecialSummon'), false, 'Ritual Summoner can');
+    eq(g.queryCard(nw, 'indestructibleEffect'), true, 'protected while the selected card is face-up');
+    await g.destroy([shield], 'effect', 1);
+    eq(g.queryCard(nw, 'indestructibleEffect'), false, 'protection ends');
+  });
+
+  await test('SOVR: Stardust Xiaolong survives only the first battle each turn', async () => {
+    const { g, place } = setup();
+    g.turnPlayer = 1;
+    const x = place(0, cardByName('Stardust Xiaolong'), 'mzone');
+    const a1 = place(1, T.brute, 'mzone');
+    const a2 = place(1, T.dark, 'mzone');
+    await g.conductAttack(1, a1);
+    eq(x.location, 'mzone', 'not destroyed the first time');
+    eq(g.players[0].lp, 8000 - 1700, 'battle damage still taken');
+    await g.conductAttack(1, a2);
+    eq(x.location, 'grave', 'destroyed the second time');
+  });
+
+  await test('SOVR: Tuned Magician becomes a Tuner when Gemini Summoned', async () => {
+    const { g, place } = setup();
+    const tm = place(0, cardByName('Tuned Magician'), 'mzone');
+    place(0, T.brute, 'mzone');
+    const sd = place(0, cardByName('Stardust Dragon'), 'extra');
+    eq(tm.isTuner, false, 'not a Tuner yet');
+    eq(g.canSynchro(0, sd), false, 'no Synchro yet');
+    const gem = g.getActivations(0, { open: true }).find((a) => a.card === tm)!;
+    await g.performAction(0, { type: 'activate', card: tm, act: gem });
+    eq(g.players[0].normalSummonsLeft, 0, 'uses the Normal Summon');
+    eq(tm.isTuner, true, 'now a Tuner');
+    eq(g.canSynchro(0, sd), true, 'Tuned Magician + Level 4 = Stardust Dragon');
+  });
+
+  await test('SOVR: Majestic Star Dragon needs Majestic Dragon + Stardust Dragon + 1 non-Tuner', async () => {
+    const { g, place } = setup();
+    const msd = place(0, cardByName('Majestic Star Dragon'), 'extra');
+    place(0, cardByName('Majestic Dragon'), 'mzone');
+    place(0, cardByName('Stardust Xiaolong'), 'mzone');
+    const k = place(0, cardByName('Archlord Kristya'), 'mzone');
+    eq(g.canSynchro(0, msd), false, 'no Stardust Dragon');
+    await g.moveCards([k], 'banished', { reason: 'effect' });
+    const sd = place(0, cardByName('Stardust Dragon'), 'mzone');
+    eq(g.canSynchro(0, msd), true, 'with Stardust Dragon');
+    await g.performAction(0, { type: 'synchro', card: msd });
+    eq(msd.location, 'mzone', 'Majestic Star Dragon summoned');
+    eq(sd.location, 'grave', 'Stardust Dragon used');
+  });
+
+  await test('SOVR: Reptilianne Scylla takes a 0 ATK monster it destroys by battle', async () => {
+    const { g, place } = setup();
+    const sc = place(0, cardByName('Reptilianne Scylla'), 'mzone');
+    const v = place(1, T.brute, 'mzone');
+    g.addTempMod(v, 'atkBecomes', 0, 'field');
+    await g.conductAttack(0, sc);
+    eq(v.location, 'mzone', 'Special Summoned');
+    eq(v.controller, 0, 'to Scylla\'s side');
+    eq(v.pos, 'def', 'in Defense Position');
+    eq(g.isNegated(v), true, 'effects negated');
+  });
+
+  await test('SOVR: Bending Destiny negates a Normal Summon and returns the monster in the End Phase', async () => {
+    const { g, c0, place } = setup();
+    g.turnPlayer = 1;
+    place(0, cardByName('Fortune Lady Wind'), 'mzone');
+    place(0, cardByName('Bending Destiny'), 'szone', { faceUp: false });
+    const m = place(1, T.brute, 'hand');
+    c0.respond = respondWith('Bending Destiny');
+    await g.performAction(1, { type: 'summon', card: m });
+    eq(m.location, 'banished', 'summoned monster banished');
+    await (g as any).setPhase('end');
+    eq(m.location, 'hand', 'returned to the hand in the End Phase');
+  });
+
+  await test("SOVR: Koa'ki Meiru Beetle is destroyed in the End Phase unless an Insect is revealed", async () => {
+    const { g, place } = setup();
+    const b1 = place(0, cardByName("Koa'ki Meiru Beetle"), 'mzone');
+    await (g as any).setPhase('end');
+    eq(b1.location, 'grave', 'destroyed without an Insect or Iron Core');
+    const b2 = place(0, cardByName("Koa'ki Meiru Beetle"), 'mzone');
+    place(0, cardByName('Dark Spider'), 'hand');
+    g.turn += 2;
+    await (g as any).setPhase('end');
+    eq(b2.location, 'mzone', 'kept by revealing an Insect');
+  });
+
+  await test('SOVR: Clear Vice Dragon attacks with twice the target\'s ATK', async () => {
+    const { g, place } = setup();
+    const cvd = place(0, cardByName('Clear Vice Dragon'), 'mzone');
+    const v = place(1, T.brute, 'mzone');
+    await g.conductAttack(0, cvd);
+    eq(v.location, 'grave', 'target destroyed');
+    eq(g.players[1].lp, 8000 - 1800, '3600 - 1800 damage');
+    eq(g.getAtk(cvd), 0, '? ATK outside damage calculation');
+  });
+  await abpfTests();
+
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })();
+
+// ---------------------------------------------------------------- Absolute Powerforce (ABPF)
+
+/** Activate the first activatable effect of `card` for player `p` as a main-phase action. */
+async function activateCard(g: Game, p: PlayerId, card: CardInstance, label?: string) {
+  const act = g.getActivations(p, { open: true }).find((a) => a.card === card && (!label || a.label === label));
+  if (!act) throw new Error(`${card.name} cannot be activated`);
+  await g.performAction(p, { type: 'activate', card, act });
+}
+
+async function abpfTests() {
+  const big = findCard('Rules Test Titan') ?? normal('Rules Test Titan', 'EARTH', 'Warrior', 4, 3500, 1000);
+  const five = findCard('Rules Test Five') ?? normal('Rules Test Five', 'EARTH', 'Warrior', 5, 2100, 1000);
+  const seven = findCard('Rules Test Seven') ?? normal('Rules Test Seven', 'EARTH', 'Dragon', 7, 2600, 2000);
+  const six = findCard('Rules Test Six') ?? normal('Rules Test Six', 'DARK', 'Fiend', 6, 2000, 1000);
+  const faceUpST = (c: CardInstance) => {
+    c.activeOnField = true;
+    return c;
+  };
+
+  await test("ABPF: Gravekeeper's Visionary — 1-Tribute Summon, ATK per GY Gravekeeper, discard instead of destruction", async () => {
+    const { g, place } = setup();
+    const spy = place(0, cardByName("Gravekeeper's Spy"), 'mzone');
+    const vis = place(0, cardByName("Gravekeeper's Visionary"), 'hand');
+    const spare = place(0, cardByName("Gravekeeper's Priestess"), 'hand');
+    place(0, cardByName("Gravekeeper's Descendant"), 'grave');
+    eq(g.canNormalSummon(0, vis), true, 'can Tribute Summon with 1 Gravekeeper');
+    await g.performAction(0, { type: 'summon', card: vis });
+    eq(vis.location, 'mzone', 'Visionary summoned');
+    eq(spy.location, 'grave', 'Spy tributed');
+    eq(g.getAtk(vis), 2400, 'ATK with 2 Gravekeepers in GY');
+    await g.destroy([vis], 'effect', 1);
+    eq(vis.location, 'mzone', 'Visionary survives');
+    eq(spare.location, 'grave', 'Gravekeeper discarded instead');
+  });
+
+  await test('ABPF: Advance Force — Tribute 1 Level 5+ monster for a Level 7+ monster', async () => {
+    const { g, place } = setup();
+    const lv5 = place(0, five, 'mzone');
+    const lv7 = place(0, seven, 'hand');
+    eq(g.canNormalSummon(0, lv7), false, 'needs 2 Tributes without Advance Force');
+    faceUpST(place(0, cardByName('Advance Force'), 'szone', { faceUp: true }));
+    eq(g.canNormalSummon(0, lv7), true, 'Advance Force allows 1 Tribute');
+    await g.performAction(0, { type: 'summon', card: lv7 });
+    eq(lv7.location, 'mzone', 'Level 7 summoned');
+    eq(lv5.location, 'grave', 'Level 5 tributed');
+  });
+
+  await test('ABPF: Ritual of Destruction — Garlandolf with a Djinn from the GY, destroys low-DEF monsters, Ascending Soul', async () => {
+    const { g, place } = setup();
+    const garl = place(0, cardByName('Garlandolf, King of Destruction'), 'hand');
+    const fodder = place(0, six, 'hand');
+    const djinn = place(0, cardByName('Djinn Disserere of Rituals'), 'grave');
+    faceUpST(place(0, cardByName('Ascending Soul'), 'szone', { faceUp: true }));
+    const weak = place(1, T.brute, 'mzone');
+    const wall = place(1, findCard('Rules Test Bulwark') ?? normal('Rules Test Bulwark', 'EARTH', 'Rock', 4, 0, 3000), 'mzone');
+    const rod = place(0, cardByName('Ritual of Destruction'), 'hand');
+    await activateCard(g, 0, rod);
+    eq(garl.location, 'mzone', 'Garlandolf Ritual Summoned');
+    eq(garl.summonMethod, 'ritual', 'summon method');
+    eq(djinn.location, 'banished', 'Djinn banished as material');
+    eq(weak.location, 'grave', 'DEF 1000 monster destroyed');
+    eq(wall.location, 'mzone', 'DEF 3000 monster survives');
+    eq(g.getAtk(garl), 2600, '+100 ATK per destroyed monster');
+    eq(fodder.location, 'hand', 'Ascending Soul returned the Tributed monster');
+    const trap = place(1, cardByName('Mirror Force'), 'szone', { faceUp: false });
+    eq(g.isUnaffected(garl, trap, 1), true, 'Disserere: unaffected by Traps');
+  });
+
+  await test('ABPF: Oilman — Union equip, destroyed instead of the equipped Machine', async () => {
+    const { g, place } = setup();
+    const oil = place(0, cardByName('Oilman'), 'mzone');
+    const machine = place(0, cardByName('Cyber Dragon'), 'mzone');
+    await activateCard(g, 0, oil);
+    eq(oil.location, 'szone', 'Oilman equipped');
+    eq(oil.equippedTo, machine.uid, 'equipped to the Machine');
+    await g.destroy([machine], 'effect', 1);
+    eq(machine.location, 'mzone', 'Machine survives');
+    eq(oil.location, 'grave', 'Oilman destroyed instead');
+  });
+
+  await test('ABPF: Shield Wing — not destroyed by battle twice per turn', async () => {
+    const { g, place } = setup();
+    const sw = place(1, cardByName('Shield Wing'), 'mzone', { pos: 'def' });
+    const a = [place(0, T.brute, 'mzone'), place(0, T.brute, 'mzone'), place(0, T.brute, 'mzone')];
+    await g.conductAttack(0, a[0]);
+    await g.conductAttack(0, a[1]);
+    eq(sw.location, 'mzone', 'survives two battles');
+    await g.conductAttack(0, a[2]);
+    eq(sw.location, 'grave', 'third battle destroys it');
+  });
+
+  await test('ABPF: Sun Dragon Inti — destroys its destroyer and burns half its ATK', async () => {
+    const { g, place } = setup();
+    const inti = place(1, cardByName('Sun Dragon Inti'), 'mzone');
+    const titan = place(0, big, 'mzone');
+    await g.conductAttack(0, titan);
+    eq(inti.location, 'grave', 'Inti destroyed by battle');
+    eq(titan.location, 'grave', 'attacker destroyed');
+    eq(g.players[0].lp, 8000 - 1750, 'half of 3500 burned');
+  });
+
+  await test('ABPF: Fiendish Chain — negates and stops attacks, destroyed with the monster', async () => {
+    const { g, c1, place } = setup();
+    const cd = place(0, cardByName('Card Trooper'), 'mzone');
+    const chain = place(1, cardByName('Fiendish Chain'), 'szone', { faceUp: false });
+    g.turnPlayer = 1;
+    c1.pick = (_g, req) => (req.candidates.includes(cd) ? [cd] : req.candidates.slice(0, req.min));
+    await activateCard(g, 1, chain);
+    g.turnPlayer = 0;
+    eq(g.isNegated(cd), true, 'effects negated');
+    eq(g.canAttack(cd), false, 'cannot attack');
+    await g.destroy([cd], 'effect', 1);
+    await g.processTriggers(false);
+    eq(chain.location, 'grave', 'Fiendish Chain destroyed with it');
+  });
+
+  await test('ABPF: Reptilianne Naga — survives, battling monster has 0 ATK after the Battle Phase', async () => {
+    const { g, place } = setup();
+    const naga = place(1, cardByName('Reptilianne Naga'), 'mzone');
+    const a = place(0, T.brute, 'mzone');
+    await g.conductAttack(0, a);
+    eq(naga.location, 'mzone', 'Naga not destroyed by battle');
+    eq(g.players[1].lp, 8000 - 1800, 'battle damage');
+    await (g as any).setPhase('main2');
+    eq(g.getAtk(a), 0, 'attacker ATK becomes 0');
+  });
+
+  await test('ABPF: Machine King - 3000 B.C. — Trap Monster, summon lock', async () => {
+    const { g, place } = setup();
+    const mk = place(0, cardByName('Machine King - 3000 B.C.'), 'szone', { faceUp: false });
+    const later = place(0, T.brute, 'hand');
+    await activateCard(g, 0, mk);
+    eq(mk.location, 'mzone', 'Special Summoned as a monster');
+    eq(mk.isMonster, true, 'treated as a monster');
+    eq(g.getAtk(mk), 1000, 'ATK 1000');
+    eq(g.getLevel(mk), 4, 'Level 4');
+    eq(g.canNormalSummon(0, later), false, 'cannot Normal Summon other monsters this turn');
+    await g.destroy([mk], 'effect', 1);
+    eq(mk.location, 'grave', 'destroyed');
+    eq(mk.isTrap, true, 'a Trap again in the GY');
+  });
+
+  await test('ABPF: Offering to the Immortals — negates the direct attack, 2 Ceremonial Tokens', async () => {
+    const { g, c1, place } = setup();
+    g.players[1].lp = 3000;
+    place(1, cardByName('Offering to the Immortals'), 'szone', { faceUp: false });
+    const a = place(0, T.brute, 'mzone');
+    c1.respond = respondWith('Offering to the Immortals');
+    await g.conductAttack(0, a);
+    eq(g.players[1].lp, 3000, 'no damage');
+    const toks = g.monsters(1).filter((c) => c.name === 'Ceremonial Token');
+    eq(toks.length, 2, '2 tokens');
+    eq(g.tributeCandidates(1).filter((c) => toks.includes(c)).length, 0, 'tokens cannot be Tributed for other summons');
+  });
+
+  await test("ABPF: Nature's Reflection — the opponent's effect damage hits them", async () => {
+    const { g, place } = setup();
+    const nr = place(0, cardByName("Nature's Reflection"), 'szone', { faceUp: false });
+    await activateCard(g, 0, nr);
+    await g.damage(0, 800, 'effect', undefined, 1);
+    eq(g.players[0].lp, 8000, 'activator takes no damage');
+    eq(g.players[1].lp, 7200, 'damage reflected');
+  });
+
+  await test('ABPF: Saber Hole — negates a Summon while you control an X-Saber', async () => {
+    const { g, c1, place } = setup();
+    place(1, cardByName('XX-Saber Garsem'), 'mzone');
+    place(1, cardByName('Saber Hole'), 'szone', { faceUp: false });
+    c1.respond = respondWith('Saber Hole');
+    const m = place(0, T.brute, 'hand');
+    await g.performAction(0, { type: 'summon', card: m });
+    eq(m.location, 'grave', 'summon negated and monster destroyed');
+  });
+
+  await test('ABPF: Consecrated Light — DARK monsters cannot attack', async () => {
+    const { g, place } = setup();
+    place(1, cardByName('Consecrated Light'), 'mzone');
+    const d = place(0, T.dark, 'mzone');
+    const b = place(0, T.brute, 'mzone');
+    eq(g.canAttack(d), false, 'DARK cannot attack');
+    eq(g.canAttack(b), true, 'EARTH can attack');
+  });
+
+  await test('ABPF: Cyber Dragon Zwei — named "Cyber Dragon" in the GY', async () => {
+    const { g, place } = setup();
+    const z = place(0, cardByName('Cyber Dragon Zwei'), 'mzone');
+    eq(z.name, 'Cyber Dragon Zwei', 'own name on the field');
+    await g.destroy([z], 'effect', 1);
+    eq(z.name, 'Cyber Dragon', 'name in the GY');
+  });
+
+  await test('ABPF: Underground Arachnid — equips a monster and destroys it instead', async () => {
+    const { g, place } = setup();
+    const ua = place(0, cardByName('Underground Arachnid'), 'mzone');
+    const victim = place(1, T.wall, 'mzone');
+    await activateCard(g, 0, ua);
+    eq(victim.location, 'szone', 'opponent monster equipped');
+    eq(victim.controller, 0, 'in your Spell & Trap Zone');
+    g.turnPlayer = 1;
+    const titan = place(1, big, 'mzone');
+    await g.conductAttack(1, titan);
+    eq(ua.location, 'mzone', 'Arachnid survives');
+    eq(victim.location, 'grave', 'equipped monster destroyed instead');
+  });
+
+  await test('ABPF: Variety Comes Out — Synchro back to the Extra Deck, Tuners revived, no Synchro this turn', async () => {
+    const { g, place } = setup();
+    const goyo = g.players[0].extra[0];
+    g.rawMove(goyo, 'mzone', { controller: 0, faceUp: true, pos: 'atk' });
+    const t1 = place(0, cardByName('Fire Ant Ascator'), 'grave');
+    const t2 = place(0, cardByName('Drill Synchron'), 'grave');
+    const v = place(0, cardByName('Variety Comes Out'), 'hand');
+    await activateCard(g, 0, v);
+    eq(goyo.location, 'extra', 'Goyo returned');
+    eq(t1.location, 'mzone', 'Tuner 1 summoned');
+    eq(t2.location, 'mzone', 'Tuner 2 summoned');
+    eq(g.canSynchro(0, goyo), false, 'cannot Synchro Summon this turn');
+  });
+
+  await test('ABPF: Witch of the Black Rose — destroyed when the drawn card is not a monster', async () => {
+    const { g, place } = setup();
+    const top = place(0, cardByName('Dark Hole'), 'deck');
+    const w = place(0, cardByName('Witch of the Black Rose'), 'hand');
+    await g.performAction(0, { type: 'summon', card: w });
+    eq(top.location, 'grave', 'drawn Spell sent to the GY');
+    eq(w.location, 'grave', 'Witch destroyed');
+  });
+}
