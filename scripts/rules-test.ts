@@ -1565,6 +1565,23 @@ async function crmsTests() {
     eq(other.location, 'grave', 'other monster destroyed');
   });
 
+  await test('Brain Control: pay 800, take a face-up monster until the End Phase, then it goes back', async () => {
+    const { g, place } = setup();
+    const bc = place(0, cardByName('Brain Control'), 'hand');
+    const mon = place(1, T.brute, 'mzone');
+    await activateCard(g, 0, bc);
+    eq(g.players[0].lp, 8000 - 800, 'paid 800');
+    eq(mon.controller, 0, 'taken');
+    await (g as any).setPhase('end');
+    await (g as any).phaseWindow?.();
+    eq(mon.controller, 1, 'returned in the End Phase');
+    const { g: g2, place: place2 } = setup();
+    g2.players[0].lp = 700;
+    const bc2 = place2(0, cardByName('Brain Control'), 'hand');
+    place2(1, T.brute, 'mzone');
+    eq(g2.legalMainActions(0).some((a) => a.type === 'activate' && a.card === bc2), false, 'cannot activate with 700 LP');
+  });
+
   await test('Card Trooper: the ATK gain lasts until the end of this turn only', async () => {
     const { g, c0, place } = setup();
     const ct = place(0, cardByName('Card Trooper'), 'mzone');
