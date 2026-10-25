@@ -139,13 +139,23 @@ monster('Blackwing - Sirocco the Dawn', {
   def: 900,
   sets: BW,
   aiValue: 300,
-  text: 'If your opponent controls a monster and you control no monsters, you can Special Summon this card (from your hand). Once per turn, during your Main Phase 1: You can target 1 "Blackwing" monster you control; it gains ATK equal to the combined ATK of all other face-up "Blackwing" monsters you control, until the End Phase. Only that monster can attack this turn.',
+  // CRMS: the first effect is a Normal Summon/Set without Tributing (YGOJSON), not a Special Summon.
+  text: 'If only your opponent controls a monster, you can Normal Summon/Set this card without Tributing. Once per turn, during your Main Phase 1: You can target 1 "Blackwing" monster you control; until the end of this turn, it gains ATK equal to the combined ATK of all "Blackwing" monsters currently on the field, except itself, also for the rest of this turn, you can only attack with that monster.',
   effects: [
     {
-      kind: 'proc',
-      label: 'Special Summon',
-      categories: ['specialSummon'],
-      condition: (ctx) => ctx.monsters('opp').length > 0 && ctx.monsters('me').length === 0 && ctx.freeMZones() > 0,
+      // CRMS: same workaround as Power Invader: refresh the noTribute flag whenever Normal Summon legality is checked.
+      kind: 'continuous',
+      range: ['hand'],
+      mods: [
+        {
+          q: 'cannotNormalSummon',
+          to: 'players',
+          filter: (ctx, p) => {
+            if (p === ctx.player) ctx.self.flags.noTribute = ctx.monsters('opp').length > 0 && ctx.monsters('me').length === 0;
+            return false;
+          },
+        },
+      ],
     },
     {
       kind: 'ignition',
@@ -161,7 +171,8 @@ monster('Blackwing - Sirocco the Dawn', {
       resolve: async (ctx) => {
         const t = ctx.validTargets((c) => c.location === 'mzone' && c.faceUp);
         if (!t.length) return;
-        const others = faceUpBW(ctx).filter((c) => c !== t[0]);
+        // CRMS: every face-up "Blackwing" monster on the field (either side) except the target.
+        const others = ctx.faceUpMonsters('both', isBW).filter((c) => c !== t[0]);
         const sum = others.reduce((a, c) => a + ctx.atk(c), 0);
         ctx.addTempMod(t[0], 'atk', sum, 'turn');
         for (const m of ctx.monsters('me')) if (m !== t[0]) m.flags.cannotAttackTurn = ctx.turn;

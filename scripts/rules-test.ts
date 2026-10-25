@@ -9,6 +9,7 @@ import { Game, GameOver } from '../src/engine/game';
 import type { BattlePos, Location, PlayerId } from '../src/engine/types';
 import { ensureAnprPatches } from '../src/cards/sets/anpr';
 import { ensureRgbtPatches } from '../src/cards/sets/rgbt';
+import { ensureCrmsPatches } from '../src/cards/sets/crms';
 
 const T = {
   brute: findCard('Rules Test Brute') ?? normal('Rules Test Brute', 'EARTH', 'Warrior', 4, 1800, 1000),
@@ -861,6 +862,7 @@ function eq(a: unknown, b: unknown, msg: string) {
   });
   await abpfTests();
   await rgbtTests();
+  await crmsTests();
 
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
@@ -1382,5 +1384,463 @@ async function rgbtTests() {
     place(0, cardByName('Blackwing - Shura the Blue Flame'), 'mzone');
     await activateCard(g, 0, dc);
     eq(set1.location, 'grave', 'Set card destroyed');
+  });
+}
+
+// ---------------------------------------------------------------- Crimson Crisis (CRMS)
+
+async function crmsTests() {
+  const five = findCard('Rules Test Five') ?? normal('Rules Test Five', 'EARTH', 'Warrior', 5, 2100, 1000);
+  const seven = findCard('Rules Test Seven') ?? normal('Rules Test Seven', 'EARTH', 'Dragon', 7, 2600, 2000);
+  const faceUpST = (c: CardInstance) => {
+    c.activeOnField = true;
+    return c;
+  };
+  const setThisTurn = (g: Game, c: CardInstance) => {
+    c.setTurn = g.turn;
+    return c;
+  };
+
+  await test('CRMS: Assault Mode Activate needs Night Wing Sorceress to be used the turn it is Set; Tributes RDA for RDA/Assault Mode', async () => {
+    const { g, place } = setup();
+    ensureCrmsPatches(g);
+    const rda = place(0, cardByName('Red Dragon Archfiend'), 'mzone');
+    rda.properlySummoned = true;
+    const am = place(0, cardByName('Red Dragon Archfiend/Assault Mode'), 'deck');
+    const ama = setThisTurn(g, place(0, cardByName('Assault Mode Activate'), 'szone', { faceUp: false }));
+    eq(g.getActivations(0, { open: true }).some((a) => a.card === ama), false, 'not activatable the turn it is Set');
+    place(0, cardByName('Night Wing Sorceress'), 'mzone');
+    await activateCard(g, 0, ama);
+    eq(rda.location, 'grave', 'Red Dragon Archfiend Tributed');
+    eq(am.location, 'mzone', 'Assault Mode summoned from the Deck');
+    eq(am.pos, 'atk', 'in Attack Position');
+    eq(g.canNormalSummon(0, place(0, cardByName('Colossal Fighter/Assault Mode'), 'hand')), false, '/Assault Mode cannot be Normal Summoned');
+  });
+
+  await test('CRMS: Red Dragon Archfiend/Assault Mode wipes the field after attacking and revives Red Dragon Archfiend when destroyed', async () => {
+    const { g, place } = setup();
+    const am = place(0, cardByName('Red Dragon Archfiend/Assault Mode'), 'mzone');
+    const mine = place(0, T.brute, 'mzone');
+    const a = place(1, T.wall, 'mzone', { pos: 'def' });
+    const b = place(1, T.dark, 'mzone');
+    const rda = place(0, cardByName('Red Dragon Archfiend'), 'grave');
+    rda.properlySummoned = true;
+    await g.conductAttack(0, am);
+    eq(a.location, 'grave', 'battled monster destroyed');
+    eq(b.location, 'grave', 'other opponent monster destroyed');
+    eq(mine.location, 'grave', 'own other monster destroyed');
+    eq(am.location, 'mzone', 'Assault Mode survives');
+    await g.destroy([am], 'effect', 1);
+    await g.processTriggers(false);
+    eq(rda.location, 'mzone', 'Red Dragon Archfiend revived');
+  });
+
+  await test('CRMS: Hyper Synchron gives a Dragon Synchro 800 ATK, banished in the End Phase', async () => {
+    const { g, place } = setup();
+    place(0, cardByName('Hyper Synchron'), 'mzone');
+    place(0, T.brute, 'mzone');
+    const rda = place(0, cardByName('Red Dragon Archfiend'), 'extra');
+    eq(g.canSynchro(0, rda), true, 'can Synchro Summon');
+    await g.performAction(0, { type: 'synchro', card: rda });
+    eq(g.getAtk(rda), 3800, '3000 + 800');
+    await (g as any).setPhase('end');
+    eq(rda.location, 'banished', 'banished in the End Phase');
+  });
+
+  await test('CRMS: Turret Warrior gains the Tributed Warrior\'s original ATK', async () => {
+    const { g, place } = setup();
+    const w = place(0, T.brute, 'mzone');
+    const tw = place(0, cardByName('Turret Warrior'), 'hand');
+    const act = g.legalMainActions(0).find((a) => a.type === 'proc' && a.card === tw)!;
+    eq(!!act, true, 'proc available');
+    await g.performAction(0, act);
+    eq(w.location, 'grave', 'Warrior tributed');
+    eq(tw.location, 'mzone', 'Turret Warrior summoned');
+    eq(g.getAtk(tw), 3000, '1200 + 1800');
+  });
+
+  await test('CRMS: Summon Reactor・SK burns 800 once per turn and can then negate an attack', async () => {
+    const { g, c1, place } = setup();
+    const sk = place(1, cardByName('Summon Reactor・SK'), 'mzone');
+    await g.performAction(0, { type: 'summon', card: place(0, T.brute, 'hand') });
+    eq(g.players[0].lp, 7200, '800 damage for the first summon');
+    g.players[0].normalSummonsLeft = 1;
+    await g.performAction(0, { type: 'summon', card: place(0, T.dark, 'hand') });
+    eq(g.players[0].lp, 7200, 'only the first time each turn');
+    const atk = g.monsters(0).find((c) => c.name === 'Rules Test Brute')!;
+    c1.respond = respondWith('Summon Reactor・SK');
+    g.phase = 'battle';
+    await g.conductAttack(0, atk);
+    eq(sk.location, 'mzone', 'Summon Reactor・SK survives');
+    eq(g.players[1].lp, 8000, 'attack negated');
+  });
+
+  await test('CRMS: Summon Reactor・SK + the other Reactors summon Flying Fortress SKY FIRE, which destroys a Set Spell/Trap', async () => {
+    const { g, c1, place } = setup();
+    ensureCrmsPatches(g);
+    const sk = place(0, cardByName('Summon Reactor・SK'), 'mzone');
+    place(0, cardByName('Trap Reactor・Y FI'), 'mzone');
+    place(0, cardByName('Spell Reactor・RE'), 'mzone');
+    const sf = place(0, cardByName('Flying Fortress SKY FIRE'), 'deck');
+    await activateCard(g, 0, sk, 'Summon Flying Fortress SKY FIRE');
+    eq(sf.location, 'mzone', 'SKY FIRE summoned');
+    eq(g.monsters(0).length, 1, 'the three Reactors were sent to the GY');
+    // Opponent's turn: they Set a Spell.
+    g.turnPlayer = 1;
+    g.turn = 3;
+    const set = place(1, cardByName('Dark Hole'), 'hand');
+    void c1;
+    const c0 = g.controllers[0] as any;
+    c0.respond = respondWith('Flying Fortress SKY FIRE');
+    await g.performAction(1, { type: 'setST', card: set });
+    eq(set.location, 'grave', 'Set card destroyed');
+    eq(g.players[1].lp, 7200, '800 damage');
+  });
+
+  await test('CRMS: Hydra Viper Tributes an Aqua-Type monster for each attack', async () => {
+    const { g, place } = setup();
+    ensureCrmsPatches(g);
+    const hv = place(0, cardByName('Hydra Viper'), 'mzone');
+    const frog = place(0, cardByName('Submarine Frog'), 'mzone');
+    await g.conductAttack(0, hv);
+    eq(frog.location, 'grave', 'Aqua Tributed');
+    eq(g.players[1].lp, 8000 - 1800, 'direct attack');
+    eq(g.canAttack(hv), false, 'no Aqua left: cannot attack again');
+  });
+
+  await test('CRMS: Dimension Fortress Weapon stops cards going from the Deck to the GY', async () => {
+    const { g, place } = setup();
+    ensureCrmsPatches(g);
+    place(1, cardByName('Dimension Fortress Weapon'), 'mzone');
+    const n = g.players[0].deck.length;
+    await g.mill(0, 3);
+    eq(g.players[0].deck.length, n, 'nothing milled');
+    eq(g.players[0].grave.length, 0, 'GY empty');
+  });
+
+  await test('CRMS: Star Blast lowers a Level 5 monster in hand so it can be Normal Summoned without Tributing', async () => {
+    const { g, place } = setup();
+    const m = place(0, five, 'hand');
+    const sb = place(0, cardByName('Star Blast'), 'hand');
+    eq(g.canNormalSummon(0, m), false, 'needs a Tribute');
+    await activateCard(g, 0, sb);
+    eq(g.players[0].lp, 7500, 'paid 500');
+    eq(g.canNormalSummon(0, m), true, 'no Tribute needed');
+    await g.performAction(0, { type: 'summon', card: m });
+    eq(m.location, 'mzone', 'summoned');
+    eq(g.getLevel(m), 4, 'Level stays reduced on the field this turn');
+  });
+
+  await test('CRMS: Ido stops your Summons and revives itself the next Standby Phase, destroying your other monsters', async () => {
+    const { g, place } = setup();
+    ensureCrmsPatches(g);
+    const ido = place(0, cardByName('Ido the Supreme Magical Force'), 'mzone');
+    const b = place(0, T.brute, 'hand');
+    eq(g.canNormalSummon(0, b), false, 'cannot Normal Summon');
+    eq(g.legalMainActions(0).some((a) => a.type === 'set'), false, 'cannot Set a monster');
+    await g.destroy([ido], 'effect', 1);
+    const other = place(0, T.dark, 'mzone');
+    g.turn = 3;
+    g.turnPlayer = 1;
+    await (g as any).setPhase('standby');
+    eq(ido.location, 'mzone', 'Ido revived');
+    eq(other.location, 'grave', 'other monster destroyed');
+  });
+
+  await test('CRMS: Alien Kid places A-Counters; the countered monster loses 300 ATK when battling an Alien', async () => {
+    const { g, place } = setup();
+    const kid = place(0, cardByName('Alien Kid'), 'mzone');
+    const b = place(1, T.brute, 'hand');
+    await g.specialSummon([b], 1, { pos: 'atk' });
+    await g.processTriggers(false);
+    eq(b.counters.A ?? 0, 1, 'A-Counter placed');
+    eq(g.getAtk(b), 1800, 'no loss outside damage calculation');
+    await g.conductAttack(0, kid);
+    eq(b.location, 'grave', '1600 beats 1800 - 300');
+    eq(g.players[1].lp, 8000 - 100, '100 damage');
+  });
+
+  await test('CRMS: Desert Protector is destroyed instead of another Insect', async () => {
+    const { g, c0, place } = setup();
+    const dp = place(0, cardByName('Desert Protector'), 'mzone');
+    const beetle = place(0, cardByName('Cross-Sword Beetle'), 'mzone');
+    place(0, cardByName('Mirror Force'), 'szone', { faceUp: false });
+    eq(g.getDef(dp), 1300, '+300 DEF per Spell/Trap');
+    c0.pick = (_g, req) => req.candidates.slice(0, Math.max(1, req.min));
+    await g.destroy([beetle], 'effect', 1);
+    eq(beetle.location, 'mzone', 'Beetle saved');
+    eq(dp.location, 'grave', 'Desert Protector destroyed instead');
+  });
+
+  await test('CRMS: Spirit Force makes the battle damage 0 and returns a Warrior Tuner', async () => {
+    const { g, c1, place } = setup();
+    ensureCrmsPatches(g);
+    const a = place(0, T.brute, 'mzone');
+    place(1, cardByName('Spirit Force'), 'szone', { faceUp: false });
+    const t = place(1, tuner, 'grave');
+    c1.respond = respondWith('Spirit Force');
+    await g.conductAttack(0, a);
+    eq(g.players[1].lp, 8000, 'no battle damage');
+    eq(t.location, 'hand', 'Warrior Tuner added');
+  });
+
+  await test('CRMS: Dark Voltanis comes out after a Counter Trap resolves', async () => {
+    const { g, c0, place } = setup();
+    g.turnPlayer = 1;
+    const dark = place(0, T.dark, 'mzone');
+    const volt = place(0, cardByName('Dark Voltanis'), 'hand');
+    place(0, cardByName('Solemn Judgment'), 'szone', { faceUp: false });
+    const victim = place(1, T.wall, 'mzone');
+    ensureCrmsPatches(g);
+    c0.respond = respondWith('Solemn Judgment');
+    const dh = place(1, cardByName('Dark Hole'), 'hand');
+    await activateCard(g, 1, dh);
+    eq(dh.location, 'grave', 'Dark Hole negated');
+    eq(dark.location, 'grave', 'DARK monster Tributed');
+    eq(volt.location, 'mzone', 'Dark Voltanis summoned');
+    eq(victim.location, 'grave', '1 card destroyed');
+  });
+
+  await test('CRMS: Psychic Tuning summons a Psychic as a Tuner; losing it burns Level x 400', async () => {
+    const { g, place } = setup();
+    const m = place(0, cardByName('Lifeforce Harmonizer'), 'grave');
+    const pt = place(0, cardByName('Psychic Tuning'), 'szone', { faceUp: false });
+    await activateCard(g, 0, pt);
+    eq(m.location, 'mzone', 'Psychic summoned');
+    eq(m.isTuner, true, 'treated as a Tuner');
+    await g.destroy([pt], 'effect', 1);
+    await g.processTriggers(false);
+    eq(m.location, 'grave', 'monster destroyed with the card');
+    eq(m.isTuner, false, 'no longer a Tuner');
+    eq(g.players[0].lp, 8000 - 800, 'Level 2 x 400 damage');
+  });
+
+  await test('CRMS: Totem Dragon counts as 2 Tributes for a Dragon; Blackwing - Sirocco is Normal Summoned without Tributing', async () => {
+    const { g, place } = setup();
+    const totem = place(0, cardByName('Totem Dragon'), 'mzone');
+    const dragon = place(0, seven, 'hand');
+    eq(g.canNormalSummon(0, dragon), true, 'Level 7 Dragon with 1 Tribute');
+    await g.performAction(0, { type: 'summon', card: dragon });
+    eq(totem.location, 'grave', 'Totem Dragon Tributed');
+    eq(dragon.location, 'mzone', 'Dragon summoned');
+    const s = setup();
+    s.place(1, T.wall, 'mzone');
+    const sir = s.place(0, cardByName('Blackwing - Sirocco the Dawn'), 'hand');
+    eq(s.g.legalMainActions(0).some((a) => a.type === 'proc' && a.card === sir), false, 'no Special Summon procedure');
+    await s.g.performAction(0, { type: 'summon', card: sir });
+    eq(sir.location, 'mzone', 'Normal Summoned without Tributing');
+    eq(sir.summonMethod, 'normal', 'Normal Summon');
+  });
+
+  await test('CRMS: Nightmare Archfiends gives 3 Tokens; each destroyed one burns its controller 800', async () => {
+    const { g, place } = setup();
+    const b = place(0, T.brute, 'mzone');
+    const na = place(0, cardByName('Nightmare Archfiends'), 'szone', { faceUp: false });
+    await activateCard(g, 0, na);
+    eq(b.location, 'grave', 'monster Tributed');
+    const toks = g.monsters(1).filter((c) => c.name === 'Nightmare Archfiend Token');
+    eq(toks.length, 3, '3 Tokens on the opponent\'s field');
+    await g.destroy([toks[0]], 'effect', 0);
+    await g.processTriggers(false);
+    eq(g.players[1].lp, 7200, '800 damage to their controller');
+  });
+
+  await test('CRMS: Greed Quasar grows by the Level of the monster it destroys', async () => {
+    const { g, place } = setup();
+    const q = place(0, cardByName('Greed Quasar'), 'mzone');
+    eq(g.getAtk(q), 2100, 'Level 7 x 300');
+    place(1, T.dark, 'mzone');
+    await g.conductAttack(0, q);
+    eq(g.getLevel(q), 11, 'Level 7 + 4');
+    eq(g.getAtk(q), 3300, 'Level 11 x 300');
+  });
+
+  await test('CRMS: B.E.S. Big Core MK-2 loses a counter per battle and is destroyed when it has none', async () => {
+    const { g, place } = setup();
+    const bes = place(0, cardByName('B.E.S. Big Core MK-2'), 'hand');
+    eq(g.canNormalSummon(0, bes), true, 'no Tribute with an empty field');
+    await g.specialSummon([bes], 0, { pos: 'atk' });
+    await g.processTriggers(false);
+    eq(bes.counters.bes, 3, '3 counters');
+    place(1, cardByName('Rules Test Giant'), 'mzone');
+    await g.conductAttack(0, bes);
+    eq(bes.location, 'mzone', 'not destroyed by battle');
+    eq(bes.counters.bes, 2, '1 counter removed');
+  });
+
+  await test('CRMS: Morphtronic Slingen in Defense Position destroys another Morphtronic instead', async () => {
+    const { g, place } = setup();
+    const sl = place(0, cardByName('Morphtronic Slingen'), 'mzone', { pos: 'def' });
+    const bo = place(0, cardByName('Morphtronic Boarden'), 'mzone');
+    await g.destroy([sl], 'effect', 1);
+    eq(sl.location, 'mzone', 'Slingen survives');
+    eq(bo.location, 'grave', 'Boarden destroyed instead');
+  });
+
+  await test('CRMS: Prevention Star locks a monster and banishes it when the equipped monster is destroyed', async () => {
+    const { g, c0, place } = setup();
+    ensureCrmsPatches(g);
+    const m = place(0, T.wall, 'mzone');
+    const opp = place(1, T.brute, 'mzone');
+    await g.performAction(0, { type: 'position', card: m });
+    const ps = place(0, cardByName('Prevention Star'), 'hand');
+    c0.pick = (_g, req) => req.candidates.slice(0, Math.max(1, req.min));
+    await activateCard(g, 0, ps);
+    eq(ps.equippedTo, m.uid, 'equipped');
+    g.turnPlayer = 1;
+    eq(g.canAttack(opp), false, 'selected monster cannot attack');
+    await g.destroy([m], 'effect', 1);
+    await g.processTriggers(false);
+    eq(opp.location, 'banished', 'selected monster removed from play');
+  });
+
+  await test('CRMS: Arcanite Magician/Assault Mode gets 2 Spell Counters (2900 ATK) and removes them to destroy all opponent\'s cards', async () => {
+    const { g, place } = setup();
+    const arc = place(0, cardByName('Arcanite Magician'), 'mzone');
+    arc.properlySummoned = true;
+    place(0, cardByName('Arcanite Magician/Assault Mode'), 'deck');
+    place(0, cardByName('Assault Mode Activate'), 'szone', { faceUp: false });
+    const a = place(1, T.brute, 'mzone');
+    const b = place(1, cardByName('Mirror Force'), 'szone', { faceUp: false });
+    await activateCard(g, 0, g.players[0].szone.find((c) => c?.name === 'Assault Mode Activate')!);
+    const am = g.monsters(0).find((c) => c.name === 'Arcanite Magician/Assault Mode')!;
+    eq(g.getAtk(am), 2900, '900 + 2 x 1000');
+    await activateCard(g, 0, am);
+    eq(a.location, 'grave', 'monster destroyed');
+    eq(b.location, 'grave', 'Spell/Trap destroyed');
+    eq(g.getAtk(am), 900, 'counters removed');
+  });
+
+  await test('CRMS: Doomkaiser Dragon/Assault Mode revives Zombies from both GYs with effects negated (Bone Crusher cannot trigger); all die in the End Phase', async () => {
+    const { g, c0, place } = setup();
+    const am = place(0, cardByName('Doomkaiser Dragon/Assault Mode'), 'hand');
+    const bc = place(0, cardByName('Bone Crusher'), 'grave');
+    const pz = place(1, cardByName('Plaguespreader Zombie'), 'grave');
+    const st = place(1, cardByName('Mirror Force'), 'szone', { faceUp: false });
+    c0.pick = (_g, req) => req.candidates.slice(0, Math.max(req.max, req.min));
+    await g.specialSummon([am], 0, { pos: 'atk', ignoreConditions: true, proper: true });
+    await g.processTriggers(false);
+    eq(bc.location, 'mzone', 'Bone Crusher revived');
+    eq(pz.location, 'mzone', 'opponent\'s Zombie revived');
+    eq(pz.controller, 0, 'on your side');
+    eq(st.location, 'szone', 'negated Bone Crusher cannot destroy a Spell/Trap');
+    eq(g.isNegated(pz), true, 'effects negated');
+    await (g as any).setPhase('end');
+    eq(bc.location, 'grave', 'Bone Crusher destroyed');
+    eq(pz.location, 'grave', 'revived Zombie destroyed');
+  });
+
+  await test("CRMS: Cosmic Fortress Gol'gar bounces Spells/Traps for A-Counters, then removes 2 to destroy a card", async () => {
+    const { g, c0, place } = setup();
+    const gg = place(0, cardByName("Cosmic Fortress Gol'gar"), 'mzone');
+    const ivy = place(1, cardByName('Ivy Shackles'), 'szone', { faceUp: true });
+    ivy.activeOnField = true;
+    const v = place(1, T.brute, 'mzone');
+    c0.pick = (_g, req) => req.candidates.filter((c) => c.controller === 1).slice(0, Math.max(1, req.min));
+    await activateCard(g, 0, gg, 'Return Spells/Traps, place A-Counters');
+    eq(ivy.location, 'hand', 'Spell/Trap returned');
+    eq(v.counters.A ?? 0, 1, 'A-Counter placed');
+    v.counters.A = 2;
+    await activateCard(g, 0, gg, 'Remove 2 A-Counters: destroy 1 card');
+    eq(v.location, 'grave', 'card destroyed');
+  });
+
+  await test('CRMS: Planet Pollutant Virus destroys monsters without A-Counters and counters later Summons', async () => {
+    const { g, place } = setup();
+    place(0, cardByName('Alien Kid'), 'mzone');
+    const a = place(1, T.brute, 'mzone');
+    const b = place(1, T.dark, 'mzone');
+    b.counters.A = 1;
+    const ppv = place(0, cardByName('Planet Pollutant Virus'), 'szone', { faceUp: false });
+    await activateCard(g, 0, ppv);
+    eq(a.location, 'grave', 'no A-Counter: destroyed');
+    eq(b.location, 'mzone', 'with A-Counter: survives');
+    g.turnPlayer = 1;
+    g.turn = 3;
+    const s = place(1, T.wall, 'hand');
+    await g.performAction(1, { type: 'summon', card: s });
+    eq(s.counters.A ?? 0, 1, 'A-Counter on the new Summon');
+  });
+
+  await test('CRMS: Half or Nothing — the opponent ends the Battle Phase or halves their ATK', async () => {
+    const { g, place } = setup();
+    const a = place(0, T.brute, 'mzone');
+    g.phase = 'battle';
+    const hon = place(1, cardByName('Half or Nothing'), 'szone', { faceUp: false });
+    const act = g.getActivations(1, { open: false }).find((x) => x.card === hon)!;
+    eq(!!act, true, 'activatable in the opponent\'s Battle Phase');
+    const link = await g.activate(1, act);
+    await g.runChain();
+    void link;
+    // TestController.chooseOption → 0: halve.
+    eq(g.getAtk(a), 900, 'ATK halved');
+    await (g as any).setPhase('main2');
+    eq(g.getAtk(a), 1800, 'restored after the Battle Phase');
+  });
+
+  await test('CRMS: Assault Revival destroys your monsters and revives an /Assault Mode monster that is banished when it leaves', async () => {
+    const { g, place } = setup();
+    const mine = place(0, T.brute, 'mzone');
+    place(0, cardByName('Assault Mode Activate'), 'grave');
+    const am = place(0, cardByName('Colossal Fighter/Assault Mode'), 'grave');
+    const ar = place(0, cardByName('Assault Revival'), 'hand');
+    await activateCard(g, 0, ar);
+    eq(mine.location, 'grave', 'own monster destroyed');
+    eq(am.location, 'mzone', '/Assault Mode revived ignoring conditions');
+    eq(g.isNegated(am), true, 'effects negated');
+    await g.destroy([am], 'effect', 1);
+    eq(am.location, 'banished', 'removed from play when it leaves');
+  });
+
+  await test('CRMS: Morphtronic Forcefield negates a Spell that would destroy a Morphtronic and searches', async () => {
+    const { g, c0, place } = setup();
+    g.turnPlayer = 1;
+    const bo = place(0, cardByName('Morphtronic Boarden'), 'mzone');
+    place(0, cardByName('Morphtronic Forcefield'), 'szone', { faceUp: false });
+    const sl = place(0, cardByName('Morphtronic Slingen'), 'deck');
+    c0.respond = respondWith('Morphtronic Forcefield');
+    const dh = place(1, cardByName('Dark Hole'), 'hand');
+    await activateCard(g, 1, dh);
+    eq(bo.location, 'mzone', 'Morphtronic survives');
+    eq(dh.location, 'grave', 'Dark Hole negated');
+    eq(sl.location, 'hand', 'Morphtronic added');
+  });
+
+  await test('CRMS: Assault Armor is sent to the GY to let the Warrior attack twice', async () => {
+    const { g, place } = setup();
+    const w = place(0, T.brute, 'mzone');
+    const aa = place(0, cardByName('Assault Armor'), 'hand');
+    await activateCard(g, 0, aa);
+    eq(g.getAtk(w), 2100, '+300 ATK');
+    await activateCard(g, 0, aa);
+    eq(aa.location, 'grave', 'sent to the GY');
+    eq(g.queryCardNum(w, 'extraAttacks'), 1, 'can attack twice');
+  });
+
+  await test('CRMS: Scanner copies a removed-from-play monster until the End Phase and is removed from play if it leaves', async () => {
+    const { g, place } = setup();
+    const sc = place(0, cardByName('Scanner'), 'mzone');
+    place(1, T.giant, 'banished');
+    await activateCard(g, 0, sc);
+    eq(sc.name, 'Rules Test Giant', 'name copied');
+    eq(g.getAtk(sc), 3000, 'ATK copied');
+    eq(g.getLevel(sc), 8, 'Level copied');
+    await g.destroy([sc], 'effect', 1);
+    eq(sc.location, 'banished', 'removed from play');
+    eq(sc.name, 'Scanner', 'own name again');
+  });
+
+  await test('CRMS: Trap Reactor・Y FI destroys an activated Trap and burns 800', async () => {
+    const { g, c0, place } = setup();
+    g.turnPlayer = 1;
+    place(0, cardByName('Trap Reactor・Y FI'), 'mzone');
+    const a = place(1, T.brute, 'mzone');
+    const mf = place(1, cardByName('Dust Tornado'), 'szone', { faceUp: false });
+    place(0, cardByName('Mirror Force'), 'szone', { faceUp: false });
+    c0.respond = respondWith('Trap Reactor・Y FI');
+    await activateCard(g, 1, mf);
+    eq(g.players[1].lp, 7200, '800 damage');
+    eq(mf.location, 'grave', 'Trap destroyed');
+    void a;
   });
 }

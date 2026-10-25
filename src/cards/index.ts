@@ -20,6 +20,7 @@ import './sets/sovr';
 import './sets/abpf';
 import './sets/tournament-extras2';
 import './sets/rgbt';
+import './sets/crms';
 import { applyBanlist } from './banlist';
 
 applyBanlist();
