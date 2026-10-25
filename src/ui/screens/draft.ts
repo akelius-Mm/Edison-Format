@@ -492,7 +492,7 @@ function homeView(ctl: Ctl, opts: { customize?: boolean } = {}) {
     const saved = savedPresets();
     const savedOn = saved.find((p) => sameSetup(p.setup, x));
     const cur = savedOn ? null : presetOf(x.plan);
-    presetRow.classList.toggle('scroll', saved.length > 0);
+    presetRow.classList.toggle('scroll', saved.length + PRESETS.length > 3);
     presetRow.replaceChildren(
       ...PRESETS.map((p) => {
         const ready = p.sets.every((c) => packOption(c, dev).ready);

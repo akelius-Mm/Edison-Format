@@ -70,11 +70,13 @@ export const packSize = (code: string, realSize: RealSize = 9) => (code === EDIS
 export const isRealPack = (code: string) => code !== EDISON_PACK;
 export const planCards = (plan: string[], realSize: RealSize = 9) => plan.reduce((a, c) => a + packSize(c, realSize), 0);
 
-export type PresetId = 'edison' | 'abpf' | 'core3';
+export type PresetId = 'edison' | 'abpf' | 'core3' | 'y2009' | 'synchro';
 export const PRESETS: { id: PresetId; label: string; sets: string[] }[] = [
   { id: 'edison', label: 'Edison Pack', sets: [EDISON_PACK] },
   { id: 'abpf', label: 'All ABPF', sets: ['ABPF'] },
   { id: 'core3', label: 'ABPF · SOVR · ANPR', sets: [...SHELF_SETS] },
+  { id: 'y2009', label: '2009 sets', sets: ['CRMS', 'RGBT', 'ANPR'] },
+  { id: 'synchro', label: 'Synchro era', sets: ['TDGS', 'CSOC', 'CRMS'] },
 ];
 
 /** Packs per player a setup may use. */
