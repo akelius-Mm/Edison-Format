@@ -7,10 +7,48 @@ import { getSettings } from '../settings';
 import { applySleeve } from '../theme/sleeves';
 import { esc } from '../theme/util';
 import { cardArtSVG, cardArtSrc } from './art';
-import { attachOfficialArt, attachOfficialCard } from './officialArt';
+import { attachOfficialArt, attachOfficialCard, cachedOfficialImage, getOfficialImage, officialArtEnabled } from './officialArt';
 import { LEVEL_STAR_SVG, attributeIconSVG, spellTypeIcon } from './icons';
 
 export { cardArtSVG, cardArtSrc };
+
+/**
+ * Point a small artwork thumbnail at the card's official cropped art: straight away when the
+ * lookup is cached, otherwise once it arrives. The drawn art shows meanwhile and stays as the
+ * fallback when official images are off or cannot load.
+ */
+export function setArtThumb(img: HTMLImageElement, data: CardData) {
+  const fallback = cardArtSrc(data);
+  img.decoding = 'async';
+  img.draggable = false;
+  if (!img.alt) img.alt = '';
+  img.onerror = () => {
+    img.onerror = null;
+    img.src = fallback;
+  };
+  const official = officialArtEnabled() && !data.isToken;
+  const hit = official ? cachedOfficialImage(data.name) : null;
+  if (hit) {
+    img.src = hit.art;
+    return img;
+  }
+  img.src = fallback;
+  if (official && hit === undefined)
+    void getOfficialImage(data.name).then((o) => {
+      if (!o) return;
+      const pre = new Image();
+      pre.onload = () => (img.src = o.art);
+      pre.src = o.art;
+    });
+  return img;
+}
+
+/** A new <img> thumbnail of a card's artwork (official crop when available). */
+export function artThumb(data: CardData, cls = ''): HTMLImageElement {
+  const img = new Image();
+  if (cls) img.className = cls;
+  return setArtThumb(img, data);
+}
 
 export type CardSize = 'xs' | 'sm' | 'md' | 'lg' | 'xl';
 

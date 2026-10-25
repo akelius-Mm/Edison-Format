@@ -2,10 +2,10 @@
 import type { CardData, CardInstance } from '../../engine/card';
 import type { Game, LogEntry } from '../../engine/game';
 import type { Phase, PlayerId } from '../../engine/types';
-import { cardArtSrc } from '../cards/art';
-import { liveStats, renderCard, typeLine } from '../cards/render';
+import { artThumb, liveStats, renderCard, typeLine } from '../cards/render';
 import { zoomCard } from '../cards/zoom';
 import { renderAvatar } from '../theme/avatars';
+import { isTouchUI } from './dialogs';
 import { esc } from '../theme/util';
 import type { DuelSide } from './api';
 
@@ -185,7 +185,8 @@ export class ChainStack {
       if (!row) {
         row = h('div', `chain-link ${l.player === this.me ? 'is-me' : 'is-opp'}`);
         row.dataset.k = k;
-        row.innerHTML = `<div class="chain-num">${l.index}</div><img class="chain-art" src="${cardArtSrc(l.card.data)}" alt=""><div class="chain-info"><div class="chain-name">${esc(l.card.name)}</div><div class="chain-label">${esc(l.isCardActivation ? 'Activation' : l.effect.label ?? 'Effect')}</div></div>`;
+        row.innerHTML = `<div class="chain-num">${l.index}</div><div class="chain-info"><div class="chain-name">${esc(l.card.name)}</div><div class="chain-label">${esc(l.isCardActivation ? 'Activation' : l.effect.label ?? 'Effect')}</div></div>`;
+        row.insertBefore(artThumb(l.card.data, 'chain-art'), row.querySelector('.chain-info'));
         row.classList.add('enter');
       }
       row.classList.toggle('is-resolving', l.index === resolving);
@@ -239,7 +240,7 @@ export class PreviewPanel {
     this.cardHost = h('div', 'preview-card');
     this.details = h('div', 'preview-details');
     this.el.append(this.cardHost, this.details);
-    this.cardHost.title = 'Click to enlarge';
+    if (!isTouchUI()) this.cardHost.title = 'Click to enlarge';
     this.cardHost.style.cursor = 'zoom-in';
     this.cardHost.addEventListener('click', (ev) => {
       // On phones the sheet's own click handler decides; elsewhere enlarge directly.
@@ -256,7 +257,7 @@ export class PreviewPanel {
   }
 
   private showEmpty() {
-    this.cardHost.innerHTML = '<div class="preview-empty">Hover or tap a card<br>to inspect it</div>';
+    this.cardHost.innerHTML = `<div class="preview-empty">${isTouchUI() ? 'Tap a card' : 'Hover or click a card'}<br>to read it</div>`;
     this.details.innerHTML = '';
   }
 

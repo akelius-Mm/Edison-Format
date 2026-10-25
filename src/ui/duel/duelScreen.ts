@@ -20,6 +20,7 @@ import {
   type ModalHandle,
   type PromptCtx,
   confirmDialog,
+  isTouchUI,
   declareDialog,
   optionDialog,
   pileViewer,
@@ -167,6 +168,7 @@ class DuelScreen implements HumanUI {
       me: this.me,
       spectator: this.spectator,
       names: [opts.sides[0].name, opts.sides[1].name],
+      firstChosen: typeof opts.firstPlayer === 'number',
       speed: () => this.speed(),
       flush: (o) => this.flush(o),
       spotlight: (c) => {
@@ -783,7 +785,7 @@ class DuelScreen implements HumanUI {
     });
     this.attackBar = this.dialogs.modal({
       title: replay ? `Replay: ${attacker.name}` : `Attack with ${attacker.name}`,
-      subtitle: targets.length ? 'Click an opponent monster to attack it.' : 'Attack directly?',
+      subtitle: targets.length ? `${isTouchUI() ? 'Tap' : 'Click'} an opponent monster to attack it.` : 'Attack directly?',
       source: attacker.data,
       actions,
       docked: true,

@@ -3,8 +3,7 @@ import type { CardData, CardInstance } from '../../engine/card';
 import type { Activation, ConfirmRequest, OptionRequest, ResponseRequest, SelectRequest } from '../../engine/controller';
 import type { Game } from '../../engine/game';
 import type { BattlePos, PlayerId } from '../../engine/types';
-import { cardArtSrc } from '../cards/art';
-import { renderCard } from '../cards/render';
+import { artThumb, renderCard } from '../cards/render';
 import { ICONS } from '../cards/icons';
 import { esc } from '../theme/util';
 import type { Sfx } from './sound';
@@ -62,6 +61,11 @@ const LOC_NAMES: Record<string, string> = {
   none: '',
 };
 
+/** Touch screens (no hover): prompts say "Tap" instead of "Click". */
+export function isTouchUI() {
+  return typeof matchMedia === 'function' && matchMedia('(hover: none)').matches;
+}
+
 function h<K extends keyof HTMLElementTagNameMap>(tag: K, cls = '', html = ''): HTMLElementTagNameMap[K] {
   const e = document.createElement(tag);
   if (cls) e.className = cls;
@@ -114,9 +118,7 @@ export class Dialogs {
     const box = h('div', 'dlg');
     const head = h('div', 'dlg-head');
     if (o.source) {
-      const img = h('img', 'dlg-src');
-      img.src = cardArtSrc(o.source);
-      head.appendChild(img);
+      head.appendChild(artThumb(o.source, 'dlg-src'));
     }
     const titles = h('div', 'dlg-titles');
     const t = h('div', 'dlg-title');
@@ -267,17 +269,21 @@ export function selectDialog(d: Dialogs, ctx: PromptCtx, req: SelectRequest): { 
   const body = h('div', 'sel');
   const grid = h('div', 'sel-grid');
   body.appendChild(grid);
-  const tiles = new Map<CardInstance, HTMLElement>();
+  // Copies of one card in the Deck, Extra Deck or your hand are interchangeable: show them as
+  // one tile with a ×N badge. Cards on the field or in a GY stay separate.
+  type Group = { cards: CardInstance[]; tile: HTMLElement };
+  const groups: Group[] = [];
+  const byKey = new Map<string, Group>();
   const range = req.min === req.max ? `${req.min}` : `${req.min}–${req.max}`;
   const subtitle = () => `Selected ${sel.length} / ${range === '0' ? req.max : range}`;
   const ok = () => sel.length >= req.min && sel.length <= req.max;
   const refresh = () => {
-    tiles.forEach((t, c) => {
-      const i = sel.indexOf(c);
-      t.classList.toggle('is-selected', i >= 0);
-      const badge = t.querySelector('.tile-sel') as HTMLElement;
-      badge.textContent = i >= 0 ? String(i + 1) : '';
-    });
+    for (const g of groups) {
+      const picked = g.cards.filter((c) => sel.includes(c));
+      g.tile.classList.toggle('is-selected', picked.length > 0);
+      const badge = g.tile.querySelector('.tile-sel') as HTMLElement;
+      badge.textContent = !picked.length ? '' : g.cards.length > 1 ? String(picked.length) : String(sel.indexOf(picked[0]) + 1);
+    }
     m.setDisabled(0, !ok());
     m.setSubtitle(subtitle());
   };
@@ -288,24 +294,37 @@ export function selectDialog(d: Dialogs, ctx: PromptCtx, req: SelectRequest): { 
   };
   for (const c of req.candidates) {
     const vis = visibleTo(ctx.game, c, ctx.viewer);
+    const stackable = vis && c.owner === ctx.viewer && (c.location === 'deck' || c.location === 'extra' || c.location === 'hand');
+    const key = stackable ? `${c.location}:${c.data.id}` : '';
+    const existing = key ? byKey.get(key) : undefined;
+    if (existing) {
+      existing.cards.push(c);
+      const n = existing.tile.querySelector('.tile-count') ?? existing.tile.appendChild(h('div', 'tile-count'));
+      n.textContent = `×${existing.cards.length}`;
+      continue;
+    }
     const tile = d.cardTile(c, ctx, { caption: locCaption(ctx.game, c, ctx.viewer), faceDown: !vis });
+    const g: Group = { cards: [c], tile };
+    groups.push(g);
+    if (key) byKey.set(key, g);
     tile.classList.add('tile--pick');
     tile.appendChild(h('div', 'tile-sel'));
     tile.addEventListener('click', () => {
       ctx.sfx.play('click');
-      const i = sel.indexOf(c);
-      if (i >= 0) sel.splice(i, 1);
-      else {
-        if (req.max === 1) sel.length = 0;
-        if (sel.length >= req.max) return;
-        sel.push(c);
-      }
+      const picked = g.cards.filter((x) => sel.includes(x));
+      const next = g.cards.find((x) => !sel.includes(x));
+      if (req.max === 1) {
+        const was = picked.length > 0;
+        sel.length = 0;
+        if (!was) sel.push(g.cards[0]);
+      } else if (next && sel.length < req.max) sel.push(next);
+      else if (picked.length) for (const x of picked) sel.splice(sel.indexOf(x), 1);
+      else return;
       refresh();
     });
     tile.addEventListener('dblclick', () => {
       if (ok()) finish([...sel]);
     });
-    tiles.set(c, tile);
     grid.appendChild(tile);
   }
   const actions: ActionBtn[] = [{ label: 'Confirm', kind: 'primary', onClick: () => ok() && finish([...sel]), hotkey: 'Enter' }];
@@ -392,13 +411,15 @@ export function responseDialog(d: Dialogs, ctx: PromptCtx, req: ResponseRequest,
     const body = h('div', 'resp-list');
     const top = ctx.game.chain[ctx.game.chain.length - 1];
     if (top && req.kind === 'chain') {
-      const t = h('div', 'resp-top', `<img src="${cardArtSrc(top.card.data)}" alt=""><div><small>Chain Link ${top.index}</small><b>${esc(top.card.name)}</b></div>`);
+      const t = h('div', 'resp-top', `<div><small>Chain Link ${top.index}</small><b>${esc(top.card.name)}</b></div>`);
+      t.prepend(artThumb(top.card.data));
       t.addEventListener('pointerenter', () => ctx.preview(top.card));
       body.appendChild(t);
     }
     for (const o of req.options) {
       const row = h('button', 'resp-opt') as HTMLButtonElement;
-      row.innerHTML = `<img src="${cardArtSrc(o.card.data)}" alt=""><div class="resp-txt"><b>${esc(o.card.name)}</b><small>${esc(o.label === 'Activate' || o.label === 'Use effect' ? describeLoc(o.card) : o.label)}</small></div><span class="resp-go">Activate</span>`;
+      row.innerHTML = `<div class="resp-txt"><b>${esc(o.card.name)}</b><small>${esc(o.label === 'Activate' || o.label === 'Use effect' ? describeLoc(o.card) : o.label)}</small></div><span class="resp-go">Activate</span>`;
+      row.prepend(artThumb(o.card.data));
       row.addEventListener('pointerenter', () => ctx.preview(o.card));
       row.onclick = () => {
         m.close();
