@@ -163,7 +163,7 @@ export function duelSetupScreen(): Screen {
           segmented<1 | 3>(
             [
               { value: 1, label: 'Single', hint: 'One game' },
-              { value: 3, label: 'Best of 3', hint: 'First to two wins' },
+              { value: 3, label: 'Bo3', hint: 'Best of three: first to two wins' },
             ],
             st.bestOf,
             (v) => ((st.bestOf = v), changed()),

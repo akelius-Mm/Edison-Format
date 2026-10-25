@@ -6,8 +6,11 @@ import type { GameResult } from '../../tournament/types';
 import type { DuelSide } from '../duel/api';
 import { startDuel } from '../duel/duelScreen';
 import { getSettings } from '../settings';
-import { button, h, icon } from './dom';
-import { applyPlaymat, renderAvatar } from './ext';
+import { button, h, icon, type ICONS } from './dom';
+
+const cta = (label: string, onClick: () => void, ic: keyof typeof ICONS, dark = false) =>
+  h('button', { type: 'button', class: ['cta', dark && 'cta--dark'], onclick: onClick }, icon(ic), h('span', null, label));
+import { applyPlaymat } from './ext';
 import { lockNav } from './nav';
 import { recordGame } from './store';
 
@@ -105,38 +108,38 @@ function interstitial(host: HTMLElement, setup: MatchSetup, games: GameResult[],
     let msg = '';
     if (loser == null) {
       msg = 'The last game was a draw — a coin toss decides who goes first.';
-      actions.append(button('Continue', () => resolve('coin'), { variant: 'primary', icon: 'play', cls: 'ui-btn-lg' }));
+      actions.append(cta('Continue', () => resolve('coin'), 'play'));
     } else if (isHuman(setup.sides[loser])) {
       msg = 'You lost the previous game, so you choose: go first or second?';
       actions.append(
-        button('Go First', () => resolve(loser), { variant: 'primary', icon: 'bolt', cls: 'ui-btn-lg' }),
-        button('Go Second', () => resolve((1 - loser) as PlayerId), { variant: 'ghost', icon: 'hand', cls: 'ui-btn-lg' }),
+        h('div', { class: 'inter-choice' }, cta('Go first', () => resolve(loser), 'bolt'), cta('Go second', () => resolve((1 - loser) as PlayerId), 'hand', true)),
       );
     } else {
       msg = `${setup.sides[loser].name} lost the previous game and chooses to go first.`;
-      actions.append(button('Continue', () => resolve(loser), { variant: 'primary', icon: 'play', cls: 'ui-btn-lg' }));
+      actions.append(cta('Continue', () => resolve(loser), 'play'));
     }
-    if (humanPlays) actions.append(button('Concede match', () => resolve('concede'), { variant: 'subtle', icon: 'flag' }));
+    if (humanPlays) actions.append(button('Concede match', () => resolve('concede'), { variant: 'subtle', icon: 'flag', cls: 'inter-concede' }));
     else setTimeout(() => resolve(loser ?? 'coin'), 4500); // exhibitions continue on their own
 
-    const side = (s: DuelSide, w: number, i: number) =>
-      h(
-        'div',
-        { class: ['inter-side', last.winner === i && 'won'] },
-        h('span', { class: 'avatar-ring' }, renderAvatar(s.avatar, 84)),
-        h('div', { class: 'inter-name' }, s.name),
-        h('div', { class: 'inter-wins' }, String(w)),
-      );
+    const side = (s: DuelSide, i: number) =>
+      h('div', { class: ['inter-side', last.winner === i && 'won', i === 1 && 'right'] }, h('div', { class: 'inter-name' }, s.name), h('div', { class: 'inter-deck' }, s.title ?? ''));
     host.append(
       bg,
       h(
         'div',
         { class: 'inter' },
         h('div', { class: 'inter-caption' }, setup.caption),
-        h('div', { class: 'inter-title' }, `Game ${games.length} · ${lastText}`),
+        h('div', { class: 'inter-title' }, `Game ${games.length}`),
+        h('div', { class: 'inter-result' }, lastText),
         h('div', { class: 'inter-reason' }, `${last.reason}${last.turns ? ` · ${last.turns} turns` : ''}`),
-        h('div', { class: 'inter-score' }, side(A, wa, 0), h('div', { class: 'inter-vs' }, icon('swords')), side(B, wb, 1)),
-        h('div', { class: 'inter-next' }, `Game ${games.length + 1}${setup.bestOf === 3 ? ' of 3' : ''}`),
+        h(
+          'div',
+          { class: 'inter-score' },
+          side(A, 0),
+          h('div', { class: 'inter-nums' }, h('b', null, String(wa)), h('span', null, '–'), h('b', null, String(wb))),
+          side(B, 1),
+        ),
+        h('div', { class: 'inter-next' }, `Up next · Game ${games.length + 1}${setup.bestOf === 3 ? ' of 3' : ''}`),
         h('p', { class: 'inter-msg' }, msg),
         actions,
       ),
