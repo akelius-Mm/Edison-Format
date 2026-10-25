@@ -49,7 +49,8 @@ export interface Grant {
   reason: string;
   coins: number;
   packs: { set: string; count: number }[];
-  cards?: number;
+  /** Extra line shown with the grant (e.g. the starter Structure Decks). */
+  note?: string;
 }
 
 export interface CollectionState {
@@ -497,8 +498,12 @@ function giveStarter(s: CollectionState) {
     reason: 'Welcome gift',
     coins: STARTER.dp,
     packs: Object.entries(s.packs).map(([set, count]) => ({ set, count })),
-    cards: STARTER.structureDecks.length * STARTER.copiesEach,
+    note: `Plus ${STARTER.copiesEach} copies each of the ${listNames(STARTER.structureDecks.map((c) => STRUCTURE_DECKS.find((d) => d.code === c)?.name ?? c))} Structure Decks.`,
   });
+}
+
+function listNames(a: string[]) {
+  return a.length < 2 ? a.join('') : `${a.slice(0, -1).join(', ')} and ${a[a.length - 1]}`;
 }
 
 // ------------------------------------------------------------------ binder helpers

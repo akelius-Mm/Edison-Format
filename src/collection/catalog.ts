@@ -4,6 +4,9 @@ import { findCard } from '../cards';
 import { ERA_SETS, STRUCTURE_DECKS } from './sets';
 import { RARITY_ORDER, type EraSetData, type Rarity, type StructureDeckData } from './types';
 
+/** Official product image for a set code (loads on the phone; may be blocked in sandboxes). */
+export const packImageUrl = (code: string) => `https://images.ygoprodeck.com/images/sets/${code}.jpg`;
+
 /** Names the pool spells differently from the printed English name. */
 const ALIASES: Record<string, string> = {
   'Red-Eyes Black Dragon': 'Red-Eyes B. Dragon',

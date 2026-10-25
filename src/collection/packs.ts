@@ -199,10 +199,14 @@ export function rollSlot(rng: Rng, slot: Slot): Rarity[] {
 
 /** Open one pack of `code` with a deterministic seed. Pulls are ordered commons → best (reveal order). */
 export function openPack(code: string, seed: number): Pull[] {
+  return rollPack(code, new Rng(seed));
+}
+
+/** Same as openPack, drawing from a caller-owned Rng (advances it). Pure: touches no state. */
+export function rollPack(code: string, rng: Rng): Pull[] {
   const set = playableSet(code);
   if (!set || !set.playable.length) return [];
   const f = PACK_FORMATS[set.data.format];
-  const rng = new Rng(seed);
   const used = new Set<string>();
   const pulls: Pull[] = [];
   for (const slot of f.slots) {

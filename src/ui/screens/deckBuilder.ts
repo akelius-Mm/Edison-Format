@@ -4,6 +4,7 @@ import { PREMADE_DECKS, validateDeck } from '../../decks';
 import type { CardData } from '../../engine/card';
 import { isExtraCard, cardBrowser, sortCards } from './cardBrowser';
 import { cardDetail, deckTile } from './components';
+import { collectionAddBlock, installCollectionOverlay } from './collectionDeck';
 import { append, button, clear, confirmDialog, h, icon, modal, promptDialog, toast, type Child } from './dom';
 import { renderCard } from './ext';
 import { frame, go, type Params, type Screen } from './nav';
@@ -72,6 +73,11 @@ export function deckBuilderScreen(params: Params): Screen {
     }
     if (copies(name) >= lim) {
       if (!quiet) toast(lim === 3 ? `Maximum 3 copies of ${c.name}.` : `${c.name} is ${lim === 1 ? 'Limited' : 'Semi-Limited'} (${lim} cop${lim === 1 ? 'y' : 'ies'}).`, 'error');
+      return false;
+    }
+    const owned = collectionAddBlock(c.name, copies(name)); // Collection mode (see collectionDeck.ts)
+    if (owned) {
+      if (!quiet) toast(owned, 'error');
       return false;
     }
     if (deckCount(list(section)) >= MAX[section]) {
@@ -143,6 +149,7 @@ export function deckBuilderScreen(params: Params): Screen {
     },
   });
   const browserCol = h('section', { class: 'db-col db-browser' }, browser.el);
+  installCollectionOverlay(browser.el); // owned counts + "Use my collection" switch
   browserCol.addEventListener('dragover', (e) => {
     if (e.dataTransfer?.types.includes(DRAG_TYPE)) {
       e.preventDefault();

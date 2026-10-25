@@ -3,7 +3,9 @@
 // odds in src/collection/packs.ts (including the empty-pool fallback, computed analytically).
 // Usage: npx tsx scripts/pack-odds-test.ts
 import '../src/cards';
-import { findCard } from '../src/cards';
+import { CARDS, findCard } from '../src/cards';
+import { DRAFT_MIN_PLAYABLE, DRAFT_SETS, generateSetPack } from '../src/collection/draft';
+import { Rng } from '../src/engine/rng';
 import { playableSets, type PlayableSet } from '../src/collection/catalog';
 import { mixSeed, openPack, PACK_FORMATS, resolveTier } from '../src/collection/packs';
 import { RARITY_NAMES, RARITY_ORDER, type Rarity } from '../src/collection/types';
@@ -94,5 +96,27 @@ for (const set of playableSets()) {
 
 console.log(`Pack odds: ${PACKS.toLocaleString()} packs per set (playable/printed, rarity counts)`);
 for (const r of rows) console.log(r);
+
+// Draft API: deterministic for a seeded Rng, real 9-card packs, valid draft rarities.
+{
+  if (!DRAFT_SETS.length) fail('DRAFT_SETS is empty');
+  const forbidden = new Set<string>();
+  const byId = new Map(Object.values(CARDS).map((x) => [x.id, x]));
+  for (const s of DRAFT_SETS) {
+    const a = generateSetPack(s.code, new Rng(77));
+    const b = generateSetPack(s.code, new Rng(77));
+    if (JSON.stringify(a) !== JSON.stringify(b)) fail(`${s.code}: generateSetPack not deterministic`);
+    if (a.length !== s.cardsPerPack) fail(`${s.code}: draft pack has ${a.length} cards`);
+    for (let i = 0; i < 200; i++)
+      for (const c of generateSetPack(s.code, new Rng(i))) {
+        if (!['C', 'R', 'SR', 'UR', 'ScR'].includes(c.r)) fail(`${s.code}: bad draft rarity ${c.r}`);
+        const d = byId.get(c.id);
+        if (!d) fail(`${s.code}: unknown id ${c.id}`);
+        else if (d.limit === 0) forbidden.add(d.name);
+      }
+  }
+  console.log(`Draft sets (>= ${DRAFT_MIN_PLAYABLE} playable): ${DRAFT_SETS.map((s) => `${s.code} ${s.playable}`).join(', ')}`);
+  if (forbidden.size) console.log(`  note: Forbidden cards that can appear in draft packs: ${[...forbidden].join(', ')}`);
+}
 console.log(`${failures ? 'FAILED' : 'OK'} in ${Date.now() - t0} ms`);
 if (failures) process.exit(1);
