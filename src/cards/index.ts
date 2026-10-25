@@ -22,6 +22,7 @@ import './sets/tournament-extras2';
 import './sets/rgbt';
 import './sets/crms';
 import './sets/ptdn';
+import './sets/lodt';
 import { applyBanlist } from './banlist';
 
 applyBanlist();

@@ -145,7 +145,8 @@ function summonedFromGrave(g: Game, c: C): boolean {
 // Forgotten Temple of the Deep, Machine King - 3000 B.C.). The real CardData is never modified.
 type DataPatch = (orig: CardData, card: C) => CardData | undefined;
 const dataPatches = new WeakMap<C, DataPatch[]>();
-function patchData(card: C, fn: DataPatch) {
+// LODT: exported so lodt.ts reuses the same per-instance override chain.
+export function patchData(card: C, fn: DataPatch) {
   let list = dataPatches.get(card);
   if (!list) {
     const l: DataPatch[] = [];
@@ -168,7 +169,7 @@ function patchData(card: C, fn: DataPatch) {
   list.push(fn);
 }
 const variants = new WeakMap<CardData, Map<string, CardData>>();
-function variant(orig: CardData, key: string, change: Partial<CardData>): CardData {
+export function variant(orig: CardData, key: string, change: Partial<CardData>): CardData {
   let m = variants.get(orig);
   if (!m) variants.set(orig, (m = new Map()));
   let v = m.get(key);
