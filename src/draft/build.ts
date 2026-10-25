@@ -123,3 +123,32 @@ export function deckRating(d: BuiltDeck): number {
   const extra = Math.min(d.extra.length, 6) * 4;
   return 1300 + main * 3 + bombs * 1.2 + extra;
 }
+
+const FAMILY_LABEL: Record<string, string> = {
+  blackwing: 'Blackwing',
+  lightsworn: 'Lightsworn',
+  gladiator: 'Gladiator Beast',
+  saber: 'X-Saber',
+  hero: 'HERO',
+  frog: 'Frog',
+  monarch: 'Monarch',
+  cyber: 'Cyber Dragon',
+  zombie: 'Zombie',
+  plant: 'Plant',
+  synchro: 'Synchro',
+};
+
+/** Short description of a deck, e.g. "Lightsworn · Zombie" or "DARK Warriors". */
+export function describeDeck(d: BuiltDeck): string {
+  const p = profile(d.main);
+  const fams = [...p.family]
+    .filter(([f, n]) => FAMILY_LABEL[f] && n >= 4)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 2)
+    .map(([f]) => FAMILY_LABEL[f]);
+  if (fams.length) return fams.join(' · ');
+  const attr = [...p.attr].sort((a, b) => b[1] - a[1])[0];
+  const race = [...p.race].sort((a, b) => b[1] - a[1])[0];
+  if (attr && race) return `${attr[0]} ${race[0]}`;
+  return 'Draft deck';
+}

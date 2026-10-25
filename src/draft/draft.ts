@@ -92,15 +92,19 @@ export function createDraft(o: NewDraftOptions): DraftState {
   const rng = new Rng(seed);
   const mrng = new Mulberry(seed ^ 0x2545f491);
   const used = new Set<string>([o.human.name]);
+  const firsts = new Set<string>([o.human.name.split(' ')[0]]);
   const avatars = o.avatars.filter((a) => a !== o.human.avatar);
   const players: DraftPlayer[] = [
     { id: 'p0', name: o.human.name, title: 'You', avatar: o.human.avatar, sleeve: o.human.sleeve, human: true, bias: { noise: 0 }, skill: 0 },
   ];
   for (let i = 1; i < SEATS; i++) {
     const t = personaTitle(mrng);
+    let name = personaName(mrng, used);
+    for (let tries = 0; firsts.has(name.split(' ')[0]) && tries < 30; tries++) name = personaName(mrng, used);
+    firsts.add(name.split(' ')[0]);
     players.push({
       id: `p${i}`,
-      name: personaName(mrng, used),
+      name,
       title: t.title,
       avatar: avatars.length ? avatars[(i - 1) % avatars.length] : `avatar-${i}`,
       sleeve: o.sleeves.length ? rng.pick(o.sleeves) : o.human.sleeve,
