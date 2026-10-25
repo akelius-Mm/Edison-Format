@@ -6,6 +6,19 @@ export const mtof = (m: number) => 440 * Math.pow(2, (m - 69) / 12);
 
 const EPS = 0.0001;
 
+/**
+ * Update a swept parameter once per 128-sample block instead of every sample. Filter sweeps
+ * sound the same, and it saves a lot of CPU (per-sample biquad coefficients are expensive).
+ */
+export function kRate(p: AudioParam): AudioParam {
+  try {
+    if ('automationRate' in p) (p as any).automationRate = 'k-rate';
+  } catch {
+    /* not supported: stays a-rate */
+  }
+  return p;
+}
+
 export interface Send {
   /** Extra destination (reverb / delay input) and how much of the voice to send there. */
   to: AudioNode;
@@ -96,6 +109,7 @@ export function tone(ac: Ctx, out: AudioNode, t: number, f0: number, dur: number
     const f = ac.createBiquadFilter();
     f.type = 'lowpass';
     f.Q.value = o.q ?? 0.7;
+    if (o.lpEnd) kRate(f.frequency);
     f.frequency.setValueAtTime(o.lp, t);
     if (o.lpEnd) f.frequency.exponentialRampToValueAtTime(Math.max(40, o.lpEnd), t + dur);
     node.connect(f);
@@ -125,6 +139,7 @@ export function noise(ac: Ctx, buf: AudioBuffer, out: AudioNode, t: number, dur:
   const f = ac.createBiquadFilter();
   f.type = o.type ?? 'bandpass';
   f.Q.value = o.q ?? 1;
+  if (o.f1) kRate(f.frequency);
   f.frequency.setValueAtTime(o.f0 ?? 1000, t);
   if (o.f1) f.frequency.exponentialRampToValueAtTime(Math.max(30, o.f1), t + (o.sweep ?? dur));
   let node: AudioNode = src.connect(f);

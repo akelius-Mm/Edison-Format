@@ -1,11 +1,11 @@
 // Shared Web Audio plumbing: one AudioContext for sound effects and music, the iOS unlock on the
-// first tap, pausing while the page is hidden, a shared room reverb and an output limiter.
+// first tap, pausing while the page is hidden, a shared room reverb and an output safety clipper.
 
 export type Ctx = BaseAudioContext;
 
 export interface AudioGraph {
   ctx: Ctx;
-  /** Everything ends here: soft limiter → speakers. */
+  /** Everything ends here: soft clipper → speakers. */
   out: GainNode;
   /** Send into the shared room reverb (sound effects). */
   reverb: GainNode;
@@ -16,6 +16,23 @@ export interface AudioGraph {
 }
 
 const graphs = new WeakMap<Ctx, AudioGraph>();
+
+/** Input level that maps to the end of the clip curve (louder input is held at full scale). */
+const CLIP_RANGE = 1.5;
+let clipData: Float32Array | null = null;
+/** Linear up to 0.75, then a tanh knee that approaches (never passes) full scale. */
+function clipCurve(): Float32Array {
+  if (clipData) return clipData;
+  const n = 2048;
+  clipData = new Float32Array(n);
+  for (let i = 0; i < n; i++) {
+    const x = ((i / (n - 1)) * 2 - 1) * CLIP_RANGE;
+    const a = Math.abs(x);
+    const y = a <= 0.75 ? a : 0.75 + 0.25 * Math.tanh((a - 0.75) / 0.25);
+    clipData[i] = Math.sign(x) * y;
+  }
+  return clipData;
+}
 
 /** Stereo noise burst with an exponential tail: a cheap, smooth room impulse. */
 export function makeImpulse(ctx: Ctx, seconds: number, decay: number): AudioBuffer {
@@ -38,15 +55,13 @@ export function makeImpulse(ctx: Ctx, seconds: number, decay: number): AudioBuff
 export function graphFor(ctx: Ctx): AudioGraph {
   const have = graphs.get(ctx);
   if (have) return have;
-  const limiter = ctx.createDynamicsCompressor();
-  limiter.threshold.value = -4;
-  limiter.knee.value = 3;
-  limiter.ratio.value = 12;
-  limiter.attack.value = 0.002;
-  limiter.release.value = 0.18;
-  limiter.connect(ctx.destination);
+  // Safety soft-clipper instead of a DynamicsCompressor: stateless (no start-up gain dip, no
+  // auto make-up gain), identical in every browser, and transparent below about -2.5 dBFS.
   const out = ctx.createGain();
-  out.connect(limiter);
+  out.gain.value = 1 / CLIP_RANGE;
+  const clip = ctx.createWaveShaper();
+  clip.curve = clipCurve() as any;
+  out.connect(clip).connect(ctx.destination);
 
   const reverb = ctx.createGain();
   const hp = ctx.createBiquadFilter();
@@ -110,6 +125,7 @@ export function audioContext(): AudioContext | null {
       if (live?.state === 'running') for (const f of [...readyListeners]) f();
     };
     live.onstatechange = notify;
+    graphFor(live); // build the shared graph (reverb impulse, noise) up front, not on the first sound
     queueMicrotask(notify);
     installAudioUnlock();
     return live;

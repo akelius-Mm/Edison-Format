@@ -315,7 +315,7 @@ export function deckCarousel(
       h('span', { class: 'dkc-shade' }),
       h('span', { class: ['dkc-tag', ev && 'dkc-tag--event'] }, tag),
       h('span', { class: 'dkc-check' }, icon('check')),
-      h('span', { class: 'dkc-text' }, h('b', null, d.name), h('span', null, line)),
+      h('span', { class: 'dkc-text' }, h('b', null, ev?.pilot ? d.name.replace(` (${ev.pilot})`, '') : d.name), h('span', null, line)),
     );
     boxes.push({ key: d.key, el });
   }

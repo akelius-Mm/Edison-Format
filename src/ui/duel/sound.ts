@@ -40,6 +40,35 @@ const GAP: Partial<Record<SfxName, number>> = {
   lose: 1,
   turn: 0.3,
 };
+/**
+ * Per-sound level trim in dB, balanced by rendering every sound offline and measuring it
+ * (at volume 0.6: heavy hits peak near -7 dBFS, medium -10, light -15, UI ticks -25).
+ */
+const TRIM_DB: Record<SfxName, number> = {
+  draw: 13,
+  set: 2,
+  flip: 15,
+  summon: 4.5,
+  synchro: 6,
+  activate: 11,
+  resolve: 11,
+  attack: 13,
+  battle: 1,
+  damage: 3,
+  bigDamage: 3.5,
+  recover: 10.5,
+  destroy: 4,
+  phase: 6,
+  turn: 11,
+  coin: 14,
+  negate: 6,
+  target: 11,
+  win: 8.5,
+  lose: 14,
+  click: 9,
+  error: 10,
+};
+
 /** Sounds that share a rate-limit slot. */
 const SLOT: Partial<Record<SfxName, string>> = { damage: 'hit', bigDamage: 'hit', win: 'end', lose: 'end' };
 
@@ -128,7 +157,7 @@ export class Sfx {
     const gate = ac.createGain();
     gate.gain.setValueAtTime(0, t0);
     osc.connect(bp).connect(gate).connect(bus);
-    const v = 0.16;
+    const v = 0.3;
     let t = 0;
     let n = 0;
     while (t < dur - 0.028) {
@@ -145,8 +174,8 @@ export class Sfx {
     osc.stop(t0 + dur + 0.05);
     // settle: a slightly rounder double tick
     const te = t0 + dur;
-    fm(ac, bus, te, up ? 2093 : 1568, 0.12, { ratio: 2, index: 0.7, indexEnd: 0.05, vol: 0.09 });
-    tone(ac, bus, te, up ? 4186 : 3136, 0.04, { vol: 0.025 });
+    fm(ac, bus, te, up ? 2093 : 1568, 0.12, { ratio: 2, index: 0.7, indexEnd: 0.05, vol: 0.14 });
+    tone(ac, bus, te, up ? 4186 : 3136, 0.04, { vol: 0.04 });
     this.ticker = { bus, end: te + 0.15 };
   }
 
@@ -193,7 +222,9 @@ export class Sfx {
 
   private voice(ac: Ctx, name: SfxName, t: number) {
     const g = graphFor(ac);
-    const o = this.master!;
+    const o = ac.createGain();
+    o.gain.value = Math.pow(10, TRIM_DB[name] / 20);
+    o.connect(this.master!);
     const N = g.noise;
     const rv = (amount: number): Send => ({ to: g.reverb, amount });
     switch (name) {
@@ -347,10 +378,10 @@ export class Sfx {
         if (t - this.lastSpin < 2.5) {
           // second call of a toss: the coin lands with a ring and two small bounces
           this.lastSpin = -10;
-          fm(ac, o, t, 2637, 0.9, { ratio: 2.76, index: 1.2, indexEnd: 0.05, vol: 0.09, send: r });
-          fm(ac, o, t + 0.11, 2637, 0.4, { ratio: 2.76, index: 0.8, vol: 0.04, send: r });
-          fm(ac, o, t + 0.19, 2637, 0.25, { ratio: 2.76, index: 0.6, vol: 0.02, send: r });
-          tone(ac, o, t, 180, 0.08, { f1: 90, vol: 0.12 });
+          fm(ac, o, t, 2637, 0.9, { ratio: 2.76, index: 1.2, indexEnd: 0.05, vol: 0.035, send: r });
+          fm(ac, o, t + 0.11, 2637, 0.4, { ratio: 2.76, index: 0.8, vol: 0.016, send: r });
+          fm(ac, o, t + 0.19, 2637, 0.25, { ratio: 2.76, index: 0.6, vol: 0.008, send: r });
+          tone(ac, o, t, 180, 0.08, { f1: 90, vol: 0.05 });
         } else {
           // spinning: metallic ticks alternating between the two faces, slowing as it rises
           this.lastSpin = t;

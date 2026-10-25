@@ -756,7 +756,7 @@ export function deckBuilderScreen(params: Params): Screen {
     }
   };
   document.addEventListener('keydown', onKey);
-  return { el, dispose: () => document.removeEventListener('keydown', onKey), onShow: () => setTimeout(() => browser.focusSearch(), 80) };
+  return { el, dispose: () => document.removeEventListener('keydown', onKey), onShow: () => setTimeout(() => matchMedia('(hover: hover)').matches && browser.focusSearch(), 80) };
 }
 
 export function copyText(text: string, fallback?: HTMLTextAreaElement) {

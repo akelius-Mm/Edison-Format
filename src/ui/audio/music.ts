@@ -9,12 +9,12 @@
 // Every melody and chord progression here is original.
 import { getSettings, onSettingsChange } from '../settings';
 import { type Ctx, audioContext, graphFor, installAudioUnlock, makeImpulse, onAudioReady, resumeAudio } from './core';
-import { type Send, driveCurve, envelope, fm, mtof, noise, route, tone } from './synth';
+import { type Send, driveCurve, envelope, fm, kRate, mtof, noise, route, tone } from './synth';
 
 export type TrackId = 'menu' | 'duel';
 
 /** Music level relative to the volume setting (sound effects use 0.55). */
-const MUSIC_LEVEL = 0.3;
+const MUSIC_LEVEL = 0.24;
 const LOOKAHEAD = 0.3;
 const TICK_MS = 40;
 
@@ -96,6 +96,7 @@ function pad(ac: Ctx, p: Parts, out: AudioNode, t: number, dur: number, notes: n
   const f = ac.createBiquadFilter();
   f.type = 'lowpass';
   f.Q.value = 0.8;
+  kRate(f.frequency);
   f.frequency.setValueAtTime(cut * 0.6, t);
   f.frequency.linearRampToValueAtTime(cut, t + dur * 0.5);
   f.frequency.linearRampToValueAtTime(cut * 0.7, t + dur);
@@ -140,6 +141,7 @@ function lead(ac: Ctx, out: AudioNode, t: number, m: number, dur: number, o: Lea
   const f = ac.createBiquadFilter();
   f.type = 'lowpass';
   f.Q.value = 1.4;
+  kRate(f.frequency);
   f.frequency.setValueAtTime(o.cut * 0.5, t);
   f.frequency.linearRampToValueAtTime(o.cut, t + a + 0.02);
   f.frequency.setTargetAtTime(o.cut * 0.65, t + a + 0.02, 0.18);
@@ -183,7 +185,7 @@ function pluck(ac: Ctx, out: AudioNode, t: number, m: number, dur: number, vol: 
   tone(ac, out, t, mtof(m), dur, { type, vol, attack: 0.003, lp: 3800, lpEnd: 500, q: 2, send: sends, pan });
 }
 
-/** Distorted power-chord chug (root, fifth, octave). */
+/** Distorted power-chord chug (root and fifth into a soft drive). */
 function chug(ac: Ctx, out: AudioNode, t: number, m: number, dur: number, vol: number) {
   const pre = ac.createGain();
   pre.gain.value = 0.9;
@@ -195,7 +197,7 @@ function chug(ac: Ctx, out: AudioNode, t: number, m: number, dur: number, vol: n
   f.Q.value = 0.9;
   const g = envelope(ac, t, dur, vol, 0.003, dur * 0.25);
   pre.connect(sh).connect(f).connect(g).connect(out);
-  for (const k of [0, 7, 12]) {
+  for (const k of [0, 7]) {
     const o = ac.createOscillator();
     o.type = 'sawtooth';
     o.frequency.value = mtof(m + k);
@@ -312,7 +314,7 @@ const duel: TrackDef = {
       const x = p.hot;
       if (step % 2 === 1) hat(ac, p, x, t, 0.035, false, -0.25);
       if (step === 3 || step === 6 || step === 11 || step === 14) kick(ac, x, t, 0.32);
-      if (step % 2 === 1) bass(ac, x, t, c.bass, sd * 0.8, 0.07);
+      if (step % 2 === 1) tone(ac, x, t, mtof(c.bass), sd * 0.8, { type: 'sawtooth', vol: 0.09, attack: 0.003, lp: 650 });
       if (step % 2 === 0) chug(ac, x, t, c.bass + 12, sd * 1.4, 0.045);
       const tones = [c.tones[0] + 12, c.tones[1] + 12, c.tones[2] + 12, c.tones[0] + 24, c.tones[1] + 24];
       pluck(ac, x, t, tones[ARP16[step]], sd * 1.2, 0.022, 'sawtooth', [sendTo(p.delay, 0.22)], step % 2 ? 0.4 : -0.4);

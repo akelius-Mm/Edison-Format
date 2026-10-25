@@ -4,15 +4,20 @@ import { PREMADE_DECKS } from '../../decks';
 import type { CardData } from '../../engine/card';
 import { cardBrowser } from './cardBrowser';
 import { cardDetail } from './components';
-import { badge, clear, h } from './dom';
+import { badge, clear, h, modal } from './dom';
 import { frame, go, type Screen } from './nav';
 
 export function databaseScreen(): Screen {
   const detail = h('aside', { class: 'dbx-detail' });
   let pinned: CardData | null = null;
+  const narrow = () => matchMedia('(max-width: 899px)').matches;
   const show = (c: CardData | null) => {
     clear(detail);
     if (c && pinned?.name === c.name) detail.appendChild(h('div', { class: 'dbx-pin' }, badge('Pinned', 'gold'), h('span', { class: 'muted' }, 'Click the card again to unpin')));
+    fill(detail, c);
+  };
+  const fill = (host: HTMLElement, c: CardData | null) => {
+    const detail = host;
     detail.appendChild(cardDetail(c, { size: 'xl' }));
     if (!c) return;
     const decks = PREMADE_DECKS.filter((d) => [...d.main, ...d.extra, ...(d.side ?? [])].some(([n]) => n === c.name));
@@ -42,9 +47,15 @@ export function databaseScreen(): Screen {
     gridSize: 'md',
     storageKey: 'edison.cb.database',
     onHover: (c) => {
-      if (!pinned) show(c);
+      if (!pinned && !narrow() && matchMedia('(hover: hover)').matches) show(c);
     },
     onPick: (c) => {
+      if (narrow()) {
+        const body = h('div', { class: 'dbx-sheet' });
+        fill(body, c);
+        modal(c.name, body, [{ label: 'Done', variant: 'primary' }], { cls: 'card-modal sheet-modal' });
+        return;
+      }
       pinned = pinned?.name === c.name ? null : c;
       show(c);
     },
@@ -53,8 +64,8 @@ export function databaseScreen(): Screen {
   const total = allCards().length;
   const el = frame(
     'Card Database',
-    { subtitle: `${total} cards in the Edison card pool · click a card to pin it`, cls: 'database frame-wide' },
+    { subtitle: `${total} cards in the Edison card pool`, cls: 'database frame-wide', compact: true, actions: h('span', { class: 'head-count' }, `${total} cards`) },
     h('div', { class: 'dbx-layout' }, h('section', { class: 'dbx-browser' }, browser.el), detail),
   );
-  return { el, onShow: () => setTimeout(() => browser.focusSearch(), 80) };
+  return { el, onShow: () => setTimeout(() => !narrow() && browser.focusSearch(), 80) };
 }
