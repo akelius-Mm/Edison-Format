@@ -17,7 +17,7 @@ export interface DeckDef {
   event?: {
     /** e.g. "Shonen Jump Championship Edison" */
     name: string;
-    /** ISO date, e.g. "2010-04-17" */
+    /** ISO date, e.g. "2010-04-17" ("2010-05" when the source gives only the month) */
     date: string;
     /** e.g. "1st", "Top 4", "Top 8" */
     place: string;

@@ -28,7 +28,7 @@ export const META: MetaArchetype[] = [
   { key: 'gladiators', label: 'Gladiator Beasts', share: 8, strength: 24, match: /gladiator|prismadiator/i },
   { key: 'zombies', label: 'Zombies', share: 7, strength: 14, match: /zombie/i },
   { key: 'xsabers', label: 'X-Sabers', share: 7, strength: 12, match: /x-?saber/i },
-  { key: 'teledad', label: 'Tele-DAD', share: 7, strength: 20, match: /tele-?dad|dark armed dragon/i },
+  { key: 'teledad', label: 'Tele-DAD', share: 7, strength: 20, match: /tele-?dad|dark armed dragon|vayu turbo/i },
   { key: 'herobeat', label: 'Hero Beat', share: 6, strength: 2, match: /\bhero\b/i },
   { key: 'rogue', label: 'Rogue', share: 10, strength: -10 },
 ];
