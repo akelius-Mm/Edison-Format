@@ -10,6 +10,7 @@ import type {
   MonsterType,
   PlayerId,
   Race,
+  Reason, // ABPF: used by EffectDef.replaceDestroy
   SpellType,
   TrapType,
 } from './types';
@@ -67,7 +68,9 @@ export type QueryKey =
   | 'cannotDeclareAttack'
   | 'cannotDraw'
   | 'cannotAddFromDeck'
-  | 'cannotSet';
+  | 'cannotSet'
+  // ABPF: player subject — "you cannot Synchro Summon this turn" (Variety Comes Out). Checked in Game.canSynchro.
+  | 'cannotSynchroSummon';
 
 export interface Mod {
   q: QueryKey;
@@ -120,6 +123,18 @@ export interface EffectDef {
   procPositions?: BattlePos[];
   /** Effect may be activated while the card is face-down (e.g. hand traps don't need this). */
   ai?: AiHints;
+  /**
+   * ABPF: destruction replacement / prevention on a 'continuous' effect (Gravekeeper's Visionary, Union monsters,
+   * Underground Arachnid, Shield Wing, Earthbound Linewalker). Called by Game.destroy and battle destruction for each
+   * card about to be destroyed while this effect applies. Return true if `card` is NOT destroyed (the hook replaced it).
+   */
+  replaceDestroy?: (ctx: Ctx, card: CardInstance, reason: Reason, reasonCard?: CardInstance) => Promise<boolean>;
+  /**
+   * ABPF: alternative Tribute Summon rule on a 'continuous' effect (Gravekeeper's Visionary, Advance Force): `summoned`,
+   * which normally needs 2 Tributes, can be Tribute Summoned by Tributing 1 monster that passes this check.
+   * Applies to the source's own card (e.g. range ['hand']) or, for a card on the field, to its controller's summons.
+   */
+  altTribute?: (ctx: Ctx, summoned: CardInstance, tribute: CardInstance) => boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -132,6 +147,8 @@ export interface SynchroReq {
   minNonTuners?: number;
   maxNonTuners?: number;
   desc?: string;
+  /** ABPF: whole-combination check (e.g. "Majestic Dragon" + "Red Dragon Archfiend" + 1 non-Tuner). */
+  check?: (materials: CardInstance[]) => boolean;
 }
 
 export interface FusionReq {
