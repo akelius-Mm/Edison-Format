@@ -256,7 +256,7 @@ function checkInScreen(): Screen {
   const history = loadHistory();
   const el = frame(
     'Locals Night',
-    { eyebrow: `Night ${up.number} · ${up.dateLabel.replace(/, 2010$/, '')}`, cls: 'lobby-screen lx-screen lx-checkin' },
+    { eyebrow: `Night ${up.number} · ${up.dateLabel.replace(/, 2010$/, '')}`, cls: 'lobby-screen lx-screen lx-checkin', backTo: () => go('play'), backLabel: 'Duel' },
     flyer,
     lobbySection('Turnout', h('span', { class: 'lob-count' }, 'Who shows up'), turnout),
     lobbySection(
@@ -344,7 +344,7 @@ function hubScreen(n: LocalsNight, autoResume = false): Screen {
   const bar = h('div', { class: 'lx-bar-host' });
 
   const dropBtn = h('button', { type: 'button', class: 'lx-head-btn', 'aria-label': 'Drop from the event', title: 'Drop', onclick: () => void drop() }, icon('door'));
-  const el = frame('Locals Night', { compact: true, cls: 'lobby-screen lx-screen lx-hub', actions: dropBtn }, header, tabsHost, content, bar);
+  const el = frame('Locals Night', { compact: true, cls: 'lobby-screen lx-screen lx-hub', actions: dropBtn, backTo: () => go('play'), backLabel: 'Duel' }, header, tabsHost, content, bar);
 
   /** A duel of this night's current match that was left (or cut off) mid-game. */
   let saved: SavedDuel | null = null;

@@ -12,11 +12,13 @@ import { rulesScreen } from './screens/rules';
 import { settingsScreen } from './screens/settingsScreen';
 import { titleScreen } from './screens/title';
 import { tournamentScreen } from './screens/tournament';
+import { playScreen } from './screens/play';
 import { mountTabBar } from './screens/tabbar';
 import { loadActiveDuel } from './duel/resume';
 
 export function startApp(root: HTMLElement) {
   registerRoute('title', titleScreen);
+  registerRoute('play', playScreen);
   registerRoute('duel', duelSetupScreen);
   registerRoute('exhibition', exhibitionScreen);
   registerRoute('deck-builder', deckBuilderScreen);
