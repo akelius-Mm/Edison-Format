@@ -4,6 +4,7 @@ import { loadActiveTournament, currentRoundLabel } from '../../tournament/tourna
 import { h, icon, ICONS, type Child } from './dom';
 import { renderAvatar, sleevePreview } from './ext';
 import { go, type Screen } from './nav';
+import { getOfficialImage } from '../cards/officialArt';
 import { getProfile, tournamentSummary, ordinal } from './store';
 
 interface MenuItem {
@@ -17,6 +18,7 @@ interface MenuItem {
 
 const MENU: MenuItem[] = [
   { route: 'duel', label: 'Duel vs AI', desc: 'Single game or best-of-three against a computer opponent', icon: 'swords', primary: true, key: '1' },
+  { route: 'draft', label: 'Draft', desc: 'Open packs, pick cards and build a draft deck', icon: 'cards', key: '2' },
   { route: 'tournament', label: 'Tournament', desc: 'Swiss rounds and a top cut against a field of AI duelists', icon: 'trophy', key: '2' },
   { route: 'deck-builder', label: 'Deck Builder', desc: 'Build, tune, import and export your decks', icon: 'cards', key: '3' },
   { route: 'database', label: 'Card Database', desc: 'Browse every card in the Edison card pool', icon: 'search', key: '4' },
@@ -64,128 +66,105 @@ export function emblemSVG(cls = 'emblem') {
 }
 
 export function titleScreen(): Screen {
-  const s = getSettings();
   const profile = getProfile();
   const ts = tournamentSummary();
   const active = loadActiveTournament();
-
-  const items: HTMLButtonElement[] = [];
-  const menu = h(
-    'nav',
-    { class: 'title-menu', 'aria-label': 'Main menu' },
-    MENU.map((m, i) => {
-      const b = h(
-        'button',
-        {
-          type: 'button',
-          class: ['menu-item', m.primary && 'menu-primary'],
-          style: { '--i': i },
-          onclick: () => go(m.route),
-          onkeydown: (e: KeyboardEvent) => {
-            if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
-              e.preventDefault();
-              const n = (i + (e.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length;
-              items[n].focus();
-            } else if (e.key === 'Home') {
-              e.preventDefault();
-              items[0].focus();
-            } else if (e.key === 'End') {
-              e.preventDefault();
-              items[items.length - 1].focus();
-            }
-          },
-        },
-        h('span', { class: 'menu-icon' }, icon(m.icon)),
-        h('span', { class: 'menu-text' }, h('span', { class: 'menu-label' }, m.label), h('span', { class: 'menu-desc' }, m.desc)),
-        h('span', { class: 'menu-key', 'aria-hidden': 'true' }, m.key),
-      );
-      items.push(b);
-      return b;
-    }),
-  );
-
   const gp = profile.games.w + profile.games.l + profile.games.d;
-  const _plate = h(
-    'button',
-    { type: 'button', class: 'player-plate', onclick: () => go('customize'), title: 'Customize your profile' },
-    h('span', { class: 'avatar-ring' }, renderAvatar(s.avatar, 52)),
+
+  // ---- hero: full-bleed Dark Armed Dragon artwork with the main call to action
+  const heroArt = h('div', { class: 'home-hero-art' });
+  artInto(heroArt, 'Dark Armed Dragon');
+  const hero = h(
+    'section',
+    { class: 'home-hero' },
+    heroArt,
+    h('div', { class: 'home-hero-shade' }),
     h(
-      'span',
-      { class: 'plate-text' },
-      h('span', { class: 'plate-name' }, s.playerName),
+      'div',
+      { class: 'home-hero-body' },
+      h('div', { class: 'home-eyebrow' }, 'Edison Format · April 2010'),
+      h('h1', { class: 'home-title' }, 'Edison'),
       h(
-        'span',
-        { class: 'plate-stats' },
-        gp ? `${profile.games.w}W · ${profile.games.l}L${profile.games.d ? ` · ${profile.games.d}D` : ''}` : 'No duels yet',
+        'div',
+        { class: 'home-record' },
+        gp ? `${profile.games.w}–${profile.games.l}${profile.games.d ? `–${profile.games.d}` : ''} record` : 'Ready to duel',
         ts.played ? ` · ${ts.wins} title${ts.wins === 1 ? '' : 's'} · best ${ordinal(ts.best!)}` : '',
       ),
+      h('button', { type: 'button', class: 'home-cta', onclick: () => go('duel') }, icon('swords'), h('span', null, 'Duel')),
     ),
   );
 
   const resume: Child = active
     ? h(
         'button',
-        { type: 'button', class: 'resume-banner', onclick: () => go('tournament') },
+        { type: 'button', class: 'home-resume', onclick: () => go('tournament') },
         icon('trophy'),
-        h('span', null, h('b', null, 'Resume tournament'), h('span', null, `${active.name} — ${currentRoundLabel(active)}`)),
+        h('span', { class: 'home-resume-text' }, h('b', null, 'Resume tournament'), h('span', null, `${active.name} · ${currentRoundLabel(active)}`)),
         icon('play'),
       )
     : null;
 
-  // decorative floating sleeves
-  const floaters = h(
-    'div',
-    { class: 'title-floaters', 'aria-hidden': 'true' },
-    [0, 1, 2, 3, 4].map((i) => {
-      const c = sleevePreview(s.sleeve, 'md');
-      return h('div', { class: `floater f${i}` }, c);
-    }),
+  // ---- mode tiles with card art
+  const tile = (route: string, label: string, sub: string, art: string, badge?: string) => {
+    const bg = h('div', { class: 'home-tile-art' });
+    artInto(bg, art);
+    return h(
+      'button',
+      { type: 'button', class: 'home-tile', onclick: () => go(route) },
+      bg,
+      h('div', { class: 'home-tile-shade' }),
+      badge ? h('span', { class: 'home-badge' }, badge) : null,
+      h('span', { class: 'home-tile-text' }, h('b', null, label), h('span', null, sub)),
+    );
+  };
+  const tiles = h(
+    'section',
+    { class: 'home-tiles' },
+    tile('draft', 'Draft', 'Open packs, build a deck', 'Gold Sarcophagus', 'New'),
+    tile('tournament', 'Tournament', 'Swiss + Top 8', 'Judgment Dragon'),
+    tile('exhibition', 'Watch', 'AI vs AI', 'Stardust Dragon'),
+    tile('deck-builder', 'Decks', 'Build and edit', 'Brionac, Dragon of the Ice Barrier'),
+  );
+
+  const row = (route: string, label: string, ic: keyof typeof ICONS) =>
+    h('button', { type: 'button', class: 'home-row', onclick: () => go(route) }, h('span', { class: 'home-row-icon' }, icon(ic)), h('span', { class: 'home-row-label' }, label), icon('chevron'));
+  const more = h(
+    'section',
+    { class: 'home-more' },
+    row('database', 'Card Database', 'search'),
+    row('customize', 'Sleeves & Playmat', 'palette'),
+    row('rules', 'How to Play & Banlist', 'book'),
+    row('settings', 'Settings', 'gear'),
   );
 
   const el = h(
     'div',
-    { class: 'title-screen', tabindex: '-1' },
-    floaters,
-    h(
-      'div',
-      { class: 'title-grid' },
-      h(
-        'section',
-        { class: 'title-hero' },
-        emblemSVG('emblem title-emblem'),
-        titleMark(),
-        h('div', { class: 'title-eyebrow' }, 'The April 2010 meta · Revived'),
-        h('h1', { class: 'title-logo' }, h('span', { class: 'logo-main' }, 'Edison'), h('span', { class: 'logo-sub' }, 'Format Simulator')),
-        h('p', { class: 'title-tag' }, 'Synchros, Plants, Blackwings and Monarchs. Duel the format many players still call the best ever.'),
-      ),
-      h('section', { class: 'title-side' }, resume, menu),
-    ),
-    h(
-      'footer',
-      { class: 'title-foot' },
-      h('span', null, 'Fan-made, non-commercial simulator. Not affiliated with or endorsed by the trading card game’s publisher.'),
-      h('span', { class: 'title-keys' }, h('span', { class: 'kbd' }, '↑'), h('span', { class: 'kbd' }, '↓'), ' navigate · ', h('span', { class: 'kbd' }, 'Enter'), ' select · ', h('span', { class: 'kbd' }, '1–8'), ' shortcuts'),
-    ),
+    { class: 'home', tabindex: '-1' },
+    hero,
+    h('div', { class: 'home-body' }, resume, h('h2', { class: 'home-h' }, 'Play'), tiles, more, h('p', { class: 'home-foot' }, 'Fan-made, non-commercial simulator. Not affiliated with the card game’s publisher.')),
   );
 
-  const onKey = (e: KeyboardEvent) => {
-    if (e.altKey || e.ctrlKey || e.metaKey) return;
-    if ((e.target as HTMLElement)?.matches?.('input,textarea,select')) return;
-    if (document.querySelector('.modal-backdrop')) return;
-    const m = MENU.find((x) => x.key === e.key);
-    if (m) {
-      e.preventDefault();
-      go(m.route);
-    }
-  };
-  document.addEventListener('keydown', onKey);
-
-  return {
-    el,
-    onShow: () => setTimeout(() => items[0]?.focus({ preventScroll: true }), 60),
-    dispose: () => document.removeEventListener('keydown', onKey),
-  };
+  return { el };
 }
+
+/** Fill an element with a card's official artwork as a background (fails quietly). */
+function artInto(el: HTMLElement, cardName: string) {
+  void getOfficialImage(cardName).then((img) => {
+    if (!img) return;
+    const pre = new Image();
+    pre.onload = () => {
+      el.style.backgroundImage = `url("${img.art}")`;
+      el.classList.add('has-art');
+    };
+    pre.src = img.art;
+  });
+}
+
+void MENU;
+void renderAvatar;
+void sleevePreview;
+void getSettings;
+void emblemSVG;
 
 /** Dark Armed Dragon artwork as the app mark; hidden where outside images are blocked. */
 function titleMark(): HTMLElement {

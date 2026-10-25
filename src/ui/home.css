@@ -1,0 +1,291 @@
+/* ==========================================================================
+   Home screen + tab bar (mobile-first, Duel Links-like)
+   ========================================================================== */
+.home {
+  min-height: 100dvh;
+  background: var(--bg-0);
+  padding-bottom: calc(84px + env(safe-area-inset-bottom, 0px));
+}
+.home-hero {
+  position: relative;
+  height: clamp(340px, 58vh, 560px);
+  overflow: hidden;
+  background: radial-gradient(120% 90% at 50% 20%, #23252b 0%, #0e0f12 70%);
+}
+.home-hero-art {
+  position: absolute;
+  inset: -4%;
+  background-size: cover;
+  background-position: center 30%;
+  opacity: 0;
+  transform: scale(1.06);
+  transition: opacity 0.8s ease, transform 6s ease-out;
+}
+.home-hero-art.has-art {
+  opacity: 1;
+  transform: scale(1);
+}
+.home-hero-shade {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(11, 12, 14, 0.15) 0%, rgba(11, 12, 14, 0.25) 45%, rgba(11, 12, 14, 0.92) 82%, var(--bg-0) 100%);
+}
+.home-hero-body {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 0 max(20px, env(safe-area-inset-left, 0px)) 22px max(20px, env(safe-area-inset-right, 0px));
+  display: grid;
+  gap: 6px;
+  max-width: 720px;
+  margin: 0 auto;
+}
+.home-eyebrow {
+  font: 600 12px/1 var(--font);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(236, 235, 231, 0.75);
+}
+.home-title {
+  margin: 0;
+  font: 800 clamp(44px, 13vw, 76px) / 0.95 var(--font-display);
+  letter-spacing: -0.04em;
+  color: #fff;
+}
+.home-record {
+  font: 500 14px var(--font);
+  color: rgba(236, 235, 231, 0.75);
+  margin-bottom: 12px;
+}
+.home-cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  height: 56px;
+  border-radius: 16px;
+  border: 0;
+  background: #f2efe8;
+  color: #111;
+  font: 700 18px var(--font);
+  letter-spacing: -0.01em;
+  cursor: pointer;
+  transition: transform 0.15s ease, background 0.2s ease;
+}
+.home-cta .icon {
+  width: 20px;
+  height: 20px;
+}
+.home-cta:active {
+  transform: scale(0.97);
+}
+.home-cta:hover {
+  background: #fff;
+}
+.home-body {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 6px max(20px, env(safe-area-inset-left, 0px)) 0 max(20px, env(safe-area-inset-right, 0px));
+  display: grid;
+  gap: 14px;
+}
+.home-h {
+  margin: 10px 0 0;
+  font: 700 20px var(--font-display);
+  letter-spacing: -0.02em;
+  color: var(--text);
+}
+.home-resume {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: 16px;
+  border: 1px solid var(--gold-line);
+  background: var(--bg-2);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+}
+.home-resume-text {
+  flex: 1;
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.home-resume-text span {
+  font-size: 13px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.home-tiles {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.home-tile {
+  position: relative;
+  aspect-ratio: 1 / 1.05;
+  border-radius: 18px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: var(--bg-2);
+  cursor: pointer;
+  text-align: left;
+  padding: 0;
+  font: inherit;
+  color: var(--text);
+  transition: transform 0.15s ease;
+}
+.home-tile:active {
+  transform: scale(0.97);
+}
+.home-tile-art {
+  position: absolute;
+  inset: 0;
+  background-size: cover;
+  background-position: center 25%;
+  opacity: 0;
+  transition: opacity 0.6s ease;
+}
+.home-tile-art.has-art {
+  opacity: 1;
+}
+.home-tile-shade {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0) 35%, rgba(8, 8, 10, 0.88) 100%);
+}
+.home-tile-text {
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  bottom: 12px;
+  display: grid;
+  gap: 2px;
+}
+.home-tile-text b {
+  font: 700 18px var(--font-display);
+  letter-spacing: -0.02em;
+}
+.home-tile-text span {
+  font-size: 13px;
+  color: rgba(236, 235, 231, 0.75);
+}
+.home-badge {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  padding: 4px 9px;
+  border-radius: 99px;
+  background: #f2efe8;
+  color: #111;
+  font: 700 11px var(--font);
+  letter-spacing: 0.02em;
+}
+.home-more {
+  margin-top: 6px;
+  border-radius: 16px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: var(--bg-2);
+}
+.home-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 54px;
+  padding: 0 16px;
+  border: 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  background: transparent;
+  color: var(--text);
+  font: 500 16px var(--font);
+  cursor: pointer;
+  text-align: left;
+}
+.home-row:last-child {
+  border-bottom: 0;
+}
+.home-row:active {
+  background: var(--bg-3);
+}
+.home-row-icon {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-2);
+}
+.home-row-label {
+  flex: 1;
+}
+.home-row > .icon:last-child {
+  color: var(--faint);
+  width: 16px;
+  height: 16px;
+}
+.home-foot {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: var(--faint);
+  text-align: center;
+}
+@media (min-width: 900px) {
+  .home-tiles {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .home-hero-art {
+    transition: none;
+    transform: none;
+  }
+}
+
+/* ---------------------------------------------------------------- tab bar */
+.tabbar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 90;
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  padding: 6px max(8px, env(safe-area-inset-left, 0px)) calc(6px + env(safe-area-inset-bottom, 0px)) max(8px, env(safe-area-inset-right, 0px));
+  background: rgba(14, 15, 18, 0.86);
+  -webkit-backdrop-filter: saturate(160%) blur(18px);
+  backdrop-filter: saturate(160%) blur(18px);
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+}
+.tab {
+  display: grid;
+  justify-items: center;
+  gap: 3px;
+  padding: 6px 0 2px;
+  border: 0;
+  background: none;
+  color: var(--faint);
+  font: 600 10.5px var(--font);
+  cursor: pointer;
+}
+.tab .icon {
+  width: 23px;
+  height: 23px;
+}
+.tab.on {
+  color: var(--text);
+}
+body.in-duel .tabbar {
+  display: none;
+}
+body.has-tabbar .frame {
+  padding-bottom: calc(76px + env(safe-area-inset-bottom, 0px));
+}
