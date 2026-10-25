@@ -3,6 +3,7 @@ import './ui/screens/screens.css';
 import { startApp } from './ui/app';
 import './ui/clean.css';
 import './ui/home.css';
+import './ui/polish.css';
 
 startApp(document.getElementById('app')!);
 
