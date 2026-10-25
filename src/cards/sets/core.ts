@@ -471,7 +471,7 @@ monster('Card Trooper', {
   level: 3,
   atk: 400,
   def: 400,
-  text: 'Once per turn: You can send up to 3 cards from the top of your Deck to the GY; this card gains 500 ATK for each card sent, until your opponent\'s next End Phase. When this card is destroyed and sent to the GY: Draw 1 card.',
+  text: 'Once per turn: You can send up to 3 cards from the top of your Deck to the GY; this card gains 500 ATK for each card sent, until the end of this turn. When this card is destroyed and sent to the GY: Draw 1 card.',
   aiValue: 400,
   effects: [
     {
@@ -487,7 +487,7 @@ monster('Card Trooper', {
       },
       resolve: async (ctx) => {
         const milled = await ctx.mill(ctx.data.n);
-        if (ctx.self.location === 'mzone' && ctx.self.faceUp) ctx.addTempMod(ctx.self, 'atk', 500 * milled.length, 'opponentEnd');
+        if (ctx.self.location === 'mzone' && ctx.self.faceUp) ctx.addTempMod(ctx.self, 'atk', 500 * milled.length, 'turn');
       },
       ai: { score: () => 55 },
     },

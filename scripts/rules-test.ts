@@ -1567,6 +1567,33 @@ async function crmsTests() {
     eq(other.location, 'grave', 'other monster destroyed');
   });
 
+  await test('Brain Control: pay 800, take a face-up monster until the End Phase, then it goes back', async () => {
+    const { g, place } = setup();
+    const bc = place(0, cardByName('Brain Control'), 'hand');
+    const mon = place(1, T.brute, 'mzone');
+    await activateCard(g, 0, bc);
+    eq(g.players[0].lp, 8000 - 800, 'paid 800');
+    eq(mon.controller, 0, 'taken');
+    await (g as any).setPhase('end');
+    await (g as any).phaseWindow?.();
+    eq(mon.controller, 1, 'returned in the End Phase');
+    const { g: g2, place: place2 } = setup();
+    g2.players[0].lp = 700;
+    const bc2 = place2(0, cardByName('Brain Control'), 'hand');
+    place2(1, T.brute, 'mzone');
+    eq(g2.legalMainActions(0).some((a) => a.type === 'activate' && a.card === bc2), false, 'cannot activate with 700 LP');
+  });
+
+  await test('Card Trooper: the ATK gain lasts until the end of this turn only', async () => {
+    const { g, c0, place } = setup();
+    const ct = place(0, cardByName('Card Trooper'), 'mzone');
+    (c0 as any).chooseOption = async (_g: unknown, _p: unknown, req: { options: unknown[] }) => req.options.length - 1;
+    await activateCard(g, 0, ct);
+    eq(g.getAtk(ct), 400 + 1500, '+1500 after sending 3');
+    // the End Phase drops 'turn' modifiers; 'opponentEnd' ones would survive into the opponent's turn
+    eq(ct.tempMods.filter((t) => t.q === 'atk').every((t) => t.until === 'turn'), true, 'expires at the end of this turn');
+  });
+
   await test('Ehren, Lightsworn Monk: a Defense Position monster it attacks goes back to the Deck, even one it destroys (no GY effects)', async () => {
     const { g, place } = setup();
     const ehren = place(0, cardByName('Ehren, Lightsworn Monk'), 'mzone');
