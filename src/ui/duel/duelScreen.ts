@@ -99,6 +99,8 @@ class DuelScreen implements HumanUI {
   private replayLog: LogEntry[] = [];
   private restoringEl: HTMLElement | null = null;
   private left = false;
+  /** Play a friend: told about every abort (surrender included). */
+  private externalAbort: ((winner: PlayerId | null, reason: string) => void)[] = [];
 
   constructor(
     private container: HTMLElement,
@@ -117,8 +119,10 @@ class DuelScreen implements HumanUI {
     const seed = opts.seed ?? Math.floor(Math.random() * 2 ** 31);
     this.replaying = !!opts.replay?.length;
     const controllers = opts.sides.map((side, i) => {
+      // Play a friend: the friend's seat is driven from the network.
+      if (opts.remote && side.control !== 'human') return opts.remote;
       if (side.control === 'human') {
-        const rec = new RecordingController(new HumanController(this), {
+        const rec = new RecordingController(opts.localDriver ?? new HumanController(this), {
           replay: opts.replay,
           onDecision: (log, game) => opts.onDecision?.(log, game),
           onReplayEnd: () => this.endReplay(),
@@ -241,6 +245,20 @@ class DuelScreen implements HumanUI {
       this.applySpeedVar();
     });
     this.applySpeedVar();
+    // Play a friend: hand the caller a way to end the game and decorate the board.
+    if (opts.onMount) {
+      const self = this;
+      opts.onMount({
+        game: this.game,
+        root: this.root,
+        me: this.me,
+        abort: (winner, reason) => this.abort(new GameOver(winner, reason)),
+        onAbort: (fn) => this.externalAbort.push(fn),
+        get restoring() {
+          return self.replaying;
+        },
+      });
+    }
   }
 
   // ------------------------------------------------------------------ phone
@@ -531,7 +549,11 @@ class DuelScreen implements HumanUI {
       const win = res.winner;
       let title: string;
       let cls: string;
-      if (win === null) {
+      const custom = this.opts.resultTitle?.(res);
+      if (custom) {
+        title = custom;
+        cls = win === null ? 'is-draw' : win === this.me ? 'is-win' : 'is-lose';
+      } else if (win === null) {
         title = 'Draw';
         cls = 'is-draw';
       } else if (this.spectator) {
@@ -619,6 +641,7 @@ class DuelScreen implements HumanUI {
     this.clearInteraction();
     for (const l of [...this.abortListeners]) l(e);
     this.abortListeners.clear();
+    for (const f of this.externalAbort) f(e.winner, e.reason);
     this.setPaused(false);
   }
 

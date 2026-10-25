@@ -15,6 +15,8 @@ import { tournamentScreen } from './screens/tournament';
 import { playScreen } from './screens/play';
 import { mountTabBar } from './screens/tabbar';
 import { loadActiveDuel } from './duel/resume';
+// Play a friend (online, room codes).
+import { friendScreen } from './screens/friend';
 
 export function startApp(root: HTMLElement) {
   registerRoute('title', titleScreen);
@@ -30,10 +32,12 @@ export function startApp(root: HTMLElement) {
   registerRoute('draft', draftScreen);
   registerRoute('packs', packsScreen);
   registerRoute('binder', binderScreen);
+  registerRoute('friend', friendScreen);
   clear(root);
   // The app was closed in the middle of a duel (iOS kills home-screen apps in the background):
   // open on Home, where the "Duel in progress" card resumes it.
-  if (loadActiveDuel()?.live && !/^#?\/?(title)?$/.test(location.hash)) history.replaceState(null, '', '#/title');
+  // (A friend's invite link still opens the join screen.)
+  if (loadActiveDuel()?.live && !/^#?\/?(title)?$/.test(location.hash) && !location.hash.startsWith('#/friend?join=')) history.replaceState(null, '', '#/title');
   startRouter(root);
   mountTabBar();
 }

@@ -28,6 +28,8 @@ export interface Settings {
   officialImages: boolean;
   /** Built-in music tracks the player switched off (track ids). */
   musicOff: string[];
+  /** Play a friend: PeerJS signalling server ("host:port/path"); empty = the free PeerJS cloud. */
+  netServer: string;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -48,6 +50,7 @@ export const DEFAULT_SETTINGS: Settings = {
   confirmEndTurn: false,
   officialImages: true,
   musicOff: [],
+  netServer: '',
 };
 
 const KEY = 'edison.settings.v1';
