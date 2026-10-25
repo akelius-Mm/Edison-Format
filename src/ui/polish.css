@@ -41,7 +41,7 @@ a,
   -webkit-tap-highlight-color: transparent;
 }
 :focus-visible {
-  outline: 2px solid var(--gold);
+  outline: 2px solid rgba(242, 239, 232, 0.55);
   outline-offset: 2px;
 }
 
@@ -3918,4 +3918,10 @@ body.in-duel .ui-toast-host {
 .badge-orange {
   background: rgba(224, 176, 122, 0.16);
   color: #e8c49c;
+}
+
+/* Dialogs focus their main button when they open: show that with a quiet light ring, not a gold one */
+.modal :focus-visible {
+  outline: 2px solid rgba(242, 239, 232, 0.55);
+  outline-offset: 2px;
 }

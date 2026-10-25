@@ -2316,3 +2316,18 @@
 }
 .duel-root .banner--turn .fx-banner-in { max-width: calc(100vw - 32px); }
 .duel-root .banner--turn b { overflow: hidden; text-overflow: ellipsis; }
+/* Phones held sideways: shorter prompt rows so two or three choices fit without scrolling */
+@media (orientation: landscape) and (max-height: 500px) {
+  .duel-root .dlg-head { padding: 10px 14px 8px; }
+  .duel-root .dlg-body { padding: 10px 14px; }
+  .duel-root .dlg-actions { padding: 8px 14px; }
+  .duel-root .resp-list { gap: 6px; }
+  .duel-root .resp-top,
+  .duel-root .resp-opt { padding: 5px 8px; }
+  .duel-root .resp-top img,
+  .duel-root .resp-opt img { width: 32px; height: 32px; }
+  .duel-root .dlg-layer--docked.dlg--response .dlg { max-height: calc(100dvh - 24px); }
+}
+.duel-root .resp-top img,
+.duel-root .resp-opt img { object-fit: cover; }
+.duel-root .tile-acts .btn { width: 100%; height: auto; min-height: 30px; padding: 5px 8px; line-height: 1.2; white-space: normal; text-align: center; }
