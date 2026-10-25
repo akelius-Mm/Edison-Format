@@ -73,6 +73,8 @@ import { getSettings, loadJSON, saveJSON } from '../settings';
 import { button, confirmDialog, h, icon, modal, segmented, toast } from './dom';
 import { AVATAR_PRESETS, SLEEVES } from './ext';
 import { runMatch } from './match';
+import { reconcileActiveDuel } from '../duel/resume';
+import { resumeDuelCard } from './resumeCard';
 import { frame, go, type Params, type Screen } from './nav';
 import { packArt as setPackArt } from './collectionUi';
 import { grantPrize } from '../../collection/api';
@@ -302,7 +304,13 @@ export function draftScreen(params: Params = {}): Screen {
       leave.push(fn);
     },
   };
-  homeView(ctl, { customize: params.customize === '1' });
+  // A saved duel of this draft's current round: Home's card (resume=1) or "Leave and save" (view=hub)
+  // lands on the round hub; resume=1 also picks the duel straight back up.
+  const s0 = loadDraft();
+  if (!s0 || s0.phase !== 'tournament') reconcileActiveDuel('draft', null);
+  if (params.resume || params.view) history.replaceState(null, '', '#/draft');
+  if (s0?.phase === 'tournament' && (params.view === 'hub' || params.resume === '1')) hubView(ctl, s0, params.resume === '1');
+  else homeView(ctl, { customize: params.customize === '1' });
   return {
     el: root,
     dispose() {
@@ -1389,9 +1397,14 @@ function byeView(ctl: Ctl, s: DraftState) {
   ctl.show(frame(`Round ${n}`, { eyebrow: hubEyebrow(s, n), subtitle: `Playing “${deckNameOf(s)}” · ${rec.text}`, ...backToHome(ctl) }, body), 'hub');
 }
 
-function hubView(ctl: Ctl, s: DraftState) {
+/** The saved-duel key of a draft round's match. */
+const duelKey = (s: DraftState, n: number) => `draft:${s.id}:r${n}`;
+
+function hubView(ctl: Ctl, s: DraftState, autoResume = false) {
   const n = s.rounds.length;
   const m = humanMatch(s);
+  const saved = reconcileActiveDuel('draft', m && m.b && !m.result ? duelKey(s, n) : null);
+  if (autoResume && !saved) toast('That duel can no longer be resumed.', 'error');
   if (!m) return finalView(ctl, s);
   if (!m.b) return byeView(ctl, s);
   const opp = playerById(s, m.b);
@@ -1405,7 +1418,7 @@ function hubView(ctl: Ctl, s: DraftState) {
   const actions = h('div', { class: 'dr-btn-row' });
   const busy = h('div', { class: 'dr-busy', style: { display: 'none' } }, h('i', { class: 'dr-spinner' }), 'Other tables are finishing…');
   if (!done) {
-    actions.append(button(n === 1 ? 'Start round 1' : `Start round ${n}`, () => void play(), { variant: 'primary', icon: 'swords', cls: 'dr-btn-wide' }));
+    actions.append(button(saved ? 'Resume match' : n === 1 ? 'Start round 1' : `Start round ${n}`, () => void play(), { variant: 'primary', icon: saved ? 'play' : 'swords', cls: 'dr-btn-wide' }));
   } else if (s.phase === 'done') {
     actions.append(button('Final results', () => finalView(ctl, s), { variant: 'primary', icon: 'trophy', cls: 'dr-btn-wide' }));
   } else {
@@ -1442,6 +1455,7 @@ function hubView(ctl: Ctl, s: DraftState) {
   const body = h(
     'div',
     { class: 'dr-hub' },
+    saved && !done ? resumeDuelCard(saved, { onResume: () => void play(), cls: 'mode-resume' }) : null,
     matchCard,
     h('div', { class: 'dr-section-title' }, h('span', null, `Round ${n} pairings`), h('span', null, done ? 'Final' : 'In progress')),
     pairingsList(s, n),
@@ -1449,6 +1463,7 @@ function hubView(ctl: Ctl, s: DraftState) {
     standingsList(s),
   );
   ctl.show(frame(`Round ${n}`, { eyebrow: hubEyebrow(s, n), subtitle: `Playing “${deckNameOf(s)}” · ${rec.text}`, ...backToHome(ctl) }, body), 'hub');
+  if (autoResume && saved && !done) setTimeout(() => void play(), 0);
 
   async function play() {
     if (!m || !m.b) return;
@@ -1464,6 +1479,7 @@ function hubView(ctl: Ctl, s: DraftState) {
       bestOf: s.bestOf,
       caption: `Draft · Round ${n} – vs ${opp.name}`,
       stats: s.savedDeckId ? { deckKey: `custom:${s.savedDeckId}`, deckName } : undefined,
+      resume: { kind: 'draft', key: duelKey(s, n), route: 'draft', params: { view: 'hub' } },
     });
     const token = ctl.token;
     actions.style.display = 'none';

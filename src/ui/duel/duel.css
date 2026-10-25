@@ -2334,3 +2334,14 @@
 /* Icon-only dialog button (the attack bar's Cancel) */
 .duel-root .dlg-actions .btn.btn--icon { flex: none; width: 38px; min-width: 38px; min-height: 38px; padding: 0; border-radius: 50%; background: rgba(255, 255, 255, 0.08); border-color: transparent; color: var(--dl-ink); }
 .duel-root .dlg-actions .btn.btn--icon svg { width: 16px; height: 16px; }
+/* Resuming a saved duel: the board stays hidden while the saved decisions are replayed */
+.duel-restoring { position: absolute; inset: 0; z-index: 80; display: grid; place-items: center; background: rgba(6, 8, 14, 0.82); transition: opacity 0.22s ease; }
+.duel-restoring.is-gone { opacity: 0; pointer-events: none; }
+.duel-restoring-box { display: flex; align-items: center; gap: 12px; padding: 14px 18px; border-radius: 14px; background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 255, 255, 0.1); color: var(--dl-ink, #fff); font: 600 15px var(--ef-font-ui, system-ui); }
+.duel-restoring .spinner { width: 18px; height: 18px; flex: none; border-radius: 50%; border: 2px solid rgba(255, 255, 255, 0.15); border-top-color: #d4af37; animation: duel-restore-spin 0.8s linear infinite; }
+@keyframes duel-restore-spin { to { transform: rotate(360deg); } }
+/* Leave or concede: stacked choices on phones */
+.duel-root .dlg--leave .dlg-actions { flex-wrap: wrap; }
+@media (max-width: 600px) {
+  .duel-root .dlg--leave .dlg-actions .btn { flex: 1 1 100%; }
+}

@@ -1,6 +1,7 @@
 // Contract between the app shell (menus/tournament) and the duel screen.
 import type { Difficulty } from '../../ai/ai';
-import type { DeckList } from '../../engine/game';
+import type { DeckList, Game } from '../../engine/game';
+import type { Decision } from '../../engine/replay';
 import type { PlayerId } from '../../engine/types';
 
 export interface DuelSide {
@@ -29,6 +30,19 @@ export interface DuelOptions {
   caption?: string;
   /** Allow surrendering (always true for humans). */
   allowSurrender?: boolean;
+  /** Overrides the "first player skips draw" setting (a resumed duel keeps the rule it started with). */
+  skipFirstDraw?: boolean;
+  /**
+   * Resume support. `replay` holds the human's recorded decisions: they are fed back instantly
+   * (no animation or sound) and the live board takes over when they run out.
+   */
+  replay?: Decision[];
+  /** Called after every live human decision with the full decision log. */
+  onDecision?: (log: Decision[], game: Game) => void;
+  /** Called when the game is decided (before the result screen), not when the player leaves. */
+  onGameOver?: (result: DuelResult) => void;
+  /** The duel is saved: the exit button offers "Leave and save" next to "Concede". */
+  resumable?: boolean;
 }
 
 export interface DuelResult {
@@ -36,6 +50,10 @@ export interface DuelResult {
   reason: string;
   turns: number;
   surrendered?: boolean;
+  /** The player left with "Leave and save": the duel was not decided and stays resumable. */
+  left?: boolean;
+  /** Replaying the saved decisions did not reproduce the game (nothing was decided). */
+  restoreFailed?: boolean;
 }
 
 /**

@@ -13,6 +13,7 @@ import { settingsScreen } from './screens/settingsScreen';
 import { titleScreen } from './screens/title';
 import { tournamentScreen } from './screens/tournament';
 import { mountTabBar } from './screens/tabbar';
+import { loadActiveDuel } from './duel/resume';
 
 export function startApp(root: HTMLElement) {
   registerRoute('title', titleScreen);
@@ -28,6 +29,9 @@ export function startApp(root: HTMLElement) {
   registerRoute('packs', packsScreen);
   registerRoute('binder', binderScreen);
   clear(root);
+  // The app was closed in the middle of a duel (iOS kills home-screen apps in the background):
+  // open on Home, where the "Duel in progress" card resumes it.
+  if (loadActiveDuel()?.live && !/^#?\/?(title)?$/.test(location.hash)) history.replaceState(null, '', '#/title');
   startRouter(root);
   mountTabBar();
 }

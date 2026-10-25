@@ -52,6 +52,7 @@ import {
 import { getSettings, loadJSON, saveJSON } from '../settings';
 import { artInto, ctaButton, deckShelf, iosGroup, iosNav, linkButton, lobbySection, stickyBar } from './components';
 import { confirmDialog, h, icon, segmented, toast, type Child } from './dom';
+import { reconcileActiveDuel } from '../duel/resume';
 import { eventRunScreen } from './eventRun';
 import { AVATAR_PRESETS, SLEEVES } from './ext';
 import { avatar, packIcon } from './locals';
@@ -70,9 +71,11 @@ interface CheckInForm {
 
 export function eventsScreen(params: Record<string, string>): Screen {
   const run = loadActiveEvent();
+  if (!run) reconcileActiveDuel('events', null);
+  if (params.resume) history.replaceState(null, '', `#/events${params.view ? `?view=${params.view}` : ''}`);
   switch (params.view) {
     case 'run':
-      return run ? eventRunScreen(run) : hubScreen();
+      return run ? eventRunScreen(run, params.resume === '1') : hubScreen();
     case 'checkin':
       return checkInScreen(params);
     case 'season': {

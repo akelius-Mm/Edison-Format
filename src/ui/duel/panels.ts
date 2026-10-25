@@ -225,6 +225,21 @@ export class LogPanel {
     if (this.list.children.length > 400) this.list.firstElementChild?.remove();
     if (stick) this.list.scrollTop = this.list.scrollHeight;
   }
+
+  /** Append many entries at once (a restored duel's history) and scroll to the newest. */
+  addMany(entries: LogEntry[]) {
+    if (!entries.length) return;
+    const frag = document.createDocumentFragment();
+    for (const e of entries.slice(-400)) {
+      const row = h('div', `log-row log-${e.kind}${e.player === undefined ? '' : e.player === this.me ? ' log-me' : ' log-opp'}`);
+      row.textContent = e.text;
+      frag.appendChild(row);
+      if (e.turn > 0) this.lastTurn = e.turn;
+    }
+    this.list.appendChild(frag);
+    while (this.list.children.length > 400) this.list.firstElementChild?.remove();
+    this.list.scrollTop = this.list.scrollHeight;
+  }
 }
 
 // ---------------------------------------------------------------- preview

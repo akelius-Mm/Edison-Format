@@ -10,6 +10,8 @@ import { getProfile, tournamentSummary, ordinal } from './store';
 // Events agent: Events tile, Profile chip and event resume.
 import { loadActiveEvent, loadRatings, roundLabel as eventRoundLabel } from '../../events';
 import { avatar as initialsAvatar } from './locals';
+import { loadActiveDuel } from '../duel/resume';
+import { resumeDuelCard } from './resumeCard';
 
 interface MenuItem {
   route: string;
@@ -100,7 +102,11 @@ export function titleScreen(): Screen {
     h('button', { type: 'button', class: 'home-profile', 'aria-label': 'Profile', onclick: () => go('profile') }, initialsAvatar({ name: getSettings().playerName || 'You', human: true }, 28), String(loadRatings().constructed.rating)),
   );
 
-  const ev = loadActiveEvent();
+  // A duel left in the middle (or cut off when the app was closed) comes first.
+  const duel = loadActiveDuel();
+  const duelCard: Child = duel ? resumeDuelCard(duel, { showMode: true }) : null;
+  const ev = duel?.tag.kind === 'events' ? null : loadActiveEvent();
+  const tour = duel?.tag.kind === 'tournament' ? null : active;
   const resume: Child = ev
     ? h(
         'button',
@@ -109,12 +115,12 @@ export function titleScreen(): Screen {
         h('span', { class: 'home-resume-text' }, h('b', null, 'Resume event'), h('span', null, `${ev.title} · ${eventRoundLabel(ev)}`)),
         icon('play'),
       )
-    : active
+    : tour
     ? h(
         'button',
         { type: 'button', class: 'home-resume', onclick: () => go('tournament') },
         icon('trophy'),
-        h('span', { class: 'home-resume-text' }, h('b', null, 'Resume tournament'), h('span', null, `${active.name} · ${currentRoundLabel(active)}`)),
+        h('span', { class: 'home-resume-text' }, h('b', null, 'Resume tournament'), h('span', null, `${tour.name} · ${currentRoundLabel(tour)}`)),
         icon('play'),
       )
     : null;
@@ -159,7 +165,7 @@ export function titleScreen(): Screen {
     'div',
     { class: 'home', tabindex: '-1' },
     hero,
-    h('div', { class: 'home-body' }, resume, h('h2', { class: 'home-h' }, 'Play'), tiles, more, h('p', { class: 'home-foot' }, 'Fan-made, non-commercial simulator. Not affiliated with the card game’s publisher.')),
+    h('div', { class: 'home-body' }, duelCard, resume, h('h2', { class: 'home-h' }, 'Play'), tiles, more, h('p', { class: 'home-foot' }, 'Fan-made, non-commercial simulator. Not affiliated with the card game’s publisher.')),
   );
 
   return { el };

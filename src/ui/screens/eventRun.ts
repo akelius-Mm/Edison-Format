@@ -50,6 +50,8 @@ import { confirmDialog, h, icon, segmented, toast, type Child } from './dom';
 import { sleevePreview } from './ext';
 import { avatar, deckArtEl, listLine, timer, toTop } from './locals';
 import { runMatch, type MatchSetup } from './match';
+import { reconcileActiveDuel, type SavedDuel } from '../duel/resume';
+import { resumeDuelCard } from './resumeCard';
 import { frame, go, type Screen } from './nav';
 import { showResults } from './results';
 import { ordinal, recordMatch, toDeckList } from './store';
@@ -88,7 +90,10 @@ function knownDeck(r: EventRun, id: string) {
   return false;
 }
 
-export function eventRunScreen(r: EventRun): Screen {
+/** The saved-duel key of an event match. */
+const duelKey = (r: EventRun, m: LocalsMatch) => `events:${r.id}:${m.id}`;
+
+export function eventRunScreen(r: EventRun, autoResume = false): Screen {
   if (r.phase === 'done') closeOutEvent(r);
   const spec = EVENT_SPECS[r.kind];
   const big = r.size > 40;
@@ -114,10 +119,18 @@ export function eventRunScreen(r: EventRun): Screen {
   const backTo = () => go('events', r.season ? { view: 'season' } : {});
   const el = frame(spec.short, { compact: true, cls: 'lobby-screen lx-screen lx-hub ev-run', actions: dropBtn, backTo, backLabel: r.season ? 'Season' : 'Events' }, header, tabsHost, content, bar);
 
+  /** A duel of this event's current match that was left (or cut off) mid-game. */
+  let saved: SavedDuel | null = null;
+  const syncSaved = () => {
+    const m = pendingHumanMatch(r);
+    saved = reconcileActiveDuel('events', m && m.b != null ? duelKey(r, m) : null);
+  };
+
   function redraw() {
     timers.length = 0;
     revealTimers.forEach(clearTimeout);
     revealTimers = [];
+    syncSaved();
     dropBtn.hidden = r.phase === 'done' || humanEliminated(r);
     drawHeader();
     drawTabs();
@@ -182,7 +195,7 @@ export function eventRunScreen(r: EventRun): Screen {
       sheetEl.classList.add('is-posting');
       postRound = null;
     }
-    return h('div', { class: 'lx-round' }, seatCard(m), sheetEl);
+    return h('div', { class: 'lx-round' }, saved ? resumeDuelCard(saved, { onResume: () => void playMine(), cls: 'mode-resume' }) : null, seatCard(m), sheetEl);
   }
 
   function seatCard(m: LocalsMatch | null): HTMLElement {
@@ -566,7 +579,7 @@ export function eventRunScreen(r: EventRun): Screen {
       const opp = opponentOf(r, m)!;
       const revealed = r.revealed.includes(m.id);
       sum = h('span', null, m.stage === 'top' ? `${m.label} · ` : `Table ${m.table} · `, 'vs ', h('b', null, opp.name));
-      cta = revealed ? ctaButton('Play match', () => void playMine(), 'swords') : ctaButton('Sit down', () => sitDown(m), 'hand');
+      cta = saved ? ctaButton('Resume match', () => void playMine(), 'play') : revealed ? ctaButton('Play match', () => void playMine(), 'swords') : ctaButton('Sit down', () => sitDown(m), 'hand');
       if (revealed) extra = h('div', { class: 'lx-bar-row' }, quiet('Concede', () => void concedeMine(), 'flag'), quiet('Auto-play · unrated', () => autoMine(), 'robot'));
     } else if (r.step === 'pairings') {
       const mine = humanMatch(r);
@@ -685,7 +698,14 @@ export function eventRunScreen(r: EventRun): Screen {
       { name: opp.name, deck: toDeckList(opp.deck), avatar: opp.avatar, sleeve: opp.sleeve, control: opp.difficulty, title: deckLabel(opp) },
     ];
     const where = m.stage === 'top' ? m.label : `Round ${m.round} · Table ${m.table}`;
-    const setup: MatchSetup = { sides, bestOf: 3, caption: `${where} – vs ${opp.name}`, requireWinner: m.stage === 'top', stats: { deckKey: me.deck.id, deckName: me.deck.name } };
+    const setup: MatchSetup = {
+      sides,
+      bestOf: 3,
+      caption: `${where} – vs ${opp.name}`,
+      requireWinner: m.stage === 'top',
+      stats: { deckKey: me.deck.id, deckName: me.deck.name },
+      resume: { kind: 'events', key: duelKey(r, m), route: 'events', params: { view: 'run' } },
+    };
     try {
       const outcome = await runMatch(setup);
       const games = outcome.games.map((g) => (meA ? g : { ...g, winner: g.winner == null ? null : ((1 - g.winner) as 0 | 1) }));
@@ -728,6 +748,10 @@ export function eventRunScreen(r: EventRun): Screen {
   }
 
   redraw();
+  if (autoResume) {
+    if (saved) setTimeout(() => void playMine(), 0);
+    else toast('That duel can no longer be resumed.', 'error');
+  }
   return {
     el,
     dispose: () => {
