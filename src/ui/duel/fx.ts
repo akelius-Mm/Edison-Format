@@ -29,6 +29,16 @@ export interface FxHost {
   spotlight(c: CardInstance): void;
 }
 
+/** Timing trace for scripts/perf-check.cjs: only collected when the page sets `window.__fxTrace = []`. */
+export type PerfMark = { k: string; type?: string; player?: number; me?: number; ms?: number; t0: number; t1: number };
+export function perfTrace(): PerfMark[] | null {
+  const t = (globalThis as { __fxTrace?: PerfMark[] }).__fxTrace;
+  return Array.isArray(t) ? t : null;
+}
+
+/** The system asks for less motion: no shaking, lunging or flying cards (steps still fade). */
+const reducedMotion = () => typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+
 export const sleep = (ms: number) => new Promise<void>((r) => window.setTimeout(r, ms));
 
 function el(cls: string, html = '') {
@@ -43,17 +53,95 @@ function center(e: Element) {
   return { x: r.left + r.width / 2, y: r.top + r.height / 2, w: r.width, h: r.height };
 }
 
+/**
+ * Step lengths at "Normal" speed (ms the duel waits before the next step; the visuals may run on
+ * underneath). Most steps are 150-300 ms; the big moments (turn change, Synchro Summon, an activated
+ * card's showcase, a reveal, the opening dice) are longer and can be skipped by tapping the board.
+ */
+const STEP = {
+  turn: 620,
+  phase: 240,
+  phaseEnd: 170,
+  draw: 230,
+  drawStagger: 70,
+  openingStagger: 85,
+  set: 260,
+  move: 240,
+  summon: 360,
+  tribute: 440,
+  synchro: 720,
+  activate: 600,
+  resolve: 260,
+  target: 360,
+  attack: 380,
+  battle: 220,
+  damage: 380,
+  bigDamage: 520,
+  recover: 340,
+  destroy: 340,
+  flip: 260,
+  reveal: 950,
+} as const;
+
 export class FxDirector {
+  /** Pending waits (animation steps and AI pacing): a tap on the board ends them at once. */
+  private waiters = new Set<() => void>();
+  private active = 0;
   constructor(private h: FxHost) {}
+
+  /** An animation step is playing. */
+  get busy() {
+    return this.active > 0;
+  }
+
+  /**
+   * Tap-to-hurry: finish whatever is animating right now and stop waiting. Only animation and
+   * pacing waits end early; decision prompts are never touched.
+   */
+  hurry() {
+    const w = [...this.waiters];
+    this.waiters.clear();
+    w.forEach((f) => f());
+    let anims: Animation[] = [];
+    try {
+      anims = this.h.root.getAnimations({ subtree: true });
+    } catch {
+      anims = document.getAnimations?.() ?? [];
+    }
+    for (const a of anims) {
+      try {
+        const end = a.effect?.getComputedTiming().endTime;
+        if (a.playState === 'running' && typeof end === 'number' && Number.isFinite(end)) a.finish();
+      } catch {
+        /* an infinite or detached animation: leave it */
+      }
+    }
+    // cards flying to a pile are parked on <body> while they move
+    document.querySelectorAll('body > .dc-ghost').forEach((e) => e.remove());
+    for (const p of this.h.panels) p.finishLp();
+  }
+
+  /** A wait that hurry() can cut short. */
+  idle(ms: number): Promise<void> {
+    if (!(ms > 0)) return Promise.resolve();
+    return new Promise<void>((resolve) => {
+      const done = () => {
+        window.clearTimeout(id);
+        this.waiters.delete(done);
+        resolve();
+      };
+      const id = window.setTimeout(done, ms);
+      this.waiters.add(done);
+    });
+  }
 
   /** Haptic for something the viewer did (never for the opponent or AI, never when spectating). */
   private feel(kind: HapticKind, player: PlayerId | undefined | null) {
     if (!this.h.spectator && player === this.h.me) haptic(kind);
   }
 
-  private async wait(ms: number) {
-    const t = ms * this.h.speed();
-    if (t > 0) await sleep(t);
+  private wait(ms: number) {
+    return this.idle(ms * this.h.speed());
   }
 
   private local(x: number, y: number) {
@@ -62,6 +150,18 @@ export class FxDirector {
   }
 
   async handle(a: AnimEvent): Promise<void> {
+    const tr = perfTrace();
+    const t0 = tr ? performance.now() : 0;
+    this.active++;
+    try {
+      await this.play(a);
+    } finally {
+      this.active--;
+      tr?.push({ k: 'fx', type: a.type, player: a.player as number | undefined, me: this.h.me, t0, t1: performance.now() });
+    }
+  }
+
+  private async play(a: AnimEvent): Promise<void> {
     const h = this.h;
     switch (a.type) {
       case 'coin':
@@ -72,37 +172,38 @@ export class FxDirector {
         h.sfx.play('turn');
         const mine = a.player === h.me;
         const label = h.spectator ? `${h.names[a.player as PlayerId]}'s Turn` : mine ? 'Your Turn' : "Opponent's Turn";
-        this.banner(`<small>Turn ${a.turn}</small><b>${label}</b>`, `banner--turn ${mine ? 'is-me' : 'is-opp'}`, 1300);
-        return this.wait(1150);
+        this.banner(`<small>Turn ${a.turn}</small><b>${label}</b>`, `banner--turn ${mine ? 'is-me' : 'is-opp'}`, 900);
+        return this.wait(STEP.turn);
       }
       case 'phase': {
         h.flush();
         const ph = a.phase as string;
-        if (ph === 'draw' || ph === 'standby') return this.wait(120);
+        // the phase bar already shows Draw and Standby: no banner or pause for them
+        if (ph === 'draw' || ph === 'standby') return;
         h.sfx.play('phase');
-        this.banner(`<b>${phaseName(a.phase)}</b>`, `banner--phase ${a.player === h.me ? 'is-me' : 'is-opp'}`, 900);
-        return this.wait(ph === 'end' ? 380 : 520);
+        this.banner(`<b>${phaseName(a.phase)}</b>`, `banner--phase ${a.player === h.me ? 'is-me' : 'is-opp'}`, 520);
+        return this.wait(ph === 'end' ? STEP.phaseEnd : STEP.phase);
       }
       case 'draw': {
         const n = (a.cards as number[]).length;
-        const stagger = a.opening ? 110 : 90;
+        const stagger = a.opening ? STEP.openingStagger : STEP.drawStagger;
         h.flush({ stagger: stagger * h.speed() });
         h.sfx.play('draw');
         if (!a.opening) this.feel('light', a.player as PlayerId);
         for (let i = 1; i < Math.min(n, 6); i++) window.setTimeout(() => h.sfx.play('draw'), i * stagger * h.speed());
-        return this.wait(430 + stagger * (n - 1));
+        return this.wait(STEP.draw + stagger * (n - 1));
       }
       case 'move': {
         h.flush();
         if (a.set) {
           h.sfx.play('set');
           this.feel('light', (a.cards as { ctrl?: PlayerId }[])[0]?.ctrl);
-          for (const m of a.cards as { uid: number }[]) this.pulse(m.uid, 'fx-set', 500);
-          return this.wait(420);
+          for (const m of a.cards as { uid: number }[]) this.pulse(m.uid, 'fx-set', 320);
+          return this.wait(STEP.set);
         }
         const toHand = (a.cards as { to: string }[]).some((m) => m.to === 'hand' || m.to === 'deck');
         if (toHand) h.sfx.play('draw');
-        return this.wait(360);
+        return this.wait(STEP.move);
       }
       case 'summon': {
         h.flush();
@@ -114,22 +215,22 @@ export class FxDirector {
         if (method === 'set') {
           h.sfx.play('set');
           this.feel('light', who);
-          for (const u of uids) this.pulse(u, 'fx-set', 500);
-          return this.wait(420);
+          for (const u of uids) this.pulse(u, 'fx-set', 320);
+          return this.wait(STEP.set);
         }
         if (method === 'synchro') {
           h.sfx.play('synchro');
           this.feel('heavy', who);
           for (const u of uids) this.synchroBurst(u);
-          return this.wait(1250);
+          return this.wait(STEP.synchro);
         }
         h.sfx.play('summon');
         this.feel('medium', who);
         for (const u of uids) {
-          this.pulse(u, method === 'tribute' ? 'fx-summon fx-tribute' : 'fx-summon', 900);
+          this.pulse(u, method === 'tribute' ? 'fx-summon fx-tribute' : 'fx-summon', 520);
           this.ring(u, method === 'tribute' ? 'ring--tribute' : 'ring--summon');
         }
-        return this.wait(method === 'tribute' ? 800 : 650);
+        return this.wait(method === 'tribute' ? STEP.tribute : STEP.summon);
       }
       case 'activate': {
         h.flush();
@@ -138,22 +239,22 @@ export class FxDirector {
         const c = h.game.card(a.card);
         if (c) {
           h.spotlight(c);
-          this.pulse(c.uid, 'fx-activate', 900);
+          this.pulse(c.uid, 'fx-activate', 580);
           this.showcase(c, a.chainIndex as number, a.player as PlayerId);
         }
-        return this.wait(950);
+        return this.wait(STEP.activate);
       }
       case 'resolve': {
         h.flush();
         h.sfx.play('resolve');
-        this.pulse(a.card, 'fx-resolve', 700);
+        this.pulse(a.card, 'fx-resolve', 380);
         const row = h.chain.linkEl(a.chainIndex);
         if (row) {
           row.classList.remove('flash');
           void row.offsetWidth;
           row.classList.add('flash');
         }
-        return this.wait(480);
+        return this.wait(STEP.resolve);
       }
       case 'chainEnd':
         h.flush();
@@ -166,9 +267,9 @@ export class FxDirector {
           const t = h.board.elFor(u);
           if (!t) continue;
           this.reticle(t);
-          if (src && src !== t) this.beam(src, t, 'beam--target', 700);
+          if (src && src !== t) this.beam(src, t, 'beam--target', 500);
         }
-        return this.wait(720);
+        return this.wait(STEP.target);
       }
       case 'attack': {
         h.flush();
@@ -177,11 +278,11 @@ export class FxDirector {
         const at = h.board.elFor(a.attacker);
         const tgt = a.target != null ? h.board.elFor(a.target) : h.panels[h.game.opp(a.player as PlayerId)].avatarEl;
         if (at && tgt) {
-          this.beam(at, tgt, 'beam--attack', 900);
+          this.beam(at, tgt, 'beam--attack', 520);
           this.lunge(at, tgt);
           if (a.target != null) this.reticle(tgt as HTMLElement);
         }
-        return this.wait(700);
+        return this.wait(STEP.attack);
       }
       case 'battle': {
         h.flush();
@@ -196,7 +297,7 @@ export class FxDirector {
         }
         if (at) this.shakeEl(at);
         if (tgt) this.shakeEl(tgt);
-        return this.wait(460);
+        return this.wait(STEP.battle);
       }
       case 'damage': {
         h.flush();
@@ -207,14 +308,15 @@ export class FxDirector {
         this.floatNumber(a.player as PlayerId, `-${amt}`, a.kind === 'cost' ? 'num--cost' : 'num--dmg', big);
         if (big) this.shakeScreen();
         if (a.kind !== 'cost') this.flashSide(a.player as PlayerId, 'flash--dmg');
-        return this.wait(big ? 950 : 750);
+        // the LP counter keeps ticking down under the next step
+        return this.wait(big ? STEP.bigDamage : STEP.damage);
       }
       case 'recover': {
         h.flush();
         h.sfx.play('recover');
         this.floatNumber(a.player as PlayerId, `+${a.amount}`, 'num--heal', false);
         this.flashSide(a.player as PlayerId, 'flash--heal');
-        return this.wait(650);
+        return this.wait(STEP.recover);
       }
       case 'destroy': {
         // Shatter the cards where they currently stand, then render them into the GY.
@@ -230,12 +332,12 @@ export class FxDirector {
         }
         h.flush({ drop, instant: drop });
         if (any) h.sfx.play('destroy');
-        return this.wait(any ? 560 : 300);
+        return this.wait(any ? STEP.destroy : STEP.move);
       }
       case 'flip': {
         h.flush();
         h.sfx.play('flip');
-        return this.wait(420);
+        return this.wait(STEP.flip);
       }
       case 'negate': {
         h.sfx.play('negate');
@@ -252,7 +354,7 @@ export class FxDirector {
         const show = h.spectator ? cards : cards.filter((c) => c.owner !== h.me);
         if (!show.length) return;
         this.reveal(show);
-        return this.wait(1200);
+        return this.wait(STEP.reveal);
       }
       default:
         h.flush();
@@ -288,7 +390,7 @@ export class FxDirector {
     const r = el(`fx-ring ${cls}`);
     r.style.setProperty('--sz', `${this.h.board.cw * 2.2}px`);
     this.place(r, c.x, c.y);
-    this.autoRemove(r, 900);
+    this.autoRemove(r, 560);
   }
 
   private synchroBurst(uid: number) {
@@ -300,8 +402,8 @@ export class FxDirector {
     wrap.style.setProperty('--sz', `${cw * 3}px`);
     wrap.innerHTML = '<div class="sy-ring r1"></div><div class="sy-ring r2"></div><div class="sy-ring r3"></div><div class="sy-pillar"></div><div class="sy-flash"></div>';
     this.place(wrap, c.x, c.y);
-    this.autoRemove(wrap, 1500);
-    this.pulse(uid, 'fx-summon fx-synchro-card', 1400);
+    this.autoRemove(wrap, 900);
+    this.pulse(uid, 'fx-summon fx-synchro-card', 840);
   }
 
   private showcase(c: CardInstance, chainIndex: number, player: PlayerId) {
@@ -320,7 +422,8 @@ export class FxDirector {
     this.place(box, cx, cy);
     const sp = this.h.speed();
     let from = 'translate(-50%,-50%) scale(.35)';
-    if (src) {
+    if (reducedMotion()) from = 'translate(-50%,-50%) scale(1)';
+    else if (src) {
       const s = center(src);
       from = `translate(calc(-50% + ${s.x - cx}px), calc(-50% + ${s.y - cy}px)) scale(${(s.w / w).toFixed(3)})`;
     }
@@ -331,9 +434,9 @@ export class FxDirector {
         { transform: 'translate(-50%,-50%) scale(1)', opacity: 1, offset: 0.8 },
         { transform: 'translate(-50%,-50%) scale(.92)', opacity: 0 },
       ],
-      { duration: 1050 * sp, easing: 'cubic-bezier(.2,.8,.2,1)', fill: 'forwards' },
+      { duration: 680 * sp, easing: 'cubic-bezier(.2,.8,.2,1)', fill: 'forwards' },
     );
-    this.autoRemove(box, 1100);
+    this.autoRemove(box, 720);
   }
 
   private reticle(t: HTMLElement) {
@@ -342,7 +445,7 @@ export class FxDirector {
     const r = el('fx-reticle', '<i></i><i></i><i></i><i></i>');
     r.style.setProperty('--sz', `${Math.max(c.w, c.h) * 1.15}px`);
     this.place(r, c.x, c.y);
-    this.autoRemove(r, 900);
+    this.autoRemove(r, 520);
   }
 
   private beam(a: HTMLElement, b: HTMLElement, cls: string, ms: number) {
@@ -364,7 +467,7 @@ export class FxDirector {
 
   private lunge(a: HTMLElement, b: HTMLElement) {
     const sp = this.h.speed();
-    if (sp <= 0) return;
+    if (sp <= 0 || reducedMotion()) return;
     const p = center(a);
     const q = center(b);
     const dx = (q.x - p.x) * 0.42;
@@ -377,7 +480,7 @@ export class FxDirector {
         { transform: `translate(${dx}px, ${dy}px) scale(1.12)`, offset: 0.6 },
         { transform: 'translate(0,0) scale(1)' },
       ],
-      { duration: 700 * sp, easing: 'cubic-bezier(.3,.7,.3,1)' },
+      { duration: 440 * sp, easing: 'cubic-bezier(.3,.7,.3,1)' },
     );
   }
 
@@ -387,22 +490,22 @@ export class FxDirector {
     const s = el('fx-spark', '<i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>');
     s.style.setProperty('--sz', `${this.h.board.cw * 1.6}px`);
     this.place(s, c.x, c.y);
-    this.autoRemove(s, 700);
+    this.autoRemove(s, 400);
   }
 
   private shakeEl(e: HTMLElement) {
     const sp = this.h.speed();
-    if (sp <= 0) return;
+    if (sp <= 0 || reducedMotion()) return;
     const fx = (e.querySelector('.dc-fx') as HTMLElement) ?? e;
     fx.animate(
       [{ transform: 'translate(0,0)' }, { transform: 'translate(-4px,2px)' }, { transform: 'translate(4px,-2px)' }, { transform: 'translate(-3px,-1px)' }, { transform: 'translate(0,0)' }],
-      { duration: 320 * sp },
+      { duration: 240 * sp },
     );
   }
 
   private shakeScreen() {
     const sp = this.h.speed();
-    if (sp <= 0) return;
+    if (sp <= 0 || reducedMotion()) return;
     this.h.board.stage.animate(
       [
         { transform: 'translate(0,0)' },
@@ -412,7 +515,7 @@ export class FxDirector {
         { transform: 'translate(5px,4px)' },
         { transform: 'translate(0,0)' },
       ],
-      { duration: 480 * sp },
+      { duration: 360 * sp },
     );
   }
 
@@ -423,20 +526,20 @@ export class FxDirector {
     const c = center(lp);
     const n = el(`fx-num ${cls}${big ? ' is-big' : ''}`, text);
     this.place(n, c.x, c.y);
-    this.autoRemove(n, 1300);
+    this.autoRemove(n, 940);
     // second number over that player's field
     const side = this.h.board.sideOf(p).root;
     const s = center(side);
     const n2 = el(`fx-num fx-num--field ${cls}${big ? ' is-big' : ''}`, text);
     this.place(n2, s.x, s.y);
-    this.autoRemove(n2, 1300);
+    this.autoRemove(n2, 940);
   }
 
   private flashSide(p: PlayerId, cls: string) {
     if (this.h.speed() <= 0) return;
     const f = el(`fx-flash ${cls} ${p === this.h.me ? 'is-me' : 'is-opp'}`);
     this.h.overlay.appendChild(f);
-    this.autoRemove(f, 800);
+    this.autoRemove(f, 520);
   }
 
   private shatter(e: HTMLElement) {
@@ -476,15 +579,15 @@ export class FxDirector {
             { transform: `${base} translate(${Math.cos(ang) * 6}px, ${Math.sin(ang) * 6}px)`, opacity: 1, filter: 'brightness(1.6)', offset: 0.15 },
             { transform: `${base} translate(${Math.cos(ang) * dist}px, ${Math.sin(ang) * dist + 30}px) rotate(${(Math.random() - 0.5) * 120}deg)`, opacity: 0, filter: 'brightness(1)' },
           ],
-          { duration: 650 * sp, easing: 'cubic-bezier(.2,.6,.4,1)', fill: 'forwards' },
+          { duration: 440 * sp, easing: 'cubic-bezier(.2,.6,.4,1)', fill: 'forwards' },
         );
-        this.autoRemove(piece, 700);
+        this.autoRemove(piece, 480);
       }
     }
     const fl = el('fx-ring ring--destroy');
     fl.style.setProperty('--sz', `${this.h.board.cw * 1.8}px`);
     this.place(fl, r.left + r.width / 2, r.top + r.height / 2);
-    this.autoRemove(fl, 700);
+    this.autoRemove(fl, 460);
   }
 
   private cross(e: HTMLElement) {
@@ -493,7 +596,7 @@ export class FxDirector {
     const x = el('fx-cross');
     x.style.setProperty('--sz', `${Math.max(c.w, c.h) * 0.9}px`);
     this.place(x, c.x, c.y);
-    this.autoRemove(x, 1100);
+    this.autoRemove(x, 740);
   }
 
   private banner(html: string, cls: string, ms: number) {
@@ -513,7 +616,7 @@ export class FxDirector {
     wrap.appendChild(row);
     const st = this.h.board.stage.getBoundingClientRect();
     this.place(wrap, st.left + st.width / 2, st.top + st.height / 2);
-    this.autoRemove(wrap, 1300);
+    this.autoRemove(wrap, 1040);
   }
 
   /** Who goes first, as a sentence for the viewer. */
@@ -525,8 +628,8 @@ export class FxDirector {
   /** Games 2 and 3: the loser chose, so there is nothing to roll. A short caption only. */
   private async firstCaption(first: PlayerId) {
     if (this.h.speed() <= 0) return;
-    this.banner(`<b>${this.firstLabel(first)}</b>`, `banner--phase ${first === this.h.me ? 'is-me' : 'is-opp'}`, 1100);
-    await this.wait(900);
+    this.banner(`<b>${this.firstLabel(first)}</b>`, `banner--phase ${first === this.h.me ? 'is-me' : 'is-opp'}`, 900);
+    await this.wait(700);
   }
 
   /**
@@ -535,7 +638,7 @@ export class FxDirector {
    */
   private async diceRoll(first: PlayerId) {
     const sp = this.h.speed();
-    const reduce = sp <= 0 || matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const reduce = sp <= 0 || reducedMotion();
     const d6 = () => 1 + Math.floor(Math.random() * 6);
     // Rounds of [player 0, player 1]. Ties re-roll (at most two shown), the last round agrees with the engine.
     const rounds: [number, number][] = [];
@@ -571,7 +674,7 @@ export class FxDirector {
     const wrap = el('fx-dice-wrap');
     wrap.append(slots[top].s, caption, slots[this.h.me].s);
     this.h.overlay.appendChild(wrap);
-    const rollMs = 1250 * sp;
+    const rollMs = 950 * sp;
     for (let i = 0; i < rounds.length; i++) {
       const r = rounds[i];
       caption.innerHTML = i ? '<span>Tie · roll again</span>' : '';
@@ -579,7 +682,7 @@ export class FxDirector {
       if (!reduce) this.h.sfx.play('coin');
       for (const p of [0, 1] as PlayerId[]) this.tumble(slots[p], r[p], reduce ? 0 : rollMs, p === top);
       if (!reduce) {
-        await sleep(rollMs);
+        await this.idle(rollMs);
         this.h.sfx.play('coin');
       }
       const tie = r[0] === r[1];
@@ -589,7 +692,7 @@ export class FxDirector {
       caption.innerHTML = `<span>${line}</span><b>${tie ? 'Tie · roll again' : this.firstLabel(first)}</b>`;
       caption.classList.add('is-shown');
       if (!tie) for (const p of [0, 1] as PlayerId[]) slots[p].s.classList.toggle('is-winner', p === first);
-      await this.wait(tie ? 900 : 1500);
+      await this.wait(tie ? 650 : 1000);
     }
     wrap.classList.add('out');
     window.setTimeout(() => wrap.remove(), 400);

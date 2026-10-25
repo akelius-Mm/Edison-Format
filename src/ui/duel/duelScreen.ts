@@ -31,6 +31,7 @@ import {
   visibleTo,
 } from './dialogs';
 import { FxDirector, sleep } from './fx';
+import { FAST_FORWARD, setupHurry } from './hurry';
 import { HumanController, type HumanUI, PacedController } from './human';
 import { ChainStack, LogPanel, PhaseBar, PlayerPanel, PreviewPanel } from './panels';
 import { Sfx } from './sound';
@@ -79,6 +80,8 @@ class DuelScreen implements HumanUI {
   readonly viewer: PlayerId | null;
   readonly spectator: boolean;
   private specSpeed = 1;
+  /** Fast-forward through the opponent's turn (the button); ends at the player's next decision. */
+  private ff = false;
   private paused = false;
   private pauseWaiters: (() => void)[] = [];
   private aborted: GameOver | null = null;
@@ -167,6 +170,7 @@ class DuelScreen implements HumanUI {
     right.append(this.buildTopBar(), this.phaseBar.el, this.chain.el, this.log.el);
     this.root.append(left, center, right, this.overlay);
     this.setupPhoneGestures(center);
+    setupHurry(this, center);
     container.innerHTML = '';
     container.appendChild(this.root);
     this.board.mount(mat);
@@ -399,8 +403,18 @@ class DuelScreen implements HumanUI {
     if (this.replaying) return 0;
     const base = getSettings().animationSpeed;
     if (!(base > 0)) return 0;
-    if (this.spectator) return this.specSpeed >= 1000 ? 0 : base / this.specSpeed;
-    return base;
+    const ff = this.ff ? FAST_FORWARD : 1;
+    if (this.spectator) return this.specSpeed >= 1000 ? 0 : (base / this.specSpeed) * ff;
+    return base * ff;
+  }
+
+  /** Fast-forward on / off (see hurry.ts). */
+  setFastForward(on: boolean) {
+    if (this.ff === on) return;
+    this.ff = on;
+    this.root.classList.toggle('is-ff', on);
+    this.applySpeedVar();
+    if (on) this.fx.hurry();
   }
 
   private setPaused(v: boolean) {
@@ -433,6 +447,7 @@ class DuelScreen implements HumanUI {
     this.panels[0].update(this.game);
     this.panels[1].update(this.game);
     music.setPinch(Math.min(this.game.players[0].lp, this.game.players[1].lp) <= 2000);
+    this.root.classList.toggle('is-opp-turn', this.game.turn > 0 && this.game.turnPlayer !== this.me);
     this.phaseBar.update(this.game);
     this.chain.update(this.game);
     this.preview.refresh();
@@ -640,6 +655,8 @@ class DuelScreen implements HumanUI {
   /** Race a UI promise against abort (surrender). */
   private guard<T>(p: Promise<T>): Promise<T> {
     if (this.aborted) return Promise.reject(this.aborted);
+    // the player is asked something: fast-forward never runs past a decision
+    this.setFastForward(false);
     return new Promise<T>((resolve, reject) => {
       const onAbort = (e: GameOver) => reject(e);
       this.abortListeners.add(onAbort);
@@ -667,7 +684,7 @@ class DuelScreen implements HumanUI {
     }
     if (this.paused) await new Promise<void>((r) => this.pauseWaiters.push(r));
     const t = ms * this.speed();
-    if (t > 0) await sleep(t);
+    if (t > 0) await this.fx.idle(t);
     else if (++this.yieldCounter % 4 === 0) await sleep(0);
     if (this.aborted) throw this.aborted;
   }
