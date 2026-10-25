@@ -938,6 +938,7 @@ function saveDraftDeck(s: DraftState, d: DeckIds): string {
     created: now,
     updated: now,
   };
+  deck.format = 'draft';
   deck.main = toEntries(d.main);
   deck.extra = toEntries(d.extra);
   saveCustomDeck(deck);

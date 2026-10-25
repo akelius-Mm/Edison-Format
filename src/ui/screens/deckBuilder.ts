@@ -1,6 +1,6 @@
 // Deck Builder: card browser + editable Main/Extra/Side deck with live validation and stats.
 import { findCard } from '../../cards';
-import { PREMADE_DECKS, validateDeck } from '../../decks';
+import { PREMADE_DECKS } from '../../decks';
 import type { CardData } from '../../engine/card';
 import { isExtraCard, cardBrowser, sortCards } from './cardBrowser';
 import { cardDetail, deckTile } from './components';
@@ -12,6 +12,7 @@ import {
   copyOfPremade,
   deckCount,
   deleteCustomDeck,
+  deckProblems,
   exportDeckText,
   getCustomDeck,
   listCustomDecks,
@@ -309,7 +310,7 @@ export function deckBuilderScreen(params: Params): Screen {
       commit();
       drawHeader();
     });
-    const problems = validateDeck(cur);
+    const problems = deckProblems(cur);
     const legal = h(
       'span',
       { class: ['db-legal', problems.length ? 'bad' : 'ok'], title: problems.join('\n') },
@@ -445,7 +446,7 @@ export function deckBuilderScreen(params: Params): Screen {
     const extra = cur.extra.map(([n, k]) => [findCard(n), k] as const);
     const syn = extra.filter(([c]) => c?.mtypes?.includes('synchro')).reduce((a, [, k]) => a + k, 0);
     const fus = extra.filter(([c]) => c?.mtypes?.includes('fusion')).reduce((a, [, k]) => a + k, 0);
-    const problems = validateDeck(cur);
+    const problems = deckProblems(cur);
     // probability of opening at least one tuner (5 cards)
     const pOpen = (k: number, N: number, draw = 5) => {
       if (!k || N < draw) return 0;

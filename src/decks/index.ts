@@ -35,7 +35,10 @@ export function buildDeckList(def: Pick<DeckDef, 'main' | 'extra'>): DeckList & 
 }
 
 /** Validate a deck against Edison construction rules. Returns a list of problems. */
-export function validateDeck(def: Pick<DeckDef, 'main' | 'extra'> & { side?: [string, number][] }): string[] {
+export function validateDeck(
+  def: Pick<DeckDef, 'main' | 'extra'> & { side?: [string, number][] },
+  opts: { ignoreLimits?: boolean } = {},
+): string[] {
   const errs: string[] = [];
   const count = (e: [string, number][]) => e.reduce((a, [, n]) => a + n, 0);
   const main = count(def.main);
@@ -51,6 +54,7 @@ export function validateDeck(def: Pick<DeckDef, 'main' | 'extra'> & { side?: [st
       errs.push(`Unknown card: ${name}`);
       continue;
     }
+    if (opts.ignoreLimits) continue;
     const lim = c.limit ?? 3;
     if (n > lim) errs.push(`${name}: ${n} copies (limit ${lim === 0 ? 'Forbidden' : lim}).`);
   }
