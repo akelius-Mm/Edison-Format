@@ -1786,4 +1786,9 @@
   .dlg-layer.is-open:not(.dlg-layer--docked) .dlg { transform: none; }
   .dlg--option .dlg-body,
   .dlg--confirm .dlg-body { padding: 12px 14px 14px; }
+  /* Positions side by side so the sheet stays short */
+  .pos-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(0, 1fr)); gap: 10px; padding: 4px 0; }
+  .pos-opt { width: auto; min-width: 0; }
+  .declare-list { grid-template-columns: 1fr; max-height: 46dvh; gap: 6px; }
+  .declare-item { min-height: 46px; padding: 10px 14px; font-size: 15px; border-radius: 10px; }
 }
