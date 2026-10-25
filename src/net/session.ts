@@ -9,6 +9,7 @@
 // (re)connection through `onConnect`.
 //
 // DOM-free (timers only), so scripts/net-test.ts runs it in Node over the in-memory transport.
+import { Reassembler, toFrames } from './frames';
 import { parseMsg, type Msg } from './protocol';
 import { TransportError, type Channel, type Transport } from './transport';
 
@@ -97,7 +98,8 @@ export class NetSession {
   }
 
   send(m: Msg) {
-    if (this.active?.open) this.active.send(JSON.stringify(m));
+    const ch = this.active;
+    if (ch?.open) for (const f of toFrames(JSON.stringify(m))) ch.send(f);
   }
 
   /** Test hook: drop the channel now and stay offline for `holdMs`. */
@@ -128,7 +130,13 @@ export class NetSession {
       return;
     }
     let accepted = false;
-    ch.onMessage = (raw) => {
+    const re = new Reassembler();
+    ch.onMessage = (piece) => {
+      const raw = re.push(piece);
+      if (raw == null) {
+        if (this.active === ch) this.lastHeard = Date.now();
+        return;
+      }
       const m = parseMsg(raw);
       if (!m) return;
       if (!accepted) {

@@ -22,7 +22,7 @@ import type { DuelSide } from './api';
 
 export const ACTIVE_DUEL_KEY = 'edison.duel.active.v1';
 
-export type ResumeKind = 'vsai' | 'locals' | 'events' | 'draft' | 'tournament' | 'friend';
+export type ResumeKind = 'vsai' | 'locals' | 'events' | 'draft' | 'tournament' | 'friend' | 'friend-locals';
 
 /** Where a duel belongs: which mode, which match in it, and how to get back there. */
 export interface ResumeTag {
@@ -218,4 +218,5 @@ export const MODE_LABEL: Record<ResumeKind, string> = {
   draft: 'Draft',
   tournament: 'Tournament',
   friend: 'Play a friend',
+  'friend-locals': 'Friends Locals',
 };

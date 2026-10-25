@@ -9,6 +9,7 @@
 // dials again on its own.
 //
 // DOM-free (timers only), so scripts/tourney-test.ts runs it in Node over the in-memory transport.
+import { Reassembler, toFrames } from './frames';
 import { parseMsg, type Msg, type NetPlayer } from './protocol';
 import { TransportError, type Channel, type Transport } from './transport';
 
@@ -83,7 +84,7 @@ export class NetHub {
 
   send(clientId: string, m: Msg) {
     const p = this.peers.get(clientId);
-    if (p?.ch.open) p.ch.send(JSON.stringify(m));
+    if (p?.ch.open) for (const f of toFrames(JSON.stringify(m))) p.ch.send(f);
   }
 
   /** Close one phone's channel (it may dial again unless refused). */
@@ -141,7 +142,14 @@ export class NetHub {
       return;
     }
     let who: string | null = null;
-    ch.onMessage = (raw) => {
+    const re = new Reassembler();
+    ch.onMessage = (piece) => {
+      const raw = re.push(piece);
+      if (raw == null) {
+        const p = who ? this.peers.get(who) : null;
+        if (p && p.ch === ch) p.lastHeard = Date.now();
+        return;
+      }
       const m = parseMsg(raw);
       if (!m) return;
       if (!who) {

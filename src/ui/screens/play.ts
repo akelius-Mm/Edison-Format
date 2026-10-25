@@ -7,6 +7,7 @@ import { loadActiveTournament, currentRoundLabel } from '../../tournament/tourna
 import { SEASON_WEEKS, loadActiveEvent, loadRatings, loadSeason } from '../../events';
 import { avatar as initialsAvatar } from './locals';
 import { artInto, modeTile, resumeRows } from './title';
+import { friendsLocalsLive } from './friendLocals';
 
 export function playScreen(): Screen {
   const { duelCard, resume } = resumeRows();
@@ -55,7 +56,20 @@ export function playScreen(): Screen {
   );
 
   // Play a friend: online duel with a room code (src/net, screens/friend.ts)
-  const friend = h('section', { class: 'home-tiles play-tiles play-tiles--friend' }, modeTile('friend', 'Play a friend', 'Online with a room code · on their own phone', 'Elemental HERO Stratos'));
+  const fl = friendsLocalsLive();
+  const flLive = !!fl && fl.phase !== 'done';
+  const friend = h(
+    'section',
+    { class: 'home-tiles play-tiles play-tiles--friend' },
+    modeTile('friend', 'Play a friend', 'Online with a room code · on their own phone', 'Elemental HERO Stratos'),
+    modeTile(
+      'friend-locals',
+      'Friends Locals',
+      flLive ? `In progress · ${fl!.phase === 'lobby' ? 'lobby' : fl!.phase === 'swiss' ? `round ${fl!.rounds.length} of ${fl!.swissRounds}` : 'top cut'}` : 'Swiss tournament for 3–8 friends',
+      'Black Rose Dragon',
+      flLive ? 'Live' : undefined,
+    ),
+  );
 
   const el = h(
     'div',

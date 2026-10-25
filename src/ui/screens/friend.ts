@@ -26,10 +26,11 @@ import { newRoomCode, normalizeRoomCode, type GameEnd, type NetPlayer, type Wire
 import { PeerTransport } from '../../net/peerTransport';
 import { AsHuman } from '../../net/remote';
 import { Room, type GameState, type RoomSnapshot } from '../../net/room';
-import { TransportError, describeServer, parseServer, type PeerServerConfig } from '../../net/transport';
+import { SpectateServer } from '../../net/spectate';
+import { TransportError, describeServer, parseServer, type PeerServerConfig, type Transport } from '../../net/transport';
 import type { DuelControl, DuelSide } from '../duel/api';
 import { startDuel } from '../duel/duelScreen';
-import { clearActiveDuel, loadActiveDuel, saveActiveDuel, type SavedDuel, type SavedSide } from '../duel/resume';
+import { clearActiveDuel, loadActiveDuel, saveActiveDuel, type ResumeTag, type SavedDuel, type SavedSide } from '../duel/resume';
 import { haptic } from '../haptics';
 import { getSettings, loadJSON, saveJSON, updateSettings } from '../settings';
 import { opponentMat } from '../theme/playmats';
@@ -52,7 +53,7 @@ const ART = 'Elemental HERO Stratos';
 
 // ------------------------------------------------------------------ config and test hooks
 
-function query(): URLSearchParams {
+export function query(): URLSearchParams {
   const q = new URLSearchParams(location.search);
   const hq = location.hash.split('?')[1];
   if (hq) new URLSearchParams(hq).forEach((v, k) => q.has(k) || q.set(k, v));
@@ -64,13 +65,13 @@ export function serverConfig(): PeerServerConfig {
   return parseServer(query().get('peer')) ?? parseServer(getSettings().netServer) ?? parseServer('')!;
 }
 
-const botLevel = (): Difficulty | null => {
+export const botLevel = (): Difficulty | null => {
   const b = query().get('netbot');
   return b === 'easy' || b === 'normal' || b === 'hard' ? b : null;
 };
 
 /** Test hook: the bot waits `ms` before each decision (`netpace`), so tests can act mid-game. */
-function paced(c: PlayerController, ms: number): PlayerController {
+export function paced(c: PlayerController, ms: number): PlayerController {
   if (!ms) return c;
   return new Proxy(c, {
     get(t, k) {
@@ -84,7 +85,7 @@ function paced(c: PlayerController, ms: number): PlayerController {
   });
 }
 
-function clientId(): string {
+export function clientId(): string {
   let id = loadJSON<string>(CLIENT_KEY, '');
   if (!id) {
     id = Math.random().toString(36).slice(2, 12);
@@ -93,12 +94,12 @@ function clientId(): string {
   return id;
 }
 
-function mePlayer(): NetPlayer {
+export function mePlayer(): NetPlayer {
   const s = getSettings();
   return { name: (s.playerName || 'Duelist').slice(0, 20), avatar: s.avatar, sleeve: s.sleeve, clientId: clientId() };
 }
 
-const wireDeck = (d: DeckInfo): WireDeck => {
+export const wireDeck = (d: DeckInfo): WireDeck => {
   const l = toDeckList(d);
   const side = buildDeckList({ main: d.side, extra: [] }).main.map((c) => c.id);
   return { name: d.name, main: l.main.map((c) => c.id), extra: l.extra.map((c) => c.id), side };
@@ -122,7 +123,7 @@ interface H2H {
   matches: string[];
 }
 
-function loadH2H(): Record<string, H2H> {
+export function loadH2H(): Record<string, H2H> {
   const r = loadJSON<Record<string, H2H>>(H2H_KEY, {});
   return r && typeof r === 'object' ? r : {};
 }
@@ -274,6 +275,13 @@ function landing(body: HTMLElement, opts: { joining?: boolean; error?: string } 
       hero,
       opts.error ? h('div', { class: 'fr-error', role: 'alert' }, icon('warn'), h('span', null, opts.error)) : null,
       h('div', { class: 'fr-actions' }, create, joinToggle, joinBox),
+      h(
+        'button',
+        { type: 'button', class: 'fl-link', 'data-test': 'friends-locals', onclick: () => go('friend-locals') },
+        h('span', { class: 'fl-link-ic' }, icon('trophy')),
+        h('span', { class: 'fl-link-text' }, h('b', null, 'Friends Locals'), h('span', null, 'A Swiss tournament for 3–8 friends, each on their own phone')),
+        icon('chevron'),
+      ),
       records,
       h(
         'p',
@@ -287,7 +295,36 @@ function landing(body: HTMLElement, opts: { joining?: boolean; error?: string } 
 
 // ------------------------------------------------------------------ one room on this phone
 
-class FriendSession {
+/**
+ * Friends Locals drives a FriendSession for each tournament match: no lobby (the registered deck,
+ * format and seed come from the organiser), only the paired opponent may join, and the match is
+ * handed back to the tournament when it is decided.
+ */
+export interface MatchHooks {
+  /** The paired opponent's clientId. */
+  expectPeer: string;
+  opponentName: string;
+  deck: WireDeck;
+  bestOf: 1 | 3;
+  seed: number;
+  skipFirstDraw: boolean;
+  matchId: string;
+  /** Duel caption, e.g. "Friends Locals · Round 2". */
+  caption: string;
+  claimAfterMs: number;
+  /** How the saved duel finds its way back (resume card). */
+  tag: (room: RoomSnapshot) => ResumeTag;
+  /** The match is decided (or went out of sync). Called before the saved duel is cleared. */
+  onDecided: (room: Room) => void;
+  /** The duel screens closed after the match. */
+  onDone: () => void;
+  /** Connection trouble before the match. */
+  onError?: (msg: string) => void;
+  /** Lets friends watch this match (Friends Locals spectating). */
+  feed?: { transport: () => Transport; build: string };
+}
+
+export class FriendSession {
   room: Room;
   closed = false;
   view: HTMLElement;
@@ -307,12 +344,15 @@ class FriendSession {
   private matchEndRefresh: (() => void) | null = null;
   /** Side decking in progress for game `index` (saved, so a closed app comes back to it). */
   private siding: { index: number; deck: DeckIds; done?: boolean } | null = null;
+  private feed: SpectateServer | null = null;
+  private uiDone: (() => void) | null = null;
 
   constructor(
     body: HTMLElement,
     readonly role: 'host' | 'guest',
     readonly code: string,
     private snap?: RoomSnapshot,
+    readonly hooks?: MatchHooks,
   ) {
     this.view = body;
     if (snap) {
@@ -328,8 +368,10 @@ class FriendSession {
       build: BUILD,
       transport: new PeerTransport(serverConfig()),
       snapshot: snap,
+      expectPeer: hooks?.expectPeer,
     });
-    if (!snap) {
+    if (hooks && !snap) this.room.mine = { deckKey: 'registered', deck: hooks.deck, ready: true, bestOf: hooks.bestOf };
+    else if (!snap) {
       const d = prefs.deck ? allDeckInfos().find((x) => x.key === prefs.deck) : undefined;
       this.room.mine = { deckKey: d?.key ?? null, deck: d && !d.problems.length ? wireDeck(d) : null, ready: false, bestOf: prefs.bestOf === 3 ? 3 : 1 };
     }
@@ -365,7 +407,7 @@ class FriendSession {
         haptic('light');
         this.matchEndRefresh?.();
       },
-      left: () => this.peerLeft(),
+      left: () => (hooks ? undefined : this.peerLeft()),
       refused: (r) => this.refused(r),
       changed: () => this.persist(),
       desync: (g, detail) => console.warn(`[online] game ${g + 1} out of sync: ${detail}`),
@@ -376,6 +418,10 @@ class FriendSession {
 
   attach(body: HTMLElement) {
     this.view = body;
+    if (this.hooks) {
+      if (!this.inMatch) this.lobby();
+      return;
+    }
     if (this.inMatch) body.replaceChildren(h('div', { class: 'fr-pane' }, h('p', { class: 'fr-hint' }, 'Duel in progress…')));
     else if (this.room.match) this.matchOver();
     else this.lobby();
@@ -386,12 +432,39 @@ class FriendSession {
     this.closed = true;
     document.removeEventListener('visibilitychange', this.onWake);
     this.room.leave();
+    this.feed?.close();
     if (active === this) active = null;
+  }
+
+  get inDuel() {
+    return this.inMatch;
+  }
+
+  /** The tournament settled this match some other way (draw, time, drop, organiser): stop here. */
+  abandon(reason: string) {
+    if (this.duel?.ctl) this.duel.ctl.abort(null, reason);
+    for (const w of [...this.readyWaiters.values()]) w();
+    this.close();
+    this.uiDone?.();
+  }
+
+  private startFeed() {
+    const f = this.hooks?.feed;
+    if (!f || this.feed) return;
+    this.feed = new SpectateServer(this.room, f.transport(), this.room.mySeat, { build: f.build, me: this.room.me });
+    void this.feed.start();
   }
 
   // ---------------------------------------------------------------- connect
 
   async open(): Promise<void> {
+    if (this.hooks) {
+      // both phones open the match room on their own: keep trying until the opponent's is there
+      this.lobby();
+      this.startFeed();
+      await this.connectLoop(true);
+      return;
+    }
     this.busy(this.role === 'host' ? 'Opening a room…' : `Joining ${this.code}…`);
     for (let attempt = 0; ; attempt++) {
       try {
@@ -417,24 +490,30 @@ class FriendSession {
 
   /** Reopened mid-match: rebuild the duel from the save and reconnect in the background. */
   async resume() {
+    this.startFeed();
     void this.connectLoop();
     await this.playMatch();
   }
 
-  private async connectLoop() {
+  private async connectLoop(fast = false) {
     for (let i = 0; !this.closed; i++) {
       try {
         await this.room.start();
         return;
       } catch (e) {
         if ((e as TransportError).kind === 'unsupported') return this.fail(errorText(e as TransportError));
-        await new Promise((r) => setTimeout(r, Math.min(8000, 1500 + i * 1000)));
+        await new Promise((r) => setTimeout(r, fast ? Math.min(4000, 800 + i * 300) : Math.min(8000, 1500 + i * 1000)));
       }
     }
   }
 
   private fail(msg: string) {
     this.close();
+    if (this.hooks) {
+      this.hooks.onError?.(msg);
+      this.hooks.onDone();
+      return;
+    }
     landing(this.view, { error: msg, joining: this.role === 'guest' });
   }
 
@@ -471,6 +550,7 @@ class FriendSession {
 
   private lobby() {
     if (this.closed) return;
+    if (this.hooks) return this.waitingPane();
     const room = this.room;
     const decks = allDeckInfos();
     const codeEl = h('div', { class: 'fr-code', 'data-test': 'room-code' }, this.code);
@@ -570,8 +650,26 @@ class FriendSession {
     scrollToTop();
   }
 
+  /** Friends Locals: before the match starts, a small pane in the tournament screen. */
+  private waitingPane() {
+    const hk = this.hooks!;
+    const room = this.room;
+    const text = h('span', null);
+    const pane = h('div', { class: 'fl-wait', role: 'status' }, h('span', { class: 'spinner' }), text);
+    const refresh = () => {
+      text.textContent = room.status === 'connected' ? `${hk.opponentName} is here · starting…` : `Waiting for ${hk.opponentName} to sit down…`;
+    };
+    this.view.replaceChildren(pane);
+    this.lobbyRefresh = refresh;
+    refresh();
+  }
+
   /** Host: both ready → start (after a short beat so both see "Ready"). */
   private maybeStart() {
+    if (this.hooks) {
+      if (this.role === 'host' && this.room.canStart && !this.closed) this.room.startMatch({ seed: this.hooks.seed, skipFirstDraw: this.hooks.skipFirstDraw, id: this.hooks.matchId });
+      return;
+    }
     if (this.role !== 'host' || !this.room.canStart) return;
     setTimeout(() => {
       if (this.room.canStart && !this.closed) this.room.startMatch({ skipFirstDraw: getSettings().skipFirstDraw });
@@ -588,6 +686,22 @@ class FriendSession {
     document.body.appendChild(host);
     document.body.classList.add('in-duel');
     lockNav(true);
+    let uiClosed = false;
+    const closeUi = () => {
+      if (uiClosed) return;
+      uiClosed = true;
+      host.classList.add('closing');
+      setTimeout(() => host.remove(), 300);
+      document.body.classList.remove('in-duel');
+      lockNav(false);
+      this.inMatch = false;
+      this.hideOffline();
+      this.uiDone = null;
+    };
+    this.uiDone = () => {
+      closeUi();
+      this.hooks?.onDone();
+    };
     this.persist();
     try {
       for (let guard = 0; guard < 12 && !this.closed && this.room.match; guard++) {
@@ -602,15 +716,15 @@ class FriendSession {
         await this.between(host, cur.index + 1);
       }
     } finally {
-      host.classList.add('closing');
-      setTimeout(() => host.remove(), 300);
-      document.body.classList.remove('in-duel');
-      lockNav(false);
-      this.inMatch = false;
-      this.hideOffline();
+      closeUi();
     }
     if (this.closed) return;
     this.recordMatch();
+    if (this.hooks) {
+      this.persist();
+      this.hooks.onDone();
+      return;
+    }
     if (this.room.match) this.matchOver();
     else this.lobby();
   }
@@ -636,7 +750,7 @@ class FriendSession {
     }
     const friend = room.match!.start.players[room.peerSeat];
     const bo3 = room.match!.start.bestOf === 3;
-    const caption = `vs ${friend.name} · Online${bo3 || g > 0 ? ` · Game ${g + 1}${bo3 ? ' of 3' : ''}` : ''}`;
+    const caption = `vs ${friend.name} · ${this.hooks?.caption ?? 'Online'}${bo3 || g > 0 ? ` · Game ${g + 1}${bo3 ? ' of 3' : ''}` : ''}`;
     const remote = room.remoteController(g);
     const bot = botLevel();
     const playmat = getSettings().playmat;
@@ -732,7 +846,7 @@ class FriendSession {
     const draw = () => {
       if (!this.offline) return;
       const waited = Date.now() - off.since;
-      const canClaim = waited >= CLAIM_AFTER_MS && !!this.duel?.ctl;
+      const canClaim = waited >= (this.hooks?.claimAfterMs ?? CLAIM_AFTER_MS) && !!this.duel?.ctl;
       el.replaceChildren(
         ...([
         h('div', { class: 'fr-offline-row' }, h('span', { class: 'spinner' }), h('span', null, h('b', null, 'Reconnecting…'), h('small', null, canClaim ? `${name} has been away for ${Math.floor(waited / 60000)} min.` : `Waiting for ${name}. Your game is safe.`))),
@@ -971,7 +1085,13 @@ class FriendSession {
     const m = room.match;
     if (!m || this.closed) return;
     const ended = !!room.outcome() || m.games.some((g) => g.end?.kind === 'desync');
-    if (ended) return clearActiveDuelIfFriend(m.start.id);
+    const tag: ResumeTag = this.hooks ? this.hooks.tag(room.snapshot()) : { kind: 'friend', key: `friend:${m.start.id}`, route: 'friend', meta: { room: room.snapshot() as unknown as Record<string, unknown> } };
+    if (ended) {
+      this.hooks?.onDecided(room);
+      const d = loadActiveDuel();
+      if (d?.tag.key === tag.key) clearActiveDuel();
+      return;
+    }
     const cur = room.current!;
     const side = (seat: PlayerId): SavedSide => {
       const p = m.start.players[seat];
@@ -980,9 +1100,9 @@ class FriendSession {
     };
     const rec: SavedDuel = {
       v: 1,
-      tag: { kind: 'friend', key: `friend:${m.start.id}`, route: 'friend', meta: { room: room.snapshot() as unknown as Record<string, unknown> } },
+      tag,
       savedAt: Date.now(),
-      setup: { sides: [side(0), side(1)], bestOf: m.start.bestOf, playmat: getSettings().playmat, caption: `vs ${m.start.players[room.peerSeat].name} · Online` },
+      setup: { sides: [side(0), side(1)], bestOf: m.start.bestOf, playmat: getSettings().playmat, caption: `vs ${m.start.players[room.peerSeat].name} · ${this.hooks?.caption ?? 'Online'}` },
       seed: m.start.seed,
       played: m.games.filter((x) => x.end).map((x) => ({ decks: [deckIds(x.decks[0] ?? m.start.decks[0]), deckIds(x.decks[1] ?? m.start.decks[1])] as [DeckIds, DeckIds], ...(x.seen ? { seen: x.seen } : {}) })),
       siding: this.siding && !cur.decks[room.mySeat] ? { index: this.siding.index, player: room.mySeat, deck: this.siding.deck, ...(this.siding.done ? { done: true } : {}) } : null,
@@ -1023,7 +1143,7 @@ class FriendSession {
 }
 
 /** Compact full state of a game for comparing the two phones. */
-function gameState(g: Game) {
+export function gameState(g: Game) {
   const ref = (c: CardInstance | null) => (c ? `${g.allCards.indexOf(c)}${c.faceUp ? 'u' : 'd'}${c.onField && c.isMonster ? c.pos : ''}` : '-');
   return {
     turn: g.turn,
@@ -1039,7 +1159,7 @@ function clearActiveDuelIfFriend(matchId: string) {
   if (d?.tag.kind === 'friend' && d.tag.key === `friend:${matchId}`) clearActiveDuel();
 }
 
-function errorText(e: TransportError | Error): string {
+export function errorText(e: TransportError | Error): string {
   const kind = (e as TransportError).kind;
   switch (kind) {
     case 'no-peer':
