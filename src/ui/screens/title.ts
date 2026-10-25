@@ -8,7 +8,7 @@ import { getOfficialImage } from '../cards/officialArt';
 import { dp, totalUnopened } from '../../collection';
 import { getProfile, tournamentSummary, ordinal } from './store';
 // Events agent: Events tile, Profile chip and event resume.
-import { loadActiveEvent, loadRatings, roundLabel as eventRoundLabel } from '../../events';
+import { EVENT_SPECS, SEASON_WEEKS, eventsThisWeek, loadActiveEvent, loadRatings, loadSeason, roundLabel as eventRoundLabel } from '../../events';
 import { avatar as initialsAvatar } from './locals';
 import { loadActiveDuel } from '../duel/resume';
 import { resumeDuelCard } from './resumeCard';
@@ -74,7 +74,6 @@ export function emblemSVG(cls = 'emblem') {
 export function titleScreen(): Screen {
   const profile = getProfile();
   const ts = tournamentSummary();
-  const active = loadActiveTournament();
   const unopened = totalUnopened();
   const gp = profile.games.w + profile.games.l + profile.games.d;
 
@@ -102,7 +101,57 @@ export function titleScreen(): Screen {
     h('button', { type: 'button', class: 'home-profile', 'aria-label': 'Profile', onclick: () => go('profile') }, initialsAvatar({ name: getSettings().playerName || 'You', human: true }, 28), String(loadRatings().constructed.rating)),
   );
 
-  // A duel left in the middle (or cut off when the app was closed) comes first.
+  const { duelCard, resume } = resumeRows();
+  const thisWeek = thisWeekCard();
+
+  const tiles = h(
+    'section',
+    { class: 'home-tiles' },
+    tile('packs', 'Packs', unopened ? `${unopened} to open · ${dp()} DP` : `Shop · ${dp()} DP`, 'Pot of Avarice', unopened ? String(unopened) : undefined),
+    tile('draft', 'Draft', 'Draft and Sealed', 'Gold Sarcophagus'),
+    tile('deck-builder', 'Decks', 'Build and edit', 'Brionac, Dragon of the Ice Barrier'),
+    tile('binder', 'Binder', 'Your collection', 'Stardust Dragon'),
+  );
+
+  const row = (route: string, label: string, ic: keyof typeof ICONS) =>
+    h('button', { type: 'button', class: 'home-row', onclick: () => go(route) }, h('span', { class: 'home-row-icon' }, icon(ic)), h('span', { class: 'home-row-label' }, label), icon('chevron'));
+  const more = h(
+    'section',
+    { class: 'home-more' },
+    row('database', 'Card Database', 'search'),
+    row('customize', 'Sleeves & Playmat', 'palette'),
+    row('rules', 'How to Play & Banlist', 'book'),
+    row('settings', 'Settings', 'gear'),
+  );
+
+  const el = h(
+    'div',
+    { class: 'home', tabindex: '-1' },
+    hero,
+    h('div', { class: 'home-body' }, duelCard, resume, thisWeek, h('h2', { class: 'home-h' }, 'Your cards'), tiles, more, h('p', { class: 'home-foot' }, 'Fan-made, non-commercial simulator. Not affiliated with the card game’s publisher.')),
+  );
+
+  return { el };
+}
+
+/** Card-art tile (Home and the Duel hub). */
+export function modeTile(route: string, label: string, sub: string, art: string, badge?: string, params?: Record<string, string>) {
+  const bg = h('div', { class: 'home-tile-art' });
+  artInto(bg, art);
+  return h(
+    'button',
+    { type: 'button', class: 'home-tile', onclick: () => go(route, params) },
+    bg,
+    h('div', { class: 'home-tile-shade' }),
+    badge ? h('span', { class: 'home-badge' }, badge) : null,
+    h('span', { class: 'home-tile-text' }, h('b', null, label), h('span', null, sub)),
+  );
+}
+const tile = modeTile;
+
+/** A duel left in the middle (or cut off when the app was closed) comes first, then an event or tournament in progress. */
+export function resumeRows(): { duelCard: Child; resume: Child } {
+  const active = loadActiveTournament();
   const duel = loadActiveDuel();
   const duelCard: Child = duel ? resumeDuelCard(duel, { showMode: true }) : null;
   const ev = duel?.tag.kind === 'events' ? null : loadActiveEvent();
@@ -125,54 +174,26 @@ export function titleScreen(): Screen {
       )
     : null;
 
-  // ---- mode tiles with card art
-  const tile = (route: string, label: string, sub: string, art: string, badge?: string) => {
-    const bg = h('div', { class: 'home-tile-art' });
-    artInto(bg, art);
-    return h(
-      'button',
-      { type: 'button', class: 'home-tile', onclick: () => go(route) },
-      bg,
-      h('div', { class: 'home-tile-shade' }),
-      badge ? h('span', { class: 'home-badge' }, badge) : null,
-      h('span', { class: 'home-tile-text' }, h('b', null, label), h('span', null, sub)),
-    );
-  };
-  const tiles = h(
-    'section',
-    { class: 'home-tiles' },
-    tile('packs', 'Packs', unopened ? `${unopened} to open · ${dp()} DP` : `Shop · ${dp()} DP`, 'Pot of Avarice', unopened ? String(unopened) : undefined),
-    tile('locals', 'Locals Night', 'Friday at the card shop', 'Black Rose Dragon', 'New'),
-    tile('draft', 'Draft', 'Draft and Sealed', 'Gold Sarcophagus'),
-    tile('events', 'Events', 'Regionals, SJCs and the circuit', 'Judgment Dragon'),
-    tile('deck-builder', 'Decks', 'Build and edit', 'Brionac, Dragon of the Ice Barrier'),
-    tile('binder', 'Binder', 'Your collection', 'Stardust Dragon'),
-  );
+  return { duelCard, resume };
+}
 
-  const row = (route: string, label: string, ic: keyof typeof ICONS) =>
-    h('button', { type: 'button', class: 'home-row', onclick: () => go(route) }, h('span', { class: 'home-row-icon' }, icon(ic)), h('span', { class: 'home-row-label' }, label), icon('chevron'));
-  const more = h(
-    'section',
-    { class: 'home-more' },
-    row('exhibition', 'Watch AI vs AI', 'eye'),
-    row('database', 'Card Database', 'search'),
-    row('customize', 'Sleeves & Playmat', 'palette'),
-    row('rules', 'How to Play & Banlist', 'book'),
-    row('settings', 'Settings', 'gear'),
+/** Home shortcut to this week's play: the Circuit week when a season is running, else Locals Night. */
+function thisWeekCard(): Child {
+  const s = loadSeason();
+  const live = s && !s.done;
+  const label = live ? `The Circuit · Week ${s.week} of ${SEASON_WEEKS}` : 'Locals Night';
+  const desc = live ? eventsThisWeek(s).map((e) => EVENT_SPECS[e.kind].short).join(' · ') + ' this week' : 'Friday at the card shop';
+  return h(
+    'button',
+    { type: 'button', class: 'home-resume home-week', onclick: () => (live ? go('events', { view: 'season' }) : go('locals')) },
+    icon(live ? 'flag' : 'trophy'),
+    h('span', { class: 'home-resume-text' }, h('b', null, label), h('span', null, desc)),
+    icon('chevron'),
   );
-
-  const el = h(
-    'div',
-    { class: 'home', tabindex: '-1' },
-    hero,
-    h('div', { class: 'home-body' }, duelCard, resume, h('h2', { class: 'home-h' }, 'Play'), tiles, more, h('p', { class: 'home-foot' }, 'Fan-made, non-commercial simulator. Not affiliated with the card game’s publisher.')),
-  );
-
-  return { el };
 }
 
 /** Fill an element with a card's official artwork as a background (fails quietly). */
-function artInto(el: HTMLElement, cardName: string) {
+export function artInto(el: HTMLElement, cardName: string) {
   void getOfficialImage(cardName).then((img) => {
     if (!img) return;
     const pre = new Image();

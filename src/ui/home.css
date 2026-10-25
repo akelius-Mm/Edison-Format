@@ -314,3 +314,106 @@ body.in-duel .tabbar {
 body.has-tabbar .frame {
   padding-bottom: calc(76px + env(safe-area-inset-bottom, 0px));
 }
+
+/* ---- Duel tab hub (route `play`) */
+.play-head {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: calc(env(safe-area-inset-top, 0px) + 22px) max(20px, env(safe-area-inset-right, 0px)) 6px max(20px, env(safe-area-inset-left, 0px));
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+}
+.play-title {
+  margin: 4px 0 0;
+  font: 800 34px var(--font-display);
+  letter-spacing: -0.03em;
+  color: var(--text);
+}
+.play-rating {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 12px 5px 5px;
+  border-radius: 99px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: var(--bg-2);
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+.play-rating span {
+  display: grid;
+  line-height: 1.05;
+  text-align: left;
+}
+.play-rating b {
+  font: 700 15px var(--font);
+}
+.play-rating small {
+  font-size: 11px;
+  color: var(--text-dim, rgba(236, 235, 231, 0.6));
+}
+.play-quick {
+  position: relative;
+  min-height: 200px;
+  border-radius: 20px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: var(--bg-2);
+  padding: 0;
+  font: inherit;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  transition: transform 0.15s ease;
+}
+.play-quick:active {
+  transform: scale(0.98);
+}
+.play-quick .home-tile-art {
+  background-position: center 20%;
+}
+.play-quick-text {
+  position: relative;
+  display: grid;
+  gap: 3px;
+  padding: 0 16px;
+}
+.play-quick-text b {
+  font: 800 26px var(--font-display);
+  letter-spacing: -0.02em;
+}
+.play-quick-text > span:last-child {
+  font-size: 13px;
+  color: rgba(236, 235, 231, 0.78);
+}
+.play-quick-go {
+  position: relative;
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 12px 16px 16px;
+  padding: 10px 18px;
+  border-radius: 99px;
+  background: #f2efe8;
+  color: #111;
+  font: 700 15px var(--font);
+}
+.play-quick-go .icon {
+  width: 16px;
+  height: 16px;
+}
+@media (orientation: landscape) and (min-width: 700px) {
+  .play-tiles {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+  .play-quick {
+    min-height: 170px;
+  }
+}
