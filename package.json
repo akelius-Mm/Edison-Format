@@ -10,11 +10,12 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "sim": "tsx scripts/sim.ts",
-    "test": "tsx scripts/rules-test.ts && tsx scripts/pack-odds-test.ts && tsx scripts/sim.ts --games 40 && tsx scripts/locals-test.ts",
+    "test": "tsx scripts/rules-test.ts && tsx scripts/pack-odds-test.ts && tsx scripts/sim.ts --games 40 && tsx scripts/locals-test.ts && tsx scripts/events-test.ts",
     "test:rules": "tsx scripts/rules-test.ts",
     "test:sim": "tsx scripts/sim.ts --games 40",
     "test:packs": "tsx scripts/pack-odds-test.ts",
-    "test:locals": "tsx scripts/locals-test.ts --nights 120"
+    "test:locals": "tsx scripts/locals-test.ts --nights 120",
+    "test:events": "tsx scripts/events-test.ts --seasons 4"
   },
   "devDependencies": {
     "@types/node": "^22.20.5",
