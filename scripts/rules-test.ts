@@ -893,6 +893,7 @@ function eq(a: unknown, b: unknown, msg: string) {
 
   await blackwingLightswornAuditTests();
   await heroDadPsychicAuditTests();
+  await plantSaberSamuraiAuditTests();
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })();
@@ -6489,5 +6490,287 @@ async function heroDadPsychicAuditTests() {
     const gill = deckCard(g, 0, 'Spined Gillman');
     await g.normalSummon(0, place(0, cardByName('Deep Sea Diva'), 'hand'), false);
     eq(gill.location, 'mzone', 'Spined Gillman Special Summoned');
+  });
+}
+
+// ---------------------------------------------------------------- Pre-tournament audit: Plants / Sabers / Six Samurai / Cats
+
+async function plantSaberSamuraiAuditTests() {
+  const live = (c: CardInstance) => {
+    c.faceUp = true;
+    c.activeOnField = true;
+    return c;
+  };
+  const deckCard = (g: Game, p: PlayerId, name: string) => {
+    const c = g.registerCard(new (g.allCards[0].constructor as any)(cardByName(name), p)) as CardInstance;
+    c.location = 'none';
+    g.rawMove(c, 'deck');
+    return c;
+  };
+  const offered = (g: Game, p: PlayerId, card: CardInstance, label?: string) =>
+    g.getActivations(p, { open: true }).some((a) => a.card === card && (!label || a.label === label));
+  const procOffered = (g: Game, p: PlayerId, card: CardInstance) => g.legalMainActions(p).some((a) => a.type === 'proc' && a.card === card);
+  const doProc = async (g: Game, p: PlayerId, card: CardInstance) => {
+    const a = g.legalMainActions(p).find((x) => x.type === 'proc' && x.card === card);
+    if (!a) throw new Error(`${card.name}: no Summon procedure offered`);
+    await g.performAction(p, a);
+  };
+  const pickOnly = (c: TestController, want: CardInstance[]) => {
+    c.pick = (_g, req) => {
+      const w = req.candidates.filter((x) => want.includes(x));
+      return w.length >= req.min && w.length ? w.slice(0, Math.max(req.min, Math.min(w.length, req.max))) : req.candidates.slice(0, req.min);
+    };
+  };
+
+  // ---- Quickdraw Plant / Dandywarrior
+  await test('Quickdraw Synchron: Special Summon needs a monster sent from the hand (not a Spell); the monster goes to the GY', async () => {
+    const { g, place } = setup();
+    const qd = place(0, cardByName('Quickdraw Synchron'), 'hand');
+    place(0, cardByName('Mystical Space Typhoon'), 'hand');
+    eq(procOffered(g, 0, qd), false, 'only a Spell in hand: no Summon');
+    const dandy = place(0, cardByName('Dandylion'), 'hand');
+    await doProc(g, 0, qd);
+    eq(qd.location, 'mzone', 'Quickdraw Special Summoned');
+    eq(dandy.location, 'grave', 'Dandylion sent as the cost');
+    eq(g.monsters(0).filter((m) => m.name === 'Fluff Token').length, 2, 'Dandylion triggered: 2 Fluff Tokens');
+  });
+
+  await test('Quickdraw Synchron: substitutes for a "Synchron" Tuner (Turbo Warrior yes), not material for Stardust Dragon', async () => {
+    const { g, place } = setup();
+    place(0, cardByName('Quickdraw Synchron'), 'mzone');
+    place(0, cardByName('Lonefire Blossom'), 'mzone');
+    const sd = place(0, cardByName('Stardust Dragon'), 'extra');
+    eq(g.canSynchro(0, sd), false, '5 + 3 = 8 but Stardust Dragon lists no "Synchron" Tuner');
+    const r = setup();
+    r.place(0, cardByName('Quickdraw Synchron'), 'mzone');
+    r.place(0, cardByName('Level Eater'), 'mzone');
+    const tw = r.place(0, cardByName('Turbo Warrior'), 'extra');
+    eq(r.g.canSynchro(0, tw), true, 'Quickdraw (5) + Level Eater (1) = Turbo Warrior');
+  });
+
+  await test('Lonefire Blossom: Tribute a face-up Plant to Special Summon a Plant from the Deck; once per turn', async () => {
+    const { g, c0, place } = setup();
+    const lf1 = place(0, cardByName('Lonefire Blossom'), 'mzone');
+    const lf2 = place(0, cardByName('Lonefire Blossom'), 'mzone');
+    const brute = place(0, T.brute, 'mzone');
+    const ty = deckCard(g, 0, 'Tytannial, Princess of Camellias');
+    pickOnly(c0, [lf2, ty]);
+    await activateCard(g, 0, lf1);
+    eq(lf2.location, 'grave', 'the other Lonefire was Tributed');
+    eq(ty.location, 'mzone', 'Tytannial Special Summoned from the Deck');
+    eq(brute.location, 'mzone', 'a non-Plant is never Tribute fodder');
+    eq(offered(g, 0, lf1), false, 'once per turn');
+  });
+
+  await test('Dandylion: sent to the GY -> 2 Fluff Tokens in Defense; they cannot be Tributed for a Tribute Summon that turn', async () => {
+    const { g, place } = setup();
+    const dandy = place(0, cardByName('Dandylion'), 'hand');
+    await g.discard([dandy], 'cost', 0);
+    await g.processTriggers(true);
+    const toks = g.monsters(0).filter((m) => m.name === 'Fluff Token');
+    eq(toks.length, 2, '2 tokens');
+    eq(toks.every((t) => t.pos === 'def'), true, 'in Defense Position');
+    const lv4 = place(0, cardByName('Thunder King Rai-Oh'), 'hand');
+    const lv6 = place(0, cardByName('Caius the Shadow Monarch'), 'hand');
+    eq(g.legalMainActions(0).some((a) => a.type === 'summon' && a.card === lv6), false, 'Fluff Tokens are not Tribute Summon fodder this turn');
+    eq(g.legalMainActions(0).some((a) => a.type === 'summon' && a.card === lv4), true, 'Level 4 still Normal Summonable');
+  });
+
+  await test('Tytannial: WIND; Tributes a Plant to negate and destroy a card that targets a face-up Plant', async () => {
+    const { g, c0, c1, place } = setup();
+    const ty = place(1, cardByName('Tytannial, Princess of Camellias'), 'mzone');
+    eq(ty.data.attribute, 'WIND', 'printed Attribute');
+    const lf = place(1, cardByName('Lonefire Blossom'), 'mzone');
+    const bc = place(0, cardByName('Brain Control'), 'hand');
+    c1.respond = respondWith('Tytannial, Princess of Camellias');
+    pickOnly(c1, [lf]);
+    pickOnly(c0, [ty]);
+    await activateCard(g, 0, bc);
+    eq(lf.location, 'grave', 'Lonefire Tributed as the cost');
+    eq(bc.location, 'grave', 'Brain Control negated and destroyed');
+    eq(ty.controller, 1, 'Tytannial not stolen');
+  });
+
+  await test('Level Eater: from the GY, lowers a Level 5+ monster by 1 and Special Summons itself', async () => {
+    const { g, place } = setup();
+    const le = place(0, cardByName('Level Eater'), 'grave');
+    const qd = place(0, cardByName('Quickdraw Synchron'), 'mzone');
+    await activateCard(g, 0, le);
+    eq(le.location, 'mzone', 'Level Eater revived');
+    eq(g.getLevel(qd), 4, 'Quickdraw is now Level 4');
+    const n = setup();
+    const le2 = n.place(0, cardByName('Level Eater'), 'grave');
+    n.place(0, T.brute, 'mzone');
+    eq(offered(n.g, 0, le2), false, 'no Level 5+ monster: not offered');
+  });
+
+  await test('Debris Dragon: Normal Summon revives a 500-or-less ATK monster in Attack Position with its effects negated', async () => {
+    const { g, place } = setup();
+    const debris = place(0, cardByName('Debris Dragon'), 'hand');
+    const dandy = place(0, cardByName('Dandylion'), 'grave');
+    await g.performAction(0, { type: 'summon', card: debris });
+    eq(dandy.location, 'mzone', 'Dandylion revived');
+    eq(dandy.pos, 'atk', 'in Attack Position');
+    eq(g.isNegated(dandy), true, 'effects negated');
+  });
+
+  // ---- Caliber Cat
+  await test('Rescue Cat: send it to Special Summon 2 Level 3 or lower Beasts from the Deck; they are destroyed in the End Phase', async () => {
+    const { g, place } = setup();
+    const cat = place(0, cardByName('Rescue Cat'), 'mzone');
+    const a1 = deckCard(g, 0, 'X-Saber Airbellum');
+    const a2 = deckCard(g, 0, 'X-Saber Airbellum');
+    const dog = deckCard(g, 0, 'Flamvell Firedog'); // Beast, but Level 4
+    await activateCard(g, 0, cat);
+    eq(cat.location, 'grave', 'Rescue Cat sent as the cost');
+    eq(a1.location, 'mzone', 'Airbellum 1 summoned');
+    eq(a2.location, 'mzone', 'Airbellum 2 summoned');
+    eq(dog.location, 'deck', 'Level 4 Beast not eligible');
+    eq(g.isNegated(a1), false, '2010 text: effects are not negated');
+    await (g as any).setPhase('end');
+    eq(a1.location, 'grave', 'destroyed in the End Phase');
+    eq(a2.location, 'grave', 'destroyed in the End Phase');
+  });
+
+  await test('Doomcaliber Knight: Fiend that cannot be Special Summoned; Tributes itself to negate a monster effect and destroy that monster', async () => {
+    const { g, c1, place } = setup();
+    const dk = place(1, cardByName('Doomcaliber Knight'), 'mzone');
+    eq(dk.data.race, 'Fiend', 'printed Type');
+    const trooper = place(0, cardByName('Card Trooper'), 'mzone');
+    c1.respond = respondWith('Doomcaliber Knight');
+    await activateCard(g, 0, trooper);
+    eq(dk.location, 'grave', 'Doomcaliber Tributed');
+    eq(trooper.location, 'grave', 'Card Trooper destroyed');
+    const r = setup();
+    r.place(0, cardByName('Doomcaliber Knight'), 'grave');
+    const reborn = r.place(0, cardByName('Monster Reborn'), 'hand');
+    eq(offered(r.g, 0, reborn), false, 'Monster Reborn cannot revive Doomcaliber Knight');
+  });
+
+  // ---- Fish OTK
+  await test('Fishborg Blaster: discard to revive only while you control a face-up Level 3 or lower WATER monster', async () => {
+    const { g, place } = setup();
+    const fb = place(0, cardByName('Fishborg Blaster'), 'grave');
+    const disc = place(0, T.brute, 'hand');
+    eq(offered(g, 0, fb), false, 'no WATER monster: not offered');
+    place(0, cardByName('Oyster Meister'), 'mzone');
+    await activateCard(g, 0, fb);
+    eq(fb.location, 'mzone', 'Fishborg revived');
+    eq(disc.location, 'grave', 'discarded as the cost');
+  });
+
+  // ---- X-Sabers
+  await test('XX-Saber Faultroll: Special Summon from the hand needs 2 face-up X-Sabers; revives a Level 4 or lower X-Saber once per turn', async () => {
+    const { g, place } = setup();
+    const ft = place(0, cardByName('XX-Saber Faultroll'), 'hand');
+    place(0, cardByName('X-Saber Airbellum'), 'mzone');
+    eq(procOffered(g, 0, ft), false, '1 X-Saber: no Summon');
+    place(0, cardByName('X-Saber Galahad'), 'mzone', { faceUp: false, pos: 'def' });
+    eq(procOffered(g, 0, ft), false, 'a face-down X-Saber does not count');
+    place(0, cardByName('XX-Saber Emmersblade'), 'mzone');
+    await doProc(g, 0, ft);
+    eq(ft.location, 'mzone', 'Faultroll Special Summoned');
+    const gal = place(0, cardByName('X-Saber Galahad'), 'grave');
+    await activateCard(g, 0, ft);
+    eq(gal.location, 'mzone', 'Galahad revived');
+    eq(offered(g, 0, ft), false, 'once per turn');
+  });
+
+  await test('XX-Saber Gottoms: Level 9 from 1 Tuner + non-Tuner EARTH monsters (Faultroll + Airbellum); Tributes an X-Saber for a random discard', async () => {
+    const { g, place } = setup();
+    const got = place(0, cardByName('XX-Saber Gottoms'), 'extra');
+    eq(got.data.level, 9, 'Level 9');
+    const air = place(0, cardByName('X-Saber Airbellum'), 'mzone');
+    const ft = place(0, cardByName('XX-Saber Faultroll'), 'mzone');
+    eq(g.canSynchro(0, got), true, 'Faultroll (6) + Airbellum (3) = 9');
+    await g.synchroSummon(0, got, [air, ft]);
+    eq(got.location, 'mzone', 'Gottoms Synchro Summoned');
+    const n = setup();
+    const got2 = n.place(0, cardByName('XX-Saber Gottoms'), 'extra');
+    n.place(0, cardByName('X-Saber Airbellum'), 'mzone');
+    n.place(0, cardByName('Caius the Shadow Monarch'), 'mzone'); // DARK Level 6
+    eq(n.g.canSynchro(0, got2), false, 'a non-EARTH non-Tuner cannot be used');
+    const m = setup();
+    const got3 = m.place(0, cardByName('XX-Saber Gottoms'), 'extra');
+    m.place(0, cardByName('Dandylion'), 'mzone'); // EARTH non-X-Saber Level 3
+    m.place(0, T.wall, 'mzone'); // EARTH non-X-Saber Level 4
+    m.place(0, tuner, 'mzone'); // EARTH Tuner Level 2
+    eq(m.g.canSynchro(0, got3), true, 'any EARTH non-Tuners work (Tuner 2 + Wall 4 + Dandylion 3 = 9)');
+    const e = setup();
+    const got4 = e.place(0, cardByName('XX-Saber Gottoms'), 'mzone');
+    const fod = e.place(0, cardByName('X-Saber Airbellum'), 'mzone');
+    const h = e.place(1, T.brute, 'hand');
+    pickOnly(e.c0, [fod]);
+    await activateCard(e.g, 0, got4);
+    eq(fod.location, 'grave', 'X-Saber Tributed');
+    eq(h.location, 'grave', "opponent's only card discarded");
+  });
+
+  await test("Gottoms' Emergency Call: needs a face-up X-Saber on the field; revives 2 X-Sabers from either GY to your field", async () => {
+    const { g, c0, place } = setup();
+    const call = place(0, cardByName("Gottoms' Emergency Call"), 'hand');
+    const mine = place(0, cardByName('X-Saber Airbellum'), 'grave');
+    const theirs = place(1, cardByName('XX-Saber Emmersblade'), 'grave');
+    eq(offered(g, 0, call), false, 'no face-up X-Saber: cannot activate');
+    place(1, cardByName('X-Saber Galahad'), 'mzone'); // the opponent's X-Saber counts ("on the field")
+    pickOnly(c0, [mine, theirs]);
+    await activateCard(g, 0, call);
+    eq(mine.location, 'mzone', 'own GY X-Saber summoned');
+    eq(theirs.location, 'mzone', "opponent's GY X-Saber summoned");
+    eq(theirs.controller, 0, 'to your side of the field');
+  });
+
+  await test('X-Saber Airbellum: a direct attack that deals damage discards 1 random card; X-Saber Galahad is a Warrior', async () => {
+    const { g, place } = setup();
+    const air = place(0, cardByName('X-Saber Airbellum'), 'mzone');
+    const h = place(1, T.brute, 'hand');
+    g.phase = 'battle';
+    await g.conductAttack(0, air);
+    eq(g.players[1].lp, 8000 - 1600, 'direct damage');
+    eq(h.location, 'grave', 'random discard');
+    eq(cardByName('X-Saber Galahad').race, 'Warrior', 'Galahad printed Type: Warrior (Reinforcement of the Army target)');
+  });
+
+  // TODO(held, not confirmed for the April 2010 printing): Saber Slash's current text destroys face-up cards on EITHER
+  // side, exactly as many as your face-up Attack Position X-Sabers, without targeting; ours targets up to that many
+  // of the opponent's face-up cards.
+  // await test('Saber Slash: destroys face-up cards on the field equal to the number of attacking X-Sabers', async () => {});
+
+  // ---- Six Samurai
+  await test('Gateway of the Six: 2 Bushido Counters per Summon, even when several Six Samurai are Special Summoned together', async () => {
+    const { g, place } = setup();
+    const gate = live(place(0, cardByName('Gateway of the Six'), 'szone'));
+    const ssu = live(place(0, cardByName('Six Samurai United'), 'szone'));
+    const a = place(0, cardByName('The Six Samurai - Kamon'), 'grave');
+    const b = place(0, cardByName('The Six Samurai - Yaichi'), 'grave');
+    await g.specialSummon([a, b], 0, { pos: 'atk' });
+    await g.processTriggers(true);
+    eq(a.location === 'mzone' && b.location === 'mzone', true, 'both summoned');
+    eq(gate.counters.bushido ?? 0, 2, 'one Summon = 2 counters');
+    eq(ssu.counters.bushido ?? 0, 1, 'United: 1 counter');
+    const z = place(0, cardByName('The Six Samurai - Zanji'), 'hand');
+    await g.performAction(0, { type: 'summon', card: z });
+    eq(gate.counters.bushido ?? 0, 4, 'a Normal Summon adds 2 more');
+    eq(ssu.counters.bushido ?? 0, 2, 'United: max 2');
+  });
+
+  await test('Hand of the Six Samurai needs another face-up Six Samurai; Enishi is Special Summoned by banishing 2 Six Samurai from the GY', async () => {
+    const { g, c0, place } = setup();
+    const hand = place(0, cardByName('Hand of the Six Samurai'), 'mzone');
+    const v = place(1, T.brute, 'mzone');
+    eq(offered(g, 0, hand), false, 'alone: not offered');
+    const kamon = place(0, cardByName('The Six Samurai - Kamon'), 'mzone');
+    pickOnly(c0, [kamon, v]);
+    await activateCard(g, 0, hand);
+    eq(kamon.location, 'grave', 'Kamon Tributed');
+    eq(v.location, 'grave', 'target destroyed');
+    const n = setup();
+    const en = n.place(0, cardByName("Enishi, Shien's Chancellor"), 'hand');
+    n.place(0, cardByName('The Six Samurai - Kamon'), 'grave');
+    eq(procOffered(n.g, 0, en), false, '1 Six Samurai in the GY: no Summon');
+    const y = n.place(0, cardByName('The Six Samurai - Yaichi'), 'grave');
+    await doProc(n.g, 0, en);
+    eq(en.location, 'mzone', 'Enishi Special Summoned');
+    eq(y.location, 'banished', 'cost banished');
   });
 }

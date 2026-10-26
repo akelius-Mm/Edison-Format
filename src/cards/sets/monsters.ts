@@ -921,11 +921,13 @@ monster('Banisher of the Radiance', {
 
 monster('Doomcaliber Knight', {
   attribute: 'DARK',
-  race: 'Warrior',
+  race: 'Fiend', // printed Type (YGOJSON), was Warrior
   level: 4,
   atk: 1900,
   def: 1800,
-  text: 'During either player\'s turn, when a monster effect is activated: You can Tribute this card; negate the activation, and if you do, destroy that monster.',
+  // "Cannot be Special Summoned": blocked from every location (it has no Summon procedure).
+  noSpecialFrom: ['hand', 'deck', 'grave', 'banished'],
+  text: 'Cannot be Special Summoned. During either player\'s turn, when a monster effect is activated: You can Tribute this face-up card; negate the activation, and if you do, destroy that monster.',
   aiValue: 700,
   effects: [
     {

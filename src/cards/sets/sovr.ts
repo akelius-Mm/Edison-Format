@@ -3064,7 +3064,9 @@ spell('Gateway of the Six', 'continuous', {
       label: 'Bushido Counters',
       eventFilter: (ctx, ev) => {
         const c = evc(ev);
-        if (c && isSixSamurai(c) && ev.method !== 'flip' && stActive(ctx)) {
+        // 2 counters per Summon, not per monster: several Six Samurai Summoned together share one event batch.
+        if (c && isSixSamurai(c) && ev.method !== 'flip' && stActive(ctx) && ctx.self.flags.gatewayBatch !== ev.batch) {
+          ctx.self.flags.gatewayBatch = ev.batch;
           ctx.self.counters.bushido = (ctx.self.counters.bushido ?? 0) + 2;
           ctx.game.update();
         }
