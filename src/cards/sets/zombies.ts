@@ -1,18 +1,13 @@
 // Card definitions: Zombies (Zombie Synchro / Plaguespreader engine).
 import { monster, spell } from '../define';
 import { cardValue } from '../helpers';
-import type { CardInstance } from '../../engine/card';
+import { dataVariant, type CardInstance } from '../../engine/card';
 import type { Ctx } from '../../engine/ctx';
 import { geminiSummonEffect, isGeminiActive, searchScored, synchroOptions } from './plants';
 
-/** Zombie check that honours Zombie World for monsters on the field / in the GY. */
-export function isZombie(ctx: Ctx, c: CardInstance) {
-  if (!c.isMonster) return false;
-  if (c.data.race === 'Zombie') return true;
-  if (c.location === 'mzone' || c.location === 'grave') {
-    return ctx.spellTraps('both', (s) => s.name === 'Zombie World' && s.faceUp && s.activeOnField && s.location === 'fzone').length > 0;
-  }
-  return false;
+/** Zombie-Type check. Zombie World's Type change is applied by the engine (EffectDef.dataMod), so `data.race` already has it. */
+export function isZombie(_ctx: Ctx, c: CardInstance) {
+  return c.isMonster && c.data.race === 'Zombie';
 }
 
 /** Value of having this monster on the field right now (AI): ATK plus a bonus if it unlocks a Synchro. */
@@ -539,8 +534,7 @@ spell('Book of Life', 'quickplay', {
 spell('Zombie World', 'field', {
   text: 'All monsters on the field and in the GYs become Zombie-Type monsters. Neither player can Tribute Summon monsters, except Zombie-Type monsters.',
   aiValue: 200,
-  // Approximation: the engine has no Type-changing query. Zombie cards in this file treat every
-  // monster on the field / in the GY as a Zombie while this card is face-up (see isZombie).
+  // The Type change is a dataMod: every check that reads `data.race` sees it (not in the GY under Necrovalley).
   // Monsters in the hand keep their Type, so only Zombies can be Tribute Summoned (Tribute Sets are allowed).
   effects: [
     {
@@ -552,6 +546,15 @@ spell('Zombie World', 'field', {
       kind: 'continuous',
       range: ['fzone'],
       mods: [{ q: 'cannotTributeSummon', to: 'cards', filter: (_ctx, c: CardInstance) => c.isMonster && c.data.race !== 'Zombie' }],
+    },
+    {
+      kind: 'continuous',
+      range: ['fzone'],
+      dataMod: {
+        to: 'cards',
+        filter: (c) => c.isMonster && (c.location === 'mzone' || c.location === 'grave'),
+        apply: (d) => (d.race === 'Zombie' ? d : dataVariant(d, 'race:Zombie', { race: 'Zombie' })),
+      },
     },
   ],
 });

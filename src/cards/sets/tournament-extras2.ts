@@ -10,10 +10,11 @@
 // the exact rule (zone locks, destruction substitutes, GY-movement negation...).
 import { findCard, monster, spell, trap } from '../define';
 import { bestTarget, cardValue, flip, race, selfDestroysByBattle } from '../helpers';
-import type { CardInstance, EffectDef } from '../../engine/card';
+import { dataVariant, type CardInstance, type EffectDef } from '../../engine/card';
 import type { Ctx } from '../../engine/ctx';
 import type { ChainLink } from '../../engine/game';
 import type { GameEvent } from '../../engine/types';
+import { necrovalleyNegates } from '../necrovalley';
 
 type C = CardInstance;
 
@@ -90,24 +91,23 @@ function imprisoningMirror(attribute: 'DARK' | 'LIGHT'): EffectDef[] {
 }
 
 /**
- * Union monster equip / unequip (old Union rules, as printed on the Machina cards).
- * APPROX: the destruction substitute only covers battle. While equipped, the host cannot be destroyed by battle; at the
- * end of a Damage Step in which the host would have been destroyed, the Union monster is destroyed instead.
- * Destruction of the host by card effects is not replaced.
+ * Union monster equip / unequip (old Union rules, as printed on the Machina cards): 1 Union per monster, and if the
+ * equipped monster would be destroyed by battle or card effect, the Union monster is destroyed instead.
  */
 function unionEffects(): EffectDef[] {
   const key = (ctx: Ctx) => `union:${ctx.self.uid}`;
   const host = (ctx: Ctx) => (ctx.self.location === 'szone' ? ctx.equipTarget : undefined);
+  const hosts = (ctx: Ctx) => ctx.faceUpMonsters('me', (c) => c !== ctx.self && isMachine(c) && !ctx.game.equipsOf(c).some((e) => e.isMonster && e.hasType('union')));
   return [
     {
       kind: 'ignition',
       label: 'Equip to a Machine monster',
       categories: ['protect'],
       condition: (ctx) => !ctx.usedThisTurn(key(ctx)),
-      canActivate: (ctx) => ctx.freeSZones() > 0 && ctx.faceUpMonsters('me', (c) => c !== ctx.self && isMachine(c)).length > 0,
+      canActivate: (ctx) => ctx.freeSZones() > 0 && hosts(ctx).length > 0,
       activate: async (ctx) => {
         ctx.markUsed(key(ctx));
-        await ctx.selectTargets(ctx.faceUpMonsters('me', (c) => c !== ctx.self && isMachine(c)), 1, 1, 'Target 1 Machine monster you control to equip this card to.', 'equip', {
+        await ctx.selectTargets(hosts(ctx), 1, 1, 'Target 1 Machine monster you control to equip this card to.', 'equip', {
           aiScore: (c) => ctx.atk(c) + (c.data.aiValue ?? 0),
         });
       },
@@ -147,33 +147,14 @@ function unionEffects(): EffectDef[] {
       },
     },
     {
+      // "If the equipped monster would be destroyed by battle or card effect, destroy this card instead."
       kind: 'continuous',
       range: ['szone'],
-      mods: [{ q: 'indestructibleBattle', to: 'cards', filter: (ctx, c) => !!ctx.equipTarget && c === ctx.equipTarget }],
-    },
-    {
-      kind: 'trigger',
-      event: 'damageStepEnd',
-      range: ['szone'],
-      mandatory: true,
-      label: 'Destroyed instead of the equipped monster',
-      categories: ['destroy'],
-      eventFilter: (ctx, ev) => {
-        const h = host(ctx);
-        if (!h || h.location !== 'mzone') return false;
-        const a = evc(ev);
-        const t = ev.other as C | undefined;
-        if (!a || !t || (h !== a && h !== t)) return false;
-        const g = ctx.game;
-        if (h === a) {
-          if (t.pos === 'atk') return g.getAtk(a) <= g.getAtk(t) && g.getAtk(t) > 0;
-          return false;
-        }
-        // host was attacked
-        return a.location === 'mzone' && (h.pos === 'atk' ? g.getAtk(a) >= g.getAtk(h) && g.getAtk(a) > 0 : g.getAtk(a) > g.getDef(h));
-      },
-      resolve: async (ctx) => {
-        if (ctx.self.onField) await ctx.game.destroy([ctx.self], 'effect', ctx.player, ctx.self);
+      replaceDestroyOne: async (ctx, card, reason) => {
+        if (card !== host(ctx) || !ctx.self.onField || (reason !== 'battle' && reason !== 'effect')) return false;
+        ctx.log(`${ctx.self.name} is destroyed instead.`);
+        await ctx.game.destroy([ctx.self], 'effect', ctx.player, ctx.self);
+        return ctx.self.location !== 'szone';
       },
     },
   ];
@@ -599,17 +580,7 @@ once('Machina Peacekeeper', () =>
   }),
 );
 
-once('Proto-Cyber Dragon', () => {
-  /** Installed once per instance: the name reads "Cyber Dragon" while the card is face-up on the field. */
-  const renamed = new WeakSet<C>();
-  const install = (c: C) => {
-    if (renamed.has(c)) return;
-    renamed.add(c);
-    Object.defineProperty(c, 'name', {
-      configurable: true,
-      get: () => (c.location === 'mzone' && c.faceUp ? 'Cyber Dragon' : c.data.name),
-    });
-  };
+once('Proto-Cyber Dragon', () =>
   monster('Proto-Cyber Dragon', {
     attribute: 'LIGHT',
     race: 'Machine',
@@ -620,17 +591,13 @@ once('Proto-Cyber Dragon', () => {
     text: 'This card\'s name becomes "Cyber Dragon" while on the field.',
     effects: [
       {
-        // Bookkeeping only (never builds a chain link): installs the on-field name change on this card.
-        kind: 'trigger',
-        event: ['summoned', 'flipped', 'monsterSet', 'drawn', 'addedToHand'],
-        eventFilter: (ctx, ev) => {
-          if (ev.card === ctx.self) install(ctx.self);
-          return false;
-        },
+        // A dataMod (Game.cardView): the name reads "Cyber Dragon" while this card is face-up on the field and not negated.
+        kind: 'continuous',
+        dataMod: { apply: (d) => dataVariant(d, 'name:Cyber Dragon', { name: 'Cyber Dragon' }) },
       },
     ],
-  });
-});
+  }),
+);
 
 // ============================================================ EXTRA DECK
 
@@ -724,15 +691,11 @@ once('Tempest Magician', () =>
 
 // ============================================================ SPELLS
 
-/** GY effects that Special Summon or add cards without moving a card that is in the GY. */
-const NECROVALLEY_SAFE = ['Dandylion'];
-
 once('Necrovalley', () =>
   spell('Necrovalley', 'field', {
-    // The GY lock negates (when activated) any effect that targets a card in a GY or that is activated by a card in the
-    // GY to move itself; costs that banish from a GY (Dark Armed Dragon, Chaos Sorcerer, Necro Gardna... see
-    // src/cards/gy-costs.ts) cannot be paid, so those effects are not offered. APPROX: non-targeting effects that
-    // move GY cards are not stopped.
+    // The GY lock (src/cards/necrovalley.ts): GY-banish costs are not offered and GY cards cannot be banished; card
+    // effects do not move cards out of the GY (an effect that targets a GY card, or that a GY card activates to move
+    // itself, is negated on activation); Zombie World's Type change does not apply in the GY.
     text: 'All "Gravekeeper\'s" monsters on the field gain 500 ATK/DEF. Cards in the GY cannot be banished. Negate any card effect that would move a card in the GY to a different place. Negate any card effect that changes Types or Attributes in the GY.',
     aiValue: 600,
     effects: [
@@ -748,6 +711,7 @@ once('Necrovalley', () =>
           { q: 'atk', to: 'cards', filter: (_ctx, c: C) => c.location === 'mzone' && c.faceUp && c.inSet('gravekeeper'), value: 500 },
           { q: 'def', to: 'cards', filter: (_ctx, c: C) => c.location === 'mzone' && c.faceUp && c.inSet('gravekeeper'), value: 500 },
           { q: 'cannotBanishFromGY', to: 'players', value: true },
+          { q: 'gyLock', to: 'players', value: true },
         ],
       },
       {
@@ -755,18 +719,7 @@ once('Necrovalley', () =>
         event: 'chainActivated',
         label: 'Necrovalley (negate)',
         eventFilter: (ctx, ev) => {
-          const link = ev.data?.link as ChainLink | undefined;
-          if (!link || link.negated || !stActive(ctx) || ctx.self.location !== 'fzone') return false;
-          // A GY effect that moves the card itself (Plaguespreader Zombie, Treeborn Frog, Necro Gardna...). Searches from the
-          // Deck (Sangan) and Dandylion's Tokens do not move a card in the GY, so they are not negated.
-          const cats = link.effect.categories ?? [];
-          const moves = cats.some((k) => ['specialSummon', 'toHand', 'toDeck', 'banish'].includes(k));
-          const targetsGY = link.ctx.targets.some((c) => c.location === 'grave');
-          const fromGY = link.fromLocation === 'grave' && link.card.location === 'grave' && moves && !NECROVALLEY_SAFE.includes(link.card.name);
-          if (targetsGY || fromGY) {
-            ctx.game.log(`Necrovalley negates ${link.card.name}.`, 'action', ctx.player);
-            ctx.game.negateLink(link, false, ctx.self);
-          }
+          if (stActive(ctx) && ctx.self.location === 'fzone') necrovalleyNegates(ctx, ev);
           return false;
         },
       },

@@ -421,22 +421,24 @@ spell('E - Emergency Call', 'normal', {
   ],
 });
 
+/** Miracle Fusion's materials: your monsters, plus those in your GY unless GY cards cannot be banished (Necrovalley, Kycoo). */
+const miracleMaterials = (ctx: Ctx) => [...ctx.monsters('me'), ...(ctx.game.gyBanishLocked(ctx.player) ? [] : ctx.grave('me', (c) => c.isMonster))];
 spell('Miracle Fusion', 'normal', {
   text: 'Fusion Summon 1 "Elemental HERO" Fusion Monster from your Extra Deck by banishing Fusion Materials listed on it from your field or GY.',
   effects: [
     {
       kind: 'activate',
       categories: ['specialSummon', 'banish'],
-      canActivate: (ctx) => fusionOptions(ctx, isEHero, [...ctx.monsters('me'), ...ctx.grave('me', (c) => c.isMonster)]).length > 0,
+      canActivate: (ctx) => fusionOptions(ctx, isEHero, miracleMaterials(ctx)).length > 0,
       resolve: async (ctx) => {
-        await performFusionSummon(ctx, isEHero, [...ctx.monsters('me'), ...ctx.grave('me', (c) => c.isMonster)], 'banished');
+        await performFusionSummon(ctx, isEHero, miracleMaterials(ctx), 'banished');
       },
       ai: {
         score: (ctx) => {
           if (ctx.phase === 'main2' && ctx.isMyTurn) {
             // Prefer to fuse in Main Phase 1 so the Fusion can attack; still fine in Main 2 as a wall.
           }
-          const opts = fusionOptions(ctx, isEHero, [...ctx.monsters('me'), ...ctx.grave('me', (c) => c.isMonster)]);
+          const opts = fusionOptions(ctx, isEHero, miracleMaterials(ctx));
           const gain = bestFusionGain(ctx, opts);
           if (gain >= 1500) return 66 + gain / 300;
           if (gain >= 600) return 45;

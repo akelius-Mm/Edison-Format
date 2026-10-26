@@ -83,8 +83,11 @@ export type QueryKey =
   | 'cannotSet'
   // ABPF: player subject — "you cannot Synchro Summon this turn" (Variety Comes Out). Checked in Game.canSynchro.
   | 'cannotSynchroSummon'
-  // player subject: cards in the GY cannot be banished (Necrovalley); effects with gyBanishCost are not offered.
+  // player subject: cards in the GY cannot be banished (Necrovalley, Kycoo); effects with gyBanishCost are not offered.
   | 'cannotBanishFromGY'
+  // player subject: Necrovalley's GY lock — card effects that would move a card in the GY, or change Types/Attributes in
+  // the GY, are negated (Game.moveCards / specialSummon / cardView; targeted ones by necrovalleyNegates).
+  | 'gyLock'
   // player subject (numeric): Monster Zones of that player that cannot be used (Phantom Dragon: 2).
   | 'lockedMZones';
 
@@ -160,6 +163,13 @@ export interface EffectDef {
    * card about to be destroyed while this effect applies. Return true if `card` is NOT destroyed (the hook replaced it).
    */
   replaceDestroyOne?: (ctx: Ctx, card: CardInstance, reason: Reason, reasonCard?: CardInstance) => Promise<boolean>;
+  /**
+   * On a 'continuous' effect: changes the printed data (Type, name...) of cards while the effect applies, so every check
+   * that reads `card.data` / `card.name` sees it (Zombie World, Proto-Cyber Dragon). `to`: 'self' (default) or any card
+   * passing `filter`. `apply` must return a stable object for the same input (use `dataVariant`). Applied by
+   * Game.cardView; a change to a card in the GY does not apply while the GY is locked (Necrovalley, query 'gyLock').
+   */
+  dataMod?: { to?: 'self' | 'cards'; filter?: (c: CardInstance) => boolean; apply: (d: CardData, c: CardInstance) => CardData };
   /**
    * ABPF: alternative Tribute Summon rule on a 'continuous' effect (Gravekeeper's Visionary, Advance Force): `summoned`,
    * which normally needs 2 Tributes, can be Tribute Summoned by Tributing 1 monster that passes this check.
@@ -241,6 +251,21 @@ export interface CardData {
   attackLpCost?: number;
   /** SDMM (The Big Saturn): locations it cannot be Special Summoned from (unless the effect ignores Summoning conditions). */
   noSpecialFrom?: Location[];
+  /** Its effects cannot be negated by Necrovalley's GY lock (Gravekeeper's Stele). */
+  ignoresGyLock?: boolean;
+}
+
+/** Per-instance override of a card's data (abpf.ts patchData & co.): return a changed copy, or undefined for no change. */
+export type DataPatch = (orig: CardData, card: CardInstance) => CardData | undefined;
+
+const dataVariants = new WeakMap<CardData, Map<string, CardData>>();
+/** A stable modified copy of `orig` (the same object for the same `key`), for data patches / dataMod. */
+export function dataVariant(orig: CardData, key: string, change: Partial<CardData>): CardData {
+  let m = dataVariants.get(orig);
+  if (!m) dataVariants.set(orig, (m = new Map()));
+  let v = m.get(key);
+  if (!v) m.set(key, (v = { ...orig, ...change }));
+  return v;
 }
 
 // ---------------------------------------------------------------------------
@@ -260,7 +285,14 @@ let NEXT_UID = 1;
 
 export class CardInstance {
   uid: number;
-  data: CardData;
+  /** Printed data; read through `data`, which applies data patches and the engine's rule view. */
+  private baseData: CardData;
+  private dataPatches?: DataPatch[];
+  /**
+   * Engine hook (set by Game.registerCard): the card's data as changed by rules that depend on where it is
+   * (Zombie World, "this card's name becomes ..."). See EffectDef.dataMod.
+   */
+  view?: (c: CardInstance, d: CardData) => CardData;
   owner: PlayerId;
   controller: PlayerId;
   location: Location = 'deck';
@@ -295,9 +327,23 @@ export class CardInstance {
 
   constructor(data: CardData, owner: PlayerId) {
     this.uid = NEXT_UID++;
-    this.data = data;
+    this.baseData = data;
     this.owner = owner;
     this.controller = owner;
+  }
+
+  /** The card's current data: printed data, then per-instance patches (in order), then the engine's rule view. */
+  get data(): CardData {
+    let d = this.baseData;
+    if (this.dataPatches) for (const f of this.dataPatches) d = f(d, this) ?? d;
+    return this.view ? this.view(this, d) : d;
+  }
+  set data(d: CardData) {
+    this.baseData = d;
+  }
+  /** Add a per-instance data override (Reptilianne Rage, Cyber Dragon Zwei, Trap Monsters...). Patches compose in order. */
+  addDataPatch(fn: DataPatch) {
+    (this.dataPatches ??= []).push(fn);
   }
 
   get name() {
