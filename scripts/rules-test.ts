@@ -4089,6 +4089,15 @@ async function sdmmTests() {
     eq(t.direct, false, 'no direct attack');
   });
 
+  await test('SDMM: Machina Defender FLIP adds Commander Covington', async () => {
+    const { g, place } = setup();
+    const def = place(1, cardByName('Machina Defender'), 'mzone', { faceUp: false, pos: 'def' });
+    const cov = place(1, cardByName('Commander Covington'), 'deck');
+    await g.conductAttack(0, place(0, T.brute, 'mzone'));
+    eq(def.location, 'mzone', 'Defender survives (1800 DEF)');
+    eq(cov.location, 'hand', 'Covington added to the hand');
+  });
+
   await test('SDMM: Machina Force — pay 1000 LP to attack; cannot attack at 1000 LP or less; revives the trio', async () => {
     const { g, place } = setup();
     const force = place(0, cardByName('Machina Force'), 'mzone');
@@ -4178,6 +4187,124 @@ async function sdmmTests() {
     await g.processTriggers(true);
     eq(g.players[0].lp, 7000 - 2800, 'controller takes its GY ATK');
     eq(g.players[1].lp, 8000 - 2800, 'opponent takes its GY ATK');
+  });
+
+  await test('SDMM: Commander Covington sends the face-up Machina trio to the GY to Special Summon Machina Force from the Deck', async () => {
+    const { g, place } = setup();
+    const cov = place(0, cardByName('Commander Covington'), 'mzone');
+    const trio = ['Machina Soldier', 'Machina Sniper', 'Machina Defender'].map((n) => place(0, cardByName(n), 'mzone'));
+    const force = place(0, cardByName('Machina Force'), 'deck');
+    await activateCard(g, 0, cov);
+    eq(trio.every((c) => c.location === 'grave'), true, 'trio sent to the GY');
+    eq(force.location, 'mzone', 'Machina Force Special Summoned');
+    eq(force.properlySummoned, true, 'properly Summoned (can be revived later)');
+
+    const b = setup();
+    const cov2 = b.place(0, cardByName('Commander Covington'), 'mzone');
+    b.place(0, cardByName('Machina Soldier'), 'mzone');
+    b.place(0, cardByName('Machina Sniper'), 'mzone');
+    b.place(0, cardByName('Machina Defender'), 'mzone', { faceUp: false, pos: 'def' });
+    b.place(0, cardByName('Machina Force'), 'deck');
+    eq(b.g.getActivations(0, { open: true }).some((x) => x.card === cov2), false, 'a face-down Defender does not count');
+  });
+
+  await test('SDMM: Heavy Mech Support Platform — Union equip +500 ATK/DEF, destroyed instead, unequip next turn', async () => {
+    const { g, place } = setup();
+    const host = place(0, cardByName('Machina Soldier'), 'mzone');
+    const hm = place(0, cardByName('Heavy Mech Support Platform'), 'mzone');
+    await activateCard(g, 0, hm);
+    eq(hm.location, 'szone', 'equipped');
+    eq(hm.equippedTo, host.uid, 'to the Machine');
+    eq(g.getAtk(host), 2100, '1600 + 500 ATK');
+    eq(g.getDef(host), 2000, '1500 + 500 DEF');
+    eq(g.getActivations(0, { open: true }).some((x) => x.card === hm), false, 'once per turn');
+    g.turn = 4;
+    await activateCard(g, 0, hm);
+    eq(hm.location, 'mzone', 'unequipped and Special Summoned');
+    eq(hm.pos, 'atk', 'in Attack Position');
+    eq(g.getAtk(host), 1600, 'boost gone');
+    g.turn = 6;
+    await activateCard(g, 0, hm);
+    await g.destroy([host], 'effect', 1);
+    eq(host.location, 'mzone', 'host survives an effect');
+    eq(hm.location, 'grave', 'Heavy Mech Support Platform destroyed instead');
+  });
+
+  await test("SDMM: Blast Sphere equips to its attacker, then destroys it and burns in that player's next Standby Phase", async () => {
+    const { g, place } = setup();
+    const sphere = place(1, cardByName('Blast Sphere'), 'mzone', { faceUp: false, pos: 'def' });
+    const brute = place(0, T.brute, 'mzone');
+    await g.conductAttack(0, brute);
+    eq(sphere.location, 'szone', 'Blast Sphere in the S/T zone');
+    eq(sphere.equippedTo, brute.uid, 'equipped to the attacker');
+    eq(brute.location, 'mzone', 'attacker still on the field');
+    eq(g.players[0].lp + g.players[1].lp, 16000, 'no damage calculation');
+    g.turn = 3;
+    g.turnPlayer = 1;
+    await (g as any).setPhase('standby');
+    eq(brute.location, 'mzone', "nothing in the Blast Sphere controller's own Standby Phase");
+    g.turn = 4;
+    g.turnPlayer = 0;
+    await (g as any).setPhase('standby');
+    eq(brute.location, 'grave', 'attacker destroyed');
+    eq(g.players[0].lp, 8000 - 1800, 'damage equal to its ATK');
+    eq(sphere.location, 'grave', 'Blast Sphere goes to the GY');
+  });
+
+  await test('SDMM: Inferno Reckless Summon fills both fields with copies', async () => {
+    const { g, place } = setup();
+    place(1, T.brute, 'mzone');
+    const theirs = place(1, T.brute, 'deck');
+    const cipher = place(0, cardByName('Cipher Soldier'), 'hand');
+    const c2 = place(0, cardByName('Cipher Soldier'), 'deck');
+    const c3 = place(0, cardByName('Cipher Soldier'), 'grave');
+    const irs = place(0, cardByName('Inferno Reckless Summon'), 'hand');
+    await g.specialSummon([cipher], 0, { pos: 'atk' });
+    await activateCard(g, 0, irs);
+    eq(c2.location, 'mzone', 'copy from the Deck');
+    eq(c3.location, 'mzone', 'copy from the GY');
+    eq(c2.pos === 'atk' && c3.pos === 'atk', true, 'in Attack Position');
+    eq(theirs.location, 'mzone', "the opponent's copy from their Deck");
+
+    const b = setup();
+    b.place(1, T.brute, 'mzone');
+    const x = b.place(0, cardByName('Cipher Soldier'), 'hand');
+    const y = b.place(0, cardByName('Cipher Soldier'), 'hand');
+    b.place(0, cardByName('Cipher Soldier'), 'deck');
+    const irs2 = b.place(0, cardByName('Inferno Reckless Summon'), 'hand');
+    await b.g.specialSummon([x, y], 0, { pos: 'atk' });
+    eq(b.g.getActivations(0, { open: true }).some((a) => a.card === irs2), false, 'not when 2 monsters are Special Summoned together');
+  });
+
+  await test("SDMM: Metalmorph — +300 ATK/DEF, and half the attack target's ATK when attacking", async () => {
+    const { g, place } = setup();
+    const brute = place(0, T.brute, 'mzone');
+    const mm = place(0, cardByName('Metalmorph'), 'szone', { faceUp: false });
+    await activateCard(g, 0, mm);
+    eq(mm.location, 'szone', 'stays on the field as an equip');
+    eq(mm.equippedTo, brute.uid, 'equipped');
+    eq(g.getAtk(brute), 2100, '1800 + 300 ATK');
+    eq(g.getDef(brute), 1300, '1000 + 300 DEF');
+    const shade = place(1, T.dark, 'mzone');
+    await g.conductAttack(0, brute);
+    eq(shade.location, 'grave', 'attack target destroyed');
+    eq(g.players[1].lp, 8000 - (2100 + 800 - 1600), '2900 ATK in damage calculation');
+    eq(g.getAtk(brute), 2100, 'bonus only during damage calculation');
+  });
+
+  await test('SDMM: Rare Metalmorph — +500 ATK, negates the first Spell that targets the Machine, destroyed when it leaves', async () => {
+    const { g, c0, place } = setup();
+    const soldier = place(1, cardByName('Machina Soldier'), 'mzone');
+    const rm = place(1, cardByName('Rare Metalmorph'), 'szone', { faceUp: false });
+    await activateCard(g, 1, rm);
+    eq(g.getAtk(soldier), 2100, '1600 + 500 ATK');
+    c0.pick = (_g, req) => (req.candidates.includes(soldier) ? [soldier] : req.candidates.slice(0, req.min));
+    await activateCard(g, 0, place(0, cardByName('Book of Moon'), 'hand'));
+    eq(soldier.faceUp, true, 'first Book of Moon negated');
+    await activateCard(g, 0, place(0, cardByName('Book of Moon'), 'hand'));
+    eq(soldier.faceUp, false, 'second Book of Moon resolves');
+    await g.destroy([soldier], 'effect', 0);
+    eq(rm.location, 'grave', 'Rare Metalmorph destroyed when the monster leaves the field');
   });
 
   await test('SDMM: Roll Out! equips a Union monster from the GY to an appropriate monster', async () => {

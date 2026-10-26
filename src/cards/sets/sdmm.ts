@@ -7,12 +7,13 @@
 // Card text is the Edison-era (SDMM printing, pre-errata) wording; effects follow the 2010 TCG rulings as far as the
 // engine allows. Approximations are marked "APPROX:".
 //
-// Engine hooks added for this set (src/engine): CardData.attackLpCost (Machina Force) and CardData.noSpecialFrom
-// (The Big Saturn).
+// Engine hooks added for this set (src/engine): CardData.attackLpCost (Machina Force), CardData.noSpecialFrom
+// (The Big Saturn) and EffectDef.faceDownAttacked (Blast Sphere).
 import { monster, spell, trap } from '../define';
 import { cardValue, flip, named } from '../helpers';
-import type { CardInstance } from '../../engine/card';
+import type { CardInstance, EffectDef } from '../../engine/card';
 import type { Ctx } from '../../engine/ctx';
+import type { ChainLink } from '../../engine/game';
 import type { GameEvent, PlayerId } from '../../engine/types';
 
 type C = CardInstance;
@@ -70,6 +71,87 @@ async function damageBoth(ctx: Ctx, amount: number) {
   g.checkLp();
 }
 
+/** Pick `n` cards (exactly as many as possible) and Special Summon them for `p`. */
+async function summonAsManyAsPossible(ctx: Ctx, p: PlayerId, cands: C[], pos: 'atk' | 'choose', prompt: string) {
+  const g = ctx.game;
+  const n = Math.min(cands.length, g.freeMZones(p));
+  if (n <= 0) return [];
+  const sel = cands.length > n ? await ctx.select(cands, n, n, prompt, 'specialSummon', { player: p }) : cands;
+  const fromDeck = sel.some((c) => c.location === 'deck');
+  const r = await g.specialSummon(sel, p, { pos, reasonCard: ctx.self });
+  if (fromDeck) g.shuffleDeck(p);
+  return r;
+}
+
+// ============================================================ Union: Heavy Mech Support Platform
+
+const hmspHosts = (ctx: Ctx) => ctx.faceUpMonsters('me', (c) => c !== ctx.self && isMachine(c) && !hasUnionEquipped(ctx, c));
+
+monster('Heavy Mech Support Platform', {
+  attribute: 'DARK',
+  race: 'Machine',
+  level: 3,
+  atk: 500,
+  def: 500,
+  types: ['union'],
+  aiValue: 300,
+  text: 'Once per turn, you can equip this card to a Machine-Type monster on your side of the field, or unequip it and Special Summon it in face-up Attack Position. While equipped to a monster by this card\'s effect, that monster gains 500 ATK and DEF. (1 monster can only be equipped with 1 Union Monster at a time. If the monster this card is equipped to is destroyed, destroy this card instead.)',
+  effects: [
+    {
+      kind: 'ignition',
+      range: ['mzone', 'szone'],
+      opt: true,
+      label: 'Equip / Unequip',
+      categories: ['atkChange'],
+      condition: (ctx) =>
+        ctx.self.location === 'mzone'
+          ? ctx.self.faceUp && ctx.freeSZones() > 0 && hmspHosts(ctx).some((c) => ctx.canTarget(c))
+          : ctx.self.location === 'szone' && !!ctx.self.flags.unionEquipped && ctx.equipTarget !== undefined && ctx.canSpecialSummon(),
+      activate: async (ctx) => {
+        ctx.data.mode = ctx.self.location === 'mzone' ? 'equip' : 'unequip';
+        if (ctx.data.mode === 'equip')
+          await ctx.selectTargets(hmspHosts(ctx), 1, 1, 'Target 1 Machine-Type monster you control to equip Heavy Mech Support Platform to.', 'equip', {
+            aiScore: (c) => ctx.atk(c) + (c.data.aiValue ?? 0),
+          });
+      },
+      resolve: async (ctx) => {
+        if (ctx.data.mode === 'equip') {
+          const t = ctx.validTargets((c) => faceUpOn(c) && c.controller === ctx.player && isMachine(c))[0];
+          if (!t || !faceUpOn(ctx.self) || hasUnionEquipped(ctx, t)) return;
+          equipUnion(ctx, ctx.self, t);
+        } else if (ctx.self.location === 'szone') {
+          await ctx.specialSummon(ctx.self, { pos: 'atk' });
+        }
+      },
+      ai: {
+        score: (ctx) => {
+          if (ctx.self.location !== 'mzone' || (ctx.phase !== 'main1' && ctx.phase !== 'main2')) return 0;
+          return hmspHosts(ctx).some((c) => ctx.atk(c) >= 1500) ? 35 : 0;
+        },
+      },
+    },
+    {
+      kind: 'continuous',
+      range: ['szone'],
+      active: (ctx) => !!ctx.self.flags.unionEquipped,
+      mods: [
+        { q: 'atk', to: 'cards', filter: (ctx, c: C) => c === ctx.equipTarget, value: 500 },
+        { q: 'def', to: 'cards', filter: (ctx, c: C) => c === ctx.equipTarget, value: 500 },
+      ],
+    },
+    {
+      kind: 'continuous',
+      range: ['szone'],
+      replaceDestroyOne: async (ctx, card) => {
+        if (!ctx.self.flags.unionEquipped || card !== ctx.equipTarget || !ctx.self.onField) return false;
+        ctx.log(`${ctx.self.name} is destroyed instead.`);
+        await ctx.game.destroy([ctx.self], 'effect', ctx.player, ctx.self);
+        return ctx.self.location !== 'szone';
+      },
+    },
+  ],
+});
+
 // ============================================================ Monsters
 
 monster('Scrap Recycler', {
@@ -116,6 +198,49 @@ monster('Scrap Recycler', {
         await ctx.draw(1);
       },
       ai: { score: () => 45 },
+    },
+  ],
+});
+
+monster(COVINGTON, {
+  attribute: 'EARTH',
+  race: 'Machine',
+  level: 4,
+  atk: 1000,
+  def: 600,
+  aiValue: 300,
+  text: 'By sending 1 face-up "Machina Soldier", "Machina Sniper", and "Machina Defender" you control to the Graveyard, Special Summon 1 "Machina Force" from your hand or Deck.',
+  effects: [
+    {
+      kind: 'ignition',
+      label: 'Special Summon "Machina Force"',
+      categories: ['specialSummon'],
+      canActivate: (ctx) =>
+        !ctx.game.queryPlayer(ctx.player, 'cannotSpecialSummon') &&
+        TRIO.every((n) => ctx.faceUpMonsters('me', named(n)).length > 0) &&
+        ctx.cards('me', ['hand', 'deck'], named(FORCE)).length > 0,
+      activate: async (ctx) => {
+        const cost: C[] = [];
+        for (const n of TRIO) {
+          const cands = ctx.faceUpMonsters('me', named(n));
+          const [c] = cands.length > 1 ? await ctx.select(cands, 1, 1, `Send 1 face-up "${n}" you control to the GY.`, 'cost') : cands;
+          if (!c) return false;
+          cost.push(c);
+        }
+        await ctx.sendToGrave(cost, 'cost');
+      },
+      resolve: async (ctx) => {
+        const cands = ctx.cards('me', ['hand', 'deck'], named(FORCE));
+        if (!cands.length || !ctx.canSpecialSummon()) return;
+        const [f] = await ctx.select(cands, 1, 1, 'Special Summon 1 "Machina Force" from your hand or Deck.', 'specialSummon', {
+          aiScore: (c) => (c.location === 'deck' ? 1 : 0),
+        });
+        if (!f) return;
+        const fromDeck = f.location === 'deck';
+        await ctx.specialSummon(f, { pos: 'choose', proper: true });
+        if (fromDeck) ctx.game.shuffleDeck(ctx.player);
+      },
+      ai: { score: () => 80 },
     },
   ],
 });
@@ -256,6 +381,64 @@ monster('Cipher Soldier', {
   ],
 });
 
+monster('Blast Sphere', {
+  attribute: 'DARK',
+  race: 'Machine',
+  level: 4,
+  atk: 1400,
+  def: 1400,
+  aiValue: 300,
+  text: 'When this face-down Defense Position card is attacked by an opponent\'s monster, equip this card to the attacking monster during the Damage Step. During your opponent\'s next Standby Phase, destroy the monster equipped with this card and inflict damage to your opponent equal to its ATK.',
+  effects: [
+    {
+      // Activated by Game.damageStep at the start of the Damage Step, before the card would be flipped face-up: it
+      // never flips, and the attack ends with no damage calculation.
+      kind: 'trigger',
+      faceDownAttacked: true,
+      mandatory: true,
+      label: 'Equip to the attacking monster',
+      categories: ['destroy', 'damage'],
+      condition: (ctx) => {
+        const b = ctx.battle;
+        return !!b && b.target === ctx.self && ctx.self.location === 'mzone' && !ctx.self.faceUp && ctx.self.pos === 'def' && faceUpOn(b.attacker) && b.attacker.controller === ctx.opp;
+      },
+      canActivate: (ctx) => ctx.freeSZones() > 0,
+      resolve: async (ctx) => {
+        const a = ctx.battle?.attacker;
+        if (!a || !faceUpOn(a) || a.controller !== ctx.opp || ctx.self.location !== 'mzone' || ctx.self.faceUp || ctx.freeSZones() <= 0) return;
+        ctx.game.rawMove(ctx.self, 'szone', { controller: ctx.player, faceUp: true });
+        ctx.equip(a);
+        ctx.self.flags.blastTurn = ctx.turn;
+        ctx.log(`${ctx.self.name} is equipped to ${a.name}.`);
+        ctx.game.update();
+      },
+    },
+    {
+      kind: 'trigger',
+      event: 'phaseStart',
+      range: ['szone'],
+      mandatory: true,
+      label: 'Destroy the equipped monster and inflict damage',
+      categories: ['destroy', 'damage'],
+      eventFilter: (ctx, ev) =>
+        ev.phase === 'standby' &&
+        ctx.game.turnPlayer === ctx.opp &&
+        ctx.self.flags.blastTurn !== undefined &&
+        ctx.turn > ctx.self.flags.blastTurn &&
+        !ctx.self.flags.blastDone &&
+        !!ctx.equipTarget,
+      resolve: async (ctx) => {
+        ctx.self.flags.blastDone = true;
+        const host = ctx.equipTarget;
+        if (!host || !faceUpOn(host)) return;
+        const atk = ctx.atk(host);
+        await ctx.destroy(host);
+        if (host.location !== 'mzone') await ctx.damage(ctx.opp, atk);
+      },
+    },
+  ],
+});
+
 monster('The Big Saturn', {
   attribute: 'DARK',
   race: 'Machine',
@@ -372,6 +555,64 @@ spell('Frontline Base', 'continuous', {
   ],
 });
 
+spell('Inferno Reckless Summon', 'quickplay', {
+  text: 'When a monster with 1500 or less ATK is Special Summoned to your side of the field while your opponent controls a face-up monster: Special Summon as many monsters as possible with the same name as that Special Summoned monster from your hand, Deck, and Graveyard in face-up Attack Position. Your opponent selects 1 face-up monster they control, and Special Summons as many monsters with that name as possible from their hand, Deck, and Graveyard.',
+  effects: [
+    {
+      kind: 'activate',
+      event: 'specialSummoned',
+      label: 'Special Summon copies',
+      categories: ['specialSummon'],
+      // Edison ruling: only when exactly 1 monster was Special Summoned (to your field) by that Summon.
+      eventFilter: (ctx, ev) => {
+        const c = evc(ev);
+        if (!c || c.location !== 'mzone' || !c.faceUp || c.controller !== ctx.player || ctx.atk(c) > 1500) return false;
+        const same = ctx.game.recentEvents.filter((e) => e.type === 'specialSummoned' && e.batch === ev.batch);
+        return same.length === 1;
+      },
+      condition: (ctx) => ctx.faceUpMonsters('opp').length > 0,
+      activate: async (ctx) => {
+        ctx.data.name = evc(ctx.event!)?.name;
+      },
+      resolve: async (ctx) => {
+        const name = ctx.data.name as string | undefined;
+        if (!name) return;
+        const g = ctx.game;
+        // Your side: every copy (face-up Attack Position).
+        if (ctx.canSpecialSummon()) {
+          const mine = ctx.cards('me', ['hand', 'deck', 'grave'], (c) => c.isMonster && c.name === name && ctx.canSummonCard(c));
+          await summonAsManyAsPossible(ctx, ctx.player, mine, 'atk', `Special Summon ${g.freeMZones(ctx.player)} "${name}".`);
+        }
+        // Their side: they pick 1 face-up monster they control and Summon every copy of it.
+        const opp = ctx.opp;
+        const faceUps = ctx.faceUpMonsters('opp');
+        if (!faceUps.length || g.queryPlayer(opp, 'cannotSpecialSummon') || g.freeMZones(opp) <= 0) return;
+        const theirCopies = (n: string) =>
+          ctx.cards('opp', ['hand', 'deck', 'grave'], (c) => {
+            if (!c.isMonster || c.name !== n || c.isExtra) return false;
+            if (g.queryCard(c, 'cannotBeSummoned') || c.data.noSpecialFrom?.includes(c.location)) return false;
+            if (c.data.nomi && (c.location !== 'grave' || !c.properlySummoned)) return false;
+            return true;
+          });
+        const [pick] = await ctx.select(faceUps, 1, 1, 'Select 1 face-up monster you control: Special Summon as many monsters with its name as possible.', 'generic', {
+          player: opp,
+          aiScore: (c) => theirCopies(c.name).length * 1000 + cardValue(g, c),
+        });
+        if (!pick) return;
+        await summonAsManyAsPossible(ctx, opp, theirCopies(pick.name), 'choose', `Special Summon "${pick.name}".`);
+      },
+      ai: {
+        score: (ctx) => {
+          const c = evc(ctx.event!);
+          if (!c) return 0;
+          const n = ctx.cards('me', ['hand', 'deck', 'grave'], (x) => x.name === c.name && x !== c && ctx.canSummonCard(x)).length;
+          return n >= 1 ? 40 + n * 10 : 0;
+        },
+      },
+    },
+  ],
+});
+
 spell('Card Trader', 'continuous', {
   text: 'Once per turn, during your Standby Phase, you can return 1 card from your hand to the Deck and shuffle it. Then, draw 1 card.',
   effects: [
@@ -402,6 +643,127 @@ spell('Card Trader', 'continuous', {
 });
 
 // ============================================================ Traps
+
+/** Metalmorph's attack boost: "If it attacks, it gains ATK equal to half the ATK of the attack target, during damage calculation only." */
+const metalmorphAttackBonus = (ctx: Ctx, c: C) => {
+  const b = ctx.battle;
+  if (!b || !b.inDamageStep || b.attacker !== c || !b.target) return 0;
+  return Math.floor(ctx.atk(b.target) / 2);
+};
+
+trap('Metalmorph', 'normal', {
+  text: 'Equip only to a face-up monster. It gains 300 ATK/DEF. If it attacks, it gains ATK equal to half the ATK of the attack target, during damage calculation only.',
+  effects: [
+    {
+      kind: 'activate',
+      damageStep: true,
+      label: 'Equip: +300 ATK/DEF',
+      categories: ['atkChange'],
+      canActivate: (ctx) => ctx.faceUpMonsters('both', (c) => ctx.canTarget(c)).length > 0,
+      activate: async (ctx) => {
+        await ctx.selectTargets(ctx.faceUpMonsters('both'), 1, 1, 'Target 1 face-up monster to equip Metalmorph to.', 'equip', {
+          aiScore: (c) => (c.controller === ctx.player ? 5000 : -5000) + (ctx.battle && (ctx.battle.attacker === c || ctx.battle.target === c) ? 2000 : 0) + ctx.atk(c),
+        });
+      },
+      resolve: async (ctx) => {
+        const t = ctx.validTargets(faceUpOn)[0];
+        if (!t || !ctx.self.onField) return;
+        ctx.self.flags.staysOnField = true;
+        ctx.self.activeOnField = true;
+        ctx.equip(t);
+        ctx.log(`${ctx.self.name} is equipped to ${t.name}.`);
+      },
+      ai: {
+        score: (ctx) => {
+          const b = ctx.battle;
+          if (!b) return 0;
+          const mine = b.attacker.controller === ctx.player ? b.attacker : b.target;
+          const theirs = mine === b.attacker ? b.target : b.attacker;
+          if (!mine || !theirs || mine.controller !== ctx.player || !faceUpOn(mine)) return 0;
+          if (b.inDamageStep && b.calc) return 0;
+          const s = theirs.pos === 'atk' || !theirs.faceUp ? ctx.atk(theirs) : ctx.def(theirs);
+          const bonus = 300 + (mine === b.attacker ? Math.floor(ctx.atk(theirs) / 2) : 0);
+          return ctx.atk(mine) <= s && ctx.atk(mine) + bonus > s ? 65 : 0;
+        },
+      },
+    },
+    {
+      kind: 'continuous',
+      mods: [
+        { q: 'atk', to: 'cards', filter: (ctx, c: C) => c === ctx.equipTarget, value: (ctx, c: C) => 300 + metalmorphAttackBonus(ctx, c) },
+        { q: 'def', to: 'cards', filter: (ctx, c: C) => c === ctx.equipTarget, value: 300 },
+      ],
+    },
+  ],
+});
+
+/** The monster Rare Metalmorph selected, while it is still the same card on the field. */
+const rareHost = (ctx: Ctx): C | undefined => {
+  const uid = ctx.self.flags.rareHost as number | undefined;
+  if (uid === undefined) return undefined;
+  const c = ctx.game.card(uid);
+  return c && c.location === 'mzone' && c.moveId === ctx.self.flags.rareHostMove ? c : undefined;
+};
+
+trap('Rare Metalmorph', 'continuous', {
+  text: 'Activate only by selecting 1 Machine-Type monster on the field. While this card remains face-up on the field, the selected monster gains 500 ATK and negates the first Spell Card effect that targets it. When the selected monster is removed from the field, destroy this card.',
+  effects: [
+    {
+      kind: 'activate',
+      damageStep: true,
+      label: 'Select a Machine: +500 ATK',
+      categories: ['atkChange', 'protect'],
+      canActivate: (ctx) => ctx.faceUpMonsters('both', (c) => isMachine(c) && ctx.canTarget(c)).length > 0,
+      activate: async (ctx) => {
+        await ctx.selectTargets(ctx.faceUpMonsters('both', isMachine), 1, 1, 'Target 1 Machine-Type monster on the field.', 'buff', {
+          aiScore: (c) => (c.controller === ctx.player ? 5000 : -5000) + ctx.atk(c),
+        });
+      },
+      resolve: async (ctx) => {
+        const t = ctx.validTargets((c) => faceUpOn(c) && isMachine(c))[0];
+        if (!t || !ctx.self.onField) return;
+        ctx.self.flags.rareHost = t.uid;
+        ctx.self.flags.rareHostMove = t.moveId;
+        // "When the selected monster is removed from the field, destroy this card."
+        ctx.game.link(ctx.self, t, false);
+      },
+      ai: {
+        score: (ctx) => {
+          const b = ctx.battle;
+          if (!b) return 0;
+          const mine = b.attacker.controller === ctx.player ? b.attacker : b.target;
+          const theirs = mine === b.attacker ? b.target : b.attacker;
+          if (!mine || !theirs || mine.controller !== ctx.player || !faceUpOn(mine) || !isMachine(mine)) return 0;
+          if (b.inDamageStep && b.calc) return 0;
+          const s = theirs.pos === 'atk' || !theirs.faceUp ? ctx.atk(theirs) : ctx.def(theirs);
+          return ctx.atk(mine) <= s && ctx.atk(mine) + 500 > s ? 60 : 0;
+        },
+      },
+    },
+    {
+      kind: 'continuous',
+      mods: [{ q: 'atk', to: 'cards', filter: (ctx, c: C) => c === rareHost(ctx), value: 500 }],
+    },
+    {
+      // APPROX (as the "Imprisoning Mirror" cards): the negation is applied as the Spell effect is activated, without a
+      // chain link of its own.
+      kind: 'trigger',
+      event: 'chainActivated',
+      range: ['szone'],
+      label: 'Negate the first Spell effect that targets the monster',
+      eventFilter: (ctx, ev) => {
+        const link = ev.data?.link as ChainLink | undefined;
+        if (!link || link.negated || !link.card.isSpell || !stActive(ctx) || ctx.self.flags.rareUsed) return false;
+        const h = rareHost(ctx);
+        if (h && faceUpOn(h) && link.ctx.targets.includes(h)) {
+          ctx.self.flags.rareUsed = true;
+          ctx.game.negateLink(link, false, ctx.self);
+        }
+        return false;
+      },
+    },
+  ],
+});
 
 trap('Roll Out!', 'normal', {
   text: 'Equip 1 Union Monster from your Graveyard to an appropriate monster on your side of the field.',

@@ -2380,7 +2380,28 @@ export class Game {
     this.damageStepId++;
     let target = b.target;
     this.recentEvents = [];
-    if (target && !target.faceUp) {
+    // SDMM: effects of a face-down monster that activate when it is attacked, before it is flipped (Blast Sphere).
+    if (target && !target.faceUp && target.location === 'mzone' && target.controller === opp) {
+      const effs = target.data.effects ?? [];
+      const idx = effs.findIndex((e) => e.kind === 'trigger' && e.faceDownAttacked);
+      if (idx >= 0) {
+        const ef = effs[idx];
+        const ctx = new Ctx(this, target, ef, opp);
+        ctx.effectIndex = idx;
+        let ok = false;
+        try {
+          ok = (!ef.condition || ef.condition(ctx)) && (!ef.canActivate || ef.canActivate(ctx));
+        } catch (e) {
+          console.error('condition error', target.name, e);
+        }
+        if (ok) {
+          const link = await this.activate(opp, { card: target, effect: ef, effectIndex: idx, label: ef.label ?? 'Trigger' });
+          if (link) await this.runChain();
+          target = b.target;
+        }
+      }
+    }
+    if (target && !target.faceUp && target.location === 'mzone') {
       // flip face-up (flip effects resolve after damage calculation)
       target.faceUp = true;
       this.beginBatch();
