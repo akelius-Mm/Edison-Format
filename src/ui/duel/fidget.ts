@@ -1,12 +1,10 @@
 // Hand-shuffle fidget: swipe sideways across your own hand and it is shuffled the way players do it at
-// locals. The fan closes into a stack held up in front of you, tilted a little, the back cards fanned out
-// to the left behind the leftmost card, which is held in front; then, one card at a time, the end card
-// slides out of the back to the left, tilting, and swings round onto the front, so the held card is pushed
-// further back with each one; then the hand fans back out.
-// The same on either turn. Purely cosmetic: each card fans back out to its own place (the hand's order
-// never changes), nothing is selected or played, and it never runs while you are asked to pick something
-// (a prompt, a menu, attack targets). On your own turn a tap on the hand stops it at once, so the tap
-// selects the card under your finger as usual.
+// locals. The leftmost card is held, lifted a little; then, one at a time from the right-hand end of the
+// hand, each card travels across to the left and lands on top of it, building a stack there (the held
+// card ends up at the back); then the stack fans back out. The same on either turn. Purely cosmetic: each
+// card fans back out to its own place (the hand's order never changes), nothing is selected or played,
+// and it never runs while you are asked to pick something (a prompt, a menu, attack targets). On your own
+// turn a tap on the hand stops it at once, so the tap selects the card under your finger as usual.
 //  - one shuffle per swipe (a swipe that keeps going queues one more)
 //  - cancels at once (cards snap home) when a decision comes up or a card enters or leaves the hand
 //  - transforms on each card's .dc-fx only (the fan itself sits on .dc), motion tokens, scaled by
@@ -32,26 +30,16 @@ const HINT_KEY = 'edison.hint.shuffle';
 /** Sideways travel (px) that counts as a swipe, and how much more queues another shuffle. */
 const SWIPE_PX = 34;
 const AGAIN_PX = 90;
-/** Closing the fan into a stack / opening it again, and one card going from the back to the front (ms at Normal speed). */
-const GATHER_MS = DUR.base;
-const SPREAD_MS = DUR.slow;
+/** Lifting the held card, one card's trip to the stack, and fanning the stack back out (ms at Normal speed). */
+const HOLD_MS = DUR.fast;
 const PULL_MS = DUR.fast * 1.3;
-/** The stack's tilt (deg), and how the cards behind fan out to the left: per card, up to FAN_DEPTH cards. */
-const TILT = -4;
-const FAN_STEP = 0.07;
-const FAN_TURN = 1.8;
-const FAN_DEPTH = 5;
-/** Most cards brought round in one shuffle. */
-const MAX_PULLS = 7;
+const SPREAD_MS = DUR.slow;
+/** Most cards moved onto the stack in one shuffle (the rest of a big hand stays put). */
+const MAX_PULLS = 9;
 
-/** How many cards come from the back to the front in one shuffle: every card behind the held one, once. */
+/** How many cards travel onto the stack in one shuffle: every card but the held one, from the right. */
 export function pullCount(n: number): number {
   return n < 2 ? 0 : Math.min(MAX_PULLS, n - 1);
-}
-
-/** The stack after one pull: `order[0]` is the front card; the end (back) card goes on the front. */
-export function pullStep(order: number[]): number[] {
-  return [order[order.length - 1], ...order.slice(0, -1)];
 }
 
 interface Slot {
@@ -65,13 +53,11 @@ export class HandFidget {
   private cards: HTMLElement[] = [];
   private slots: Slot[] = [];
   private anims: Animation[] = [];
-  /** The steps of the shuffle in progress (gather, pulls..., spread), run one after another. */
+  /** The steps of the shuffle in progress (hold, pulls..., spread), run one after another. */
   private plan: (() => number)[] = [];
-  /** order[depth] = the card (index into `cards`) at that depth of the stack, 0 = the front card. */
-  private order: number[] = [];
-  /** The stack's centre (page px) and card size. */
-  private sx = 0;
-  private sy = 0;
+  /** The cards (indexes into `cards`) on the stack, bottom (the held card) to top. */
+  private stack: number[] = [];
+  /** Card size. */
   private cw = 0;
   private ch = 0;
   private timer = 0;
@@ -159,7 +145,7 @@ export class HandFidget {
     return [...this.hand.children].filter((c) => c.classList.contains('dc') && !c.classList.contains('dc-ghost')) as HTMLElement[];
   }
 
-  /** One shuffle: close the fan, bring cards from the back to the front, open it again (queued if one is playing). */
+  /** One shuffle: hold the leftmost card, bring the others onto it from the right, fan out again (queued if one is playing). */
   private riffle() {
     if (this.running) {
       this.queued = Math.min(1, this.queued + 1);
@@ -170,22 +156,13 @@ export class HandFidget {
     // where each card sits in the fan (one layout read for the whole shuffle)
     this.slots = this.cards.map((c) => {
       const r = c.getBoundingClientRect();
-      return {
-        x: r.left + r.width / 2,
-        y: r.top + r.height / 2,
-        r: parseFloat(c.style.getPropertyValue('--fan-r')) || 0,
-      };
+      return { x: r.left + r.width / 2, y: r.top + r.height / 2, r: parseFloat(c.style.getPropertyValue('--fan-r')) || 0 };
     });
     this.cw = this.cards[0].offsetWidth || 60;
-    const ch = (this.ch = this.cards[0].offsetHeight || this.cw * 1.45);
-    // the stack is held up in the middle of the hand (its back cards fan out to the left)
-    const mid = this.slots[Math.floor((n - 1) / 2)];
-    this.sx = (this.slots[0].x + this.slots[n - 1].x) / 2 + this.cw * 0.15;
-    this.sy = mid.y - ch * 0.38;
-    // the leftmost card in front
-    this.order = this.cards.map((_, i) => i);
-    this.plan = [() => this.gather()];
-    for (let k = pullCount(n); k > 0; k--) this.plan.push(() => this.pull());
+    this.ch = this.cards[0].offsetHeight || this.cw * 1.45;
+    this.stack = [0];
+    this.plan = [() => this.hold()];
+    for (let k = 1; k <= pullCount(n); k++) this.plan.push(() => this.pull(n - k));
     this.plan.push(() => this.spread());
     this.hand.classList.add('is-shuffling');
     this.watch();
@@ -196,20 +173,16 @@ export class HandFidget {
     return base * Math.min(1.5, Math.max(0.5, this.h.speed()));
   }
 
-  /** Transform that puts card i at page point (x, y), upright (or tilted by `r`), scaled. */
+  /** Transform that puts card i at page point (x, y), tilted by `r` (deg), scaled. */
   private toPoint(i: number, x: number, y: number, r = 0, scale = 1) {
     const a = this.slots[i];
     return `translate(${(x - a.x).toFixed(1)}px, ${(y - a.y).toFixed(1)}px) rotate(${(r - a.r).toFixed(2)}deg) scale(${scale})`;
   }
 
-  /** Card i in the stack at this depth: the stack is tilted a little and deeper cards fan out to the left behind. */
-  private inStack(i: number, depth: number) {
-    const f = Math.min(depth, FAN_DEPTH);
-    return this.toPoint(i, this.sx - f * this.cw * FAN_STEP, this.sy + depth * 0.4, TILT - f * FAN_TURN, 1.06);
-  }
-
-  private stackZ() {
-    this.order.forEach((card, depth) => (this.cards[card].style.zIndex = String(80 - depth)));
+  /** Where a card sits on the stack at this level (0 = the held card): over the leftmost slot, each card a hair higher. */
+  private onStack(i: number, level: number) {
+    const s = this.slots[0];
+    return this.toPoint(i, s.x + this.cw * (0.18 + level * 0.035), s.y - this.ch * 0.14 - level * 0.8, s.r * 0.4 + level * 0.5, 1.04);
   }
 
   private animate(i: number, frames: Keyframe[], ms: number, easing: string) {
@@ -220,52 +193,49 @@ export class HandFidget {
     this.anims.push(an);
   }
 
-  /** Close the fan into a squared stack. */
-  private gather() {
-    const ms = this.ms(GATHER_MS);
-    this.stackZ();
-    this.order.forEach((card, depth) => this.animate(card, [{ transform: 'none' }, { transform: this.inStack(card, depth) }], ms, EASE.out));
+  /** The cards already on the stack stay put (their pose is re-stated: the previous step's animations end). */
+  private keepStack(ms: number) {
+    this.stack.forEach((card, level) => this.animate(card, [{ transform: this.onStack(card, level) }, { transform: this.onStack(card, level) }], ms, 'linear'));
+  }
+
+  /** The leftmost card is taken up a little: the start of the stack. */
+  private hold() {
+    const ms = this.ms(HOLD_MS);
+    this.cards[0].style.zIndex = '80';
+    this.animate(0, [{ transform: 'none' }, { transform: this.onStack(0, 0) }], ms, EASE.out);
     return ms;
   }
 
-  /** The end card slides out of the back of the stack to the left, tilting, and swings round onto the front. */
-  private pull() {
+  /** Card i travels from its place in the fan across to the left and lands on top of the stack. */
+  private pull(i: number) {
     const ms = this.ms(PULL_MS);
-    const n = this.order.length;
-    const from = this.order;
-    const to = pullStep(from);
-    const card = from[n - 1];
-    const f = Math.min(n - 1, FAN_DEPTH);
+    const level = this.stack.length;
+    const a = this.slots[i];
+    const s = this.slots[0];
+    this.keepStack(ms);
+    // it passes over the cards between, so it is on top from the start
+    this.cards[i].style.zIndex = String(80 + level);
     this.animate(
-      card,
+      i,
       [
-        { transform: this.inStack(card, n - 1) },
-        // slid out of the back to the left, pivoting as the fingers draw it clear of the stack
-        { transform: this.toPoint(card, this.sx - this.cw * (f * FAN_STEP + 0.6), this.sy + this.ch * 0.04, TILT - 16, 1.06), offset: 0.45 },
-        // swung round in front, coming toward you
-        { transform: this.toPoint(card, this.sx - this.cw * 0.2, this.sy - this.ch * 0.02, TILT - 5, 1.09), offset: 0.75 },
-        { transform: this.inStack(card, 0) },
+        { transform: 'none' },
+        // lifted out of the fan and carried left, leaning into the move
+        { transform: this.toPoint(i, (a.x + s.x) / 2 + this.cw * 0.1, Math.min(a.y, s.y) - this.ch * 0.3, -8, 1.06), offset: 0.5 },
+        { transform: this.onStack(i, level) },
       ],
       ms,
       EASE.inOut,
     );
-    // the rest of the stack (the held card first) goes back one place
-    from.slice(0, n - 1).forEach((c, d) => this.animate(c, [{ transform: this.inStack(c, d) }, { transform: this.inStack(c, d + 1) }], ms, EASE.out));
-    this.order = to;
-    // it comes in front once it is clear of the stack
-    window.setTimeout(() => {
-      if (this.running && this.order === to) this.stackZ();
-    }, ms * 0.5);
+    this.stack.push(i);
     this.h.sfx.play('fidget');
     haptic('selection');
     return ms * 0.92;
   }
 
-  /** Open the stack back into the fan (every card to its own slot, in the original order). */
+  /** The stack fans back out: every card to its own place, in the original order. */
   private spread() {
     const ms = this.ms(SPREAD_MS);
-    this.cards.forEach((c, i) => (c.style.zIndex = String(10 + i)));
-    this.order.forEach((card, depth) => this.animate(card, [{ transform: this.inStack(card, depth) }, { transform: 'none' }], ms, EASE.out));
+    this.stack.forEach((card, level) => this.animate(card, [{ transform: this.onStack(card, level) }, { transform: 'none' }], ms, EASE.out));
     return ms;
   }
 

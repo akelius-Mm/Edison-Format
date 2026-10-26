@@ -1,8 +1,8 @@
 // Hand shuffle (fidget.ts) in a real duel (Playwright, Chromium, iPhone 13 portrait 390×844, touch).
 //
-// On your own turn, waiting in Main Phase 1: a sideways swipe across your hand shuffles it the locals way — the fan
-// closes into a stack with the leftmost card held in front, then one at a time the end card slides out of the back
-// to the left and swings round onto the front (pushing the held card further back), then the hand fans out in its
+// On your own turn, waiting in Main Phase 1: a sideways swipe across your hand shuffles it the locals way — the
+// leftmost card is held, then one at a time from the right-hand end each card travels across to the left and lands on
+// top of it (the hand does not close up first; the held card ends at the back), then the stack fans back out in the
 // original order. The opponent's turn looks the same.
 // A tap on the hand mid-shuffle stops it and selects the tapped card as usual.
 //
@@ -93,24 +93,19 @@ function sample(page, ms) {
 }
 
 /**
- * first: the card held in front when the stack closes. Returns whether the hand closed into a stack (all centres
- * within about two card widths), how far cards slid out to the left of the stack's middle (in card widths), whether the first
- * card was covered by others (cards landed in front of it) and whether it was still covered just before the fan
- * opened (it never comes back to the front).
+ * Returns whether the rightmost card travelled across to the held (leftmost) card while the next card was still out
+ * in the fan (one at a time from the side, not closing the hand up first), whether the held card stayed near its own
+ * place, and whether cards landed on top of it and it was still underneath just before the stack fanned out.
  */
-function summarize(res, first) {
+function summarize(res) {
   const { frames, n, cw } = res;
-  const stacked = frames.map((f) => Math.max(...f.map((p) => p.x)) - Math.min(...f.map((p) => p.x)) < cw * 2.2);
-  const i0 = stacked.indexOf(true);
-  const i1 = stacked.lastIndexOf(true);
-  if (i0 < 0) return { n, stacked: false, outLeft: 0, buried: false, staysBack: false };
-  const mid = frames.slice(i0 + Math.round((i1 - i0) * 0.1), i1 - Math.round((i1 - i0) * 0.1));
-  const median = (f, k) => f.map((p) => p[k]).sort((a, b) => a - b)[Math.floor(n / 2)];
-  const outLeft = Math.max(...mid.flatMap((f) => f.map((p) => median(f, 'x') - p.x))) / cw;
-  const top = (f) => f[first].z >= Math.max(...f.map((p) => p.z));
-  // the last frame still in the stack (z-indexes 70+ while stacked; the fan's are lower)
-  const last = frames.filter((f) => Math.min(...f.map((p) => p.z)) >= 70).pop() ?? frames[i1];
-  return { n, stacked: true, outLeft, buried: mid.some((f) => !top(f)), staysBack: !top(last) };
+  const near = (f, i) => Math.abs(f[i].x - f[0].x) < cw * 0.4;
+  const oneAtATime = frames.some((f) => near(f, n - 1) && Math.abs(f[n - 2].x - f[0].x) > cw * 0.9);
+  const heldMove = Math.max(...frames.map((f) => Math.abs(f[0].x - frames[0][0].x))) / cw;
+  const top = (f) => f[0].z >= Math.max(...f.map((p) => p.z));
+  // the last frame before the fan opens: every card on the stack (all z-indexes 80+)
+  const last = frames.filter((f) => Math.min(...f.map((p) => p.z)) >= 80).pop();
+  return { n, oneAtATime, heldMove, buried: frames.some((f) => !top(f)), staysBack: !!last && !top(last) };
 }
 
 (async () => {
@@ -156,10 +151,10 @@ function summarize(res, first) {
     const before = await orderOf();
     await swipe(page, cdp);
     const res = await sample(page, 3200);
-    const mine = summarize(res, 0);
-    check(mine.stacked, `the hand closes into a stack on your own turn (${mine.n} cards)`);
-    check(mine.outLeft > 0.5, `cards slide out of the back to the left (${mine.outLeft.toFixed(2)} card widths)`);
-    check(mine.buried && mine.staysBack, 'they land in front of the held card, which does not come back to the front');
+    const mine = summarize(res);
+    check(mine.oneAtATime, `cards travel one at a time from the right side onto the held card on your own turn (${mine.n} cards)`);
+    check(mine.heldMove < 0.3, `the held (leftmost) card stays at its place (moved ${mine.heldMove.toFixed(2)} card widths)`);
+    check(mine.buried && mine.staysBack, 'they land on top of the held card, which ends at the back');
     fs.writeFileSync(path.join(OUT, 'my-turn-frames.json'), JSON.stringify(res));
     await sleep(600);
     check((await orderOf()) === before, 'the hand ends in its original order');
@@ -173,14 +168,14 @@ function summarize(res, first) {
       ctl.game.turnPlayer = 1 - ctl.me;
     });
     await swipe(page, cdp);
-    const opp = summarize(await sample(page, 3200), 0);
+    const opp = summarize(await sample(page, 3200));
     await page.evaluate(() => {
       const ctl = window.__duelCtl;
       ctl.game.turnPlayer = ctl.__realTurn;
     });
-    check(opp.stacked, 'the hand closes into a stack');
-    check(opp.outLeft > 0.5, `cards slide out of the back to the left (${opp.outLeft.toFixed(2)} card widths)`);
-    check(opp.buried && opp.staysBack, 'they land in front of the held card, which does not come back to the front');
+    check(opp.oneAtATime, `cards travel one at a time from the right side onto the held card (${opp.n} cards)`);
+    check(opp.heldMove < 0.3, `the held (leftmost) card stays at its place (moved ${opp.heldMove.toFixed(2)} card widths)`);
+    check(opp.buried && opp.staysBack, 'they land on top of the held card, which ends at the back');
     await sleep(600);
     check((await orderOf()) === before, 'the hand ends in its original order');
 
