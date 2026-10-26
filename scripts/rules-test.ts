@@ -891,6 +891,7 @@ function eq(a: unknown, b: unknown, msg: string) {
   await archetypeAuditTests();
   await zombieGraveAlienAuditTests();
 
+  await blackwingLightswornAuditTests();
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })();
@@ -5679,4 +5680,461 @@ async function zombieGraveAlienAuditTests() {
   //   place(0, T.wall, 'mzone');
   //   eq(g.canNormalSummon(0, rezd, false), false, 'non-Zombie Tributes');
   // });
+}
+
+// ---------------------------------------------------------------- Pre-tournament audit: Blackwings & Lightsworn
+async function blackwingLightswornAuditTests() {
+  const live = (c: CardInstance) => {
+    c.faceUp = true;
+    c.activeOnField = true;
+    return c;
+  };
+  const deckData = (g: Game, p: PlayerId, data: CardData) => {
+    const c = g.registerCard(new (g.allCards[0].constructor as any)(data, p)) as CardInstance;
+    c.location = 'none';
+    g.rawMove(c, 'deck'); // top of the Deck
+    return c;
+  };
+  const deckCard = (g: Game, p: PlayerId, name: string) => deckData(g, p, cardByName(name));
+  const offered = (g: Game, p: PlayerId, card: CardInstance, label?: string) =>
+    g.getActivations(p, { open: true }).some((a) => a.card === card && (!label || a.label === label));
+  const procOffered = (g: Game, p: PlayerId, card: CardInstance) => g.legalMainActions(p).some((a) => a.type === 'proc' && a.card === card);
+  const pickOnly = (c: TestController, want: CardInstance[]) => {
+    c.pick = (_g, req) => {
+      const w = req.candidates.filter((x) => want.includes(x));
+      return w.length >= req.min && w.length ? w.slice(0, Math.max(req.min, Math.min(w.length, req.max))) : req.candidates.slice(0, req.min);
+    };
+  };
+  const endPhase = async (g: Game) => {
+    await (g as any).setPhase('end');
+  };
+  const deckLen = (g: Game, p: PlayerId) => g.players[p].deck.length;
+
+  // ---- Lightsworn
+  await test('Audit LS: End Phase mills (Lumina 3, Jain 2, Aurkus 2, Ehren 3, Lyla 3, Judgment Dragon 4) only in your own End Phase, only face-up', async () => {
+    const cases: [string, number][] = [
+      ['Lumina, Lightsworn Summoner', 3],
+      ['Jain, Lightsworn Paladin', 2],
+      ['Aurkus, Lightsworn Druid', 2],
+      ['Ehren, Lightsworn Monk', 3],
+      ['Lyla, Lightsworn Sorceress', 3],
+      ['Judgment Dragon', 4],
+    ];
+    for (const [name, n] of cases) {
+      const { g, place } = setup();
+      place(0, cardByName(name), 'mzone');
+      const before = deckLen(g, 0);
+      await endPhase(g);
+      eq(deckLen(g, 0), before - n, `${name} mills ${n}`);
+      const o = setup();
+      o.place(0, cardByName(name), 'mzone');
+      o.g.turnPlayer = 1;
+      const b2 = deckLen(o.g, 0);
+      await endPhase(o.g);
+      eq(deckLen(o.g, 0), b2, `${name}: no mill in the opponent's End Phase`);
+    }
+    const fd = setup();
+    fd.place(0, cardByName('Lumina, Lightsworn Summoner'), 'mzone', { faceUp: false, pos: 'def' });
+    const b3 = deckLen(fd.g, 0);
+    await endPhase(fd.g);
+    eq(deckLen(fd.g, 0), b3, 'a face-down Lumina does not mill');
+    const two = setup();
+    two.place(0, cardByName('Jain, Lightsworn Paladin'), 'mzone');
+    two.place(0, cardByName('Jain, Lightsworn Paladin'), 'mzone');
+    const b4 = deckLen(two.g, 0);
+    await endPhase(two.g);
+    eq(deckLen(two.g, 0), b4 - 4, 'each copy mills');
+  });
+
+  await test('Audit LS: Wulf is Special Summoned when sent from the Deck (mill, Foolish Burial), not when discarded; cannot be Normal Summoned/Set', async () => {
+    const { g, place } = setup();
+    place(0, cardByName('Lumina, Lightsworn Summoner'), 'mzone');
+    const w = deckCard(g, 0, 'Wulf, Lightsworn Beast');
+    await endPhase(g);
+    eq(w.location, 'mzone', 'Wulf milled by Lumina is Special Summoned');
+    const f = setup();
+    const w2 = deckCard(f.g, 0, 'Wulf, Lightsworn Beast');
+    deckData(f.g, 0, T.wall);
+    pickOnly(f.c0, [w2]);
+    await activateCard(f.g, 0, f.place(0, cardByName('Foolish Burial'), 'hand'));
+    eq(w2.location, 'mzone', 'Foolish Burial: Wulf Special Summoned');
+    const d = setup();
+    const w3 = d.place(0, cardByName('Wulf, Lightsworn Beast'), 'hand');
+    eq(d.g.canNormalSummon(0, w3, false), false, 'cannot be Normal Summoned');
+    eq(d.g.canNormalSummon(0, w3, true), false, 'cannot be Set');
+    d.place(0, cardByName('Ryko, Lightsworn Hunter'), 'hand');
+    pickOnly(d.c0, [w3]);
+    await activateCard(d.g, 0, d.place(0, cardByName('Solar Recharge'), 'hand'));
+    eq(w3.location, 'grave', 'discarded Wulf stays in the GY');
+  });
+
+  await test('Audit LS: Charge of the Light Brigade sends 3 as a cost, then adds a Level 4 or lower Lightsworn (not Celestia / Judgment Dragon)', async () => {
+    const { g, c0, place } = setup();
+    const cel = deckCard(g, 0, 'Celestia, Lightsworn Angel');
+    const jd = deckCard(g, 0, 'Judgment Dragon');
+    const ryko = deckCard(g, 0, 'Ryko, Lightsworn Hunter');
+    for (let i = 0; i < 3; i++) deckData(g, 0, T.wall);
+    let cands: CardInstance[] = [];
+    c0.pick = (_g, req) => {
+      cands = req.candidates;
+      return req.candidates.filter((c) => c === ryko);
+    };
+    const before = deckLen(g, 0);
+    await activateCard(g, 0, place(0, cardByName('Charge of the Light Brigade'), 'hand'));
+    eq(ryko.location, 'hand', 'Ryko added');
+    eq(cands.includes(cel) || cands.includes(jd), false, 'Level 5+ / non-Lightsworn not searchable');
+    eq(deckLen(g, 0), before - 4, '3 sent + 1 added');
+    const e = setup();
+    e.g.players[0].deck.splice(0, e.g.players[0].deck.length - 2);
+    deckCard(e.g, 0, 'Ryko, Lightsworn Hunter');
+    eq(offered(e.g, 0, e.place(0, cardByName('Charge of the Light Brigade'), 'hand')), false, 'needs 3 cards to send plus a Lightsworn to add');
+  });
+
+  await test('Audit LS: Solar Recharge discards a Lightsworn as a cost, draws 2, then sends the top 2', async () => {
+    const { g, place } = setup();
+    const sr = place(0, cardByName('Solar Recharge'), 'hand');
+    const nonLs = place(0, T.brute, 'hand');
+    eq(offered(g, 0, sr), false, 'not without a Lightsworn monster to discard');
+    const ryko = place(0, cardByName('Ryko, Lightsworn Hunter'), 'hand');
+    const before = deckLen(g, 0);
+    await activateCard(g, 0, sr);
+    eq(ryko.location, 'grave', 'Lightsworn discarded');
+    eq(nonLs.location, 'hand', 'non-Lightsworn kept');
+    eq(g.players[0].hand.length, 3, 'drew 2');
+    eq(deckLen(g, 0), before - 4, 'drew 2 + sent 2');
+  });
+
+  await test("Audit LS: Garoth triggers once per Lightsworn mill (Lumina's End Phase), sends 2 and draws per Lightsworn; not for its own mill or a Spell's mill", async () => {
+    const { g, place } = setup();
+    place(0, cardByName('Lumina, Lightsworn Summoner'), 'mzone');
+    place(0, cardByName('Garoth, Lightsworn Warrior'), 'mzone');
+    deckCard(g, 0, 'Ryko, Lightsworn Hunter');
+    deckCard(g, 0, 'Lyla, Lightsworn Sorceress');
+    for (let i = 0; i < 3; i++) deckData(g, 0, T.wall);
+    const before = deckLen(g, 0);
+    const hand = g.players[0].hand.length;
+    await endPhase(g);
+    eq(g.players[0].hand.length, hand + 2, 'drew 2 (2 Lightsworn sent by Garoth)');
+    eq(deckLen(g, 0), before - 3 - 2 - 2, 'Lumina 3 + Garoth 2 + 2 draws (Garoth does not retrigger itself)');
+    const s = setup();
+    s.place(0, cardByName('Garoth, Lightsworn Warrior'), 'mzone');
+    deckCard(s.g, 0, 'Ryko, Lightsworn Hunter');
+    for (let i = 0; i < 4; i++) deckData(s.g, 0, T.wall);
+    const b2 = deckLen(s.g, 0);
+    s.c0.pick = (_g, req) => req.candidates.slice(0, 1);
+    await activateCard(s.g, 0, s.place(0, cardByName('Charge of the Light Brigade'), 'hand'));
+    eq(deckLen(s.g, 0), b2 - 4, 'Charge (a Spell) does not trigger Garoth');
+  });
+
+  await test('Audit LS: Lumina discards, then revives a Level 4 or lower Lightsworn from the GY, once per turn', async () => {
+    const { g, c0, place } = setup();
+    const lumina = place(0, cardByName('Lumina, Lightsworn Summoner'), 'mzone');
+    const cel = place(0, cardByName('Celestia, Lightsworn Angel'), 'grave');
+    const jain = place(0, cardByName('Jain, Lightsworn Paladin'), 'grave');
+    const disc = place(0, T.brute, 'hand');
+    place(0, T.wall, 'hand');
+    let cands: CardInstance[] = [];
+    c0.pick = (_g, req) => {
+      if (req.candidates.includes(jain) || req.candidates.includes(cel)) cands = req.candidates;
+      if (req.candidates.includes(disc)) return [disc];
+      return req.candidates.filter((c) => c === jain);
+    };
+    await activateCard(g, 0, lumina);
+    eq(disc.location, 'grave', 'discarded');
+    eq(jain.location, 'mzone', 'Jain revived');
+    eq(cands.includes(cel), false, 'Level 5 Celestia not a target');
+    place(0, cardByName('Ryko, Lightsworn Hunter'), 'grave');
+    eq(offered(g, 0, lumina), false, 'once per turn');
+  });
+
+  await test('Audit LS: Ryko FLIP — the destruction is optional, the top 3 are sent either way', async () => {
+    const { g, c0, place } = setup();
+    const ryko = place(0, cardByName('Ryko, Lightsworn Hunter'), 'mzone', { faceUp: false, pos: 'def' });
+    const opp = place(1, cardByName('Mirror Force'), 'szone', { faceUp: false });
+    pickOnly(c0, [opp]);
+    const before = deckLen(g, 0);
+    g.turn += 1;
+    await g.flipSummon(0, ryko);
+    await g.processTriggers(true);
+    eq(opp.location, 'grave', 'destroyed');
+    eq(deckLen(g, 0), before - 3, 'sent 3');
+    const n = setup();
+    const r2 = n.place(0, cardByName('Ryko, Lightsworn Hunter'), 'mzone', { faceUp: false, pos: 'def' });
+    const b2 = deckLen(n.g, 0);
+    n.g.turn += 1;
+    await n.g.flipSummon(0, r2);
+    await n.g.processTriggers(true);
+    eq(deckLen(n.g, 0), b2 - 3, 'sent 3 with nothing to destroy');
+  });
+
+  await test('Audit LS: Lyla goes to Defense Position to destroy a Spell/Trap and is locked in that position', async () => {
+    const { g, c0, place } = setup();
+    const lyla = place(0, cardByName('Lyla, Lightsworn Sorceress'), 'mzone');
+    const st = place(1, cardByName('Mirror Force'), 'szone', { faceUp: false });
+    pickOnly(c0, [st]);
+    await activateCard(g, 0, lyla);
+    eq(lyla.pos, 'def', 'Defense Position');
+    eq(st.location, 'grave', 'Spell/Trap destroyed');
+    eq(offered(g, 0, lyla), false, 'not again while in Defense Position');
+    g.turn += 2;
+    eq(g.legalMainActions(0).some((a) => a.type === 'position' && a.card === lyla), false, 'position locked through your next turn');
+    g.turn += 2;
+    eq(g.legalMainActions(0).some((a) => a.type === 'position' && a.card === lyla), true, 'free again the turn after');
+  });
+
+  await test('Audit LS: Judgment Dragon — pay 1000, destroy all other cards; not once per turn; Special Summon only from the hand', async () => {
+    const { g, place } = setup();
+    const jd = place(0, cardByName('Judgment Dragon'), 'mzone');
+    const a = place(1, T.brute, 'mzone');
+    const b = place(1, cardByName('Mirror Force'), 'szone', { faceUp: false });
+    const mine = place(0, T.wall, 'mzone');
+    await activateCard(g, 0, jd);
+    eq(g.players[0].lp, 7000, 'paid 1000');
+    eq([a.location, b.location, mine.location].join(), 'grave,grave,grave', 'all other cards destroyed');
+    eq(jd.location, 'mzone', 'Judgment Dragon stays');
+    place(1, T.brute, 'mzone');
+    eq(offered(g, 0, jd), true, 'can activate again (no once-per-turn in 2010)');
+    const r = setup();
+    for (const n of ['Ryko, Lightsworn Hunter', 'Lumina, Lightsworn Summoner', 'Wulf, Lightsworn Beast', 'Lyla, Lightsworn Sorceress']) r.place(0, cardByName(n), 'grave');
+    const jdg = r.place(0, cardByName('Judgment Dragon'), 'grave');
+    eq(procOffered(r.g, 0, jdg), false, 'not from the GY');
+    const jdh = r.place(0, cardByName('Judgment Dragon'), 'hand');
+    eq(procOffered(r.g, 0, jdh), true, 'from the hand');
+    eq(r.g.canNormalSummon(0, jdh, false), false, 'cannot be Normal Summoned');
+  });
+
+  await test('Audit LS: Jain gains 300 only when attacking a monster (not on a direct attack)', async () => {
+    const { g, place } = setup();
+    const jain = place(0, cardByName('Jain, Lightsworn Paladin'), 'mzone');
+    const v = place(1, T.brute, 'mzone'); // 1800
+    await g.conductAttack(0, jain);
+    eq(v.location, 'grave', '2100 vs 1800');
+    eq(g.players[1].lp, 7700, '300 damage');
+    jain.attacksThisTurn = 0;
+    await g.conductAttack(0, jain);
+    eq(g.players[1].lp, 7700 - 1800, 'direct attack: 1800');
+  });
+
+  // ---- Blackwings
+  await test('Audit BW: Kalut adds 1400 when your Blackwing battles (from the hand), not for a non-Blackwing', async () => {
+    const { g, c0, place } = setup();
+    const bora = place(0, cardByName('Blackwing - Bora the Spear'), 'mzone');
+    const kalut = place(0, cardByName('Blackwing - Kalut the Moon Shadow'), 'hand');
+    const v = place(1, T.giant, 'mzone'); // 3000
+    c0.respond = respondWith('Blackwing - Kalut the Moon Shadow');
+    await g.conductAttack(0, bora);
+    eq(kalut.location, 'grave', 'Kalut sent');
+    eq(v.location, 'grave', '3100 beats 3000');
+    eq(bora.location, 'mzone', 'Bora survives');
+    const n = setup();
+    const br = n.place(0, T.brute, 'mzone');
+    const k2 = n.place(0, cardByName('Blackwing - Kalut the Moon Shadow'), 'hand');
+    n.place(1, T.giant, 'mzone');
+    n.c0.respond = respondWith('Blackwing - Kalut the Moon Shadow');
+    await n.g.conductAttack(0, br);
+    eq(k2.location, 'hand', 'not for a non-Blackwing');
+  });
+
+  await test('Audit BW: Gale / Bora Special Summon from the hand only with another face-up Blackwing; Gale halves ATK/DEF once per turn; Bora pierces', async () => {
+    const { g, c0, place } = setup();
+    const gale = place(0, cardByName('Blackwing - Gale the Whirlwind'), 'hand');
+    const bora = place(0, cardByName('Blackwing - Bora the Spear'), 'hand');
+    eq(procOffered(g, 0, gale), false, 'Gale: no other Blackwing');
+    eq(procOffered(g, 0, bora), false, 'Bora: no other Blackwing');
+    place(0, cardByName('Blackwing - Gale the Whirlwind'), 'mzone', { faceUp: false, pos: 'def' });
+    eq(procOffered(g, 0, bora), false, 'a face-down Blackwing does not count');
+    place(0, cardByName('Blackwing - Kalut the Moon Shadow'), 'mzone');
+    eq(procOffered(g, 0, gale), true, 'Gale with Kalut');
+    await g.performAction(0, g.legalMainActions(0).find((a) => a.type === 'proc' && a.card === gale)!);
+    eq(gale.location, 'mzone', 'Gale summoned');
+    const v = place(1, T.brute, 'mzone'); // 1800/1000
+    pickOnly(c0, [v]);
+    await activateCard(g, 0, gale);
+    eq(g.getAtk(v), 900, 'ATK halved');
+    eq(g.getDef(v), 500, 'DEF halved');
+    eq(offered(g, 0, gale), false, 'once per turn');
+    const p = setup();
+    p.place(0, cardByName('Blackwing - Kalut the Moon Shadow'), 'mzone');
+    const b2 = p.place(0, cardByName('Blackwing - Bora the Spear'), 'mzone');
+    p.place(1, T.dark, 'mzone', { pos: 'def' }); // DEF 1200
+    await p.g.conductAttack(0, b2);
+    eq(p.g.players[1].lp, 8000 - 500, 'Bora inflicts piercing damage');
+  });
+
+  await test('Audit BW: Shura — after destroying a monster by battle, Special Summons a Blackwing with 1500 or less ATK from the Deck (effects negated); not Blizzard', async () => {
+    const { g, c0, place } = setup();
+    const shura = place(0, cardByName('Blackwing - Shura the Blue Flame'), 'mzone');
+    const gale = deckCard(g, 0, 'Blackwing - Gale the Whirlwind');
+    const bliz = deckCard(g, 0, 'Blackwing - Blizzard the Far North');
+    const bora = deckCard(g, 0, 'Blackwing - Bora the Spear');
+    place(1, T.wall, 'mzone'); // 500 ATK, Attack Position
+    let cands: CardInstance[] = [];
+    c0.pick = (_g, req) => {
+      cands = req.candidates;
+      return req.candidates.filter((c) => c === gale);
+    };
+    await g.conductAttack(0, shura);
+    eq(gale.location, 'mzone', 'Gale summoned');
+    eq(g.isNegated(gale), true, 'effects negated');
+    eq(cands.includes(bliz), false, 'Blizzard cannot be Special Summoned');
+    eq(cands.includes(bora), false, 'Bora (1700) too strong');
+  });
+
+  await test('Audit BW: Sirocco — Normal Summon without Tributing only if just the opponent controls a monster; gather ATK; only that monster can attack', async () => {
+    const { g, c0, place } = setup();
+    const sir = place(0, cardByName('Blackwing - Sirocco the Dawn'), 'hand');
+    eq(g.legalMainActions(0).some((a) => a.type === 'summon' && a.card === sir), false, 'no Tribute-free summon with no monsters at all');
+    place(1, T.brute, 'mzone');
+    eq(g.legalMainActions(0).some((a) => a.type === 'summon' && a.card === sir), true, 'Tribute-free summon when only the opponent controls a monster');
+    await g.normalSummon(0, sir, false);
+    eq(sir.location, 'mzone', 'Summoned without Tributing');
+    const bora = place(0, cardByName('Blackwing - Bora the Spear'), 'mzone');
+    const other = place(0, T.wall, 'mzone');
+    pickOnly(c0, [bora]);
+    await activateCard(g, 0, sir);
+    eq(g.getAtk(bora), 1700 + 2000, 'Bora gains Sirocco ATK');
+    eq(g.canAttack(sir), false, 'Sirocco cannot attack');
+    eq(g.canAttack(other), false, 'other monsters cannot attack');
+    eq(g.canAttack(bora), true, 'target can attack');
+    eq(offered(g, 0, sir), false, 'once per turn');
+  });
+
+  await test('Audit BW: Blizzard — on Normal Summon revives a Level 4 or lower Blackwing in Defense; cannot be Special Summoned; not on a Flip Summon', async () => {
+    const { g, c0, place } = setup();
+    const bora = place(0, cardByName('Blackwing - Bora the Spear'), 'grave');
+    const sir = place(0, cardByName('Blackwing - Sirocco the Dawn'), 'grave');
+    const bliz = place(0, cardByName('Blackwing - Blizzard the Far North'), 'hand');
+    let cands: CardInstance[] = [];
+    c0.pick = (_g, req) => {
+      cands = req.candidates;
+      return req.candidates.filter((c) => c === bora);
+    };
+    await g.normalSummon(0, bliz, false);
+    eq(bora.location, 'mzone', 'Bora revived');
+    eq(bora.pos, 'def', 'in Defense Position');
+    eq(cands.includes(sir), false, 'Level 5 Sirocco not a target');
+    const r = setup();
+    r.place(0, cardByName('Blackwing - Blizzard the Far North'), 'grave');
+    eq(offered(r.g, 0, r.place(0, cardByName('Monster Reborn'), 'hand')), false, 'Monster Reborn cannot revive Blizzard');
+    const f = setup();
+    const kal = f.place(0, cardByName('Blackwing - Kalut the Moon Shadow'), 'grave');
+    const b3 = f.place(0, cardByName('Blackwing - Blizzard the Far North'), 'hand');
+    await f.g.normalSummon(0, b3, true);
+    f.g.turn += 2;
+    await f.g.flipSummon(0, b3);
+    await f.g.processTriggers(true);
+    eq(kal.location, 'grave', 'no revive on a Flip Summon');
+  });
+
+  await test('Audit BW: Black Whirlwind searches a Blackwing with less ATK on a Normal Summon only', async () => {
+    const { g, c0, place } = setup();
+    live(place(0, cardByName('Black Whirlwind'), 'szone', { faceUp: true }));
+    const gale = deckCard(g, 0, 'Blackwing - Gale the Whirlwind'); // 1300
+    const shura = deckCard(g, 0, 'Blackwing - Shura the Blue Flame'); // 1800
+    const bora2 = deckCard(g, 0, 'Blackwing - Bora the Spear'); // 1700 (equal)
+    let cands: CardInstance[] = [];
+    c0.pick = (_g, req) => {
+      cands = req.candidates;
+      return req.candidates.filter((c) => c === gale);
+    };
+    await g.normalSummon(0, place(0, cardByName('Blackwing - Bora the Spear'), 'hand'), false);
+    eq(gale.location, 'hand', 'Gale added');
+    eq(cands.includes(shura) || cands.includes(bora2), false, 'only strictly less ATK');
+    const s = setup();
+    live(s.place(0, cardByName('Black Whirlwind'), 'szone', { faceUp: true }));
+    s.place(0, cardByName('Blackwing - Kalut the Moon Shadow'), 'mzone');
+    const g2 = deckCard(s.g, 0, 'Blackwing - Gale the Whirlwind');
+    const bh = s.place(0, cardByName('Blackwing - Bora the Spear'), 'hand');
+    await s.g.performAction(0, s.g.legalMainActions(0).find((a) => a.type === 'proc' && a.card === bh)!);
+    eq(g2.location, 'deck', 'no search on a Special Summon');
+  });
+
+  await test('Audit BW: Icarus Attack Tributes a Winged Beast as a cost and destroys 2 targeted cards', async () => {
+    const { g, c0, place } = setup();
+    const ic = place(0, cardByName('Icarus Attack'), 'szone', { faceUp: false });
+    const a = place(1, T.brute, 'mzone');
+    const b = place(1, cardByName('Mirror Force'), 'szone', { faceUp: false });
+    eq(offered(g, 0, ic), false, 'not without a Winged Beast');
+    const bora = place(0, cardByName('Blackwing - Bora the Spear'), 'mzone');
+    pickOnly(c0, [bora, a, b]);
+    await activateCard(g, 0, ic);
+    eq(bora.location, 'grave', 'Tributed');
+    eq(a.location, 'grave', 'monster destroyed');
+    eq(b.location, 'grave', 'Set card destroyed');
+  });
+
+  await test('Audit BW: Armor Master is not destroyed by battle, takes no battle damage, and wedges the monster it battled', async () => {
+    const { g, place } = setup();
+    const am = place(0, cardByName('Blackwing Armor Master'), 'mzone');
+    const v = place(1, T.giant, 'mzone');
+    await g.conductAttack(0, am);
+    eq(am.location, 'mzone', 'not destroyed');
+    eq(g.players[0].lp, 8000, 'no battle damage');
+    eq(v.counters.wedge, 1, 'Wedge Counter placed');
+    await activateCard(g, 0, am, 'Remove Wedge Counters');
+    eq(g.getAtk(v), 0, 'ATK 0');
+    eq(g.getDef(v), 0, 'DEF 0');
+  });
+
+  await test('Audit BW: Sirocco — a monster Summoned after the effect resolved cannot attack either (fixed)', async () => {
+    const { g, c0, place } = setup();
+    const sir = place(0, cardByName('Blackwing - Sirocco the Dawn'), 'mzone');
+    place(0, cardByName('Blackwing - Kalut the Moon Shadow'), 'mzone');
+    pickOnly(c0, [sir]);
+    await activateCard(g, 0, sir);
+    const late = place(0, T.brute, 'hand');
+    await g.normalSummon(0, late, false);
+    eq(g.canAttack(late), false, 'a monster summoned after the effect cannot attack either');
+  });
+
+  await test('Audit BW: Vayu on the field cannot be used as Synchro Material', async () => {
+    const { g, place } = setup();
+    place(0, cardByName('Blackwing - Vayu the Emblem of Honor'), 'mzone');
+    place(0, cardByName('Blackwing - Bora the Spear'), 'mzone');
+    place(0, cardByName('Blackwing - Gale the Whirlwind'), 'mzone');
+    const am = place(0, cardByName('Blackwing Armor Master'), 'extra');
+    eq(g.canSynchro(0, am), true, 'Gale + Bora = 7');
+    const r = setup();
+    r.place(0, cardByName('Blackwing - Vayu the Emblem of Honor'), 'mzone');
+    r.place(0, cardByName('Blackwing - Sirocco the Dawn'), 'mzone');
+    r.place(0, cardByName('Blackwing - Kalut the Moon Shadow'), 'mzone');
+    const aw = r.place(0, cardByName('Blackwing Armed Wing'), 'extra');
+    eq(r.g.canSynchro(0, aw), false, 'Vayu + Sirocco not usable');
+  });
+
+  await test('Audit LS: Judgment Dragon can be revived only after it was properly Summoned', async () => {
+    const { g, c0, place } = setup();
+    for (const n of ['Ryko, Lightsworn Hunter', 'Lumina, Lightsworn Summoner', 'Wulf, Lightsworn Beast', 'Lyla, Lightsworn Sorceress']) place(0, cardByName(n), 'grave');
+    const jd = place(0, cardByName('Judgment Dragon'), 'hand');
+    await g.performAction(0, g.legalMainActions(0).find((a) => a.type === 'proc' && a.card === jd)!);
+    eq(jd.location, 'mzone', 'summoned');
+    await g.destroy([jd], 'effect', 1);
+    pickOnly(c0, [jd]);
+    eq(offered(g, 0, place(0, cardByName('Monster Reborn'), 'hand')), true, 'properly summoned JD can be revived');
+    const d = setup();
+    d.place(0, cardByName('Judgment Dragon'), 'grave');
+    eq(offered(d.g, 0, d.place(0, cardByName('Monster Reborn'), 'hand')), false, 'not if never properly summoned');
+  });
+
+  await test('Audit BW: Armor Master wedges only a monster it attacked; defending it still takes no damage and survives (fixed)', async () => {
+    const { g, place } = setup();
+    g.turnPlayer = 1;
+    const am = place(0, cardByName('Blackwing Armor Master'), 'mzone');
+    const v = place(1, T.giant, 'mzone');
+    await g.conductAttack(1, v);
+    eq(am.location, 'mzone', 'not destroyed');
+    eq(g.players[0].lp, 8000, 'no damage');
+    eq(v.counters.wedge ?? 0, 0, 'attacked by the opponent: no Wedge Counter');
+  });
+
+  await test('Audit: Royal Decree negates other face-up Trap effects (Mirror Force)', async () => {
+    const { g, c1, place } = setup();
+    live(place(0, cardByName('Royal Decree'), 'szone', { faceUp: true }));
+    const a = place(0, T.brute, 'mzone');
+    place(1, cardByName('Mirror Force'), 'szone', { faceUp: false });
+    c1.respond = respondWith('Mirror Force');
+    await g.conductAttack(0, a);
+    eq(a.location, 'mzone', 'Mirror Force negated');
+    eq(g.players[1].lp, 8000 - 1800, 'direct attack goes through');
+  });
 }

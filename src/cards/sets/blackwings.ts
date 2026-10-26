@@ -176,6 +176,10 @@ monster('Blackwing - Sirocco the Dawn', {
         const sum = others.reduce((a, c) => a + ctx.atk(c), 0);
         ctx.addTempMod(t[0], 'atk', sum, 'turn');
         for (const m of ctx.monsters('me')) if (m !== t[0]) m.flags.cannotAttackTurn = ctx.turn;
+        // Audit: monsters Summoned later this turn cannot attack either (see the continuous effect below).
+        ctx.self.flags.siroccoTurn = ctx.turn;
+        ctx.self.flags.siroccoTarget = t[0].uid;
+        ctx.self.flags.siroccoMove = t[0].moveId;
       },
       ai: {
         score: (ctx) => {
@@ -192,6 +196,21 @@ monster('Blackwing - Sirocco the Dawn', {
           return 0;
         },
       },
+    },
+    {
+      // Audit: "for the rest of this turn, you can only attack with that monster" also covers monsters that are
+      // Summoned after the effect resolved (the per-card flag above only covers the monsters already on the field).
+      kind: 'continuous',
+      mods: [
+        {
+          q: 'cannotAttack',
+          to: 'cards',
+          filter: (ctx, c: CardInstance) => {
+            const f = ctx.self.flags;
+            return f.siroccoTurn === ctx.turn && c.controller === ctx.player && !(c.uid === f.siroccoTarget && c.moveId === f.siroccoMove);
+          },
+        },
+      ],
     },
   ],
 });
@@ -521,7 +540,7 @@ monster('Blackwing Armor Master', {
   types: ['synchro'],
   sets: BW,
   aiValue: 1000,
-  text: '"Blackwing" Tuner + 1 or more non-Tuner monsters\nCannot be destroyed by battle. You take no battle damage from battles involving this card. At the end of the Damage Step, if this card battled an opponent\'s monster: place 1 Wedge Counter on that monster (max. 1). You can remove all Wedge Counters on the field; the ATK and DEF of each monster that had a Wedge Counter become 0 until the End Phase.',
+  text: '"Blackwing" Tuner + 1 or more non-Tuner monsters\nCannot be destroyed by battle. You take no battle damage from battles involving this card. At the end of the Damage Step, if this card attacked a monster: place 1 Wedge Counter on that monster (max. 1). You can remove all Wedge Counters on the field; the ATK and DEF of each monster that had a Wedge Counter become 0 until the End Phase.',
   synchro: { tuner: bwTuner, desc: '"Blackwing" Tuner + 1+ non-Tuner monsters' },
   effects: [
     { kind: 'continuous', mods: [{ q: 'indestructibleBattle' }, { q: 'noBattleDamageFrom' }] },
@@ -532,7 +551,8 @@ monster('Blackwing Armor Master', {
       label: 'Place Wedge Counter',
       eventFilter: (ctx, ev) => {
         if (ctx.self.location !== 'mzone' || !ctx.self.faceUp) return false;
-        const other = ev.card === ctx.self ? (ev.other as CardInstance | undefined) : ev.other === ctx.self ? (ev.card as CardInstance) : undefined;
+        // Audit: only a monster this card attacked gets a Wedge Counter (ev.card is the attacker), not one that attacked it.
+        const other = ev.card === ctx.self ? (ev.other as CardInstance | undefined) : undefined;
         return !!other && other.location === 'mzone' && other.controller !== ctx.player && !(other.counters.wedge > 0);
       },
       activate: async (ctx) => {
