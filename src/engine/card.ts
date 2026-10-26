@@ -248,6 +248,8 @@ export interface CardData {
    * Called with the Synchro monster being summoned and the full material list.
    */
   synchroMaterialCheck?: (synchro: CardInstance, materials: CardInstance[], self: CardInstance) => boolean;
+  /** Another Level this card can be treated as when used as Synchro Material (Tuningware: 2). */
+  synchroLevel?: number;
   /**
    * While face-up on the field and not negated: true when this card cannot be targeted by the effect of `source`
    * (checked by Ctx.canTarget with the targeting effect's Ctx), e.g. Turbo Warrior vs Level 6 or lower monsters.

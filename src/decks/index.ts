@@ -11,12 +11,13 @@ import { DECKS as E } from './group-e';
 import { DECKS as T } from './tournament';
 import { DECKS as T2 } from './tournament2';
 import { DECKS as T3 } from './tournament3';
+import { DECKS as T4 } from './tournament4';
 import type { DeckDef } from './types';
 
 export type { DeckDef };
 export * from './siding';
 
-export const PREMADE_DECKS: DeckDef[] = [...A, ...B, ...C, ...D, ...E, ...T, ...T2, ...T3];
+export const PREMADE_DECKS: DeckDef[] = [...A, ...B, ...C, ...D, ...E, ...T, ...T2, ...T3, ...T4];
 
 export function deckById(id: string) {
   return PREMADE_DECKS.find((d) => d.id === id);
