@@ -320,7 +320,13 @@ export class CardInstance {
     return !!this.data.isToken;
   }
   hasType(t: MonsterType) {
-    return (this.data.mtypes ?? []).includes(t);
+    const types = this.data.mtypes ?? [];
+    // Gemini: treated as a Normal Monster (not an Effect Monster) in the GY, and face-up on the field until it is Gemini Summoned.
+    if ((t === 'normal' || t === 'effect') && types.includes('gemini')) {
+      const asNormal = this.location === 'grave' || (this.location === 'mzone' && this.faceUp && !this.flags.geminiSummoned);
+      if (asNormal) return t === 'normal';
+    }
+    return types.includes(t);
   }
   get isTuner() {
     return this.hasType('tuner');
