@@ -248,7 +248,6 @@ class DuelScreen implements HumanUI {
       speed: () => this.speed(),
       // your own Main Phase choice doesn't stop it (swipe while you think); a prompt, a menu or attack targets do
       deciding: () => !!this.attackState || !!this.root.querySelector('.dlg-layer:not(.is-closing), .ctx-menu'),
-      myTurn: () => this.game.turnPlayer === this.me,
     });
     // a card entering or leaving the hand stops a shuffle at once
     this.board.onHandChange = () => this.fidget.cancel();

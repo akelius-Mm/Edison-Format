@@ -2,8 +2,7 @@
 //
 // On your own turn, waiting in Main Phase 1: a sideways swipe across your hand shuffles it the locals way — the fan
 // closes into a stack, the leftmost card stays held in front while packets pulled off the back come out to the right
-// and go back in behind it, then the hand fans out in its original order. On the opponent's turn it is the mirror
-// (rightmost card held, packets out to the left).
+// and go back in behind it, then the hand fans out in its original order. The opponent's turn looks the same.
 // A tap on the hand mid-shuffle stops it and selects the tapped card as usual.
 //
 // Usage (Playwright is not a project dependency):
@@ -173,21 +172,21 @@ function summarize(res, held) {
     check(!(await page.locator('.ctx-menu').count()), 'no card was selected by the swipe');
     check(await page.evaluate(() => !!document.querySelector('.duel-root.awaiting-action')), 'still your move');
 
-    console.log("Opponent's turn (mirror)");
+    console.log("Opponent's turn (same as yours)");
     await page.evaluate(() => {
       const ctl = window.__duelCtl;
       ctl.__realTurn = ctl.game.turnPlayer;
       ctl.game.turnPlayer = 1 - ctl.me;
     });
     await swipe(page, cdp);
-    const opp = summarize(await sample(page, 3200), (await page.locator('.hand-me .dc').count()) - 1);
+    const opp = summarize(await sample(page, 3200), 0);
     await page.evaluate(() => {
       const ctl = window.__duelCtl;
       ctl.game.turnPlayer = ctl.__realTurn;
     });
     check(opp.stacked, 'the hand closes into a stack');
-    check(opp.heldMove < 3 && opp.inStack, `the rightmost card stays held in front of the stack (moved ${opp.heldMove.toFixed(1)}px)`);
-    check(opp.outLeft > 0.4 && opp.outRight < 0.2, `packets come out to the left (${opp.outLeft.toFixed(2)} card widths)`);
+    check(opp.heldMove < 3 && opp.inStack, `the leftmost card stays held in front of the stack (moved ${opp.heldMove.toFixed(1)}px)`);
+    check(opp.outRight > 0.4 && opp.outLeft < 0.2, `packets come out to the right (${opp.outRight.toFixed(2)} card widths)`);
     await sleep(600);
     check((await orderOf()) === before, 'the hand ends in its original order');
 
