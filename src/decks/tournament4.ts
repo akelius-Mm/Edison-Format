@@ -80,7 +80,7 @@ const quickdrawFrog: DeckDef = {
 
 // Source: Format Library deck 1789 (Format Library Really Big Edison Tournament 3, Top 64, pilot Fascination), https://github.com/dwmcnelis/formatlibrary-backup
 // (script/data/decks.json).
-// Adjusted (cards not in the simulator): extra Dark End Dragon -> Red Dragon Archfiend; side Offerings to the Doomed -> Smashing Ground.
+// Adjusted: extra Dark End Dragon -> Red Dragon Archfiend (not in the simulator); side Offerings to the Doomed -> Smashing Ground (not in the simulator).
 const machinaFrog: DeckDef = {
   id: 't-fl-rbet03-33-fascination',
   name: 'Machina Frog (Fascination)',
@@ -288,7 +288,7 @@ const plantControl: DeckDef = {
 
 // Source: Format Library deck 1456 (Format Library Really Big Edison Tournament 2, Top 128, pilot Nzxer), https://github.com/dwmcnelis/formatlibrary-backup
 // (script/data/decks.json).
-// Adjusted (cards not in the simulator): extra Dark End Dragon -> Red Dragon Archfiend; side Magic Jammer -> Dark Bribe.
+// Adjusted: extra Dark End Dragon -> Red Dragon Archfiend (not in the simulator); side Magic Jammer -> Dark Bribe (not in the simulator).
 const psychicZombie: DeckDef = {
   id: 't-fl-rbet02-65-nzxer',
   name: 'Psychic Zombie (Nzxer)',
@@ -365,7 +365,7 @@ const psychicZombie: DeckDef = {
 
 // Source: Format Library deck 2502 (Format Library Really Big Charity Tournament, 4th, pilot Indicud), https://github.com/dwmcnelis/formatlibrary-backup
 // (script/data/decks.json).
-// Adjusted (cards not in the simulator): extra Dark End Dragon -> Red Dragon Archfiend.
+// Adjusted: extra Dark End Dragon -> Red Dragon Archfiend (not in the simulator).
 const divaHeroZombie: DeckDef = {
   id: 't-fl-rbct-4-indicud',
   name: 'Diva Hero Zombie (Indicud)',
@@ -373,18 +373,18 @@ const divaHeroZombie: DeckDef = {
   tier: 1,
   color: '#2f5e7a',
   description:
-    "4th at Format Library's Really Big Charity Tournament (53 players, 2022). Deep Sea Diva and Destiny HERO - Malicious build synchros, while Goblin Zombie, Mezuki and Zombie Master add the Zombie line. Two Miracle Fusion banish a HERO and a WATER monster from the Graveyard for Elemental HERO Absolute Zero, and Future Fusion and Return from the Different Dimension can swing a game. Dark End Dragon is swapped for Red Dragon Archfiend.",
+    "4th at Format Library's Really Big Charity Tournament (53 players, 2022). Deep Sea Diva and Destiny Hero - Malicious build synchros, while Goblin Zombie, Mezuki and Zombie Master add the Zombie line. Two Miracle Fusion banish a HERO and a WATER monster from the Graveyard for Elemental Hero Absolute Zero, and Future Fusion and Return from the Different Dimension can swing a game. Dark End Dragon is swapped for Red Dragon Archfiend.",
   event: { name: 'Format Library Really Big Charity Tournament', date: '2022-06-25', place: '4th', pilot: 'Indicud' },
   main: [
     // Monsters (22)
     ['Deep Sea Diva', 3],
     ['Caius the Shadow Monarch', 2],
-    ['Destiny HERO - Malicious', 2],
+    ['Destiny Hero - Malicious', 2],
     ['Goblin Zombie', 2],
     ['Mystic Tomato', 2],
     ['Dark Armed Dragon', 1],
-    ['Elemental HERO Neos Alius', 1],
-    ['Elemental HERO Stratos', 1],
+    ['Elemental Hero Neos Alius', 1],
+    ['Elemental Hero Stratos', 1],
     ['Evil HERO Infernal Prodigy', 1],
     ['Gorz the Emissary of Darkness', 1],
     ['Mezuki', 1],
@@ -413,14 +413,14 @@ const divaHeroZombie: DeckDef = {
     ['Trap Dustshoot', 1],
   ],
   extra: [
-    ['Elemental HERO Absolute Zero', 2],
+    ['Elemental Hero Absolute Zero', 2],
     ['Ally of Justice Catastor', 1],
     ['Armory Arm', 1],
     ['Black Rose Dragon', 1],
     ['Brionac, Dragon of the Ice Barrier', 1],
     ['Colossal Fighter', 1],
     ['Doomkaiser Dragon', 1],
-    ['Elemental HERO Gaia', 1],
+    ['Elemental Hero Gaia', 1],
     ['Goyo Guardian', 1],
     ['Magical Android', 1],
     ['Red Dragon Archfiend', 1],
@@ -443,7 +443,7 @@ const divaHeroZombie: DeckDef = {
 
 // Source: Format Library deck 2425 (Format Library Yu-Gi-Oh! Retro Series 25, Top 8, pilot LouisWain), https://github.com/dwmcnelis/formatlibrary-backup
 // (script/data/decks.json).
-// Adjusted (cards not in the simulator): side Array of Revealing Light -> Swords of Revealing Light; side Fiend Comedian -> Dimensional Fissure.
+// Adjusted: side Array of Revealing Light -> Swords of Revealing Light (not in the simulator); side Fiend Comedian -> Dimensional Fissure (not in the simulator).
 const dragonTurbo: DeckDef = {
   id: 't-fl-yrs25-7-louiswain',
   name: 'Dragon Turbo (LouisWain)',
@@ -508,7 +508,7 @@ const dragonTurbo: DeckDef = {
 
 // Source: Format Library deck 1228 (Format Library Really Big Edison Tournament 1, Top 128, pilot Ste), https://github.com/dwmcnelis/formatlibrary-backup
 // (script/data/decks.json).
-// Adjusted (cards not in the simulator): extra Dark End Dragon -> Red Dragon Archfiend; side Soul Release -> Light-Imprisoning Mirror; side Deck Devastation Virus -> Shadow-Imprisoning Mirror.
+// Adjusted: extra Dark End Dragon -> Red Dragon Archfiend (not in the simulator); side Soul Release -> Light-Imprisoning Mirror (not in the simulator); side Deck Devastation Virus -> Shadow-Imprisoning Mirror (not in the simulator).
 const aggroDragon: DeckDef = {
   id: 't-fl-rbet01-97-ste',
   name: 'Aggro Dragon (Ste)',
@@ -581,7 +581,7 @@ const aggroDragon: DeckDef = {
 
 // Source: Format Library deck 2523 (Format Library Really Big Charity Tournament, 1st, pilot Roghnach), https://github.com/dwmcnelis/formatlibrary-backup
 // (script/data/decks.json).
-// Adjusted (cards not in the simulator): extra Dark End Dragon -> Red Dragon Archfiend; side Deck Devastation Virus -> Light-Imprisoning Mirror.
+// Adjusted: extra Dark End Dragon -> Red Dragon Archfiend (not in the simulator); side Deck Devastation Virus -> Light-Imprisoning Mirror (not in the simulator).
 const divaFrog: DeckDef = {
   id: 't-fl-rbct-1-roghnach',
   name: 'Diva Frog (Roghnach)',
@@ -649,7 +649,7 @@ const divaFrog: DeckDef = {
 
 // Source: Format Library deck 1544 (Format Library Really Big Edison Tournament 2, Top 16, pilot gooperman), https://github.com/dwmcnelis/formatlibrary-backup
 // (script/data/decks.json).
-// Adjusted (cards not in the simulator): side Puppet Plant -> Enemy Controller; side Twister -> Dust Tornado.
+// Adjusted: side Puppet Plant -> Enemy Controller (not in the simulator); side Twister -> Dust Tornado (not in the simulator).
 const volcanicQuickdraw: DeckDef = {
   id: 't-fl-rbet02-9-gooperman',
   name: 'Volcanic Quickdraw (gooperman)',
@@ -714,7 +714,7 @@ const volcanicQuickdraw: DeckDef = {
 
 // Source: Format Library deck 916 (Format Library Pumpking of Games, Top 128, pilot crops), https://github.com/dwmcnelis/formatlibrary-backup
 // (script/data/decks.json).
-// Adjusted (cards not in the simulator): side Twister -> Dust Tornado.
+// Adjusted: side Twister -> Dust Tornado (not in the simulator).
 const quickdrawZombie: DeckDef = {
   id: 't-fl-pkog-65-crops',
   name: 'Quickdraw Zombie (crops)',
@@ -789,7 +789,7 @@ const quickdrawZombie: DeckDef = {
 
 // Source: Format Library deck 2809 (Format Library Digbic Dig Series 2, Top 32, pilot TheCiscoKid), https://github.com/dwmcnelis/formatlibrary-backup
 // (script/data/decks.json).
-// Adjusted (cards not in the simulator): side Mask of Restrict -> Trap Hole.
+// Adjusted: side Mask of Restrict -> Trap Hole (not in the simulator); side Deck padded to 15 with one more Trap Hole (published with 14).
 const rockStun: DeckDef = {
   id: 't-fl-dds02-17-theciscokid',
   name: 'Rock Stun (TheCiscoKid)',
@@ -797,7 +797,7 @@ const rockStun: DeckDef = {
   tier: 2,
   color: '#7a6a52',
   description:
-    "Top 32 at Format Library's Digbic Dig Series 2 (23 players, 2021). A stun deck built on big defenders. Koa'ki Meiru Guardian, Kycoo the Ghost Destroyer, Legendary Jujitsu Master and Fossil Dyna Pachycephalo hold the field while two King Tiger Wanghu and two Thunder King Rai-Oh stop small monsters and searches. Three Book of Moon, three Dimensional Prison and two Royal Oppression protect the lock. Side Mask of Restrict is swapped for Trap Hole.",
+    "Top 32 at Format Library's Digbic Dig Series 2 (23 players, 2021). A stun deck built on big defenders. Koa'ki Meiru Guardian, Kycoo the Ghost Destroyer, Legendary Jujitsu Master and Fossil Dyna Pachycephalo hold the field while two King Tiger Wanghu and two Thunder King Rai-Oh stop small monsters and searches. Three Book of Moon, three Dimensional Prison and two Royal Oppression protect the lock. Side Mask of Restrict is swapped for Trap Hole; the published Side Deck has 14 cards, so one more Trap Hole makes 15.",
   event: { name: 'Format Library Digbic Dig Series 2', date: '2021-03-21', place: 'Top 32', pilot: 'TheCiscoKid' },
   main: [
     // Monsters (19)
@@ -830,10 +830,10 @@ const rockStun: DeckDef = {
     ['Stardust Dragon', 1],
   ],
   side: [
+    ['Trap Hole', 3],
     ['Banisher of the Radiance', 2],
     ['Burden of the Mighty', 2],
     ['D.D. Crow', 2],
-    ['Trap Hole', 2],
     ['Widespread Ruin', 2],
     ['Doomcaliber Knight', 1],
     ['Seven Tools of the Bandit', 1],
@@ -844,7 +844,7 @@ const rockStun: DeckDef = {
 
 // Source: Format Library deck 2451 (Format Library Yu-Gi-Oh! Retro Series 30, Top 16, pilot inteck), https://github.com/dwmcnelis/formatlibrary-backup
 // (script/data/decks.json).
-// Adjusted (cards not in the simulator): side Imperial Iron Wall -> Skill Drain.
+// Adjusted: side Imperial Iron Wall -> Skill Drain (not in the simulator).
 const antiMetaStun: DeckDef = {
   id: 't-fl-yrs30-13-inteck',
   name: 'Anti-Meta Stun (inteck)',
@@ -914,7 +914,7 @@ const antiMetaStun: DeckDef = {
 
 // Source: Format Library deck 2533 (Format Library Really Big Charity Tournament, Top 64, pilot dlw20), https://github.com/dwmcnelis/formatlibrary-backup
 // (script/data/decks.json).
-// Adjusted (cards not in the simulator): side Soul Release -> Light-Imprisoning Mirror.
+// Adjusted: side Soul Release -> Light-Imprisoning Mirror (not in the simulator).
 const ancientGearMachina: DeckDef = {
   id: 't-fl-rbct-33-dlw20',
   name: 'Ancient Gear Machina (dlw20)',
@@ -980,7 +980,7 @@ const ancientGearMachina: DeckDef = {
 
 // Source: Format Library deck 1836 (Format Library Really Big Edison Tournament 3, Top 256, pilot wznrf), https://github.com/dwmcnelis/formatlibrary-backup
 // (script/data/decks.json).
-// Adjusted (cards not in the simulator): side Mask of Restrict -> Trap Hole.
+// Adjusted: side Mask of Restrict -> Trap Hole (not in the simulator).
 const blackGarden: DeckDef = {
   id: 't-fl-rbet03-129-wznrf',
   name: 'Black Garden (wznrf)',
@@ -1039,7 +1039,7 @@ const blackGarden: DeckDef = {
 
 // Source: Format Library deck 911 (Format Library Pumpking of Games, Top 32, pilot VictoryOperation), https://github.com/dwmcnelis/formatlibrary-backup
 // (script/data/decks.json).
-// Adjusted (cards not in the simulator): side Non-Fusion Area -> Royal Oppression.
+// Adjusted: side Non-Fusion Area -> Royal Oppression (not in the simulator).
 const quickdrawMachina: DeckDef = {
   id: 't-fl-pkog-25-victoryoperation',
   name: 'Quickdraw Machina (VictoryOperation)',
