@@ -1,9 +1,9 @@
 // Hand shuffle (fidget.ts) in a real duel (Playwright, Chromium, iPhone 13 portrait 390×844, touch).
 //
-// On your own turn, waiting in Main Phase 1: a sideways swipe across your hand shuffles it the locals way — the
-// leftmost card is held, then one at a time from the right-hand end each card travels across to the left and lands on
-// top of it (the hand does not close up first; the held card ends at the back), then the stack fans back out in the
-// original order. The opponent's turn looks the same.
+// On your own turn, waiting in Main Phase 1: a sideways swipe across your hand does the Yu-Gi-Oh hand shuffle — the
+// hand squares up into a pile on the right, the front card is slid off it into a pile on the left, then the next onto
+// that, one at a time, until the whole hand has moved over (the first card slid ends at the back), then the hand fans
+// out in its original order. The opponent's turn looks the same.
 // A tap on the hand mid-shuffle stops it and selects the tapped card as usual.
 //
 // Usage (Playwright is not a project dependency):
@@ -93,19 +93,19 @@ function sample(page, ms) {
 }
 
 /**
- * Returns whether the rightmost card travelled across to the held (leftmost) card while the next card was still out
- * in the fan (one at a time from the side, not closing the hand up first), whether the held card stayed near its own
- * place, and whether cards landed on top of it and it was still underneath just before the stack fanned out.
+ * Returns whether the hand squared up into one pile, whether cards were slid one at a time from a right pile into a
+ * left pile (the first two slid together on the left while the last was still on the right), and whether the first
+ * card slid ended at the back of the new pile.
  */
 function summarize(res) {
   const { frames, n, cw } = res;
-  const near = (f, i) => Math.abs(f[i].x - f[0].x) < cw * 0.4;
-  const oneAtATime = frames.some((f) => near(f, n - 1) && Math.abs(f[n - 2].x - f[0].x) > cw * 0.9);
-  const heldMove = Math.max(...frames.map((f) => Math.abs(f[0].x - frames[0][0].x))) / cw;
+  const width = (f) => Math.max(...f.map((p) => p.x)) - Math.min(...f.map((p) => p.x));
+  const squared = frames.some((f) => width(f) < cw * 0.6);
+  const twoPiles = frames.some((f) => Math.abs(f[0].x - f[1].x) < cw * 0.5 && f[n - 1].x - f[1].x > cw * 0.8);
   const top = (f) => f[0].z >= Math.max(...f.map((p) => p.z));
-  // the last frame before the fan opens: every card on the stack (all z-indexes 80+)
+  // the last frame before the fan opens: every card slid over (all z-indexes 80+)
   const last = frames.filter((f) => Math.min(...f.map((p) => p.z)) >= 80).pop();
-  return { n, oneAtATime, heldMove, buried: frames.some((f) => !top(f)), staysBack: !!last && !top(last) };
+  return { n, squared, twoPiles, endsAtBack: frames.some((f) => !top(f)) && !!last && !top(last) };
 }
 
 (async () => {
@@ -152,9 +152,9 @@ function summarize(res) {
     await swipe(page, cdp);
     const res = await sample(page, 3200);
     const mine = summarize(res);
-    check(mine.oneAtATime, `cards travel one at a time from the right side onto the held card on your own turn (${mine.n} cards)`);
-    check(mine.heldMove < 0.3, `the held (leftmost) card stays at its place (moved ${mine.heldMove.toFixed(2)} card widths)`);
-    check(mine.buried && mine.staysBack, 'they land on top of the held card, which ends at the back');
+    check(mine.squared, `the hand squares up into a pile on your own turn (${mine.n} cards)`);
+    check(mine.twoPiles, 'cards are slid one at a time from the right pile into a left pile');
+    check(mine.endsAtBack, 'the first card slid ends at the back of the new pile');
     fs.writeFileSync(path.join(OUT, 'my-turn-frames.json'), JSON.stringify(res));
     await sleep(600);
     check((await orderOf()) === before, 'the hand ends in its original order');
@@ -173,9 +173,9 @@ function summarize(res) {
       const ctl = window.__duelCtl;
       ctl.game.turnPlayer = ctl.__realTurn;
     });
-    check(opp.oneAtATime, `cards travel one at a time from the right side onto the held card (${opp.n} cards)`);
-    check(opp.heldMove < 0.3, `the held (leftmost) card stays at its place (moved ${opp.heldMove.toFixed(2)} card widths)`);
-    check(opp.buried && opp.staysBack, 'they land on top of the held card, which ends at the back');
+    check(opp.squared, `the hand squares up into a pile (${opp.n} cards)`);
+    check(opp.twoPiles, 'cards are slid one at a time from the right pile into a left pile');
+    check(opp.endsAtBack, 'the first card slid ends at the back of the new pile');
     await sleep(600);
     check((await orderOf()) === before, 'the hand ends in its original order');
 
