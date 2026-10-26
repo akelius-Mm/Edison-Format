@@ -884,6 +884,7 @@ function eq(a: unknown, b: unknown, msg: string) {
   await archetypeExtras2Tests();
   await fuzzRegressionTests();
   await sdmmTests();
+  await geminiTests();
 
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
@@ -4319,5 +4320,34 @@ async function sdmmTests() {
     await g.conductAttack(1, place(1, T.giant, 'mzone'));
     eq(host.location, 'mzone', 'host survives the battle');
     eq(pk.location, 'grave', 'the Union is destroyed instead');
+  });
+}
+
+// ---------------------------------------------------------------- Gemini monsters count as Normal Monsters
+
+async function geminiTests() {
+  await test('Gemini: Normal Monster in the GY and face-up on the field until Gemini Summoned; Effect Monster in hand and once Gemini Summoned', async () => {
+    const { place } = setup();
+    const inHand = place(0, cardByName('Elemental Hero Neos Alius'), 'hand');
+    eq(inHand.hasType('normal'), false, 'not Normal in the hand');
+    eq(inHand.hasType('effect') || !inHand.hasType('normal'), true, 'hand: not treated as Normal');
+    const inGy = place(0, cardByName('Elemental Hero Neos Alius'), 'grave');
+    eq(inGy.hasType('normal'), true, 'Normal in the GY');
+    eq(inGy.hasType('effect'), false, 'not an Effect Monster in the GY');
+    const onField = place(0, cardByName('Elemental Hero Neos Alius'), 'mzone');
+    onField.faceUp = true;
+    eq(onField.hasType('normal'), true, 'Normal face-up on the field');
+    onField.flags.geminiSummoned = true;
+    eq(onField.hasType('normal'), false, 'not Normal once Gemini Summoned');
+  });
+
+  await test('Hero Blast can add Neos Alius from the GY (a Gemini is a Normal Monster there)', async () => {
+    const { g, place } = setup();
+    const alius = place(0, cardByName('Elemental Hero Neos Alius'), 'grave');
+    const blast = place(0, cardByName('Hero Blast'), 'szone');
+    const weak = place(1, T.wall, 'mzone');
+    weak.faceUp = true;
+    await activateCard(g, 0, blast);
+    eq(alius.location, 'hand', 'Neos Alius added to the hand');
   });
 }

@@ -5,7 +5,7 @@
 //  1. Undo a Normal Summon: the monster is back in hand, the Normal Summon unused, the board equal
 //     to the snapshot taken when the summon was chosen.
 //  2. Moving to the Battle Phase by mistake can be undone (back to Main Phase 1).
-//  3. Not after the opponent was asked to respond (Trap Hole set; activating or passing both count).
+//  3. Not after the opponent responded (Trap Hole activated); a pass on the response window leaves undo open.
 //  4. Not after a draw (Pot of Greed) or a search (Reinforcement of the Army).
 //  5. Not after damage (a direct attack), and not once the turn passed to the opponent.
 //  6. Determinism: a game continued after an undo replays identically from its log, twice.
@@ -238,13 +238,13 @@ async function rebuildAt(decks: [DeckList, DeckList], seed: number, first: Playe
     ok(r.blocked, 'undo blocked');
   });
 
-  await test('not after the opponent was asked to respond (Trap Hole, AI passed)', async () => {
+  await test('still allowed when the opponent passed on its response window (Trap Hole set, AI passed)', async () => {
     const trapHole = cardByName('Trap Hole');
     const oppDecks: [DeckList, DeckList] = [{ main: of(BRUTE, 40), extra: [] }, { main: of(trapHole, 40), extra: [] }];
     const opp = new Script(false, (_g, acts) => pick(acts, 'setST', 'Trap Hole') ?? endTurn(acts), () => null);
     const r = await playThenCheck(oppDecks, 22, 1, [(_g, acts) => pick(acts, 'summon')!], opp);
     eq(r.game.players[0].mzone.filter(Boolean).length, 1, 'monster stayed');
-    eq(r.blocked, 'the opponent was asked to respond', 'reason');
+    eq(r.blocked, null, 'undo allowed after a pass');
   });
 
   await test('not after a draw (Pot of Greed)', async () => {

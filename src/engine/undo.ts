@@ -13,8 +13,9 @@
 //
 // The rule (conservative; anything unknown blocks). Undo to point P is allowed only if, since the
 // human was asked P's action, ALL of these hold:
-//   1. the opponent's controller was not asked anything (no action, chain response, target, trigger
-//      confirmation… an AI pass counts too: the window itself is information);
+//   1. the opponent's controller was not asked anything (action, target, trigger confirmation…), except
+//      chain-response windows it passed on: a pass doesn't block (house rule: misclicks matter more
+//      than the small tell that the opponent chose not to respond);
 //   2. the game's random number generator was not used (shuffles, the coin toss, dice, coins,
 //      random discards);
 //   3. nothing hidden was shown: no 'reveal', 'coin', 'draw' or 'shuffle' animation;
@@ -67,7 +68,7 @@ const lastSeq = (g: Game) => g.eventLog[g.eventLog.length - 1]?.seq ?? 0;
 export class UndoTracker {
   /** Undo points in log order (replayed and live). */
   readonly marks: UndoMark[] = [];
-  /** Requests made to the opponent's controller so far. */
+  /** Requests made to the opponent's controller so far (response windows only when it responded). */
   oppCalls = 0;
 
   constructor(readonly human: PlayerId) {}
@@ -78,6 +79,13 @@ export class UndoTracker {
       get: (t, k) => {
         const v = (t as any)[k];
         if (typeof v !== 'function' || !OPP_METHODS.has(k as string)) return v;
+        // A response window counts only once it is answered with an activation; a pass leaves undo open.
+        if (k === 'chooseResponse')
+          return (...a: unknown[]) =>
+            Promise.resolve(v.apply(t, a)).then((r) => {
+              if (r != null) this.oppCalls++;
+              return r;
+            });
         return (...a: unknown[]) => {
           this.oppCalls++;
           return v.apply(t, a);
