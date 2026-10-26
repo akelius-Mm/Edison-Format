@@ -4,7 +4,7 @@ import { h, icon, modal } from './dom';
 
 export const RULES_NOTES_KEY = 'edison.rulesNotes.v1';
 
-export const RULES_NOTES_INTRO = 'Cards now play exactly as written in April 2010:';
+export const RULES_NOTES_INTRO = 'Cards now play exactly as written in April 2010.';
 
 export const RULES_NOTES: { deck: string; items: string[] }[] = [
   {
@@ -73,11 +73,19 @@ export const RULES_NOTES: { deck: string; items: string[] }[] = [
   },
 ];
 
+/** One collapsed row per deck; tap a deck to read its changes. */
 function notesList(): HTMLElement {
   return h(
     'div',
     { class: 'rn-list' },
-    RULES_NOTES.map((g) => h('section', { class: 'rn-group' }, h('h3', null, g.deck), h('ul', null, g.items.map((t) => h('li', null, t))))),
+    RULES_NOTES.map((g) =>
+      h(
+        'details',
+        { class: 'rn-group' },
+        h('summary', null, h('span', null, g.deck), h('span', { class: 'rn-count' }, String(g.items.length))),
+        h('ul', null, g.items.map((t) => h('li', null, t))),
+      ),
+    ),
   );
 }
 
@@ -103,21 +111,18 @@ export function rulesNotesCard(): HTMLElement | null {
     el.classList.add('is-gone');
     setTimeout(() => el.remove(), 260);
   };
-  el.append(
+  // One compact row: tap it to read the changes, × to hide it for good.
+  const open = h(
+    'button',
+    { type: 'button', class: 'rn-open', onclick: () => openRulesNotes() },
     h('span', { class: 'rn-icon' }, icon('scroll')),
-    h(
-      'div',
-      { class: 'rn-text' },
-      h('b', null, 'Rules updates'),
-      h('small', null, `${RULES_NOTES_INTRO} ${count} rulings changed. Tip: tap a card you can’t use to see why. Read this again any time in Settings.`),
-      h('details', { class: 'rn-details' }, h('summary', null, `See all ${count} changes`), notesList()),
-    ),
-    h('button', { type: 'button', class: 'rn-x', 'aria-label': 'Dismiss rules updates', onclick: dismiss }, icon('x')),
+    h('span', { class: 'rn-text' }, h('b', null, 'Rules updates'), h('small', null, `${count} rulings changed · tap to read`)),
   );
+  el.append(open, h('button', { type: 'button', class: 'rn-x', 'aria-label': 'Dismiss rules updates', onclick: dismiss }, icon('x')));
   return el;
 }
 
 /** The full list in a sheet (Settings → Rules updates). */
 export function openRulesNotes() {
-  modal('Rules updates', h('div', { class: 'rn-sheet' }, h('p', { class: 'rn-intro' }, `${RULES_NOTES_INTRO} (tap a card you can’t use in a duel to see why)`), notesList()), [{ label: 'Done', variant: 'primary' }]);
+  modal('Rules updates', h('div', { class: 'rn-sheet' }, h('p', { class: 'rn-intro' }, `${RULES_NOTES_INTRO} Tap a deck to see what changed. In a duel, tap a card you can’t use to see why.`), notesList()), [{ label: 'Done', variant: 'primary' }]);
 }
