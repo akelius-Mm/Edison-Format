@@ -703,7 +703,6 @@ export function eventRunScreen(r: EventRun, autoResume = false): Screen {
       bestOf: 3,
       caption: `${where} – vs ${opp.name}`,
       requireWinner: m.stage === 'top',
-      ...(r.kind === 'regional' ? { decor: 'regional' as const } : {}),
       stats: { deckKey: me.deck.id, deckName: me.deck.name },
       resume: { kind: 'events', key: duelKey(r, m), route: 'events', params: { view: 'run' } },
     };
