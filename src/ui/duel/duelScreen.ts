@@ -11,6 +11,7 @@ import { RecordingController, type Decision } from '../../engine/replay';
 import { UndoTracker } from '../../engine/undo';
 import type { BattlePos, PlayerId } from '../../engine/types';
 import { ICONS } from '../cards/icons';
+import { prefetchOfficialImages } from '../cards/officialArt';
 import { zoomCard } from '../cards/zoom';
 import { getSettings, onSettingsChange, updateSettings } from '../settings';
 import { applyMatVars, applyPlaymat, opponentMat } from '../theme/playmats';
@@ -283,6 +284,8 @@ class DuelScreen implements HumanUI {
       },
     };
     let officialImages = s.officialImages;
+    // Warm both decks' card scans on disk, one at a time, so cards played later show their real image quickly.
+    if (officialImages && !this.spectator) prefetchOfficialImages(opts.sides.flatMap((d) => [...d.deck.main, ...d.deck.extra].map((c) => c.name)));
     this.unsubSettings = onSettingsChange((st) => {
       if (st.officialImages !== officialImages) {
         officialImages = st.officialImages;
