@@ -2,7 +2,7 @@
 //
 //  1. Duel (dev harness, /duel-dev.html on the Vite dev server): Brain Control in hand with only a Stardust Dragon on
 //     the opponent's field → tapping it shows a disabled row with the Brain Control reason.
-//  2. Home (built app in dist/, served by python3 -m http.server): the one-time "Rules updates" card shows, expands,
+//  2. Home (built app in dist/, served by python3 -m http.server): the one-time "Rules updates" card is one line, opens the list,
 //     is dismissed for good, and Settings → Rules updates opens the full list.
 //
 // Usage (after `npm run build`; Playwright is not a project dependency):
@@ -111,11 +111,20 @@ async function homeCheck(browser) {
     await card.waitFor({ timeout: 15000 });
     check(/Rules updates/.test(await card.innerText()), 'the Rules updates card is on Home');
     await page.screenshot({ path: path.join(OUT, 'rules-updates-home.png') });
-    await card.locator('summary').click();
+    const h = (await card.boundingBox()).height;
+    check(h <= 80, `the card is one compact row (${Math.round(h)}px tall)`);
+    check(!/Brain Control/.test(await card.innerText()), 'no rulings text on Home');
+    await card.locator('.rn-open').click();
+    await page.waitForSelector('.rn-sheet', { timeout: 5000 });
     await sleep(300);
-    check(/Brain Control can only take/.test(await card.innerText()), 'it expands to the list of changes');
-    await card.scrollIntoViewIfNeeded();
+    const sheet = page.locator('.rn-sheet');
+    check(!(await sheet.getByText(/Brain Control can only take/).isVisible()), 'decks start collapsed in the sheet');
+    await sheet.locator('.rn-group summary').first().click();
+    await sleep(300);
+    check(await sheet.getByText(/Brain Control can only take/).isVisible(), 'tapping a deck shows its changes');
     await page.screenshot({ path: path.join(OUT, 'rules-updates-home-open.png') });
+    await page.locator('.modal').getByRole('button', { name: 'Done' }).click();
+    await sleep(400);
     const sw = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
     check(sw <= 0, 'no horizontal scroll');
     await card.locator('.rn-x').click();
