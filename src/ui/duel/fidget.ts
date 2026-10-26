@@ -1,9 +1,8 @@
 // Hand-shuffle fidget: swipe sideways across your own hand and it is shuffled the way players do it at
 // locals. The fan closes into a squared stack held up in front of you; the front card stays held while
 // small packets are pulled off the back of the stack, slid out to the side and pushed back in right
-// behind the held card, packet after packet, quickly; then the hand fans back out. On your turn the
-// leftmost card is the held one and packets come out to the right; on the opponent's turn it is the
-// mirror. Purely cosmetic: the hand ends in its original order, nothing is selected or played, and it
+// behind the held card, packet after packet, quickly; then the hand fans back out. On either turn the
+// leftmost card is the held one and packets come out to the right. Purely cosmetic: the hand ends in its original order, nothing is selected or played, and it
 // never runs while you are asked to pick something (a prompt, a menu, attack targets). On your own turn
 // a tap on the hand stops it at once, so the tap selects the card under your finger as usual.
 //  - one shuffle per swipe (a swipe that keeps going queues one more)
@@ -25,8 +24,6 @@ export interface FidgetHost {
   speed(): number;
   /** The player is being asked to pick something right now (a prompt, a menu, attack targets). */
   deciding(): boolean;
-  /** It is this player's turn (the shuffle runs the other way round). */
-  myTurn(): boolean;
 }
 
 const HINT_KEY = 'edison.hint.shuffle';
@@ -80,8 +77,6 @@ export class HandFidget {
   private plan: (() => number)[] = [];
   /** order[depth] = the card (index into `cards`) at that depth of the stack, 0 = the held front card. */
   private order: number[] = [];
-  /** +1: packets come out to the right (your turn); -1: to the left. */
-  private dir = 1;
   /** The stack's centre (page px) and card size. */
   private sx = 0;
   private sy = 0;
@@ -190,13 +185,12 @@ export class HandFidget {
     });
     this.cw = this.cards[0].offsetWidth || 60;
     const ch = this.cards[0].offsetHeight || this.cw * 1.45;
-    this.dir = this.h.myTurn() ? 1 : -1;
     // the stack is held up in the middle of the hand, a little to the held card's side
     const mid = this.slots[Math.floor((n - 1) / 2)];
-    this.sx = (this.slots[0].x + this.slots[n - 1].x) / 2 - this.dir * this.cw * 0.25;
+    this.sx = (this.slots[0].x + this.slots[n - 1].x) / 2 - this.cw * 0.25;
     this.sy = mid.y - ch * 0.38;
-    // held card in front: the leftmost on your turn, the rightmost on the opponent's
-    this.order = this.cards.map((_, i) => (this.dir > 0 ? i : n - 1 - i));
+    // held card in front: the leftmost
+    this.order = this.cards.map((_, i) => i);
     const sizes = packetSizes(n);
     this.plan = [() => this.gather()];
     for (let r = 0; r < ROUNDS; r++) for (const k of sizes) this.plan.push(() => this.pull(k));
@@ -218,7 +212,7 @@ export class HandFidget {
 
   /** Card i squared up in the stack at this depth (deeper cards peek out a hair behind). */
   private inStack(i: number, depth: number) {
-    return this.toPoint(i, this.sx + this.dir * depth * 0.8, this.sy + depth * 0.6, 0, 1.06);
+    return this.toPoint(i, this.sx + depth * 0.8, this.sy + depth * 0.6, 0, 1.06);
   }
 
   private stackZ() {
@@ -252,19 +246,19 @@ export class HandFidget {
     packet.forEach((card, j) => {
       const d0 = n - k + j;
       const d1 = 1 + j;
-      const [x0, y0] = [this.sx + this.dir * d0 * 0.8, this.sy + d0 * 0.6];
-      const [x1, y1] = [this.sx + this.dir * d1 * 0.8, this.sy + d1 * 0.6];
+      const [x0, y0] = [this.sx + d0 * 0.8, this.sy + d0 * 0.6];
+      const [x1, y1] = [this.sx + d1 * 0.8, this.sy + d1 * 0.6];
       this.animate(
         card,
         [
           { transform: this.inStack(card, d0) },
           // slid out the side, a touch up and tilted, like a thumb drawing it off the back
           {
-            transform: this.toPoint(card, x0 + this.dir * out, y0 - 6, this.dir * 7, 1.06),
+            transform: this.toPoint(card, x0 + out, y0 - 6, 7, 1.06),
             offset: 0.45,
           },
           {
-            transform: this.toPoint(card, x1 + this.dir * out * 0.35, y1 - 3, this.dir * 3, 1.06),
+            transform: this.toPoint(card, x1 + out * 0.35, y1 - 3, 3, 1.06),
             offset: 0.75,
           },
           { transform: this.inStack(card, d1) },
