@@ -9,7 +9,7 @@
   min-height: 0;
   padding: calc(14px + env(safe-area-inset-top, 0px)) 0 0;
   color: var(--text, #ecebe7);
-  animation: rise 0.45s var(--ease-out, ease);
+  animation: rise var(--dur-slow) var(--ease-out);
 }
 .sd-head,
 .sd-opp {
@@ -180,7 +180,7 @@
   user-select: none;
   -webkit-touch-callout: none;
   transition:
-    transform var(--dur-fast) var(--ease-out, var(--ease-out)),
+    transform var(--dur-fast) var(--ease-out),
     opacity var(--dur-fast);
 }
 .sd-tile > .yc {

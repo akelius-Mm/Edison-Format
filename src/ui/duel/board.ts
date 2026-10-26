@@ -5,8 +5,12 @@ import type { Location, PlayerId } from '../../engine/types';
 import { liveStats, renderCard } from '../cards/render';
 import { applySleeve } from '../theme/sleeves';
 import { esc } from '../theme/util';
+import { reducedMotion } from '../motion';
 
 export const RATIO = 86 / 59;
+
+/** Places on the field: a card arriving here lands with a little squash and a shadow pulse. */
+const FIELD = new Set(['mzone', 'szone', 'fzone']);
 
 interface View {
   uid: number;
@@ -64,12 +68,15 @@ export class BoardView {
   private lastLoc = new Map<number, Location>();
   private ro: ResizeObserver | null = null;
   private handScale = 1.08;
+  private handKey = '';
   cw = 90;
 
   onCardClick?: (c: CardInstance, el: HTMLElement, ev: MouseEvent) => void;
   onCardHover?: (c: CardInstance | null, el: HTMLElement | null) => void;
   onPileClick?: (p: PlayerId, loc: 'grave' | 'banished' | 'extra' | 'deck', ev: MouseEvent) => void;
   onLayout?: () => void;
+  /** My hand is about to change (cards added or removed): see fidget.ts. */
+  onHandChange?: () => void;
 
   constructor(
     private game: Game,
@@ -277,8 +284,11 @@ export class BoardView {
     const rot = div('dc-rot');
     const stat = div('dc-stat');
     const badges = div('dc-badges');
+    // a soft contact shadow under the card: shown when a card in hand is lifted and pulsed when a
+    // card lands on the field (opacity and transform only)
+    const shadow = div('dc-shadow');
     fx.append(rot, badges);
-    el.append(fx, stat);
+    el.append(shadow, fx, stat);
     return { uid: c.uid, el, fx, rot, stat, badges, sig: '', place: '' };
   }
 
@@ -377,6 +387,7 @@ export class BoardView {
     // 4) create / update / re-parent
     const handOrder: [HTMLElement[], HTMLElement[]] = [[], []];
     const fresh = new Set<number>();
+    const landing = new Set<number>();
     for (const w of want) {
       let v = this.views.get(w.c.uid);
       if (!v) {
@@ -384,6 +395,7 @@ export class BoardView {
         this.views.set(w.c.uid, v);
         fresh.add(w.c.uid);
       }
+      if (FIELD.has(w.place) && v.place !== w.place && this.lastLoc.size) landing.add(w.c.uid);
       this.updateView(v, w.c, w.place);
       if (w.place === 'hand') handOrder[w.c.owner].push(v.el);
       else if (v.el.parentElement !== w.parent) w.parent.appendChild(v.el);
@@ -391,6 +403,11 @@ export class BoardView {
         // keep the top card above any lingering previous top
         w.parent.appendChild(v.el);
       }
+    }
+    const handKey = handOrder[this.cfg.me].map((e) => e.dataset.uid).join(',');
+    if (handKey !== this.handKey) {
+      this.handKey = handKey;
+      this.onHandChange?.();
     }
     for (const p of [0, 1] as PlayerId[]) {
       const hand = this.sides[p].hand;
@@ -421,6 +438,8 @@ export class BoardView {
           void v.el.offsetWidth;
           v.el.classList.add('dc-pop');
         }
+        // the squash lands as the flight ends (most of the distance is covered by then: ease-out)
+        if (landing.has(w.c.uid)) this.land(v.el, from ? (fresh.has(w.c.uid) && o.stagger ? (k - 1) * o.stagger : 0) + dur * 0.72 : dur * 0.5);
       }
       for (const m of moves) {
         m.v.el.style.transition = 'none';
@@ -443,13 +462,26 @@ export class BoardView {
       moves.forEach((m) => {
         const el = m.v.el;
         if (!el.classList.contains('dc-moving')) return;
-        el.style.transition = `translate ${dur}ms var(--ef-ease-out) ${m.delay}ms, scale ${dur}ms var(--ef-ease-out) ${m.delay}ms`;
+        el.style.transition = `translate ${dur}ms var(--ease-out) ${m.delay}ms, scale ${dur}ms var(--ease-out) ${m.delay}ms`;
         el.style.translate = '';
         el.style.scale = '';
         window.setTimeout(() => el.classList.remove('dc-moving'), dur + m.delay + 30);
       });
     }
     for (const c of g.allCards) this.lastLoc.set(c.uid, c.location);
+  }
+
+  /** A card arriving on the field: a short squash-and-settle and a contact-shadow pulse. */
+  private land(el: HTMLElement, delayMs: number) {
+    const sp = this.cfg.speed();
+    if (sp <= 0 || reducedMotion()) return;
+    window.setTimeout(() => {
+      if (!el.isConnected || el.classList.contains('dc-ghost')) return;
+      el.classList.remove('dc-land');
+      void el.offsetWidth;
+      el.classList.add('dc-land');
+      window.setTimeout(() => el.classList.remove('dc-land'), 340 * sp + 40);
+    }, delayMs);
   }
 
   private retire(v: View, c: CardInstance | undefined, rect: Rect | undefined, dur: number, o: RenderOpts) {
@@ -481,12 +513,12 @@ export class BoardView {
     document.body.appendChild(el);
     void el.offsetWidth;
     if (target) {
-      el.style.transition = `translate ${dur}ms var(--ef-ease-out), scale ${dur}ms var(--ef-ease-out), opacity ${dur}ms ease-in`;
+      el.style.transition = `translate ${dur}ms var(--ease-out), scale ${dur}ms var(--ease-out), opacity ${dur}ms var(--ease-in)`;
       el.style.translate = `${(target.x - rect.x).toFixed(1)}px ${(target.y - rect.y).toFixed(1)}px`;
       el.style.scale = (target.w / (w || 1)).toFixed(3);
       el.style.opacity = c && (c.location === 'deck' || c.location === 'extra') ? '0.2' : '0.85';
     } else {
-      el.style.transition = `opacity ${dur}ms ease, scale ${dur}ms ease`;
+      el.style.transition = `opacity ${dur}ms var(--ease-out), scale ${dur}ms var(--ease-out)`;
       el.style.opacity = '0';
       el.style.scale = '0.6';
     }

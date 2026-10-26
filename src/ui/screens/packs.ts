@@ -675,7 +675,7 @@ class Stage {
     void grid.offsetWidth;
     for (const [i, c] of this.cards.entries()) {
       const delay = i * (pulls.length > 12 ? 28 : 60);
-      c.el.style.transition = `transform 520ms var(--ease-out) ${delay}ms, opacity 200ms ease ${delay}ms`;
+      c.el.style.transition = `transform 520ms var(--ease-out) ${delay}ms, opacity var(--dur-base) var(--ease-out) ${delay}ms`;
       c.el.style.transform = '';
       c.el.style.opacity = '';
       setTimeout(() => !this.dead && this.sfx.play('draw'), delay);

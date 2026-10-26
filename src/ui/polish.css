@@ -617,7 +617,7 @@ body.has-tabbar .frame {
     linear-gradient(180deg, color-mix(in srgb, var(--deck) 22%, #16171a), #121316);
   background-size: cover;
   background-position: center 30%;
-  transition: transform 0.4s var(--ease-out);
+  transition: transform var(--dur-slow) var(--ease-out);
 }
 .dkc-art.has-art {
   background-size: cover;
@@ -878,10 +878,10 @@ body.has-tabbar .frame:has(.lob-bar) {
   min-width: 0;
 }
 .flow-fwd {
-  animation: flowIn 0.32s var(--ease-out);
+  animation: flowIn var(--dur-slow) var(--ease-out);
 }
 .flow-back {
-  animation: flowBack 0.32s var(--ease-out);
+  animation: flowBack var(--dur-slow) var(--ease-out);
 }
 @keyframes flowIn {
   from {
@@ -1074,7 +1074,7 @@ button.mu-side {
   opacity: 0;
   transform: scale(1.08);
   transition:
-    opacity 0.8s var(--ease-out),
+    opacity calc(var(--dur-big) * 1.33) var(--ease-out),
     transform 5s var(--ease-out);
 }
 .res-art.has-art {
@@ -1114,7 +1114,7 @@ button.mu-side {
   letter-spacing: -0.045em !important;
   text-transform: none !important;
   color: #fff !important;
-  animation: resIn 0.6s var(--ease-out) both;
+  animation: resIn var(--dur-big) var(--ease-out) both;
 }
 .results-defeat .res-headline {
   color: rgba(236, 235, 231, 0.78) !important;
@@ -2413,7 +2413,7 @@ a.ios-row {
   background-size: cover;
   background-position: center 30%;
   opacity: 0;
-  transition: opacity 0.6s var(--ease-out);
+  transition: opacity var(--dur-big) var(--ease-out);
 }
 .mm2-bg.has-art {
   opacity: 0.35;
@@ -3189,7 +3189,7 @@ body.has-tabbar .database.frame {
   padding: 6px;
   border-radius: 14px;
   background: var(--grp-hi);
-  animation: selIn 0.2s var(--ease-out);
+  animation: selIn var(--dur-base) var(--ease-out);
 }
 .db-selbar[hidden] {
   display: none;

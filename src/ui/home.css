@@ -19,7 +19,7 @@
   background-position: center 30%;
   opacity: 0;
   transform: scale(1.06);
-  transition: opacity 0.8s var(--ease-out), transform 6s var(--ease-out);
+  transition: opacity calc(var(--dur-big) * 1.33) var(--ease-out), transform 6s var(--ease-out);
 }
 .home-hero-art.has-art {
   opacity: 1;
@@ -171,7 +171,7 @@
   background-size: cover;
   background-position: center 25%;
   opacity: 0;
-  transition: opacity 0.6s var(--ease-out);
+  transition: opacity var(--dur-big) var(--ease-out);
 }
 .home-tile-art.has-art {
   opacity: 1;

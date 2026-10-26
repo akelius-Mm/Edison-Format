@@ -301,7 +301,7 @@ async function waitFor(page, fn, arg, ms = 15000) {
         return { peak: +db(peak).toFixed(1), loud50: +(10 * Math.log10(best || 1e-12)).toFixed(1), rms: +(10 * Math.log10(sum / L.length || 1e-12)).toFixed(1) };
       };
       const out = {};
-      const names = ['draw', 'set', 'flip', 'shuffle', 'summon', 'synchro', 'activate', 'resolve', 'attack', 'battle', 'damage', 'bigDamage', 'recover', 'destroy', 'phase', 'turn', 'coin', 'negate', 'target', 'win', 'lose', 'click', 'error'];
+      const names = ['draw', 'set', 'flip', 'shuffle', 'summon', 'special', 'tribute', 'synchro', 'activate', 'spell', 'trap', 'resolve', 'attack', 'battle', 'damage', 'bigDamage', 'recover', 'destroy', 'phase', 'turn', 'coin', 'negate', 'target', 'win', 'lose', 'click', 'fidget', 'error'];
       for (const n of names) {
         const ac = new OfflineAudioContext(2, SR * 3, SR);
         const fx = new Sfx({ context: ac });

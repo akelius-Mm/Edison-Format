@@ -9,9 +9,14 @@ import { type Send, fm, mtof, noise, tone } from '../audio/synth';
 export type SfxName =
   | 'draw'
   | 'summon'
+  | 'special'
+  | 'tribute'
   | 'synchro'
   | 'set'
   | 'activate'
+  | 'spell'
+  | 'trap'
+  | 'chain'
   | 'resolve'
   | 'attack'
   | 'battle'
@@ -29,6 +34,7 @@ export type SfxName =
   | 'win'
   | 'lose'
   | 'click'
+  | 'fidget'
   | 'error';
 
 /** Minimum gap (seconds) before the same sound may fire again, so bursts don't stack. */
@@ -39,7 +45,13 @@ const GAP: Partial<Record<SfxName, number>> = {
   bigDamage: 0.1,
   synchro: 0.3,
   summon: 0.08,
+  special: 0.08,
+  tribute: 0.08,
   activate: 0.08,
+  spell: 0.08,
+  trap: 0.08,
+  chain: 0.08,
+  fidget: 0.045,
   win: 1,
   lose: 1,
   turn: 0.3,
@@ -55,8 +67,13 @@ const TRIM_DB: Record<SfxName, number> = {
   flip: 15,
   shuffle: 6,
   summon: 4.5,
+  special: 4.5,
+  tribute: 3.5,
   synchro: 6,
   activate: 11,
+  spell: 11,
+  trap: 9,
+  chain: 9,
   resolve: 11,
   attack: 13,
   battle: 1,
@@ -72,11 +89,26 @@ const TRIM_DB: Record<SfxName, number> = {
   win: 8.5,
   lose: 14,
   click: 9,
+  fidget: 4,
   error: 10,
 };
 
 /** Sounds that share a rate-limit slot. */
-const SLOT: Partial<Record<SfxName, string>> = { damage: 'hit', bigDamage: 'hit', win: 'end', lose: 'end' };
+const SLOT: Partial<Record<SfxName, string>> = {
+  damage: 'hit',
+  bigDamage: 'hit',
+  win: 'end',
+  lose: 'end',
+  summon: 'summon',
+  special: 'summon',
+  tribute: 'summon',
+  activate: 'activate',
+  spell: 'activate',
+  trap: 'activate',
+};
+
+/** Synthesized stand-ins (used until the samples have loaded) for sounds without their own. */
+const VOICE_FALLBACK: Partial<Record<SfxName, SfxName>> = { special: 'summon', tribute: 'summon', spell: 'activate', trap: 'activate', chain: 'target', fidget: 'flip' };
 
 const vary = (x: number, pct: number) => x * (1 + (Math.random() * 2 - 1) * pct);
 
@@ -122,6 +154,21 @@ const RECIPES: Partial<Record<SfxName | 'coinToss' | 'coinLand', Layer[]>> = {
     { s: THUDS, db: 0, rate: [0.9, 1.05] },
     { s: ['chime-1'], at: 0.03, db: -10, rate: [0.98, 1.04] },
   ],
+  // brought out by an effect: an airy rush in, the same slam, a shimmer of energy on top
+  special: [
+    { s: WOOSHES, db: -5, rate: [1.15, 1.3] },
+    { s: PLACES, at: 0.06, db: 4, rate: [0.98, 1.06] },
+    { s: THUDS, at: 0.06, db: -1, rate: [0.95, 1.05] },
+    { s: ['energy-1', 'energy-2'], at: 0.04, db: -11, rate: [1.3, 1.4] },
+    { s: ['shimmer'], at: 0.1, db: -10, rate: [1.02, 1.08] },
+  ],
+  // tributes paid: a heavier, lower slam with a deep boom under it
+  tribute: [
+    { s: PLACES, db: 4, rate: [0.86, 0.92] },
+    { s: THUDS, db: 1, rate: [0.8, 0.88] },
+    { s: ['boom'], db: -8, rate: [1.05, 1.15] },
+    { s: ['chime-1'], at: 0.04, db: -12, rate: [0.88, 0.92] },
+  ],
   // energy rising, a swoosh, then the slam: boom + slap + shing + sparkle
   synchro: [
     { s: ['energy-1', 'energy-2'], db: -1, rate: [0.75, 0.8] },
@@ -136,6 +183,19 @@ const RECIPES: Partial<Record<SfxName | 'coinToss' | 'coinLand', Layer[]>> = {
   activate: [
     { s: SHINGS, db: 0, rate: [0.95, 1.08], jitter: 1 },
     { s: ['card-flip-2'], db: -3, rate: [1, 1.1] },
+  ],
+  // a Spell flipped up: bright and magical (shing + sparkle)
+  spell: [
+    { s: SHINGS, db: -1, rate: [1.02, 1.1], jitter: 1 },
+    { s: ['card-flip-2'], db: -4, rate: [1, 1.1] },
+    { s: ['sparkle'], at: 0.03, db: -9, rate: [1.05, 1.12] },
+  ],
+  // a Trap sprung: a hard mechanical snap, a short metal clank and a low knock (darker than a Spell)
+  trap: [
+    { s: ['card-flip-1'], db: 0, rate: [1.15, 1.25] },
+    { s: ['clang-1', 'clang-2'], db: -9, rate: [1.2, 1.3] },
+    { s: THUDS, db: -6, rate: [1.1, 1.2] },
+    { s: ['barrier'], at: 0.02, db: -12, rate: [1.25, 1.35] },
   ],
   resolve: [{ s: ['chime-2', 'chime-1'], db: -5, rate: [0.97, 1.05], jitter: 1 }],
   // the monster lunges: a long low whoosh doubled with a quick swish
@@ -194,12 +254,37 @@ const RECIPES: Partial<Record<SfxName | 'coinToss' | 'coinLand', Layer[]>> = {
   // defeat: a falling line that settles on a low D minor chord
   lose: [{ s: ['vibe-lose'], db: 1 }],
   click: [{ s: ['click-1', 'click-2'], db: -15, rate: [0.95, 1.05] }],
+  // idle hand shuffle: one card slid across the others, soft (well under any gameplay sound)
+  fidget: [{ s: SLIDES, db: -13, rate: [1.15, 1.35], jitter: 2 }],
   error: [{ s: ['error'], db: -10 }],
 };
 
 /** Every take a recipe can use has loaded. */
 function ready(layers: Layer[]) {
   return layers.every((l) => l.s.some((n) => sample(n)));
+}
+
+/**
+ * How the LP number rolls (0..1 of the time → 0..1 of the way): it eases in briefly, runs fastest
+ * just before the middle, then slows and lands. Shared by the counter (panels.ts) and its ticks.
+ */
+export function lpEase(k: number): number {
+  const x = Math.max(0, Math.min(1, k));
+  const smooth = x * x * (3 - 2 * x);
+  const out = 1 - Math.pow(1 - x, 3);
+  return 0.75 * smooth + 0.25 * out;
+}
+
+/** The time (0..1) at which the roll reaches `v` of the way (lpEase is increasing). */
+export function lpEaseInverse(v: number): number {
+  let lo = 0;
+  let hi = 1;
+  for (let i = 0; i < 18; i++) {
+    const m = (lo + hi) / 2;
+    if (lpEase(m) < v) lo = m;
+    else hi = m;
+  }
+  return (lo + hi) / 2;
 }
 
 interface Ticker {
@@ -259,86 +344,206 @@ export class Sfx {
 
   // ------------------------------------------------------------------ LP counter
   /**
-   * The rolling LP counter: soft digital ticks for `durationMs` (the length of the number roll),
-   * fast at first and easing off, then one settle tick when the number lands. A new call replaces
-   * a ticker that is still running.
+   * The rolling LP counter, in step with the number (see `lpEase`): one soft pitched tick each
+   * time the number has rolled another equal slice of `amount`, so the ticks start gently, speed
+   * up and slow down again as the number lands, then one rounded "tok" (a chime when healing) on
+   * the final value. Damage ticks fall in pitch, healing ticks rise. A new call replaces a ticker
+   * that is still running.
    */
-  lpTicker(durationMs: number, up = false) {
+  lpTicker(durationMs: number, up = false, amount = 1000) {
     this.stopTicker();
     if (!(durationMs >= 80)) return;
     const ac = this.ensure();
     if (!ac || !this.master) return;
     const t0 = ac.currentTime + 0.005;
     const dur = durationMs / 1000;
+    // everything through one gentle low-pass: ticks are felt more than heard, never "clicky"
     const bus = ac.createGain();
-    bus.connect(this.master);
+    const soft = ac.createBiquadFilter();
+    soft.type = 'lowpass';
+    soft.frequency.value = up ? 5200 : 3800;
+    soft.Q.value = 0.5;
+    bus.connect(soft).connect(this.master);
 
+    const n = Math.round(Math.max(6, Math.min(30, 6 + Math.abs(amount) / 150)));
+    const times: number[] = [];
+    let last = -1;
+    for (let i = 1; i < n; i++) {
+      const at = lpEaseInverse(i / n) * dur;
+      if (at - last < 0.024 || at > dur - 0.04) continue;
+      times.push(at);
+      last = at;
+    }
     const ticks = [sample('tick-1'), sample('tick-2')];
-    if (ticks[0] && ticks[1]) {
-      // recorded counter ticks: rapid at first, slowing as the number settles; down = a little
-      // brighter and falling, up = rising
-      let t = 0;
-      let n = 0;
-      while (t < dur - 0.028) {
+    const rec = !!(ticks[0] && ticks[1]);
+    times.forEach((at, i) => {
+      const k = at / dur;
+      // pitch walks down (damage) or up (healing) over the roll; level eases off towards the end
+      const rate = up ? 0.95 + 0.3 * k : 1.08 - 0.26 * k;
+      const lv = (i % 2 ? 0.82 : 1) * (1 - 0.35 * k);
+      if (rec) {
         const src = ac.createBufferSource();
-        src.buffer = ticks[n % 2]!;
-        const k = t / dur;
-        src.playbackRate.value = up ? 0.9 + 0.25 * k : 1.12 - 0.25 * k;
+        src.buffer = ticks[i % 2]!;
+        src.playbackRate.value = rate;
         const g = ac.createGain();
-        g.gain.value = (n % 2 ? 0.8 : 1) * Math.pow(10, -21 / 20);
+        g.gain.value = lv * Math.pow(10, -22 / 20);
         src.connect(g).connect(bus);
-        src.start(t0 + t);
-        t += 0.026 + 0.045 * Math.pow(t / dur, 1.5);
-        n++;
+        src.start(t0 + at);
       }
-      const te = t0 + dur;
-      const settle = sample(up ? 'chime-2' : 'select-2');
-      if (settle) {
+      // a quiet sine "pip" under the click gives each tick its pitch
+      tone(ac, bus, t0 + at, (up ? 1320 : 1180) * rate, 0.035, { vol: lv * (rec ? 0.016 : 0.05), attack: 0.001, shape: 6 });
+    });
+    // the landing: damage = a soft wooden "tok" with a little body, healing = a light chime
+    const te = t0 + dur;
+    if (up) {
+      const ch = sample('chime-2');
+      if (ch) {
         const src = ac.createBufferSource();
-        src.buffer = settle;
-        src.playbackRate.value = up ? 1.1 : 0.9;
+        src.buffer = ch;
+        src.playbackRate.value = 1.12;
         const g = ac.createGain();
-        g.gain.value = Math.pow(10, (up ? -16 : -15) / 20);
+        g.gain.value = Math.pow(10, -17 / 20);
+        src.connect(g).connect(bus);
+        src.start(te);
+      } else fm(ac, bus, te, 2093, 0.3, { ratio: 2, index: 0.6, indexEnd: 0.05, vol: 0.06 });
+    } else {
+      tone(ac, bus, te, 520, 0.11, { f1: 410, vol: 0.075, attack: 0.002, shape: 5 });
+      tone(ac, bus, te, 1040, 0.05, { type: 'triangle', vol: 0.025, attack: 0.001 });
+      const sel = sample('select-2');
+      if (sel) {
+        const src = ac.createBufferSource();
+        src.buffer = sel;
+        src.playbackRate.value = 0.82;
+        const g = ac.createGain();
+        g.gain.value = Math.pow(10, -18 / 20);
         src.connect(g).connect(bus);
         src.start(te);
       }
-      this.ticker = { bus, end: te + 0.3 };
-      return;
     }
-    // One oscillator, gated into ticks by gain automation: cheap even for long rolls.
-    const osc = ac.createOscillator();
-    osc.type = 'square';
-    const f0 = up ? 1500 : 2150;
-    const f1 = up ? 2150 : 1450;
-    osc.frequency.setValueAtTime(f0, t0);
-    osc.frequency.linearRampToValueAtTime(f1, t0 + dur);
-    const bp = ac.createBiquadFilter();
-    bp.type = 'bandpass';
-    bp.frequency.value = 2400;
-    bp.Q.value = 1.4;
-    const gate = ac.createGain();
-    gate.gain.setValueAtTime(0, t0);
-    osc.connect(bp).connect(gate).connect(bus);
-    const v = 0.3;
-    let t = 0;
-    let n = 0;
-    while (t < dur - 0.028) {
-      const ti = t0 + t;
-      const lv = v * (n % 2 ? 0.8 : 1);
-      gate.gain.setValueAtTime(0, ti);
-      gate.gain.linearRampToValueAtTime(lv, ti + 0.0015);
-      gate.gain.setTargetAtTime(0, ti + 0.0015, 0.0045);
-      // ticks start rapid and slow down as the number settles
-      t += 0.024 + 0.04 * Math.pow(t / dur, 1.5);
-      n++;
+    this.ticker = { bus, end: te + 0.4 };
+  }
+
+  // ------------------------------------------------------------------ LP damage
+  /**
+   * Losing LP, scaled by the amount: a low body thump (a recorded thud, deeper for bigger hits,
+   * with a sine drop under it for weight) and a bright, short transient on top (a punch, high-passed
+   * so it cracks rather than booms). From about 2000 a soft boom and crunch tail join in and the
+   * music ducks. Paying a cost is a muted version. The level rises only ~5 dB from a 300 hit to a
+   * 4000+ one: bigger hits are mostly longer and lower, not louder.
+   */
+  hit(amount: number, kind: 'battle' | 'effect' | 'cost' = 'battle') {
+    const ac = this.ensure();
+    if (!ac || !this.master) return;
+    const now = ac.currentTime;
+    const prev = this.last.get('hit') ?? -10;
+    if (now - prev < 0.1) return;
+    this.last.set('hit', now);
+    const t = now + 0.005;
+    const s = Math.max(0, Math.min(1, (amount - 300) / 3700));
+    const cost = kind === 'cost';
+    const out = ac.createGain();
+    // a gentle top cut keeps the transient bright but not harsh
+    const top = ac.createBiquadFilter();
+    top.type = 'lowpass';
+    top.frequency.value = 7500;
+    top.Q.value = 0.5;
+    out.connect(top).connect(this.master);
+    out.gain.value = Math.pow(10, ((cost ? -5 : 0) + 3 * s + 2) / 20);
+    const g = graphFor(ac);
+    const thud = this.pick('hit/thud', THUDS);
+    const punch = this.pick('hit/punch', PUNCHES);
+    if (thud && punch) {
+      // the thud's own sub is cut so the weight below comes from the sine alone (two lows that
+      // happen to cancel or add made the level swing by several dB from take to take)
+      this.buf(ac, out, thud, t, (1.02 - 0.2 * s) * vary(1, 0.03), 1 + 2 * s, { hp: 140 });
+      if (!cost) this.buf(ac, out, punch, t, (1.12 - 0.3 * s) * vary(1, 0.03), 3 + s, { hp: 1300 - 500 * s });
+      if (s > 0.42 && !cost) {
+        const boom = sample('boom');
+        const crunch = sample('crunch-2') ?? sample('crunch-1');
+        const k = (s - 0.42) / 0.58;
+        if (boom) this.buf(ac, out, boom, t + 0.01, 1.05 - 0.1 * k, -9 + 7 * k, { lp: 2400 });
+        if (crunch) this.buf(ac, out, crunch, t, 0.9 - 0.08 * k, -10 + 5 * k, { lp: 5000 });
+      }
+    } else {
+      // synthesized: noise crack + saw body
+      noise(ac, g.noise, out, t, 0.05, { type: 'highpass', f0: 2600 - 900 * s, vol: cost ? 0.05 : 0.16, attack: 0.001 });
+      tone(ac, out, t, 190, 0.2 + 0.25 * s, { type: 'sawtooth', f1: 70, vol: 0.1, lp: 900, lpEnd: 160 });
+      noise(ac, g.noise, out, t, 0.18 + 0.4 * s, { type: 'lowpass', f0: 1400, f1: 140, vol: 0.26 + 0.12 * s, send: { to: g.reverb, amount: 0.25 * s } });
     }
-    osc.start(t0);
-    osc.stop(t0 + dur + 0.05);
-    // settle: a slightly rounder double tick
-    const te = t0 + dur;
-    fm(ac, bus, te, up ? 2093 : 1568, 0.12, { ratio: 2, index: 0.7, indexEnd: 0.05, vol: 0.14 });
-    tone(ac, bus, te, up ? 4186 : 3136, 0.04, { vol: 0.04 });
-    this.ticker = { bus, end: te + 0.15 };
+    // the weight: a sine drop, longer and lower for bigger hits
+    tone(ac, out, t, 105 - 20 * s, 0.24 + 0.5 * s, { f1: 46 - 12 * s, glide: 0.18 + 0.35 * s, vol: (cost ? 0.2 : 0.3) + 0.16 * s, attack: 0.004 });
+    if (s > 0.42 && !cost) duckMusic(ac, 0.3 + 0.2 * s, 0.25 + 0.3 * s, 0.8);
+    this.unhook(ac, out, t + 1.6);
+  }
+
+  /** A chain link joins (link 2 and up): a small metal clink that climbs with each link. */
+  chain(index: number) {
+    const ac = this.ensure();
+    if (!ac || !this.master) return;
+    const now = ac.currentTime;
+    const prev = this.last.get('chain') ?? -10;
+    if (now - prev < 0.08) return;
+    this.last.set('chain', now);
+    const t = now + 0.005;
+    const up = Math.pow(2, (Math.min(8, Math.max(2, index)) - 2) * (2 / 12));
+    const out = ac.createGain();
+    out.connect(this.master);
+    const clang = sample('clang-1');
+    const coin = sample('coin-land-1');
+    if (clang && coin) {
+      this.buf(ac, out, coin, t, 1.3 * up, -7);
+      this.buf(ac, out, clang, t + 0.045, 1.6 * up, -13, { hp: 1200 });
+    } else {
+      out.gain.value = Math.pow(10, TRIM_DB.chain / 20);
+      fm(ac, out, t, 1568 * up, 0.25, { ratio: 2.76, index: 1, indexEnd: 0.05, vol: 0.05 });
+      fm(ac, out, t + 0.05, 2093 * up, 0.3, { ratio: 2.76, index: 0.8, indexEnd: 0.05, vol: 0.04 });
+    }
+    this.unhook(ac, out, t + 1.2);
+  }
+
+  private lastPick = new Map<string, SampleName>();
+  /** A loaded take from `pool`, never the same one twice in a row. */
+  private pick(id: string, pool: SampleName[]): AudioBuffer | undefined {
+    const takes = pool.filter((n) => sample(n));
+    if (!takes.length) return undefined;
+    const prev = this.lastPick.get(id);
+    const from = takes.length > 1 ? takes.filter((n) => n !== prev) : takes;
+    const n = from[Math.floor(Math.random() * from.length)];
+    this.lastPick.set(id, n);
+    return sample(n);
+  }
+
+  /** Play a recorded buffer at `t` (rate, level in dB, optional high-/low-pass). */
+  private buf(ac: Ctx, out: AudioNode, b: AudioBuffer, t: number, rate: number, db: number, f: { hp?: number; lp?: number } = {}) {
+    const src = ac.createBufferSource();
+    src.buffer = b;
+    src.playbackRate.value = rate;
+    let node: AudioNode = src;
+    for (const [type, hz] of [['highpass', f.hp], ['lowpass', f.lp]] as const) {
+      if (!hz) continue;
+      const bq = ac.createBiquadFilter();
+      bq.type = type;
+      bq.frequency.value = hz;
+      bq.Q.value = 0.6;
+      node.connect(bq);
+      node = bq;
+    }
+    const g = ac.createGain();
+    g.gain.value = Math.pow(10, db / 20);
+    node.connect(g).connect(out);
+    src.start(t);
+  }
+
+  /** Disconnect a one-shot's bus once it has played (live context only). */
+  private unhook(ac: Ctx, out: AudioNode, end: number) {
+    if (typeof window === 'undefined' || (ac as any).startRendering) return;
+    window.setTimeout(() => {
+      try {
+        out.disconnect();
+      } catch {
+        /* ignore */
+      }
+    }, (end - ac.currentTime + 0.3) * 1000);
   }
 
   private stopTicker() {
@@ -380,9 +585,15 @@ export class Sfx {
       this.lastSpin = this.coinLanding ? -10 : t;
       key = this.coinLanding ? 'coinLand' : 'coinToss';
     }
+    // LP damage is built per amount (see hit()); these two names stay for a plain small / big hit
+    if (name === 'damage' || name === 'bigDamage') {
+      this.last.delete('hit');
+      this.hit(name === 'bigDamage' ? 2600 : 900);
+      return;
+    }
     const layers = RECIPES[key];
     if (layers && ready(layers)) this.layered(ac, name, layers, t);
-    else this.voice(ac, name, t);
+    else this.voice(ac, VOICE_FALLBACK[name] ?? name, t);
   }
 
   private lastTake = new Map<string, SampleName>();
@@ -419,8 +630,7 @@ export class Sfx {
       src.start(at);
       end = Math.max(end, at + buf.duration / rate);
     });
-    if (name === 'bigDamage') duckMusic(ac, 0.45, 0.4, 0.8);
-    else if (name === 'synchro') duckMusic(ac, 0.5, 1.2, 1);
+    if (name === 'synchro') duckMusic(ac, 0.5, 1.2, 1);
     else if (name === 'win') duckMusic(ac, 0.7, 2.2, 1.5);
     else if (name === 'lose') duckMusic(ac, 0.75, 2.4, 1.5);
     // unhook the layer bus once everything has played

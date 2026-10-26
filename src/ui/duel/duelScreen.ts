@@ -31,6 +31,7 @@ import {
   selectDialog,
   visibleTo,
 } from './dialogs';
+import { HandFidget } from './fidget';
 import { FxDirector, sleep } from './fx';
 import { FAST_FORWARD, setupHurry } from './hurry';
 import { HumanController, type HumanUI, PacedController } from './human';
@@ -79,6 +80,8 @@ class DuelScreen implements HumanUI {
   readonly dialogs: Dialogs;
   readonly sfx = new Sfx();
   readonly fx: FxDirector;
+  /** Idle hand-shuffle while the opponent plays (fidget.ts). */
+  readonly fidget: HandFidget;
   readonly me: PlayerId;
   readonly viewer: PlayerId | null;
   readonly spectator: boolean;
@@ -165,7 +168,7 @@ class DuelScreen implements HumanUI {
     const p0 = new PlayerPanel(opts.sides[0], 0, this.me === 0, startLp, () => this.speed());
     const p1 = new PlayerPanel(opts.sides[1], 1, this.me === 1, startLp, () => this.speed());
     this.panels = [p0, p1];
-    for (const p of this.panels) p.onLpRoll = (ms, up) => this.sfx.lpTicker(ms, up);
+    for (const p of this.panels) p.onLpRoll = (ms, up, amount) => this.sfx.lpTicker(ms, up, amount);
     this.phaseBar = new PhaseBar(this.me);
     if (this.spectator) this.phaseBar.setSpectatorLabels([opts.sides[0].name, opts.sides[1].name]);
     this.chain = new ChainStack(this.me);
@@ -214,6 +217,17 @@ class DuelScreen implements HumanUI {
       },
     });
 
+    this.fidget = new HandFidget({
+      board: this.board,
+      sfx: this.sfx,
+      me: this.me,
+      spectator: this.spectator,
+      speed: () => this.speed(),
+      deciding: () => this.deciding(),
+    });
+    // a card entering or leaving the hand stops a shuffle at once
+    this.board.onHandChange = () => this.fidget.cancel();
+
     // ---- wiring
     this.board.onCardClick = (c, el, ev) => this.onCardClick(c, el, ev);
     this.board.onCardHover = (c) => {
@@ -237,6 +251,7 @@ class DuelScreen implements HumanUI {
       anim: async (a) => {
         if (this.aborted && a.type !== 'negate') throw this.aborted;
         if (this.replaying) return;
+        if (a.type === 'turn') this.fidget.turnStarted(a.player as PlayerId);
         try {
           await this.fx.handle(a);
         } catch (e) {
@@ -665,6 +680,7 @@ class DuelScreen implements HumanUI {
     setDuelDiag(null);
     this.unsubSettings();
     this.dialogs.dispose();
+    this.fidget.dispose();
     this.board.destroy();
     if (this.raf) cancelAnimationFrame(this.raf);
     window.setTimeout(() => this.sfx.dispose(), 1500);
@@ -838,7 +854,13 @@ class DuelScreen implements HumanUI {
   }
 
   // ------------------------------------------------------------------ HumanUI: main actions
+  /** The player is being asked something right now (a shuffle never runs then). */
+  private deciding(): boolean {
+    return !!this.actionState || !!this.attackState || !!this.root.querySelector('.dlg-layer:not(.is-closing), .ctx-menu');
+  }
+
   requestAction(p: PlayerId, actions: Action[]): Promise<Action> {
+    this.fidget.cancel();
     this.flush();
     const byCard = new Map<number, Action[]>();
     for (const a of actions) {

@@ -22,14 +22,33 @@ const FF_ICON =
 
 export function setupHurry(host: HurryHost, center: HTMLElement) {
   let swallow = 0;
+  const hurry = () => {
+    if (!host.fx.busy) return;
+    host.fx.hurry();
+    // the click this tap produces is used up by the hurry
+    swallow = performance.now();
+  };
   center.addEventListener(
     'pointerdown',
     (ev) => {
-      if ((ev.target as HTMLElement).closest('.duel-ff, .dlg-layer')) return;
+      const t = ev.target as HTMLElement;
+      if (t.closest('.duel-ff, .dlg-layer')) return;
       if (!host.fx.busy) return;
-      host.fx.hurry();
-      // the click this tap produces is used up by the hurry
-      swallow = performance.now();
+      // On your own hand a swipe shuffles it (fidget.ts) without hurrying the opponent's play:
+      // there, only a tap (lifted without moving) hurries.
+      if (t.closest('.hand-me')) {
+        const x0 = ev.clientX;
+        const y0 = ev.clientY;
+        const id = ev.pointerId;
+        const up = (e: PointerEvent) => {
+          if (e.pointerId !== id) return;
+          window.removeEventListener('pointerup', up, true);
+          if (Math.hypot(e.clientX - x0, e.clientY - y0) < 12) hurry();
+        };
+        window.addEventListener('pointerup', up, true);
+        return;
+      }
+      hurry();
     },
     true,
   );
