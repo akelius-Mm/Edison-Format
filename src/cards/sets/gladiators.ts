@@ -28,9 +28,11 @@ function gbTagScore(ctx: Ctx, c: CardInstance, already: CardInstance[] = []): nu
   const dup = already.some((a) => a.name === c.name) ? -400 : 0;
   switch (c.name) {
     case BESTIARI:
-      return dup + (oppST ? 900 : 350) + (hasGyzarus && fieldGB.length ? 250 : 0);
+      // Its destruction is mandatory: with no opposing Spell/Trap it would have to hit one of ours.
+      return dup + (oppST ? 900 : ctx.spellTraps('me').length ? 100 : 350) + (hasGyzarus && fieldGB.length ? 250 : 0);
     case 'Gladiator Beast Murmillo':
-      return dup + (oppFaceUp.length ? 850 + Math.min(300, Math.max(...oppFaceUp.map((m) => cardValue(ctx.game, m))) / 10) : 120);
+      // Mandatory: with no opposing face-up monster it destroys one of ours (or itself).
+      return dup + (oppFaceUp.length ? 850 + Math.min(300, Math.max(...oppFaceUp.map((m) => cardValue(ctx.game, m))) / 10) : 20);
     case 'Gladiator Beast Darius':
       return dup + (graveGB.length ? 720 : 300);
     case LAQUARI:
@@ -142,14 +144,18 @@ monster(BESTIARI, {
   def: 800,
   sets: GB,
   aiValue: 700,
-  text: `If this card is Special Summoned by the effect of a "Gladiator Beast" monster: You can target 1 Spell/Trap on the field; destroy it. ${TAG_TEXT} "${BESTIARI}".`,
+  text: `If this card is Special Summoned by the effect of a "Gladiator Beast" monster: Target 1 Spell/Trap on the field; destroy that target. ${TAG_TEXT} "${BESTIARI}".`,
   effects: [
     onGBSummon({
+      // Official text: mandatory ("Target 1 Spell/Trap"; no "You can"): with only your own Spell/Traps on the field it must target one.
+      mandatory: true,
       label: 'Destroy 1 Spell/Trap',
       categories: ['destroy'],
       canActivate: (ctx) => ctx.spellTraps('both', (c) => ctx.canTarget(c)).length > 0,
       activate: async (ctx) => {
-        await ctx.selectTargets(ctx.spellTraps('both'), 1, 1, 'Target 1 Spell/Trap to destroy.', 'destroy');
+        await ctx.selectTargets(ctx.spellTraps('both'), 1, 1, 'Target 1 Spell/Trap to destroy.', 'destroy', {
+          aiScore: (c) => (c.controller === ctx.opp ? 1000 : 0) - (c.faceUp ? 0 : 1) + (c.controller !== ctx.opp && c.faceUp && c.isTrap ? 200 : 0),
+        });
       },
       resolve: async (ctx) => {
         const t = ctx.validTargets((c) => c.onField);
@@ -169,18 +175,22 @@ monster('Gladiator Beast Darius', {
   def: 300,
   sets: GB,
   aiValue: 500,
-  text: `If this card is Special Summoned by the effect of a "Gladiator Beast" monster: You can Special Summon 1 "Gladiator Beast" monster from your GY; its effects are negated, and it is shuffled into the Deck when this card leaves the field. ${TAG_TEXT} "Gladiator Beast Darius".`,
+  text: `When this card is Special Summoned by the effect of a "Gladiator Beast" monster: You can target 1 "Gladiator Beast" monster in your GY; Special Summon that target, but its effect(s) is negated by this card, and it is shuffled into the Deck when this card leaves the field. ${TAG_TEXT} "Gladiator Beast Darius".`,
   effects: [
     onGBSummon({
       label: 'Revive Gladiator Beast',
       categories: ['specialSummon'],
-      condition: (ctx) => ctx.canSpecialSummon() && ctx.grave('me', (c) => isGB(c) && ctx.canSummonCard(c)).length > 0,
-      resolve: async (ctx) => {
-        if (!ctx.canSpecialSummon()) return;
+      // Official text: it TARGETS the monster in the GY when the effect is activated (Necrovalley, D.D. Crow in response).
+      condition: (ctx) => ctx.canSpecialSummon() && ctx.grave('me', (c) => isGB(c) && ctx.canSummonCard(c) && ctx.canTarget(c)).length > 0,
+      activate: async (ctx) => {
         const cands = ctx.grave('me', (c) => isGB(c) && ctx.canSummonCard(c));
-        const sel = await ctx.select(cands, 1, 1, 'Special Summon 1 "Gladiator Beast" from your GY.', 'specialSummon', {
+        await ctx.selectTargets(cands, 1, 1, 'Target 1 "Gladiator Beast" monster in your GY to Special Summon.', 'specialSummon', {
           aiScore: (c) => (c.name === BESTIARI ? 2000 : 0) + (c.data.atk ?? 0) + (c.name === LAQUARI ? 300 : 0),
         });
+      },
+      resolve: async (ctx) => {
+        if (!ctx.canSpecialSummon()) return;
+        const sel = ctx.validTargets((c) => c.location === 'grave' && isGB(c));
         if (!sel.length) return;
         const r = await ctx.specialSummon(sel[0]);
         if (!r.length) return;
@@ -219,7 +229,7 @@ monster('Gladiator Beast Darius', {
 
 monster(LAQUARI, {
   attribute: 'FIRE',
-  race: 'Beast',
+  race: 'Beast-Warrior', // YGOJSON: Beast-Warrior (was Beast)
   level: 4,
   atk: 1800,
   def: 400,
@@ -237,14 +247,18 @@ monster('Gladiator Beast Murmillo', {
   def: 400,
   sets: GB,
   aiValue: 600,
-  text: `If this card is Special Summoned by the effect of a "Gladiator Beast" monster: You can target 1 face-up monster on the field; destroy it. ${TAG_TEXT} "Gladiator Beast Murmillo".`,
+  text: `When this card is Special Summoned by the effect of a "Gladiator Beast" monster: Target 1 face-up monster; destroy that target. ${TAG_TEXT} "Gladiator Beast Murmillo".`,
   effects: [
     onGBSummon({
+      // Official text: mandatory ("Target 1 face-up monster"; no "You can"), and it can target itself.
+      mandatory: true,
       label: 'Destroy 1 face-up monster',
       categories: ['destroy'],
-      canActivate: (ctx) => ctx.faceUpMonsters('both', (c) => c !== ctx.self && ctx.canTarget(c)).length > 0,
+      canActivate: (ctx) => ctx.faceUpMonsters('both', (c) => ctx.canTarget(c)).length > 0,
       activate: async (ctx) => {
-        await ctx.selectTargets(ctx.faceUpMonsters('both'), 1, 1, 'Target 1 face-up monster to destroy.', 'destroy');
+        await ctx.selectTargets(ctx.faceUpMonsters('both'), 1, 1, 'Target 1 face-up monster to destroy.', 'destroy', {
+          aiScore: (c) => (c.controller === ctx.opp ? 10000 + cardValue(ctx.game, c) : c === ctx.self ? 0 : -cardValue(ctx.game, c) / 10),
+        });
       },
       resolve: async (ctx) => {
         const t = ctx.validTargets((c) => c.location === 'mzone' && c.faceUp);
@@ -258,9 +272,9 @@ monster('Gladiator Beast Murmillo', {
 
 monster('Gladiator Beast Hoplomus', {
   attribute: 'EARTH',
-  race: 'Reptile',
+  race: 'Rock', // YGOJSON: Rock, 700 ATK (was Reptile, 300)
   level: 4,
-  atk: 300,
+  atk: 700,
   def: 2100,
   sets: GB,
   aiValue: 200,
@@ -276,12 +290,13 @@ monster('Gladiator Beast Equeste', {
   def: 1200,
   sets: GB,
   aiValue: 400,
-  text: `If this card is Special Summoned by the effect of a "Gladiator Beast" monster: You can target 1 "Gladiator Beast" card in your GY; add it to your hand. ${TAG_TEXT} "Gladiator Beast Equeste".`,
+  text: `When this card is Special Summoned by the effect of a "Gladiator Beast" monster: Target 1 "Gladiator Beast" card in your GY; add that target to your hand. ${TAG_TEXT} "Gladiator Beast Equeste".`,
   effects: [
     onGBSummon({
+      mandatory: true, // official text: no "You can"
+      canActivate: (ctx) => ctx.grave('me', (c) => c.inSet('gladiator') && ctx.canTarget(c)).length > 0,
       label: 'Add Gladiator Beast card',
       categories: ['toHand'],
-      canActivate: (ctx) => ctx.grave('me', (c) => c.inSet('gladiator')).length > 0,
       activate: async (ctx) => {
         await ctx.selectTargets(ctx.grave('me', (c) => c.inSet('gladiator')), 1, 1, 'Target 1 "Gladiator Beast" card in your GY.', 'toHand', {
           aiScore: (c) => (c.name === 'Gladiator Beast War Chariot' ? 2500 : 0) + (c.name === BESTIARI ? 2200 : 0) + (c.data.atk ?? 0),
@@ -300,8 +315,8 @@ monster('Gladiator Beast Retiari', {
   attribute: 'WATER',
   race: 'Aqua',
   level: 3,
-  atk: 1000,
-  def: 1200,
+  atk: 1200, // YGOJSON: 1200/800 (was 1000/1200)
+  def: 800,
   sets: GB,
   text: `If this card is Special Summoned by the effect of a "Gladiator Beast" monster: You can target 1 card in your opponent's GY; banish it. ${TAG_TEXT} "Gladiator Beast Retiari".`,
   effects: [
@@ -323,16 +338,47 @@ monster('Gladiator Beast Retiari', {
   ],
 });
 
-monster('Gladiator Beast Secutor', {
-  attribute: 'EARTH',
-  race: 'Dinosaur',
-  level: 3,
+// YGOJSON: WIND / Reptile / Level 4 (was EARTH / Dinosaur / Level 3). Secutor has no ordinary tag-out: only if it was
+// Special Summoned by a Gladiator Beast effect, at the end of a Battle Phase in which it battled, it (mandatorily)
+// Special Summons 2 Gladiator Beasts from the Deck and stays on the field itself.
+const SECUTOR = 'Gladiator Beast Secutor';
+const secutorCands = (ctx: Ctx) => ctx.deck('me', (c) => isGB(c) && c.name !== SECUTOR && ctx.canSummonCard(c));
+monster(SECUTOR, {
+  attribute: 'WIND',
+  race: 'Reptile',
+  level: 4,
   atk: 400,
   def: 300,
   sets: GB,
   aiValue: 400,
-  text: 'At the end of the Battle Phase, if this card attacked or was attacked: You can shuffle it into the Deck; Special Summon 2 "Gladiator Beast" monsters from your Deck, except "Gladiator Beast Secutor".',
-  effects: [tagOut(2)],
+  text: `If this card was Special Summoned by the effect of a "Gladiator Beast" monster, then at the end of any Battle Phase in which this card attacked or was attacked: Special Summon 2 "Gladiator Beast" monsters from your Deck, except "${SECUTOR}".`,
+  effects: [
+    markGB,
+    {
+      kind: 'trigger',
+      event: 'battleEnd',
+      mandatory: true,
+      label: 'Special Summon 2 Gladiator Beasts',
+      categories: ['specialSummon'],
+      eventFilter: (ctx) => ctx.self.location === 'mzone' && ctx.self.faceUp && !!ctx.self.flags.gbSummoned && ctx.self.attackedThisTurnOrWasAttacked,
+      // "Special Summon 2": nothing happens unless both can be Special Summoned.
+      canActivate: (ctx) => ctx.canSpecialSummon() && ctx.freeMZones() >= 2 && secutorCands(ctx).length >= 2,
+      resolve: async (ctx) => {
+        const cands = secutorCands(ctx);
+        if (ctx.freeMZones() < 2 || cands.length < 2 || !ctx.canSpecialSummon()) return;
+        const picked: CardInstance[] = [];
+        for (let i = 0; i < 2; i++) {
+          const sel = await ctx.select(cands.filter((c) => !picked.includes(c)), 1, 1, `Special Summon a "Gladiator Beast" from your Deck (${i + 1}/2).`, 'specialSummon', {
+            aiScore: (c) => gbTagScore(ctx, c, picked),
+          });
+          if (!sel.length) break;
+          picked.push(sel[0]);
+        }
+        if (picked.length) await ctx.specialSummon(picked);
+        ctx.game.shuffleDeck(ctx.player);
+      },
+    },
+  ],
 });
 
 // PTDN: Gladiator Beast Andal (PTDN-EN002) is a Normal Monster (Beast-Warrior/EARTH/Level 4/ATK 1900/DEF 1500) per
@@ -387,7 +433,9 @@ monster('Test Tiger', {
         if (!cands.length || !ctx.canSpecialSummon()) return;
         const sel = await ctx.select(cands, 1, 1, 'Special Summon 1 "Gladiator Beast" from your Deck.', 'specialSummon', { aiScore: (c) => gbTagScore(ctx, c) });
         // Treated as Summoned by the returned Gladiator Beast's effect, so the new monster's effect applies.
-        if (sel.length) await summonFromDeckBy(ctx, sel, gb);
+        // (The summoned Gladiator Beast itself is the reason card: the returned monster may have been an Elemental Hero
+        // Prisma that was only named "Gladiator Beast ..." on the field.)
+        if (sel.length) await summonFromDeckBy(ctx, sel, isGB(gb) ? gb : sel[0]);
         ctx.game.shuffleDeck(ctx.player);
       },
       ai: {
@@ -545,15 +593,15 @@ monster('Gladiator Beast Gyzarus', {
 });
 
 monster('Gladiator Beast Heraklinos', {
-  attribute: 'EARTH',
-  race: 'Insect',
+  attribute: 'FIRE', // YGOJSON: FIRE / Beast-Warrior (was EARTH / Insect)
+  race: 'Beast-Warrior',
   level: 8,
   atk: 3000,
   def: 2800,
   types: ['fusion'],
   sets: GB,
   aiValue: 900,
-  text: `"${LAQUARI}" + 2 "Gladiator Beast" monsters\nMust be Special Summoned from the Extra Deck by shuffling the above cards you control into the Deck (you do not use "Polymerization"). While you have a card in your hand, when a Spell/Trap Card is activated: You can discard 1 card; negate the activation, and if you do, destroy it.`,
+  text: `"${LAQUARI}" + 2 "Gladiator Beast" monsters\nMust be Special Summoned from the Extra Deck by shuffling the above cards you control into the Deck (you do not use "Polymerization"). When a Spell/Trap Card is activated (Quick Effect): You can discard 1 card; negate the activation, and if you do, destroy it. This card must be face-up on the field to activate and to resolve this effect.`,
   fusion: { materials: [(c) => c.name === LAQUARI, isGB, isGB], noPoly: true, desc: `"${LAQUARI}" + 2 "Gladiator Beast" monsters` },
   effects: [
     {
@@ -602,6 +650,8 @@ monster('Gladiator Beast Heraklinos', {
         await ctx.discardFromHand(1, undefined, 'cost', ctx.player, 'Discard 1 card.');
       },
       resolve: async (ctx) => {
+        // "This card must be face-up on the field to activate and to resolve this effect."
+        if (ctx.self.location !== 'mzone' || !ctx.self.faceUp) return;
         await ctx.negateAndDestroy(ctx.prevLink());
       },
       ai: {

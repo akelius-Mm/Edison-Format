@@ -894,6 +894,7 @@ function eq(a: unknown, b: unknown, msg: string) {
   await blackwingLightswornAuditTests();
   await heroDadPsychicAuditTests();
   await plantSaberSamuraiAuditTests();
+  await gladiatorDeepTests();
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })();
@@ -6772,5 +6773,416 @@ async function plantSaberSamuraiAuditTests() {
     await doProc(n.g, 0, en);
     eq(en.location, 'mzone', 'Enishi Special Summoned');
     eq(y.location, 'banished', 'cost banished');
+  });
+}
+
+// ---------------------------------------------------------------- Gladiator Beasts: deep audit (sequences)
+
+async function gladiatorDeepTests() {
+  const live = (c: CardInstance) => {
+    c.faceUp = true;
+    c.activeOnField = true;
+    return c;
+  };
+  const deckCard = (g: Game, p: PlayerId, name: string) => {
+    const c = g.registerCard(new (g.allCards[0].constructor as any)(cardByName(name), p)) as CardInstance;
+    c.location = 'none';
+    g.rawMove(c, 'deck');
+    return c;
+  };
+  const battleEnd = async (g: Game) => {
+    g.beginBatch();
+    g.emit({ type: 'battleEnd', player: g.turnPlayer, phase: 'battle' });
+    await g.processTriggers(true);
+  };
+  const procAct = (g: Game, p: PlayerId, card: CardInstance) => g.legalMainActions(p).find((a) => a.type === 'proc' && a.card === card);
+  const pickOnly = (c: TestController, want: CardInstance[]) => {
+    c.pick = (_g, req) => {
+      const w = want.filter((x) => req.candidates.includes(x));
+      return w.length >= req.min && w.length ? w.slice(0, Math.max(req.min, Math.min(w.length, req.max))) : req.candidates.slice(0, req.min);
+    };
+  };
+  /** Accept only the tag-out among optional triggers (mandatory ones never ask). */
+  const onlyTagOut = (c: TestController) => {
+    (c as any).confirmTrigger = async (_g: Game, _p: PlayerId, act: Activation) => act.label === 'Tag out';
+  };
+  const N = (name: string) => cardByName(name);
+
+  await test('GB audit: card data matches the official text (Hoplomus, Retiari, Secutor, Laquari, Heraklinos)', async () => {
+    const hop = N('Gladiator Beast Hoplomus');
+    eq(`${hop.race}/${hop.atk}/${hop.def}`, 'Rock/700/2100', 'Hoplomus');
+    const ret = N('Gladiator Beast Retiari');
+    eq(`${ret.atk}/${ret.def}`, '1200/800', 'Retiari');
+    const sec = N('Gladiator Beast Secutor');
+    eq(`${sec.attribute}/${sec.race}/${sec.level}/${sec.atk}/${sec.def}`, 'WIND/Reptile/4/400/300', 'Secutor');
+    eq(N('Gladiator Beast Laquari').race, 'Beast-Warrior', 'Laquari');
+    const her = N('Gladiator Beast Heraklinos');
+    eq(`${her.attribute}/${her.race}`, 'FIRE/Beast-Warrior', 'Heraklinos');
+  });
+
+  await test('GB audit: "Special Summoned by a Gladiator Beast effect" — tag-outs (2 at once) give Laquari 2100 / Hoplomus 2400; Monster Reborn, Call of the Haunted, Normal Summon do not', async () => {
+    const a = setup();
+    const laq = deckCard(a.g, 0, 'Gladiator Beast Laquari');
+    const hop = deckCard(a.g, 0, 'Gladiator Beast Hoplomus');
+    const best = a.place(0, N('Gladiator Beast Bestiari'), 'mzone');
+    const dar = a.place(0, N('Gladiator Beast Darius'), 'mzone');
+    best.attackedThisTurnOrWasAttacked = true;
+    dar.attackedThisTurnOrWasAttacked = true;
+    pickOnly(a.c0, [laq, hop]);
+    await battleEnd(a.g);
+    eq(laq.location, 'mzone', 'Laquari tagged in');
+    eq(hop.location, 'mzone', 'Hoplomus tagged in (each Beast tags out separately)');
+    eq(a.g.getAtk(laq), 2100, 'Laquari 2100');
+    eq(a.g.getDef(hop), 2400, 'Hoplomus 2400 DEF');
+    eq(best.location, 'deck', 'Bestiari shuffled in');
+    eq(dar.location, 'deck', 'Darius shuffled in');
+    const r = setup();
+    const l2 = r.place(0, N('Gladiator Beast Laquari'), 'grave');
+    pickOnly(r.c0, [l2]);
+    await activateCard(r.g, 0, r.place(0, N('Monster Reborn'), 'hand'));
+    eq(l2.location, 'mzone', 'revived');
+    eq(r.g.getAtk(l2), 1800, 'Monster Reborn: original 1800');
+    const c = setup();
+    const l3 = c.place(0, N('Gladiator Beast Laquari'), 'grave');
+    const coth = c.place(0, N('Call of the Haunted'), 'szone');
+    pickOnly(c.c0, [l3]);
+    await activateCard(c.g, 0, coth);
+    eq(l3.location, 'mzone', 'Call of the Haunted revived');
+    eq(c.g.getAtk(l3), 1800, 'Call of the Haunted: 1800');
+    const n = setup();
+    const b4 = n.place(0, N('Gladiator Beast Bestiari'), 'hand');
+    const st = n.place(1, N('Mirror Force'), 'szone');
+    await n.g.normalSummon(0, b4, false);
+    await n.g.processTriggers(true);
+    eq(st.location, 'szone', 'Normal Summoned Bestiari: no destruction');
+  });
+
+  await test('GB audit: Bestiari / Murmillo / Equeste effects are mandatory (official text has no "You can")', async () => {
+    const a = setup();
+    const best = deckCard(a.g, 0, 'Gladiator Beast Bestiari');
+    const laq = a.place(0, N('Gladiator Beast Laquari'), 'mzone');
+    const own = a.place(0, N('Mirror Force'), 'szone');
+    laq.attackedThisTurnOrWasAttacked = true;
+    onlyTagOut(a.c0);
+    pickOnly(a.c0, [best, own]);
+    await battleEnd(a.g);
+    eq(best.location, 'mzone', 'Bestiari tagged in');
+    eq(own.location, 'grave', 'with only our own Set card on the field, Bestiari must destroy it');
+    const m = setup();
+    const mur = deckCard(m.g, 0, 'Gladiator Beast Murmillo');
+    const l2 = m.place(0, N('Gladiator Beast Laquari'), 'mzone');
+    l2.attackedThisTurnOrWasAttacked = true;
+    const v = m.place(1, T.brute, 'mzone');
+    onlyTagOut(m.c0);
+    pickOnly(m.c0, [v, mur]);
+    await battleEnd(m.g);
+    eq(v.location, 'grave', 'Murmillo destroyed the face-up monster without being asked');
+    const s = setup();
+    const mur2 = deckCard(s.g, 0, 'Gladiator Beast Murmillo');
+    const l3 = s.place(0, N('Gladiator Beast Laquari'), 'mzone');
+    l3.attackedThisTurnOrWasAttacked = true;
+    pickOnly(s.c0, [mur2]);
+    await battleEnd(s.g);
+    eq(mur2.location, 'grave', 'Murmillo, the only face-up monster, has to target and destroy itself');
+    const e = setup();
+    const equ = deckCard(e.g, 0, 'Gladiator Beast Equeste');
+    const wc = e.place(0, N('Gladiator Beast War Chariot'), 'grave');
+    const l4 = e.place(0, N('Gladiator Beast Laquari'), 'mzone');
+    l4.attackedThisTurnOrWasAttacked = true;
+    onlyTagOut(e.c0);
+    pickOnly(e.c0, [equ, wc]);
+    await battleEnd(e.g);
+    eq(equ.location, 'mzone', 'Equeste tagged in');
+    eq(wc.location, 'hand', 'Equeste added War Chariot');
+  });
+
+  await test('GB audit: Darius targets on activation — D.D. Crow in response leaves it with nothing; Necrovalley negates it', async () => {
+    const a = setup();
+    const dar = deckCard(a.g, 0, 'Gladiator Beast Darius');
+    const best = a.place(0, N('Gladiator Beast Bestiari'), 'grave');
+    const laq = a.place(0, N('Gladiator Beast Laquari'), 'mzone');
+    laq.attackedThisTurnOrWasAttacked = true;
+    const crow = a.place(1, N('D.D. Crow'), 'hand');
+    let seen: CardInstance[] = [];
+    a.c1.respond = (g, req) => {
+      const top = g.chain[g.chain.length - 1];
+      if (top?.card === dar) {
+        seen = top.ctx.targets.slice();
+        return req.options.find((o) => o.card === crow) ?? null;
+      }
+      return null;
+    };
+    pickOnly(a.c0, [dar, best]);
+    pickOnly(a.c1, [best]);
+    await battleEnd(a.g);
+    eq(dar.location, 'mzone', 'Darius tagged in');
+    eq(seen.includes(best), true, 'Bestiari was targeted when Darius activated');
+    eq(best.location, 'banished', 'D.D. Crow banished the target');
+    eq(a.g.monsters(0).length, 1, 'Darius revived nothing');
+    const n = setup();
+    const d2 = deckCard(n.g, 0, 'Gladiator Beast Darius');
+    const b2 = n.place(0, N('Gladiator Beast Bestiari'), 'grave');
+    const l2 = n.place(0, N('Gladiator Beast Laquari'), 'mzone');
+    l2.attackedThisTurnOrWasAttacked = true;
+    live(n.place(1, N('Necrovalley'), 'fzone'));
+    pickOnly(n.c0, [d2, b2]);
+    await battleEnd(n.g);
+    eq(d2.location, 'mzone', 'Darius tagged in');
+    eq(b2.location, 'grave', 'Necrovalley: Bestiari stays in the GY');
+  });
+
+  await test('GB audit: Darius tagging out returns its revived monster; Retiari banishes from the GY (Necrovalley stops it)', async () => {
+    const a = setup();
+    const dar = deckCard(a.g, 0, 'Gladiator Beast Darius');
+    const laqG = a.place(0, N('Gladiator Beast Laquari'), 'grave');
+    const ret = deckCard(a.g, 0, 'Gladiator Beast Retiari');
+    const hop = a.place(0, N('Gladiator Beast Hoplomus'), 'mzone');
+    hop.attackedThisTurnOrWasAttacked = true;
+    pickOnly(a.c0, [dar, laqG]);
+    await battleEnd(a.g);
+    eq(laqG.location, 'mzone', 'Laquari revived by Darius');
+    eq(a.g.getAtk(laqG), 1800, 'negated: no 2100');
+    dar.attackedThisTurnOrWasAttacked = true;
+    const og = a.place(1, T.brute, 'grave');
+    pickOnly(a.c0, [ret, og]);
+    await battleEnd(a.g);
+    eq(dar.location, 'deck', 'Darius tagged out');
+    eq(ret.location, 'mzone', 'Retiari tagged in');
+    eq(laqG.location, 'deck', "Darius's revived Laquari shuffled into the Deck");
+    eq(og.location, 'banished', 'Retiari banished a card from the GY');
+    const n = setup();
+    const r2 = deckCard(n.g, 0, 'Gladiator Beast Retiari');
+    const l2 = n.place(0, N('Gladiator Beast Laquari'), 'mzone');
+    l2.attackedThisTurnOrWasAttacked = true;
+    const og2 = n.place(1, T.brute, 'grave');
+    live(n.place(1, N('Necrovalley'), 'fzone'));
+    pickOnly(n.c0, [r2, og2]);
+    await battleEnd(n.g);
+    eq(r2.location, 'mzone', 'Retiari tagged in');
+    eq(og2.location, 'grave', 'Necrovalley: no banish');
+  });
+
+  await test('GB audit: tag-out needs another Gladiator Beast in the Deck; not after Book of Moon; not without battling', async () => {
+    const a = setup();
+    deckCard(a.g, 0, 'Gladiator Beast Bestiari');
+    const best = a.place(0, N('Gladiator Beast Bestiari'), 'mzone');
+    best.attackedThisTurnOrWasAttacked = true;
+    await battleEnd(a.g);
+    eq(best.location, 'mzone', 'only another Bestiari in the Deck: no tag-out');
+    const b = setup();
+    const laq = deckCard(b.g, 0, 'Gladiator Beast Laquari');
+    const b2 = b.place(0, N('Gladiator Beast Bestiari'), 'mzone');
+    b2.attackedThisTurnOrWasAttacked = true;
+    await b.g.changePosition(b2, 'def', false);
+    await battleEnd(b.g);
+    eq(b2.location, 'mzone', 'face-down: stays');
+    eq(laq.location, 'deck', 'face-down: no tag-out');
+    const c = setup();
+    const laq3 = deckCard(c.g, 0, 'Gladiator Beast Laquari');
+    const b3 = c.place(0, N('Gladiator Beast Bestiari'), 'mzone');
+    await battleEnd(c.g);
+    eq(b3.location, 'mzone', 'did not battle: stays');
+    eq(laq3.location, 'deck', 'did not battle: no tag-out');
+  });
+
+  await test('GB audit: Gyzarus tag-out returns it to the Extra Deck and Special Summons 2 (not Bestiari); both arrivals get their effects', async () => {
+    const { g, c0, place } = setup();
+    const gyz = place(0, N('Gladiator Beast Gyzarus'), 'mzone');
+    gyz.attackedThisTurnOrWasAttacked = true;
+    const best = deckCard(g, 0, 'Gladiator Beast Bestiari');
+    const laq = deckCard(g, 0, 'Gladiator Beast Laquari');
+    const mur = deckCard(g, 0, 'Gladiator Beast Murmillo');
+    const v = place(1, T.brute, 'mzone');
+    pickOnly(c0, [v, best, laq, mur]);
+    await battleEnd(g);
+    eq(gyz.location, 'extra', 'Gyzarus returned to the Extra Deck');
+    eq(best.location, 'deck', 'Bestiari cannot be summoned by it');
+    eq(laq.location, 'mzone', 'Laquari');
+    eq(mur.location, 'mzone', 'Murmillo');
+    eq(g.getAtk(laq), 2100, 'Laquari 2100');
+    eq(v.location, 'grave', 'Murmillo destroyed the opposing monster');
+  });
+
+  await test('GB audit: Secutor (official text) — only if Gladiator-Summoned: after battling it Special Summons 2 and stays; never with only 1 free zone', async () => {
+    const a = setup();
+    const sec = a.place(0, N('Gladiator Beast Secutor'), 'mzone');
+    const laq = deckCard(a.g, 0, 'Gladiator Beast Laquari');
+    deckCard(a.g, 0, 'Gladiator Beast Hoplomus');
+    sec.attackedThisTurnOrWasAttacked = true;
+    await battleEnd(a.g);
+    eq(laq.location, 'deck', 'not Gladiator-Summoned: nothing');
+    eq(sec.location, 'mzone', 'stays');
+    const b = setup();
+    const tiger = b.place(0, N('Test Tiger'), 'mzone');
+    const laqF = b.place(0, N('Gladiator Beast Laquari'), 'mzone');
+    const sec2 = deckCard(b.g, 0, 'Gladiator Beast Secutor');
+    pickOnly(b.c0, [sec2, laqF]);
+    await activateCard(b.g, 0, tiger);
+    eq(sec2.location, 'mzone', 'Secutor tagged in by Test Tiger');
+    const l2 = deckCard(b.g, 0, 'Gladiator Beast Laquari');
+    const h2 = deckCard(b.g, 0, 'Gladiator Beast Hoplomus');
+    sec2.attackedThisTurnOrWasAttacked = true;
+    (b.c0 as any).confirmTrigger = async () => false;
+    pickOnly(b.c0, [l2, h2]);
+    await battleEnd(b.g);
+    eq(l2.location, 'mzone', 'Laquari summoned (mandatory)');
+    eq(h2.location, 'mzone', 'Hoplomus summoned');
+    eq(sec2.location, 'mzone', 'Secutor stays on the field');
+    eq(b.g.getAtk(l2), 2100, 'Summoned by a Gladiator Beast effect');
+    const c = setup();
+    const sec3 = c.place(0, N('Gladiator Beast Secutor'), 'mzone');
+    sec3.flags.gbSummoned = true;
+    sec3.attackedThisTurnOrWasAttacked = true;
+    for (let i = 0; i < 3; i++) c.place(0, T.wall, 'mzone');
+    const l3 = deckCard(c.g, 0, 'Gladiator Beast Laquari');
+    deckCard(c.g, 0, 'Gladiator Beast Hoplomus');
+    await battleEnd(c.g);
+    eq(l3.location, 'deck', 'only 1 free zone: nothing');
+  });
+
+  await test('GB audit: contact fusion — Gyzarus with Prisma named Bestiari; Heraklinos with Prisma named Laquari; never with a face-down or un-named material', async () => {
+    const a = setup();
+    const prisma = a.place(0, N('Elemental Hero Prisma'), 'mzone');
+    const gyz = a.place(0, N('Gladiator Beast Gyzarus'), 'extra');
+    const best = deckCard(a.g, 0, 'Gladiator Beast Bestiari');
+    const laq = a.place(0, N('Gladiator Beast Laquari'), 'mzone');
+    eq(!!procAct(a.g, 0, gyz), false, 'no Bestiari yet');
+    pickOnly(a.c0, [gyz, best]);
+    await activateCard(a.g, 0, prisma);
+    eq(best.location, 'grave', 'Prisma sent Bestiari');
+    eq(prisma.name, 'Gladiator Beast Bestiari', 'Prisma named Bestiari');
+    const st = a.place(1, N('Mirror Force'), 'szone');
+    pickOnly(a.c0, [prisma, laq, st]);
+    await a.g.performAction(0, procAct(a.g, 0, gyz)!);
+    eq(gyz.location, 'mzone', 'Gyzarus contact-fused');
+    eq(prisma.location, 'deck', 'Prisma shuffled in');
+    eq(laq.location, 'deck', 'Laquari shuffled in');
+    eq(st.location, 'grave', 'Gyzarus destroyed a card on Special Summon');
+    const h = setup();
+    const p2 = h.place(0, N('Elemental Hero Prisma'), 'mzone');
+    const her = h.place(0, N('Gladiator Beast Heraklinos'), 'extra');
+    const laqD = deckCard(h.g, 0, 'Gladiator Beast Laquari');
+    h.place(0, N('Gladiator Beast Darius'), 'mzone');
+    h.place(0, N('Gladiator Beast Hoplomus'), 'mzone', { pos: 'def' });
+    pickOnly(h.c0, [her, laqD]);
+    await activateCard(h.g, 0, p2);
+    eq(p2.name, 'Gladiator Beast Laquari', 'Prisma named Laquari');
+    await h.g.performAction(0, procAct(h.g, 0, her)!);
+    eq(her.location, 'mzone', 'Heraklinos contact-fused');
+    const f = setup();
+    const gyz2 = f.place(0, N('Gladiator Beast Gyzarus'), 'extra');
+    f.place(0, N('Gladiator Beast Bestiari'), 'mzone', { faceUp: false, pos: 'def' });
+    f.place(0, N('Gladiator Beast Laquari'), 'mzone');
+    eq(!!procAct(f.g, 0, gyz2), false, 'face-down Bestiari cannot be a material');
+    const t = setup();
+    const gyz3 = t.place(0, N('Gladiator Beast Gyzarus'), 'extra');
+    t.place(0, N('Elemental Hero Prisma'), 'mzone');
+    t.place(0, N('Gladiator Beast Laquari'), 'mzone');
+    eq(!!procAct(t.g, 0, gyz3), false, 'un-named Prisma is not Bestiari');
+  });
+
+  await test('GB audit: Solemn Judgment negates a contact fusion (materials stay shuffled); Bottomless Trap Hole hits a tagged-in Laquari', async () => {
+    const a = setup();
+    a.place(0, N('Gladiator Beast Bestiari'), 'mzone');
+    a.place(0, N('Gladiator Beast Darius'), 'mzone');
+    const gyz = a.place(0, N('Gladiator Beast Gyzarus'), 'extra');
+    a.place(1, N('Solemn Judgment'), 'szone');
+    a.c1.respond = respondWith('Solemn Judgment');
+    await a.g.performAction(0, procAct(a.g, 0, gyz)!);
+    eq(gyz.location, 'grave', 'Gyzarus negated and destroyed');
+    eq(a.g.players[1].lp, 4000, 'half LP paid');
+    eq(a.g.monsters(0).length, 0, 'materials were shuffled in as the summon procedure');
+    const b = setup();
+    const laq = deckCard(b.g, 0, 'Gladiator Beast Laquari');
+    const best = b.place(0, N('Gladiator Beast Bestiari'), 'mzone');
+    best.attackedThisTurnOrWasAttacked = true;
+    b.place(1, N('Bottomless Trap Hole'), 'szone');
+    b.c1.respond = respondWith('Bottomless Trap Hole');
+    await battleEnd(b.g);
+    eq(laq.location, 'banished', 'Bottomless Trap Hole banished the 2100 Laquari');
+  });
+
+  await test('GB audit: Test Tiger tags out Prisma named Bestiari (Laquari still 2100) and Gyzarus (back to the Extra Deck)', async () => {
+    const a = setup();
+    const prisma = a.place(0, N('Elemental Hero Prisma'), 'mzone');
+    a.place(0, N('Gladiator Beast Gyzarus'), 'extra');
+    const best = deckCard(a.g, 0, 'Gladiator Beast Bestiari');
+    pickOnly(a.c0, [best]);
+    await activateCard(a.g, 0, prisma);
+    const laq = deckCard(a.g, 0, 'Gladiator Beast Laquari');
+    const tiger = a.place(0, N('Test Tiger'), 'hand');
+    await a.g.performAction(0, procAct(a.g, 0, tiger)!);
+    eq(tiger.location, 'mzone', 'Test Tiger summoned (Prisma is a Gladiator Beast by name)');
+    pickOnly(a.c0, [prisma, laq]);
+    await activateCard(a.g, 0, tiger);
+    eq(prisma.location, 'deck', 'Prisma shuffled into the Deck');
+    eq(laq.location, 'mzone', 'Laquari');
+    eq(a.g.getAtk(laq), 2100, 'treated as Summoned by a Gladiator Beast effect');
+    const b = setup();
+    const gyz = b.place(0, N('Gladiator Beast Gyzarus'), 'mzone');
+    const t2 = b.place(0, N('Test Tiger'), 'mzone');
+    const mur = deckCard(b.g, 0, 'Gladiator Beast Murmillo');
+    const v = b.place(1, T.brute, 'mzone');
+    pickOnly(b.c0, [v, gyz, mur]);
+    await activateCard(b.g, 0, t2);
+    eq(gyz.location, 'extra', 'Gyzarus returned to the Extra Deck');
+    eq(mur.location, 'mzone', 'Murmillo');
+    eq(v.location, 'grave', 'Murmillo destroyed');
+  });
+
+  await test('GB audit: Heraklinos flipped face-down by Book of Moon in response does not negate', async () => {
+    const { g, c0, c1, place } = setup();
+    const her = place(1, N('Gladiator Beast Heraklinos'), 'mzone');
+    place(1, T.wall, 'hand');
+    place(1, T.brute, 'mzone');
+    const bom = place(0, N('Book of Moon'), 'szone');
+    const sm = place(0, N('Smashing Ground'), 'hand');
+    c1.respond = (gg, req) => (gg.chain[gg.chain.length - 1]?.card === sm ? (req.options.find((o) => o.card === her) ?? null) : null);
+    c0.respond = (gg, req) => (gg.chain[gg.chain.length - 1]?.card === her ? (req.options.find((o) => o.card === bom) ?? null) : null);
+    pickOnly(c0, [her]);
+    await activateCard(g, 0, sm);
+    eq(her.faceUp, false, 'Heraklinos flipped face-down');
+    eq(sm.location, 'grave', 'Smashing Ground resolved and went to the GY');
+    eq(g.monsters(1).some((m) => m.location === 'grave') || g.monsters(1).length === 1, true, 'Smashing Ground destroyed a monster');
+  });
+
+  await test('GB audit: Samnite tagged in searches when it destroys a monster by battle; a Normal Summoned Samnite does not', async () => {
+    const a = setup();
+    const sam = deckCard(a.g, 0, 'Gladiator Beast Samnite');
+    const laq = a.place(0, N('Gladiator Beast Laquari'), 'mzone');
+    laq.attackedThisTurnOrWasAttacked = true;
+    pickOnly(a.c0, [sam]);
+    await battleEnd(a.g);
+    eq(sam.location, 'mzone', 'Samnite tagged in');
+    const wc = deckCard(a.g, 0, 'Gladiator Beast War Chariot');
+    const v = a.place(1, T.dark, 'mzone', { pos: 'def' });
+    pickOnly(a.c0, [wc]);
+    a.g.phase = 'battle';
+    await a.g.conductAttack(0, sam);
+    eq(v.location, 'grave', 'destroyed by battle');
+    eq(wc.location, 'hand', 'Samnite searched War Chariot');
+    const n = setup();
+    const s2 = n.place(0, N('Gladiator Beast Samnite'), 'hand');
+    await n.g.normalSummon(0, s2, false);
+    const wc2 = deckCard(n.g, 0, 'Gladiator Beast War Chariot');
+    const v2 = n.place(1, T.dark, 'mzone', { pos: 'def' });
+    n.g.phase = 'battle';
+    await n.g.conductAttack(0, s2);
+    eq(v2.location, 'grave', 'destroyed by battle');
+    eq(wc2.location, 'deck', 'not Gladiator-Summoned: no search');
+  });
+
+  await test('GB audit: Gladiator Beast War Chariot negates Prisma (a monster effect) while you control a Gladiator Beast', async () => {
+    const { g, c1, place } = setup();
+    const prisma = place(0, N('Elemental Hero Prisma'), 'mzone');
+    place(0, N('Gladiator Beast Gyzarus'), 'extra');
+    const best = deckCard(g, 0, 'Gladiator Beast Bestiari');
+    place(1, N('Gladiator Beast Laquari'), 'mzone');
+    const wc = place(1, N('Gladiator Beast War Chariot'), 'szone');
+    c1.respond = respondWith('Gladiator Beast War Chariot');
+    await activateCard(g, 0, prisma);
+    eq(wc.location, 'grave', 'War Chariot used');
+    eq(prisma.location, 'grave', 'Prisma destroyed');
+    eq(best.location, 'deck', 'nothing sent');
   });
 }
