@@ -1604,6 +1604,21 @@ async function crmsTests() {
     eq(mon.location, 'banished', 'Bottomless banishes the 1800 ATK monster');
   });
 
+  await test('Vayu (from the GY): banish it with a non-Tuner Blackwing, Special Summon a Blackwing Synchro of the total Level', async () => {
+    const { g, c0, place } = setup();
+    const vayu = place(0, cardByName('Blackwing - Vayu the Emblem of Honor'), 'grave');
+    const sirocco = place(0, cardByName('Blackwing - Sirocco the Dawn'), 'grave');
+    const armed = place(0, cardByName('Blackwing Armed Wing'), 'extra');
+    const act = g.legalMainActions(0).find((a) => a.type === 'activate' && a.card === vayu);
+    eq(!!act, true, 'offered from the GY in the Main Phase');
+    c0.pick = (_g, req) => req.candidates.slice(0, Math.max(1, req.min));
+    await g.performAction(0, act!);
+    eq(vayu.location, 'banished', 'Vayu banished');
+    eq(sirocco.location, 'banished', 'Sirocco banished');
+    eq(armed.location, 'mzone', 'Level 6 Blackwing Armed Wing summoned');
+    eq(g.isNegated(armed), true, 'with its effects negated');
+  });
+
   await test('Brain Control: pay 800, take a face-up monster until the End Phase, then it goes back', async () => {
     const { g, place } = setup();
     const bc = place(0, cardByName('Brain Control'), 'hand');
