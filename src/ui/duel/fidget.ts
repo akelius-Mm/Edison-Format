@@ -1,7 +1,8 @@
 // Hand-shuffle fidget: swipe sideways across your own hand and it is shuffled the way players do it at
-// locals. The fan closes into a squared stack held up in front of you, the leftmost card in front and held
-// there; then, one card at a time, the end card comes up from the back of the stack, over the top and down
-// onto the front, so the held card is pushed further back with each one; then the hand fans back out.
+// locals. The fan closes into a stack held up in front of you, tilted a little, the back cards fanned out
+// to the left behind the leftmost card, which is held in front; then, one card at a time, the end card
+// slides out of the back to the left, tilting, and swings round onto the front, so the held card is pushed
+// further back with each one; then the hand fans back out.
 // The same on either turn. Purely cosmetic: each card fans back out to its own place (the hand's order
 // never changes), nothing is selected or played, and it never runs while you are asked to pick something
 // (a prompt, a menu, attack targets). On your own turn a tap on the hand stops it at once, so the tap
@@ -35,6 +36,11 @@ const AGAIN_PX = 90;
 const GATHER_MS = DUR.base;
 const SPREAD_MS = DUR.slow;
 const PULL_MS = DUR.fast * 1.3;
+/** The stack's tilt (deg), and how the cards behind fan out to the left: per card, up to FAN_DEPTH cards. */
+const TILT = -4;
+const FAN_STEP = 0.07;
+const FAN_TURN = 1.8;
+const FAN_DEPTH = 5;
 /** Most cards brought round in one shuffle. */
 const MAX_PULLS = 7;
 
@@ -172,9 +178,9 @@ export class HandFidget {
     });
     this.cw = this.cards[0].offsetWidth || 60;
     const ch = (this.ch = this.cards[0].offsetHeight || this.cw * 1.45);
-    // the stack is held up in the middle of the hand, a little to the left
+    // the stack is held up in the middle of the hand (its back cards fan out to the left)
     const mid = this.slots[Math.floor((n - 1) / 2)];
-    this.sx = (this.slots[0].x + this.slots[n - 1].x) / 2 - this.cw * 0.25;
+    this.sx = (this.slots[0].x + this.slots[n - 1].x) / 2 + this.cw * 0.15;
     this.sy = mid.y - ch * 0.38;
     // the leftmost card in front
     this.order = this.cards.map((_, i) => i);
@@ -196,9 +202,10 @@ export class HandFidget {
     return `translate(${(x - a.x).toFixed(1)}px, ${(y - a.y).toFixed(1)}px) rotate(${(r - a.r).toFixed(2)}deg) scale(${scale})`;
   }
 
-  /** Card i squared up in the stack at this depth (deeper cards peek out a hair behind). */
+  /** Card i in the stack at this depth: the stack is tilted a little and deeper cards fan out to the left behind. */
   private inStack(i: number, depth: number) {
-    return this.toPoint(i, this.sx + depth * 0.8, this.sy + depth * 0.6, 0, 1.06);
+    const f = Math.min(depth, FAN_DEPTH);
+    return this.toPoint(i, this.sx - f * this.cw * FAN_STEP, this.sy + depth * 0.4, TILT - f * FAN_TURN, 1.06);
   }
 
   private stackZ() {
@@ -221,22 +228,22 @@ export class HandFidget {
     return ms;
   }
 
-  /** The end card comes up from the back of the stack, over the top and down onto the front. */
+  /** The end card slides out of the back of the stack to the left, tilting, and swings round onto the front. */
   private pull() {
     const ms = this.ms(PULL_MS);
     const n = this.order.length;
     const from = this.order;
     const to = pullStep(from);
     const card = from[n - 1];
-    const [x0, y0] = [this.sx + (n - 1) * 0.8, this.sy + (n - 1) * 0.6];
+    const f = Math.min(n - 1, FAN_DEPTH);
     this.animate(
       card,
       [
         { transform: this.inStack(card, n - 1) },
-        // drawn up out of the back, tilting a little as the fingers lift it
-        { transform: this.toPoint(card, x0 + this.cw * 0.12, y0 - this.ch * 0.62, 6, 1.06), offset: 0.42 },
-        // over the top edge of the stack, coming forward
-        { transform: this.toPoint(card, this.sx + this.cw * 0.06, this.sy - this.ch * 0.5, 3, 1.08), offset: 0.62 },
+        // slid out of the back to the left, pivoting as the fingers draw it clear of the stack
+        { transform: this.toPoint(card, this.sx - this.cw * (f * FAN_STEP + 0.6), this.sy + this.ch * 0.04, TILT - 16, 1.06), offset: 0.45 },
+        // swung round in front, coming toward you
+        { transform: this.toPoint(card, this.sx - this.cw * 0.2, this.sy - this.ch * 0.02, TILT - 5, 1.09), offset: 0.75 },
         { transform: this.inStack(card, 0) },
       ],
       ms,
@@ -245,7 +252,7 @@ export class HandFidget {
     // the rest of the stack (the held card first) goes back one place
     from.slice(0, n - 1).forEach((c, d) => this.animate(c, [{ transform: this.inStack(c, d) }, { transform: this.inStack(c, d + 1) }], ms, EASE.out));
     this.order = to;
-    // it lands on the front once it is above the stack
+    // it comes in front once it is clear of the stack
     window.setTimeout(() => {
       if (this.running && this.order === to) this.stackZ();
     }, ms * 0.5);
