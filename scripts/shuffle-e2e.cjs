@@ -1,9 +1,9 @@
 // Hand shuffle (fidget.ts) in a real duel (Playwright, Chromium, iPhone 13 portrait 390×844, touch).
 //
 // On your own turn, waiting in Main Phase 1: a sideways swipe across your hand shuffles it the locals way — the fan
-// closes into a stack with the leftmost card in front, packets pulled off the back come out to the right and are
-// dropped on the front (burying that first card for a while), then the hand fans out in its original order. The
-// opponent's turn looks the same.
+// closes into a stack with the leftmost card held in front, then one at a time the end card comes up from the back,
+// over the top and down onto the front (pushing the held card further back), then the hand fans out in its original
+// order. The opponent's turn looks the same.
 // A tap on the hand mid-shuffle stops it and selects the tapped card as usual.
 //
 // Usage (Playwright is not a project dependency):
@@ -84,7 +84,7 @@ function sample(page, ms) {
             }),
           );
           if (performance.now() - t0 < ms) requestAnimationFrame(tick);
-          else done({ frames, n: cards.length, cw: cards[0].offsetWidth });
+          else done({ frames, n: cards.length, cw: cards[0].offsetWidth, ch: cards[0].offsetHeight });
         };
         requestAnimationFrame(tick);
       }),
@@ -93,29 +93,24 @@ function sample(page, ms) {
 }
 
 /**
- * first: the card in front when the stack closes. Returns whether the hand closed into a stack (all centres within
- * about two card widths), how far cards were pulled out past the stack's middle (+ = to the right, in card widths),
- * whether that first card was ever covered by others (buried) and whether it was back in front by the end.
+ * first: the card held in front when the stack closes. Returns whether the hand closed into a stack (all centres
+ * within about two card widths), how high cards rose above the stack's middle (in card heights), whether the first
+ * card was covered by others (cards landed in front of it) and whether it was still covered just before the fan
+ * opened (it never comes back to the front).
  */
 function summarize(res, first) {
-  const { frames, n, cw } = res;
+  const { frames, n, cw, ch } = res;
   const stacked = frames.map((f) => Math.max(...f.map((p) => p.x)) - Math.min(...f.map((p) => p.x)) < cw * 2.2);
   const i0 = stacked.indexOf(true);
   const i1 = stacked.lastIndexOf(true);
-  if (i0 < 0) return { n, stacked: false, outRight: 0, outLeft: 0, buried: false, backOnTop: false };
+  if (i0 < 0) return { n, stacked: false, rise: 0, buried: false, staysBack: false };
   const mid = frames.slice(i0 + Math.round((i1 - i0) * 0.1), i1 - Math.round((i1 - i0) * 0.1));
-  const median = (f) => f.map((p) => p.x).sort((a, b) => a - b)[Math.floor(n / 2)];
-  const rel = mid.flatMap((f) => f.map((p) => p.x - median(f)));
+  const median = (f, k) => f.map((p) => p[k]).sort((a, b) => a - b)[Math.floor(n / 2)];
+  const rise = Math.max(...mid.flatMap((f) => f.map((p) => median(f, 'y') - p.y))) / ch;
   const top = (f) => f[first].z >= Math.max(...f.map((p) => p.z));
-  return {
-    n,
-    stacked: true,
-    outRight: Math.max(...rel) / cw,
-    outLeft: -Math.min(...rel) / cw,
-    buried: mid.some((f) => !top(f)),
-    // the last frame still in the stack (z-indexes 70+ while stacked; the fan's are lower)
-    backOnTop: top(frames.filter((f) => Math.min(...f.map((p) => p.z)) >= 70).pop() ?? frames[i1]),
-  };
+  // the last frame still in the stack (z-indexes 70+ while stacked; the fan's are lower)
+  const last = frames.filter((f) => Math.min(...f.map((p) => p.z)) >= 70).pop() ?? frames[i1];
+  return { n, stacked: true, rise, buried: mid.some((f) => !top(f)), staysBack: !top(last) };
 }
 
 (async () => {
@@ -163,9 +158,8 @@ function summarize(res, first) {
     const res = await sample(page, 3200);
     const mine = summarize(res, 0);
     check(mine.stacked, `the hand closes into a stack on your own turn (${mine.n} cards)`);
-    check(mine.buried, 'packets land in front of the first card (it is buried)');
-    check(mine.backOnTop, 'the first card is back in front before the hand fans out');
-    check(mine.outRight > 0.4 && mine.outLeft < 0.3, `packets come out to the right (${mine.outRight.toFixed(2)} card widths)`);
+    check(mine.rise > 0.4, `cards come up out of the back of the stack (${mine.rise.toFixed(2)} card heights)`);
+    check(mine.buried && mine.staysBack, 'they land in front of the held card, which does not come back to the front');
     fs.writeFileSync(path.join(OUT, 'my-turn-frames.json'), JSON.stringify(res));
     await sleep(600);
     check((await orderOf()) === before, 'the hand ends in its original order');
@@ -185,9 +179,8 @@ function summarize(res, first) {
       ctl.game.turnPlayer = ctl.__realTurn;
     });
     check(opp.stacked, 'the hand closes into a stack');
-    check(opp.buried, 'packets land in front of the first card (it is buried)');
-    check(opp.backOnTop, 'the first card is back in front before the hand fans out');
-    check(opp.outRight > 0.4 && opp.outLeft < 0.3, `packets come out to the right (${opp.outRight.toFixed(2)} card widths)`);
+    check(opp.rise > 0.4, `cards come up out of the back of the stack (${opp.rise.toFixed(2)} card heights)`);
+    check(opp.buried && opp.staysBack, 'they land in front of the held card, which does not come back to the front');
     await sleep(600);
     check((await orderOf()) === before, 'the hand ends in its original order');
 
