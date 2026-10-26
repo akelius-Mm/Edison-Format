@@ -21,7 +21,7 @@ import { ensureArchetypeExtras2Patches } from '../src/cards/sets/archetype-extra
 import { AIController } from '../src/ai/ai';
 import { Ctx } from '../src/engine/ctx';
 import { GY_BANISH_COST_PROBLEMS } from '../src/cards/gy-costs';
-import { WHY_NOT_PROBLEMS } from '../src/cards/why-not';
+import { WHY_NOT_PROBLEMS, whyRow, whySentence } from '../src/cards/why-not';
 
 const T = {
   brute: findCard('Rules Test Brute') ?? normal('Rules Test Brute', 'EARTH', 'Warrior', 4, 1800, 1000),
@@ -4042,18 +4042,25 @@ async function fuzzRegressionTests() {
     const { g, place } = setup();
     const bc = place(0, cardByName('Brain Control'), 'hand');
     place(1, cardByName('Stardust Dragon'), 'mzone');
-    eq(/not Synchro\/Fusion\/Ritual/.test(why(g, bc) ?? ''), true, 'Brain Control: only a Stardust Dragon');
+    eq(why(g, bc), "can't take Stardust Dragon\nIt's a Synchro Monster", 'Brain Control: only a Stardust Dragon');
+    eq(JSON.stringify(whyRow('Activate', why(g, bc)!)), JSON.stringify({ label: "Activate: can't take Stardust Dragon", sub: "It's a Synchro Monster" }), 'menu row');
+    const dadOpp = place(1, cardByName('Dark Armed Dragon'), 'mzone');
+    eq(why(g, bc), "none of their monsters can be taken\nOnly ones that can be Normal Summoned", 'Brain Control: Stardust + Dark Armed Dragon');
+    g.rawMove(dadOpp, 'grave', {});
     place(1, T.brute, 'mzone');
     eq(why(g, bc), null, 'Brain Control: a legal target');
     g.players[0].lp = 800;
     eq(/more than 800 LP/.test(why(g, bc) ?? ''), true, 'Brain Control: LP');
     const dad = place(0, cardByName('Dark Armed Dragon'), 'hand');
     place(0, cardByName('Dark Armed Dragon'), 'grave');
-    eq(why(g, dad), 'Needs exactly 3 DARK monsters in your Graveyard (you have 1)', 'Dark Armed Dragon count');
+    eq(why(g, dad), 'needs exactly 3 DARK in your GY\nYou have 1', 'Dark Armed Dragon count');
+    eq(whySentence(why(g, dad)!), 'Needs exactly 3 DARK in your GY. You have 1.', 'as a sentence');
     const frog = place(0, cardByName('Treeborn Frog'), 'grave');
     eq(why(g, frog), null, 'Treeborn: nothing stops it');
     place(0, cardByName('Heavy Storm'), 'szone', { faceUp: false });
-    eq(/Spell\/Trap Card/.test(why(g, frog) ?? ''), true, 'Treeborn: a Set card');
+    eq(/you control a Spell\/Trap/.test(why(g, frog) ?? ''), true, 'Treeborn: a Set card');
+    // every first line fits the menu ("Activate: " + about 35 characters)
+    for (const r of [why(g, bc), why(g, dad), why(g, frog)]) eq((r ?? '').split('\n')[0].length <= 40, true, `short: ${r}`);
   });
 
   await test('Gozen Match: no Synchro Summon that would leave monsters of another Attribute', async () => {

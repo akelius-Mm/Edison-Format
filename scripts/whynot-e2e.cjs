@@ -83,7 +83,9 @@ async function duelCheck(browser) {
     await page.waitForSelector('.ctx-menu', { timeout: 5000 });
     await sleep(300);
     const text = await page.locator('.ctx-menu').innerText();
-    check(/not Synchro\/Fusion\/Ritual monsters/.test(text), 'the menu explains why Brain Control can\'t be used');
+    check(/Activate: can't take Stardust Dragon/.test(text) && /It's a Synchro Monster/.test(text), 'the menu says in one line why Brain Control can\'t be used');
+    const rowH = await page.locator('.ctx-menu .ctx-item.is-disabled').first().boundingBox();
+    check(!!rowH && rowH.height <= 90, `the reason row is short (${rowH && Math.round(rowH.height)}px)`);
     const enabled = await page.locator('.ctx-menu .ctx-item:not(.is-disabled)').allInnerTexts();
     check(!enabled.some((t) => /^Activate/.test(t.trim())), 'no Activate action is offered');
     const box = await page.locator('.ctx-menu').boundingBox();
