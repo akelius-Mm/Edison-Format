@@ -446,7 +446,7 @@ monster('Junk Synchron', {
 });
 
 monster('Tytannial, Princess of Camellias', {
-  attribute: 'EARTH',
+  attribute: 'WIND', // printed Attribute (YGOJSON), was EARTH
   race: 'Plant',
   level: 8,
   atk: 2800,

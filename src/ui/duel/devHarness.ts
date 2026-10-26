@@ -81,6 +81,11 @@ async function duel() {
     seed: q.has('seed') ? Number(q.get('seed')) : undefined,
     caption: 'Dev Duel',
     allowSurrender: true,
+    // e2e scripts (scripts/whynot-e2e.cjs) set up board states through the live game
+    onMount: (ctl) => {
+      (window as any).__duelCtl = ctl;
+      (window as any).__cardByName = cardByName;
+    },
   });
   (window as any).__duelResult = res;
   console.log('DUEL RESULT', JSON.stringify(res));

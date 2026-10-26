@@ -13,6 +13,7 @@ import { loadActiveTournament, currentRoundLabel } from '../../tournament/tourna
 // Play a friend: connection server (advanced).
 import { onlineSettingsGroup } from './friend';
 import { openReportSheet } from './report';
+import { openRulesNotes } from './rulesNotes';
 
 export function settingsScreen(): Screen {
   const s = getSettings();
@@ -50,6 +51,7 @@ export function settingsScreen(): Screen {
       iosNav('Card Database', () => go('database'), { icon: 'search' }),
       iosNav('Sleeves & Playmat', () => go('customize'), { icon: 'palette' }),
       iosNav('How to Play & Banlist', () => go('rules'), { icon: 'book' }),
+      iosNav('Rules updates', () => openRulesNotes(), { icon: 'scroll' }),
     ]),
     packsDraftSettingsGroup(),
     iosGroup(

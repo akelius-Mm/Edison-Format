@@ -235,7 +235,8 @@ body.in-duel .err-toast {
 }
 
 /* ---------------------------------------------------------------- in-app browser banner (Home) */
-.br-banner {
+.br-banner,
+.rn-card {
   display: flex;
   align-items: flex-start;
   gap: 12px;
@@ -249,11 +250,13 @@ body.in-duel .err-toast {
     transform var(--dur-base) var(--ease-out);
   min-width: 0;
 }
-.br-banner.is-gone {
+.br-banner.is-gone,
+.rn-card.is-gone {
   opacity: 0;
   transform: scale(0.98);
 }
-.br-icon {
+.br-icon,
+.rn-icon {
   flex: none;
   display: grid;
   place-items: center;
@@ -263,17 +266,20 @@ body.in-duel .err-toast {
   background: rgba(90, 169, 255, 0.16);
   color: #8cc4ff;
 }
-.br-icon .icon {
+.br-icon .icon,
+.rn-icon .icon {
   width: 18px;
   height: 18px;
 }
-.br-text {
+.br-text,
+.rn-text {
   flex: 1;
   display: grid;
   gap: 6px;
   min-width: 0;
 }
-.br-text > b {
+.br-text > b,
+.rn-text > b {
   font: 600 15px/1.3 var(--font);
 }
 .br-steps {
@@ -288,12 +294,14 @@ body.in-duel .err-toast {
   color: var(--text);
   font-weight: 600;
 }
-.br-text small {
+.br-text small,
+.rn-text small {
   font-size: 12.5px;
   line-height: 1.35;
   color: var(--muted);
 }
-.br-x {
+.br-x,
+.rn-x {
   flex: none;
   display: grid;
   place-items: center;
@@ -305,7 +313,59 @@ body.in-duel .err-toast {
   background: none;
   color: var(--muted);
 }
-.br-x .icon {
+.br-x .icon,
+.rn-x .icon {
   width: 16px;
   height: 16px;
+}
+
+/* ---------------------------------------------------------------- Rules updates (Home card + Settings sheet) */
+.rn-card {
+  border-color: rgba(216, 180, 90, 0.45);
+}
+.rn-icon {
+  background: rgba(216, 180, 90, 0.16);
+  color: #e6c46a;
+}
+.rn-details summary {
+  cursor: pointer;
+  font: 600 14px/1.3 var(--font);
+  color: #e6c46a;
+  padding: 4px 0;
+}
+.rn-details[open] summary {
+  margin-bottom: 6px;
+}
+.rn-card .rn-list {
+  max-height: min(52vh, 420px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 4px;
+}
+.rn-list {
+  display: grid;
+  gap: 10px;
+}
+.rn-group h3 {
+  margin: 0 0 4px;
+  font: 600 13px/1.3 var(--font);
+  letter-spacing: 0.02em;
+  color: var(--text);
+}
+.rn-group ul {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 4px;
+  font-size: 13.5px;
+  line-height: 1.4;
+  color: var(--text-2);
+}
+.rn-intro {
+  margin: 0 0 10px;
+  color: var(--text-2);
+}
+.rn-sheet .rn-list {
+  max-height: 60vh;
+  overflow-y: auto;
 }

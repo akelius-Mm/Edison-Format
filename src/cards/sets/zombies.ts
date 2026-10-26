@@ -316,7 +316,7 @@ monster('Red-Eyes Zombie Dragon', {
   level: 7,
   atk: 2400,
   def: 2000,
-  text: 'Can only be Tribute Summoned by Tributing Zombie-Type monsters. When this card destroys a monster by battle and sends it to the GY: You can Special Summon that monster to your side of the field.',
+  text: 'Can only be Tribute Summoned by Tributing Zombie-Type monsters. When this card destroys a Zombie-Type monster by battle and sends it to the GY: You can Special Summon that monster to your side of the field.',
   aiValue: 300,
   // Note: the engine has no per-card tribute filter; the Zombie-only Tribute restriction is not enforced.
   effects: [
@@ -325,11 +325,13 @@ monster('Red-Eyes Zombie Dragon', {
       event: 'battleDestroyed',
       label: 'Take the destroyed monster',
       categories: ['specialSummon'],
-      eventFilter: (ctx, ev) => ev.other === ctx.self && ctx.self.location === 'mzone' && (ev.card as CardInstance).location === 'grave',
+      // Only a Zombie-Type monster it destroys (Zombie World makes every monster in the GY a Zombie).
+      eventFilter: (ctx, ev) =>
+        ev.other === ctx.self && ctx.self.location === 'mzone' && (ev.card as CardInstance).location === 'grave' && isZombie(ctx, ev.card as CardInstance),
       condition: (ctx) => ctx.canSpecialSummon(),
       resolve: async (ctx) => {
         const c = ctx.event!.card as CardInstance;
-        if (c.location === 'grave' && ctx.canSummonCard(c)) await ctx.specialSummon(c);
+        if (c.location === 'grave' && isZombie(ctx, c) && ctx.canSummonCard(c)) await ctx.specialSummon(c);
       },
     },
   ],

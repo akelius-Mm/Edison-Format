@@ -21,6 +21,7 @@ import { ensureArchetypeExtras2Patches } from '../src/cards/sets/archetype-extra
 import { AIController } from '../src/ai/ai';
 import { Ctx } from '../src/engine/ctx';
 import { GY_BANISH_COST_PROBLEMS } from '../src/cards/gy-costs';
+import { WHY_NOT_PROBLEMS } from '../src/cards/why-not';
 
 const T = {
   brute: findCard('Rules Test Brute') ?? normal('Rules Test Brute', 'EARTH', 'Warrior', 4, 1800, 1000),
@@ -889,7 +890,12 @@ function eq(a: unknown, b: unknown, msg: string) {
   await extraDeckTests();
   await graveEffectTests();
   await archetypeAuditTests();
+  await zombieGraveAlienAuditTests();
 
+  await blackwingLightswornAuditTests();
+  await heroDadPsychicAuditTests();
+  await plantSaberSamuraiAuditTests();
+  await gladiatorDeepTests();
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })();
@@ -4027,6 +4033,29 @@ async function fuzzRegressionTests() {
     eq(GY_BANISH_COST_PROBLEMS.join('; '), '', 'problems');
   });
 
+  await test('why-not table: every card and effect index resolves; reasons follow the card checks', async () => {
+    eq(WHY_NOT_PROBLEMS.join('; '), '', 'problems');
+    const why = (g: Game, c: CardInstance, i = 0) => {
+      const ef = c.data.effects![i];
+      return ef.whyNot ? ef.whyNot(new Ctx(g, c, ef, c.controller)) : 'none';
+    };
+    const { g, place } = setup();
+    const bc = place(0, cardByName('Brain Control'), 'hand');
+    place(1, cardByName('Stardust Dragon'), 'mzone');
+    eq(/not Synchro\/Fusion\/Ritual/.test(why(g, bc) ?? ''), true, 'Brain Control: only a Stardust Dragon');
+    place(1, T.brute, 'mzone');
+    eq(why(g, bc), null, 'Brain Control: a legal target');
+    g.players[0].lp = 800;
+    eq(/more than 800 LP/.test(why(g, bc) ?? ''), true, 'Brain Control: LP');
+    const dad = place(0, cardByName('Dark Armed Dragon'), 'hand');
+    place(0, cardByName('Dark Armed Dragon'), 'grave');
+    eq(why(g, dad), 'Needs exactly 3 DARK monsters in your Graveyard (you have 1)', 'Dark Armed Dragon count');
+    const frog = place(0, cardByName('Treeborn Frog'), 'grave');
+    eq(why(g, frog), null, 'Treeborn: nothing stops it');
+    place(0, cardByName('Heavy Storm'), 'szone', { faceUp: false });
+    eq(/Spell\/Trap Card/.test(why(g, frog) ?? ''), true, 'Treeborn: a Set card');
+  });
+
   await test('Gozen Match: no Synchro Summon that would leave monsters of another Attribute', async () => {
     const darkTuner = findCard('Rules Test Dark Tuner') ?? normal('Rules Test Dark Tuner', 'DARK', 'Fiend', 2, 800, 800);
     if (!darkTuner.mtypes!.includes('tuner')) darkTuner.mtypes!.push('tuner');
@@ -5366,5 +5395,1818 @@ async function archetypeAuditTests() {
     await d.g.destroy([dupe], 'effect', 1);
     await d.g.processTriggers(true);
     eq(sw.location, 'hand', 'Dupe Frog added Swap Frog');
+  });
+}
+
+// ---------------------------------------------------------------- Pre-tournament audit: Zombies, Gravekeepers, Aliens, Fortune Ladies, Morphtronics, Koa'ki Meiru, Ancient Gear
+
+async function zombieGraveAlienAuditTests() {
+  const live = (c: CardInstance) => {
+    c.faceUp = true;
+    c.activeOnField = true;
+    return c;
+  };
+  const deckCard = (g: Game, p: PlayerId, name: string) => {
+    const c = g.registerCard(new (g.allCards[0].constructor as any)(cardByName(name), p)) as CardInstance;
+    c.location = 'none';
+    g.rawMove(c, 'deck');
+    return c;
+  };
+  const standby = async (g: Game, p: PlayerId) => {
+    g.turnPlayer = p;
+    g.phase = 'standby';
+    g.beginBatch();
+    g.emit({ type: 'phaseStart', phase: 'standby', player: p } as any);
+    await g.processTriggers(true);
+    g.phase = 'main1';
+  };
+  const offered = (g: Game, p: PlayerId, card: CardInstance) => g.getActivations(p, { open: true }).some((a) => a.card === card);
+  const procOffered = (g: Game, p: PlayerId, card: CardInstance) => g.legalMainActions(p).some((a) => a.type === 'proc' && a.card === card);
+  const pickOnly = (c: TestController, want: CardInstance[]) => {
+    c.pick = (_g, req) => {
+      const w = req.candidates.filter((x) => want.includes(x));
+      return w.length >= req.min && w.length ? w.slice(0, Math.max(req.min, Math.min(w.length, req.max))) : req.candidates.slice(0, req.min);
+    };
+  };
+
+  // ---- Zombies
+  await test('Audit: Zombie Master discards a monster to revive a Level 4 or lower Zombie from either GY, once per turn', async () => {
+    const { g, c0, place } = setup();
+    const zm = place(0, cardByName('Zombie Master'), 'mzone');
+    const fodder = place(0, T.brute, 'hand');
+    place(1, cardByName('Vampire Lord'), 'grave'); // Level 5: not a target
+    const target = place(1, cardByName('Goblin Zombie'), 'grave');
+    pickOnly(c0, [fodder, target]);
+    await activateCard(g, 0, zm);
+    eq(fodder.location, 'grave', 'monster discarded as the cost');
+    eq(target.location, 'mzone', "opponent's Zombie revived");
+    eq(target.controller, 0, 'on my side');
+    place(0, T.brute, 'hand');
+    place(0, cardByName('Mezuki'), 'grave');
+    eq(offered(g, 0, zm), false, 'once per turn');
+    const s = setup();
+    const zm2 = s.place(0, cardByName('Zombie Master'), 'mzone');
+    s.place(0, cardByName('Vampire Lord'), 'grave');
+    s.place(0, T.brute, 'hand');
+    eq(offered(s.g, 0, zm2), false, 'no Level 4 or lower Zombie to revive');
+  });
+
+  await test('Audit: Goblin Zombie searches a 1200-or-less-DEF Zombie when sent from the field to the GY, not when discarded', async () => {
+    const { g, c0, place } = setup();
+    const gz = place(0, cardByName('Goblin Zombie'), 'mzone');
+    const mez = deckCard(g, 0, 'Mezuki');
+    pickOnly(c0, [mez]);
+    await g.destroy([gz], 'effect', 1);
+    await g.processTriggers(true);
+    eq(mez.location, 'hand', 'Mezuki added');
+    const s = setup();
+    const gz2 = s.place(0, cardByName('Goblin Zombie'), 'hand');
+    const mez2 = deckCard(s.g, 0, 'Mezuki');
+    await s.g.discard([gz2], 'effect', 1);
+    await s.g.processTriggers(true);
+    eq(mez2.location, 'deck', 'no search from the hand');
+  });
+
+  await test('Audit: Red-Eyes Zombie Dragon takes only a Zombie-Type monster it destroys (any monster under Zombie World)', async () => {
+    const { g, place } = setup();
+    const rezd = place(0, cardByName('Red-Eyes Zombie Dragon'), 'mzone');
+    const v = place(1, T.brute, 'mzone');
+    await g.conductAttack(0, rezd);
+    eq(v.location, 'grave', 'a non-Zombie stays in the GY');
+    const s = setup();
+    const rezd2 = s.place(0, cardByName('Red-Eyes Zombie Dragon'), 'mzone');
+    const z = s.place(1, cardByName('Mezuki'), 'mzone');
+    await s.g.conductAttack(0, rezd2);
+    eq(z.location, 'mzone', 'the Zombie is Special Summoned');
+    eq(z.controller, 0, 'to my side');
+    const w = setup();
+    const rezd3 = w.place(0, cardByName('Red-Eyes Zombie Dragon'), 'mzone');
+    live(w.place(0, cardByName('Zombie World'), 'fzone'));
+    const v3 = w.place(1, T.brute, 'mzone');
+    await w.g.conductAttack(0, rezd3);
+    eq(v3.location, 'mzone', 'Zombie World: the destroyed monster is a Zombie');
+    eq(v3.controller, 0, 'to my side');
+  });
+
+  await test('Audit: Il Blud (Gemini Summoned) revives a Zombie from either GY once per turn; they are destroyed when it leaves', async () => {
+    const { g, c0, place } = setup();
+    const il = place(0, cardByName('Il Blud'), 'mzone');
+    const z = place(1, cardByName('Mezuki'), 'grave');
+    const revive = () => g.getActivations(0, { open: true }).some((a) => a.card === il && a.label === 'Summon a Zombie from hand or either GY');
+    eq(revive(), false, 'a Normal Monster until Gemini Summoned');
+    il.flags.geminiSummoned = true;
+    pickOnly(c0, [z]);
+    await activateCard(g, 0, il);
+    eq(z.location, 'mzone', "opponent's Zombie Special Summoned");
+    eq(z.controller, 0, 'to my side');
+    place(0, cardByName('Goblin Zombie'), 'grave');
+    eq(revive(), false, 'once per turn');
+    await g.destroy([il], 'effect', 1);
+    await g.processTriggers(true);
+    eq(z.location, 'grave', 'destroyed when Il Blud left the field');
+  });
+
+  await test('Audit: Pyramid Turtle destroyed by battle Special Summons a Zombie with 2000 or less DEF from the Deck', async () => {
+    const { g, place } = setup();
+    const pt = place(1, cardByName('Pyramid Turtle'), 'mzone');
+    const rk = deckCard(g, 1, 'Ryu Kokki'); // DEF 2200: not eligible
+    const vl = deckCard(g, 1, 'Vampire Lord');
+    const a = place(0, T.brute, 'mzone');
+    await g.conductAttack(0, a);
+    eq(pt.location, 'grave', 'Turtle destroyed');
+    eq(vl.location, 'mzone', 'Vampire Lord Special Summoned');
+    eq(rk.location, 'deck', 'Ryu Kokki (DEF 2200) stays');
+  });
+
+  // ---- Gravekeepers
+  await test("Audit: Gravekeeper's Descendant Tributes only another face-up Gravekeeper's monster", async () => {
+    const { g, c0, place } = setup();
+    const desc = place(0, cardByName("Gravekeeper's Descendant"), 'mzone');
+    place(0, T.brute, 'mzone');
+    const st = place(1, cardByName('Mirror Force'), 'szone');
+    eq(offered(g, 0, desc), false, "a non-Gravekeeper's monster cannot be Tributed");
+    place(0, cardByName("Gravekeeper's Spy"), 'mzone', { faceUp: false, pos: 'def' });
+    eq(offered(g, 0, desc), false, "a face-down Gravekeeper's Spy cannot be Tributed");
+    const spy = place(0, cardByName("Gravekeeper's Spy"), 'mzone');
+    pickOnly(c0, [spy, st]);
+    await activateCard(g, 0, desc);
+    eq(spy.location, 'grave', 'Spy Tributed');
+    eq(st.location, 'grave', 'target destroyed');
+  });
+
+  await test("Audit: Gravekeeper's Commandant discards itself to add Necrovalley; Royal Tribute needs Necrovalley and discards monsters from both hands", async () => {
+    const { g, place } = setup();
+    const cmd = place(0, cardByName("Gravekeeper's Commandant"), 'hand');
+    const nv = deckCard(g, 0, 'Necrovalley');
+    await activateCard(g, 0, cmd);
+    eq(cmd.location, 'grave', 'Commandant discarded');
+    eq(nv.location, 'hand', 'Necrovalley added');
+    const s = setup();
+    const rt = s.place(0, cardByName('Royal Tribute'), 'hand');
+    const mine = s.place(0, T.brute, 'hand');
+    const theirs = s.place(1, T.brute, 'hand');
+    const spell = s.place(1, cardByName('Dark Hole'), 'hand');
+    eq(offered(s.g, 0, rt), false, 'no Necrovalley: cannot activate');
+    live(s.place(0, cardByName('Necrovalley'), 'fzone'));
+    await activateCard(s.g, 0, rt);
+    eq(mine.location, 'grave', 'my monster discarded');
+    eq(theirs.location, 'grave', "opponent's monster discarded");
+    eq(spell.location, 'hand', 'non-monsters stay');
+  });
+
+  // ---- Aliens
+  await test('Audit: Alien Dog comes out when an Alien is Normal Summoned, places 2 real A-Counters, and its battles use them', async () => {
+    const { g, place } = setup();
+    const dog = place(0, cardByName('Alien Dog'), 'hand');
+    const kid = place(0, cardByName('Alien Kid'), 'hand');
+    const v = place(1, T.brute, 'mzone');
+    await g.normalSummon(0, kid, false);
+    eq(dog.location, 'mzone', 'Alien Dog Special Summoned');
+    eq(v.counters.A ?? 0, 2, "2 A-Counters on the opponent's monster");
+    eq(g.getAtk(v), 1800, 'no loss outside damage calculation');
+    dog.pos = 'atk';
+    await g.conductAttack(0, dog);
+    eq(v.location, 'grave', '1500 beats 1800 - 600');
+    eq(g.players[1].lp, 8000 - 300, '300 damage');
+  });
+
+  await test('Audit: Alien Overlord Special Summons itself by removing 2 A-Counters and counters every opposing face-up monster once per turn', async () => {
+    const { g, place } = setup();
+    const ov = place(0, cardByName('Alien Overlord'), 'hand');
+    const v = place(1, T.brute, 'mzone');
+    const w = place(1, T.wall, 'mzone');
+    eq(procOffered(g, 0, ov), false, 'no A-Counters');
+    v.counters.A = 2;
+    eq(procOffered(g, 0, ov), true, '2 A-Counters on the field');
+    await g.performAction(0, g.legalMainActions(0).find((a) => a.type === 'proc' && a.card === ov)!);
+    eq(ov.location, 'mzone', 'Overlord Special Summoned');
+    eq(v.counters.A ?? 0, 0, 'counters removed');
+    await activateCard(g, 0, ov);
+    eq(v.counters.A ?? 0, 1, 'counter on the first monster');
+    eq(w.counters.A ?? 0, 1, 'counter on the second monster');
+    eq(offered(g, 0, ov), false, 'once per turn');
+  });
+
+  await test('Audit: Cell Explosion Virus only answers an attack by a monster with an A-Counter and destroys all Attack Position monsters', async () => {
+    const { g, c1, place } = setup();
+    const a = place(0, T.brute, 'mzone');
+    const cev = place(1, cardByName('Cell Explosion Virus'), 'szone', { faceUp: false });
+    place(1, T.giant, 'mzone');
+    c1.respond = respondWith('Cell Explosion Virus');
+    await g.conductAttack(0, a);
+    eq(cev.location, 'szone', 'no A-Counter: not activated');
+    const s = setup();
+    const a2 = s.place(0, T.brute, 'mzone');
+    const b2 = s.place(0, T.dark, 'mzone');
+    const d2 = s.place(0, T.wall, 'mzone', { pos: 'def' });
+    s.place(1, cardByName('Cell Explosion Virus'), 'szone', { faceUp: false });
+    s.place(1, T.giant, 'mzone');
+    a2.counters.A = 1;
+    s.c1.respond = respondWith('Cell Explosion Virus');
+    await s.g.conductAttack(0, a2);
+    eq(a2.location, 'grave', 'attacker destroyed');
+    eq(b2.location, 'grave', 'other Attack Position monster destroyed');
+    eq(d2.location, 'mzone', 'Defense Position monster survives');
+  });
+
+  // ---- Fortune Ladies
+  await test("Audit: Fortune Lady ATK/DEF follow the Level, which rises in its controller's Standby Phase only", async () => {
+    const { g, place } = setup();
+    const fl = place(0, cardByName('Fortune Lady Light'), 'mzone');
+    eq(g.getAtk(fl), 200, 'Level 1 x 200');
+    await standby(g, 1);
+    eq(g.getLevel(fl), 1, "not in the opponent's Standby Phase");
+    await standby(g, 0);
+    eq(g.getLevel(fl), 2, 'Level 2');
+    eq(g.getAtk(fl), 400, 'ATK 400');
+    eq(g.getDef(fl), 400, 'DEF 400');
+  });
+
+  await test('Audit: Fortune Lady Dark revives a Fortune Lady after a Fortune Lady wins a battle; Solitaire Magician lowers a Level by 3 to destroy a monster', async () => {
+    const { g, c0, place } = setup();
+    const dark = place(0, cardByName('Fortune Lady Dark'), 'mzone');
+    const light = place(0, cardByName('Fortune Lady Light'), 'grave');
+    place(1, T.wall, 'mzone');
+    pickOnly(c0, [light]);
+    await g.conductAttack(0, dark);
+    eq(light.location, 'mzone', 'Fortune Lady Light revived');
+    const s = setup();
+    const sm = s.place(0, cardByName('Solitaire Magician'), 'mzone');
+    const d2 = s.place(0, cardByName('Fortune Lady Dark'), 'mzone');
+    const v = s.place(1, T.brute, 'mzone');
+    pickOnly(s.c0, [d2, v]);
+    await activateCard(s.g, 0, sm);
+    eq(v.location, 'grave', 'other monster destroyed');
+    eq(s.g.getLevel(d2), 2, 'Level 5 - 3');
+    eq(s.g.getAtk(d2), 800, 'ATK = Level x 400');
+  });
+
+  await test("Audit: Fortune's Future returns a banished Fortune Lady to the GY and draws 2", async () => {
+    const { g, place } = setup();
+    const ff = place(0, cardByName("Fortune's Future"), 'hand');
+    eq(offered(g, 0, ff), false, 'no banished Fortune Lady');
+    const b = place(0, cardByName('Fortune Lady Light'), 'banished');
+    await activateCard(g, 0, ff);
+    eq(b.location, 'grave', 'returned to the GY');
+    eq(g.players[0].hand.length, 2, 'drew 2');
+  });
+
+  // ---- Morphtronics
+  await test('Audit: Morphtronic Radion +800 ATK in Attack Position / +1000 DEF in Defense Position; Scopen is Level 4 in Defense Position', async () => {
+    const { g, place } = setup();
+    const r = place(0, cardByName('Morphtronic Radion'), 'mzone');
+    const bx = place(0, cardByName('Morphtronic Boomboxen'), 'mzone');
+    const other = place(0, T.brute, 'mzone');
+    eq(g.getAtk(bx), 2000, 'Boomboxen 1200 + 800');
+    eq(g.getAtk(r), 1800, 'Radion boosts itself');
+    eq(g.getAtk(other), 1800, 'non-Morphtronic unaffected');
+    r.pos = 'def';
+    g.update();
+    eq(g.getAtk(bx), 1200, 'no ATK boost in Defense Position');
+    eq(g.getDef(bx), 1400, 'Boomboxen 400 + 1000 DEF');
+    const sc = place(0, cardByName('Morphtronic Scopen'), 'mzone');
+    eq(g.getLevel(sc), 3, 'Level 3 in Attack Position');
+    sc.pos = 'def';
+    g.update();
+    eq(g.getLevel(sc), 4, 'Level 4 in Defense Position');
+  });
+
+  await test('Audit: Morphtronic Boomboxen in Defense Position negates an attack on a face-up Morphtronic', async () => {
+    const { g, place } = setup();
+    const bx = place(1, cardByName('Morphtronic Boomboxen'), 'mzone', { pos: 'def' });
+    const a = place(0, T.giant, 'mzone');
+    await g.conductAttack(0, a);
+    eq(bx.location, 'mzone', 'attack negated');
+    eq(g.players[1].lp, 8000, 'no damage');
+  });
+
+  // ---- Koa'ki Meiru / Ancient Gear
+  await test("Audit: Koa'ki Meiru Rooklord can be Tribute Summoned with 1 Koa'ki Meiru monster only", async () => {
+    const { g, place } = setup();
+    const rook = place(0, cardByName("Koa'ki Meiru Rooklord"), 'hand');
+    place(0, T.brute, 'mzone');
+    eq(procOffered(g, 0, rook), false, "no Koa'ki Meiru to Tribute");
+    place(0, cardByName("Koa'ki Meiru Boulder"), 'mzone');
+    eq(procOffered(g, 0, rook), true, "1 Koa'ki Meiru Tribute");
+  });
+
+  await test('Audit: Ultimate Ancient Gear Golem destroyed revives Ancient Gear Golem from the GY', async () => {
+    const { g, place } = setup();
+    const uagg = place(0, cardByName('Ultimate Ancient Gear Golem'), 'mzone');
+    const agg = place(0, cardByName('Ancient Gear Golem'), 'grave');
+    await g.destroy([uagg], 'effect', 1);
+    await g.processTriggers(true);
+    eq(agg.location, 'mzone', 'Ancient Gear Golem Special Summoned');
+  });
+
+  // TODO (held, engine has no per-card Tribute filter): Red-Eyes Zombie Dragon can only be Tribute Summoned by Tributing Zombies.
+  // await test('Audit: Red-Eyes Zombie Dragon cannot be Tribute Summoned with non-Zombie Tributes', async () => {
+  //   const { g, place } = setup();
+  //   const rezd = place(0, cardByName('Red-Eyes Zombie Dragon'), 'hand');
+  //   place(0, T.brute, 'mzone');
+  //   place(0, T.wall, 'mzone');
+  //   eq(g.canNormalSummon(0, rezd, false), false, 'non-Zombie Tributes');
+  // });
+}
+
+// ---------------------------------------------------------------- Pre-tournament audit: Blackwings & Lightsworn
+async function blackwingLightswornAuditTests() {
+  const live = (c: CardInstance) => {
+    c.faceUp = true;
+    c.activeOnField = true;
+    return c;
+  };
+  const deckData = (g: Game, p: PlayerId, data: CardData) => {
+    const c = g.registerCard(new (g.allCards[0].constructor as any)(data, p)) as CardInstance;
+    c.location = 'none';
+    g.rawMove(c, 'deck'); // top of the Deck
+    return c;
+  };
+  const deckCard = (g: Game, p: PlayerId, name: string) => deckData(g, p, cardByName(name));
+  const offered = (g: Game, p: PlayerId, card: CardInstance, label?: string) =>
+    g.getActivations(p, { open: true }).some((a) => a.card === card && (!label || a.label === label));
+  const procOffered = (g: Game, p: PlayerId, card: CardInstance) => g.legalMainActions(p).some((a) => a.type === 'proc' && a.card === card);
+  const pickOnly = (c: TestController, want: CardInstance[]) => {
+    c.pick = (_g, req) => {
+      const w = req.candidates.filter((x) => want.includes(x));
+      return w.length >= req.min && w.length ? w.slice(0, Math.max(req.min, Math.min(w.length, req.max))) : req.candidates.slice(0, req.min);
+    };
+  };
+  const endPhase = async (g: Game) => {
+    await (g as any).setPhase('end');
+  };
+  const deckLen = (g: Game, p: PlayerId) => g.players[p].deck.length;
+
+  // ---- Lightsworn
+  await test('Audit LS: End Phase mills (Lumina 3, Jain 2, Aurkus 2, Ehren 3, Lyla 3, Judgment Dragon 4) only in your own End Phase, only face-up', async () => {
+    const cases: [string, number][] = [
+      ['Lumina, Lightsworn Summoner', 3],
+      ['Jain, Lightsworn Paladin', 2],
+      ['Aurkus, Lightsworn Druid', 2],
+      ['Ehren, Lightsworn Monk', 3],
+      ['Lyla, Lightsworn Sorceress', 3],
+      ['Judgment Dragon', 4],
+    ];
+    for (const [name, n] of cases) {
+      const { g, place } = setup();
+      place(0, cardByName(name), 'mzone');
+      const before = deckLen(g, 0);
+      await endPhase(g);
+      eq(deckLen(g, 0), before - n, `${name} mills ${n}`);
+      const o = setup();
+      o.place(0, cardByName(name), 'mzone');
+      o.g.turnPlayer = 1;
+      const b2 = deckLen(o.g, 0);
+      await endPhase(o.g);
+      eq(deckLen(o.g, 0), b2, `${name}: no mill in the opponent's End Phase`);
+    }
+    const fd = setup();
+    fd.place(0, cardByName('Lumina, Lightsworn Summoner'), 'mzone', { faceUp: false, pos: 'def' });
+    const b3 = deckLen(fd.g, 0);
+    await endPhase(fd.g);
+    eq(deckLen(fd.g, 0), b3, 'a face-down Lumina does not mill');
+    const two = setup();
+    two.place(0, cardByName('Jain, Lightsworn Paladin'), 'mzone');
+    two.place(0, cardByName('Jain, Lightsworn Paladin'), 'mzone');
+    const b4 = deckLen(two.g, 0);
+    await endPhase(two.g);
+    eq(deckLen(two.g, 0), b4 - 4, 'each copy mills');
+  });
+
+  await test('Audit LS: Wulf is Special Summoned when sent from the Deck (mill, Foolish Burial), not when discarded; cannot be Normal Summoned/Set', async () => {
+    const { g, place } = setup();
+    place(0, cardByName('Lumina, Lightsworn Summoner'), 'mzone');
+    const w = deckCard(g, 0, 'Wulf, Lightsworn Beast');
+    await endPhase(g);
+    eq(w.location, 'mzone', 'Wulf milled by Lumina is Special Summoned');
+    const f = setup();
+    const w2 = deckCard(f.g, 0, 'Wulf, Lightsworn Beast');
+    deckData(f.g, 0, T.wall);
+    pickOnly(f.c0, [w2]);
+    await activateCard(f.g, 0, f.place(0, cardByName('Foolish Burial'), 'hand'));
+    eq(w2.location, 'mzone', 'Foolish Burial: Wulf Special Summoned');
+    const d = setup();
+    const w3 = d.place(0, cardByName('Wulf, Lightsworn Beast'), 'hand');
+    eq(d.g.canNormalSummon(0, w3, false), false, 'cannot be Normal Summoned');
+    eq(d.g.canNormalSummon(0, w3, true), false, 'cannot be Set');
+    d.place(0, cardByName('Ryko, Lightsworn Hunter'), 'hand');
+    pickOnly(d.c0, [w3]);
+    await activateCard(d.g, 0, d.place(0, cardByName('Solar Recharge'), 'hand'));
+    eq(w3.location, 'grave', 'discarded Wulf stays in the GY');
+  });
+
+  await test('Audit LS: Charge of the Light Brigade sends 3 as a cost, then adds a Level 4 or lower Lightsworn (not Celestia / Judgment Dragon)', async () => {
+    const { g, c0, place } = setup();
+    const cel = deckCard(g, 0, 'Celestia, Lightsworn Angel');
+    const jd = deckCard(g, 0, 'Judgment Dragon');
+    const ryko = deckCard(g, 0, 'Ryko, Lightsworn Hunter');
+    for (let i = 0; i < 3; i++) deckData(g, 0, T.wall);
+    let cands: CardInstance[] = [];
+    c0.pick = (_g, req) => {
+      cands = req.candidates;
+      return req.candidates.filter((c) => c === ryko);
+    };
+    const before = deckLen(g, 0);
+    await activateCard(g, 0, place(0, cardByName('Charge of the Light Brigade'), 'hand'));
+    eq(ryko.location, 'hand', 'Ryko added');
+    eq(cands.includes(cel) || cands.includes(jd), false, 'Level 5+ / non-Lightsworn not searchable');
+    eq(deckLen(g, 0), before - 4, '3 sent + 1 added');
+    const e = setup();
+    e.g.players[0].deck.splice(0, e.g.players[0].deck.length - 2);
+    deckCard(e.g, 0, 'Ryko, Lightsworn Hunter');
+    eq(offered(e.g, 0, e.place(0, cardByName('Charge of the Light Brigade'), 'hand')), false, 'needs 3 cards to send plus a Lightsworn to add');
+  });
+
+  await test('Audit LS: Solar Recharge discards a Lightsworn as a cost, draws 2, then sends the top 2', async () => {
+    const { g, place } = setup();
+    const sr = place(0, cardByName('Solar Recharge'), 'hand');
+    const nonLs = place(0, T.brute, 'hand');
+    eq(offered(g, 0, sr), false, 'not without a Lightsworn monster to discard');
+    const ryko = place(0, cardByName('Ryko, Lightsworn Hunter'), 'hand');
+    const before = deckLen(g, 0);
+    await activateCard(g, 0, sr);
+    eq(ryko.location, 'grave', 'Lightsworn discarded');
+    eq(nonLs.location, 'hand', 'non-Lightsworn kept');
+    eq(g.players[0].hand.length, 3, 'drew 2');
+    eq(deckLen(g, 0), before - 4, 'drew 2 + sent 2');
+  });
+
+  await test("Audit LS: Garoth triggers once per Lightsworn mill (Lumina's End Phase), sends 2 and draws per Lightsworn; not for its own mill or a Spell's mill", async () => {
+    const { g, place } = setup();
+    place(0, cardByName('Lumina, Lightsworn Summoner'), 'mzone');
+    place(0, cardByName('Garoth, Lightsworn Warrior'), 'mzone');
+    deckCard(g, 0, 'Ryko, Lightsworn Hunter');
+    deckCard(g, 0, 'Lyla, Lightsworn Sorceress');
+    for (let i = 0; i < 3; i++) deckData(g, 0, T.wall);
+    const before = deckLen(g, 0);
+    const hand = g.players[0].hand.length;
+    await endPhase(g);
+    eq(g.players[0].hand.length, hand + 2, 'drew 2 (2 Lightsworn sent by Garoth)');
+    eq(deckLen(g, 0), before - 3 - 2 - 2, 'Lumina 3 + Garoth 2 + 2 draws (Garoth does not retrigger itself)');
+    const s = setup();
+    s.place(0, cardByName('Garoth, Lightsworn Warrior'), 'mzone');
+    deckCard(s.g, 0, 'Ryko, Lightsworn Hunter');
+    for (let i = 0; i < 4; i++) deckData(s.g, 0, T.wall);
+    const b2 = deckLen(s.g, 0);
+    s.c0.pick = (_g, req) => req.candidates.slice(0, 1);
+    await activateCard(s.g, 0, s.place(0, cardByName('Charge of the Light Brigade'), 'hand'));
+    eq(deckLen(s.g, 0), b2 - 4, 'Charge (a Spell) does not trigger Garoth');
+  });
+
+  await test('Audit LS: Lumina discards, then revives a Level 4 or lower Lightsworn from the GY, once per turn', async () => {
+    const { g, c0, place } = setup();
+    const lumina = place(0, cardByName('Lumina, Lightsworn Summoner'), 'mzone');
+    const cel = place(0, cardByName('Celestia, Lightsworn Angel'), 'grave');
+    const jain = place(0, cardByName('Jain, Lightsworn Paladin'), 'grave');
+    const disc = place(0, T.brute, 'hand');
+    place(0, T.wall, 'hand');
+    let cands: CardInstance[] = [];
+    c0.pick = (_g, req) => {
+      if (req.candidates.includes(jain) || req.candidates.includes(cel)) cands = req.candidates;
+      if (req.candidates.includes(disc)) return [disc];
+      return req.candidates.filter((c) => c === jain);
+    };
+    await activateCard(g, 0, lumina);
+    eq(disc.location, 'grave', 'discarded');
+    eq(jain.location, 'mzone', 'Jain revived');
+    eq(cands.includes(cel), false, 'Level 5 Celestia not a target');
+    place(0, cardByName('Ryko, Lightsworn Hunter'), 'grave');
+    eq(offered(g, 0, lumina), false, 'once per turn');
+  });
+
+  await test('Audit LS: Ryko FLIP — the destruction is optional, the top 3 are sent either way', async () => {
+    const { g, c0, place } = setup();
+    const ryko = place(0, cardByName('Ryko, Lightsworn Hunter'), 'mzone', { faceUp: false, pos: 'def' });
+    const opp = place(1, cardByName('Mirror Force'), 'szone', { faceUp: false });
+    pickOnly(c0, [opp]);
+    const before = deckLen(g, 0);
+    g.turn += 1;
+    await g.flipSummon(0, ryko);
+    await g.processTriggers(true);
+    eq(opp.location, 'grave', 'destroyed');
+    eq(deckLen(g, 0), before - 3, 'sent 3');
+    const n = setup();
+    const r2 = n.place(0, cardByName('Ryko, Lightsworn Hunter'), 'mzone', { faceUp: false, pos: 'def' });
+    const b2 = deckLen(n.g, 0);
+    n.g.turn += 1;
+    await n.g.flipSummon(0, r2);
+    await n.g.processTriggers(true);
+    eq(deckLen(n.g, 0), b2 - 3, 'sent 3 with nothing to destroy');
+  });
+
+  await test('Audit LS: Lyla goes to Defense Position to destroy a Spell/Trap and is locked in that position', async () => {
+    const { g, c0, place } = setup();
+    const lyla = place(0, cardByName('Lyla, Lightsworn Sorceress'), 'mzone');
+    const st = place(1, cardByName('Mirror Force'), 'szone', { faceUp: false });
+    pickOnly(c0, [st]);
+    await activateCard(g, 0, lyla);
+    eq(lyla.pos, 'def', 'Defense Position');
+    eq(st.location, 'grave', 'Spell/Trap destroyed');
+    eq(offered(g, 0, lyla), false, 'not again while in Defense Position');
+    g.turn += 2;
+    eq(g.legalMainActions(0).some((a) => a.type === 'position' && a.card === lyla), false, 'position locked through your next turn');
+    g.turn += 2;
+    eq(g.legalMainActions(0).some((a) => a.type === 'position' && a.card === lyla), true, 'free again the turn after');
+  });
+
+  await test('Audit LS: Judgment Dragon — pay 1000, destroy all other cards; not once per turn; Special Summon only from the hand', async () => {
+    const { g, place } = setup();
+    const jd = place(0, cardByName('Judgment Dragon'), 'mzone');
+    const a = place(1, T.brute, 'mzone');
+    const b = place(1, cardByName('Mirror Force'), 'szone', { faceUp: false });
+    const mine = place(0, T.wall, 'mzone');
+    await activateCard(g, 0, jd);
+    eq(g.players[0].lp, 7000, 'paid 1000');
+    eq([a.location, b.location, mine.location].join(), 'grave,grave,grave', 'all other cards destroyed');
+    eq(jd.location, 'mzone', 'Judgment Dragon stays');
+    place(1, T.brute, 'mzone');
+    eq(offered(g, 0, jd), true, 'can activate again (no once-per-turn in 2010)');
+    const r = setup();
+    for (const n of ['Ryko, Lightsworn Hunter', 'Lumina, Lightsworn Summoner', 'Wulf, Lightsworn Beast', 'Lyla, Lightsworn Sorceress']) r.place(0, cardByName(n), 'grave');
+    const jdg = r.place(0, cardByName('Judgment Dragon'), 'grave');
+    eq(procOffered(r.g, 0, jdg), false, 'not from the GY');
+    const jdh = r.place(0, cardByName('Judgment Dragon'), 'hand');
+    eq(procOffered(r.g, 0, jdh), true, 'from the hand');
+    eq(r.g.canNormalSummon(0, jdh, false), false, 'cannot be Normal Summoned');
+  });
+
+  await test('Audit LS: Jain gains 300 only when attacking a monster (not on a direct attack)', async () => {
+    const { g, place } = setup();
+    const jain = place(0, cardByName('Jain, Lightsworn Paladin'), 'mzone');
+    const v = place(1, T.brute, 'mzone'); // 1800
+    await g.conductAttack(0, jain);
+    eq(v.location, 'grave', '2100 vs 1800');
+    eq(g.players[1].lp, 7700, '300 damage');
+    jain.attacksThisTurn = 0;
+    await g.conductAttack(0, jain);
+    eq(g.players[1].lp, 7700 - 1800, 'direct attack: 1800');
+  });
+
+  // ---- Blackwings
+  await test('Audit BW: Kalut adds 1400 when your Blackwing battles (from the hand), not for a non-Blackwing', async () => {
+    const { g, c0, place } = setup();
+    const bora = place(0, cardByName('Blackwing - Bora the Spear'), 'mzone');
+    const kalut = place(0, cardByName('Blackwing - Kalut the Moon Shadow'), 'hand');
+    const v = place(1, T.giant, 'mzone'); // 3000
+    c0.respond = respondWith('Blackwing - Kalut the Moon Shadow');
+    await g.conductAttack(0, bora);
+    eq(kalut.location, 'grave', 'Kalut sent');
+    eq(v.location, 'grave', '3100 beats 3000');
+    eq(bora.location, 'mzone', 'Bora survives');
+    const n = setup();
+    const br = n.place(0, T.brute, 'mzone');
+    const k2 = n.place(0, cardByName('Blackwing - Kalut the Moon Shadow'), 'hand');
+    n.place(1, T.giant, 'mzone');
+    n.c0.respond = respondWith('Blackwing - Kalut the Moon Shadow');
+    await n.g.conductAttack(0, br);
+    eq(k2.location, 'hand', 'not for a non-Blackwing');
+  });
+
+  await test('Audit BW: Gale / Bora Special Summon from the hand only with another face-up Blackwing; Gale halves ATK/DEF once per turn; Bora pierces', async () => {
+    const { g, c0, place } = setup();
+    const gale = place(0, cardByName('Blackwing - Gale the Whirlwind'), 'hand');
+    const bora = place(0, cardByName('Blackwing - Bora the Spear'), 'hand');
+    eq(procOffered(g, 0, gale), false, 'Gale: no other Blackwing');
+    eq(procOffered(g, 0, bora), false, 'Bora: no other Blackwing');
+    place(0, cardByName('Blackwing - Gale the Whirlwind'), 'mzone', { faceUp: false, pos: 'def' });
+    eq(procOffered(g, 0, bora), false, 'a face-down Blackwing does not count');
+    place(0, cardByName('Blackwing - Kalut the Moon Shadow'), 'mzone');
+    eq(procOffered(g, 0, gale), true, 'Gale with Kalut');
+    await g.performAction(0, g.legalMainActions(0).find((a) => a.type === 'proc' && a.card === gale)!);
+    eq(gale.location, 'mzone', 'Gale summoned');
+    const v = place(1, T.brute, 'mzone'); // 1800/1000
+    pickOnly(c0, [v]);
+    await activateCard(g, 0, gale);
+    eq(g.getAtk(v), 900, 'ATK halved');
+    eq(g.getDef(v), 500, 'DEF halved');
+    eq(offered(g, 0, gale), false, 'once per turn');
+    const p = setup();
+    p.place(0, cardByName('Blackwing - Kalut the Moon Shadow'), 'mzone');
+    const b2 = p.place(0, cardByName('Blackwing - Bora the Spear'), 'mzone');
+    p.place(1, T.dark, 'mzone', { pos: 'def' }); // DEF 1200
+    await p.g.conductAttack(0, b2);
+    eq(p.g.players[1].lp, 8000 - 500, 'Bora inflicts piercing damage');
+  });
+
+  await test('Audit BW: Shura — after destroying a monster by battle, Special Summons a Blackwing with 1500 or less ATK from the Deck (effects negated); not Blizzard', async () => {
+    const { g, c0, place } = setup();
+    const shura = place(0, cardByName('Blackwing - Shura the Blue Flame'), 'mzone');
+    const gale = deckCard(g, 0, 'Blackwing - Gale the Whirlwind');
+    const bliz = deckCard(g, 0, 'Blackwing - Blizzard the Far North');
+    const bora = deckCard(g, 0, 'Blackwing - Bora the Spear');
+    place(1, T.wall, 'mzone'); // 500 ATK, Attack Position
+    let cands: CardInstance[] = [];
+    c0.pick = (_g, req) => {
+      cands = req.candidates;
+      return req.candidates.filter((c) => c === gale);
+    };
+    await g.conductAttack(0, shura);
+    eq(gale.location, 'mzone', 'Gale summoned');
+    eq(g.isNegated(gale), true, 'effects negated');
+    eq(cands.includes(bliz), false, 'Blizzard cannot be Special Summoned');
+    eq(cands.includes(bora), false, 'Bora (1700) too strong');
+  });
+
+  await test('Audit BW: Sirocco — Normal Summon without Tributing only if just the opponent controls a monster; gather ATK; only that monster can attack', async () => {
+    const { g, c0, place } = setup();
+    const sir = place(0, cardByName('Blackwing - Sirocco the Dawn'), 'hand');
+    eq(g.legalMainActions(0).some((a) => a.type === 'summon' && a.card === sir), false, 'no Tribute-free summon with no monsters at all');
+    place(1, T.brute, 'mzone');
+    eq(g.legalMainActions(0).some((a) => a.type === 'summon' && a.card === sir), true, 'Tribute-free summon when only the opponent controls a monster');
+    await g.normalSummon(0, sir, false);
+    eq(sir.location, 'mzone', 'Summoned without Tributing');
+    const bora = place(0, cardByName('Blackwing - Bora the Spear'), 'mzone');
+    const other = place(0, T.wall, 'mzone');
+    pickOnly(c0, [bora]);
+    await activateCard(g, 0, sir);
+    eq(g.getAtk(bora), 1700 + 2000, 'Bora gains Sirocco ATK');
+    eq(g.canAttack(sir), false, 'Sirocco cannot attack');
+    eq(g.canAttack(other), false, 'other monsters cannot attack');
+    eq(g.canAttack(bora), true, 'target can attack');
+    eq(offered(g, 0, sir), false, 'once per turn');
+  });
+
+  await test('Audit BW: Blizzard — on Normal Summon revives a Level 4 or lower Blackwing in Defense; cannot be Special Summoned; not on a Flip Summon', async () => {
+    const { g, c0, place } = setup();
+    const bora = place(0, cardByName('Blackwing - Bora the Spear'), 'grave');
+    const sir = place(0, cardByName('Blackwing - Sirocco the Dawn'), 'grave');
+    const bliz = place(0, cardByName('Blackwing - Blizzard the Far North'), 'hand');
+    let cands: CardInstance[] = [];
+    c0.pick = (_g, req) => {
+      cands = req.candidates;
+      return req.candidates.filter((c) => c === bora);
+    };
+    await g.normalSummon(0, bliz, false);
+    eq(bora.location, 'mzone', 'Bora revived');
+    eq(bora.pos, 'def', 'in Defense Position');
+    eq(cands.includes(sir), false, 'Level 5 Sirocco not a target');
+    const r = setup();
+    r.place(0, cardByName('Blackwing - Blizzard the Far North'), 'grave');
+    eq(offered(r.g, 0, r.place(0, cardByName('Monster Reborn'), 'hand')), false, 'Monster Reborn cannot revive Blizzard');
+    const f = setup();
+    const kal = f.place(0, cardByName('Blackwing - Kalut the Moon Shadow'), 'grave');
+    const b3 = f.place(0, cardByName('Blackwing - Blizzard the Far North'), 'hand');
+    await f.g.normalSummon(0, b3, true);
+    f.g.turn += 2;
+    await f.g.flipSummon(0, b3);
+    await f.g.processTriggers(true);
+    eq(kal.location, 'grave', 'no revive on a Flip Summon');
+  });
+
+  await test('Audit BW: Black Whirlwind searches a Blackwing with less ATK on a Normal Summon only', async () => {
+    const { g, c0, place } = setup();
+    live(place(0, cardByName('Black Whirlwind'), 'szone', { faceUp: true }));
+    const gale = deckCard(g, 0, 'Blackwing - Gale the Whirlwind'); // 1300
+    const shura = deckCard(g, 0, 'Blackwing - Shura the Blue Flame'); // 1800
+    const bora2 = deckCard(g, 0, 'Blackwing - Bora the Spear'); // 1700 (equal)
+    let cands: CardInstance[] = [];
+    c0.pick = (_g, req) => {
+      cands = req.candidates;
+      return req.candidates.filter((c) => c === gale);
+    };
+    await g.normalSummon(0, place(0, cardByName('Blackwing - Bora the Spear'), 'hand'), false);
+    eq(gale.location, 'hand', 'Gale added');
+    eq(cands.includes(shura) || cands.includes(bora2), false, 'only strictly less ATK');
+    const s = setup();
+    live(s.place(0, cardByName('Black Whirlwind'), 'szone', { faceUp: true }));
+    s.place(0, cardByName('Blackwing - Kalut the Moon Shadow'), 'mzone');
+    const g2 = deckCard(s.g, 0, 'Blackwing - Gale the Whirlwind');
+    const bh = s.place(0, cardByName('Blackwing - Bora the Spear'), 'hand');
+    await s.g.performAction(0, s.g.legalMainActions(0).find((a) => a.type === 'proc' && a.card === bh)!);
+    eq(g2.location, 'deck', 'no search on a Special Summon');
+  });
+
+  await test('Audit BW: Icarus Attack Tributes a Winged Beast as a cost and destroys 2 targeted cards', async () => {
+    const { g, c0, place } = setup();
+    const ic = place(0, cardByName('Icarus Attack'), 'szone', { faceUp: false });
+    const a = place(1, T.brute, 'mzone');
+    const b = place(1, cardByName('Mirror Force'), 'szone', { faceUp: false });
+    eq(offered(g, 0, ic), false, 'not without a Winged Beast');
+    const bora = place(0, cardByName('Blackwing - Bora the Spear'), 'mzone');
+    pickOnly(c0, [bora, a, b]);
+    await activateCard(g, 0, ic);
+    eq(bora.location, 'grave', 'Tributed');
+    eq(a.location, 'grave', 'monster destroyed');
+    eq(b.location, 'grave', 'Set card destroyed');
+  });
+
+  await test('Audit BW: Armor Master is not destroyed by battle, takes no battle damage, and wedges the monster it battled', async () => {
+    const { g, place } = setup();
+    const am = place(0, cardByName('Blackwing Armor Master'), 'mzone');
+    const v = place(1, T.giant, 'mzone');
+    await g.conductAttack(0, am);
+    eq(am.location, 'mzone', 'not destroyed');
+    eq(g.players[0].lp, 8000, 'no battle damage');
+    eq(v.counters.wedge, 1, 'Wedge Counter placed');
+    await activateCard(g, 0, am, 'Remove Wedge Counters');
+    eq(g.getAtk(v), 0, 'ATK 0');
+    eq(g.getDef(v), 0, 'DEF 0');
+  });
+
+  await test('Audit BW: Sirocco — a monster Summoned after the effect resolved cannot attack either (fixed)', async () => {
+    const { g, c0, place } = setup();
+    const sir = place(0, cardByName('Blackwing - Sirocco the Dawn'), 'mzone');
+    place(0, cardByName('Blackwing - Kalut the Moon Shadow'), 'mzone');
+    pickOnly(c0, [sir]);
+    await activateCard(g, 0, sir);
+    const late = place(0, T.brute, 'hand');
+    await g.normalSummon(0, late, false);
+    eq(g.canAttack(late), false, 'a monster summoned after the effect cannot attack either');
+  });
+
+  await test('Audit BW: Vayu on the field cannot be used as Synchro Material', async () => {
+    const { g, place } = setup();
+    place(0, cardByName('Blackwing - Vayu the Emblem of Honor'), 'mzone');
+    place(0, cardByName('Blackwing - Bora the Spear'), 'mzone');
+    place(0, cardByName('Blackwing - Gale the Whirlwind'), 'mzone');
+    const am = place(0, cardByName('Blackwing Armor Master'), 'extra');
+    eq(g.canSynchro(0, am), true, 'Gale + Bora = 7');
+    const r = setup();
+    r.place(0, cardByName('Blackwing - Vayu the Emblem of Honor'), 'mzone');
+    r.place(0, cardByName('Blackwing - Sirocco the Dawn'), 'mzone');
+    r.place(0, cardByName('Blackwing - Kalut the Moon Shadow'), 'mzone');
+    const aw = r.place(0, cardByName('Blackwing Armed Wing'), 'extra');
+    eq(r.g.canSynchro(0, aw), false, 'Vayu + Sirocco not usable');
+  });
+
+  await test('Audit LS: Judgment Dragon can be revived only after it was properly Summoned', async () => {
+    const { g, c0, place } = setup();
+    for (const n of ['Ryko, Lightsworn Hunter', 'Lumina, Lightsworn Summoner', 'Wulf, Lightsworn Beast', 'Lyla, Lightsworn Sorceress']) place(0, cardByName(n), 'grave');
+    const jd = place(0, cardByName('Judgment Dragon'), 'hand');
+    await g.performAction(0, g.legalMainActions(0).find((a) => a.type === 'proc' && a.card === jd)!);
+    eq(jd.location, 'mzone', 'summoned');
+    await g.destroy([jd], 'effect', 1);
+    pickOnly(c0, [jd]);
+    eq(offered(g, 0, place(0, cardByName('Monster Reborn'), 'hand')), true, 'properly summoned JD can be revived');
+    const d = setup();
+    d.place(0, cardByName('Judgment Dragon'), 'grave');
+    eq(offered(d.g, 0, d.place(0, cardByName('Monster Reborn'), 'hand')), false, 'not if never properly summoned');
+  });
+
+  await test('Audit BW: Armor Master wedges only a monster it attacked; defending it still takes no damage and survives (fixed)', async () => {
+    const { g, place } = setup();
+    g.turnPlayer = 1;
+    const am = place(0, cardByName('Blackwing Armor Master'), 'mzone');
+    const v = place(1, T.giant, 'mzone');
+    await g.conductAttack(1, v);
+    eq(am.location, 'mzone', 'not destroyed');
+    eq(g.players[0].lp, 8000, 'no damage');
+    eq(v.counters.wedge ?? 0, 0, 'attacked by the opponent: no Wedge Counter');
+  });
+
+  await test('Audit: Royal Decree negates other face-up Trap effects (Mirror Force)', async () => {
+    const { g, c1, place } = setup();
+    live(place(0, cardByName('Royal Decree'), 'szone', { faceUp: true }));
+    const a = place(0, T.brute, 'mzone');
+    place(1, cardByName('Mirror Force'), 'szone', { faceUp: false });
+    c1.respond = respondWith('Mirror Force');
+    await g.conductAttack(0, a);
+    eq(a.location, 'mzone', 'Mirror Force negated');
+    eq(g.players[1].lp, 8000 - 1800, 'direct attack goes through');
+  });
+}
+
+// ---------------------------------------------------------------- HERO / Dark Armed Dragon / Psychic / Reptilianne audit
+
+async function heroDadPsychicAuditTests() {
+  const live = (c: CardInstance) => {
+    c.faceUp = true;
+    c.activeOnField = true;
+    return c;
+  };
+  const deckCard = (g: Game, p: PlayerId, name: string) => {
+    const c = g.registerCard(new (g.allCards[0].constructor as any)(cardByName(name), p)) as CardInstance;
+    c.location = 'none';
+    g.rawMove(c, 'deck');
+    return c;
+  };
+  const offered = (g: Game, p: PlayerId, card: CardInstance) => g.getActivations(p, { open: true }).some((a) => a.card === card);
+  const procOffered = (g: Game, p: PlayerId, card: CardInstance) => g.legalMainActions(p).some((a) => a.type === 'proc' && a.card === card);
+  const doProc = async (g: Game, p: PlayerId, card: CardInstance) => {
+    const a = g.legalMainActions(p).find((x) => x.type === 'proc' && x.card === card);
+    if (!a) throw new Error(`${card.name}: no Summon procedure offered`);
+    await g.performAction(p, a);
+  };
+  const pickOnly = (c: TestController, want: CardInstance[]) => {
+    c.pick = (_g, req) => {
+      const w = req.candidates.filter((x) => want.includes(x));
+      return w.length >= req.min && w.length ? w.slice(0, Math.max(req.min, Math.min(w.length, req.max))) : req.candidates.slice(0, req.min);
+    };
+  };
+  /** Record every candidate list offered to this controller (and pick the first `min`). */
+  const recordPicks = (c: TestController) => {
+    const seen: CardInstance[][] = [];
+    c.pick = (_g, req) => {
+      seen.push([...req.candidates]);
+      return req.candidates.slice(0, req.min);
+    };
+    return seen;
+  };
+
+  // ---- Dark Armed Dragon engine
+  await test('Dark Armed Dragon: Special Summon only from the hand with EXACTLY 3 DARK monsters in the GY; never Normal Summoned', async () => {
+    const { g, place } = setup();
+    const dad = place(0, cardByName('Dark Armed Dragon'), 'hand');
+    place(0, T.dark, 'grave');
+    place(0, T.dark, 'grave');
+    place(0, T.brute, 'grave');
+    eq(procOffered(g, 0, dad), false, '2 DARK (+1 EARTH) in GY');
+    const third = place(0, T.dark, 'grave');
+    eq(procOffered(g, 0, dad), true, 'exactly 3 DARK');
+    place(0, T.dark, 'grave');
+    eq(procOffered(g, 0, dad), false, '4 DARK in GY');
+    eq(g.canNormalSummon(0, dad, false) || g.canNormalSummon(0, dad, true), false, 'cannot be Normal Summoned/Set');
+    void third;
+    const s = setup();
+    const inGy = s.place(0, cardByName('Dark Armed Dragon'), 'grave');
+    s.place(0, T.dark, 'grave');
+    s.place(0, T.dark, 'grave');
+    eq(procOffered(s.g, 0, inGy), false, 'not from the GY (3 DARK counting itself)');
+  });
+
+  await test('Dark Armed Dragon: banish 1 DARK from the GY (cost), target 1 card; usable more than once per turn', async () => {
+    const { g, c0, place } = setup();
+    const dad = place(0, cardByName('Dark Armed Dragon'), 'hand');
+    const d1 = place(0, T.dark, 'grave');
+    const d2 = place(0, T.dark, 'grave');
+    const d3 = place(0, T.dark, 'grave');
+    await doProc(g, 0, dad);
+    eq(dad.location, 'mzone', 'summoned');
+    eq(dad.properlySummoned, true, 'properly Summoned');
+    const mon = place(1, T.brute, 'mzone');
+    const st = place(1, cardByName('Mirror Force'), 'szone');
+    pickOnly(c0, [d1, mon]);
+    await activateCard(g, 0, dad);
+    eq(d1.location, 'banished', 'DARK banished');
+    eq(mon.location, 'grave', 'monster destroyed');
+    pickOnly(c0, [d2, st]);
+    await activateCard(g, 0, dad);
+    eq(d2.location, 'banished', 'second DARK banished');
+    eq(st.location, 'grave', 'Set card destroyed (second use this turn)');
+    eq(d3.location, 'grave', 'only one DARK banished per use');
+  });
+
+  await test('Dark Grepher: Special Summon by discarding a Level 5+ DARK (not Level 4); once per turn discard a DARK to send a DARK from the Deck', async () => {
+    const { g, c0, place } = setup();
+    const grepher = place(0, cardByName('Dark Grepher'), 'hand');
+    const lv4 = place(0, T.dark, 'hand');
+    eq(procOffered(g, 0, grepher), false, 'a Level 4 DARK cannot pay');
+    const mal = place(0, cardByName('Destiny Hero - Malicious'), 'hand');
+    pickOnly(c0, [mal]);
+    await doProc(g, 0, grepher);
+    eq(grepher.location, 'mzone', 'Grepher Special Summoned');
+    eq(mal.location, 'grave', 'Malicious discarded');
+    eq(g.players[0].normalSummonsLeft, 1, 'Normal Summon not used');
+    const ak = deckCard(g, 0, 'Armageddon Knight');
+    deckCard(g, 0, 'Krebons');
+    pickOnly(c0, [lv4, ak]);
+    await activateCard(g, 0, grepher);
+    eq(lv4.location, 'grave', 'DARK discarded');
+    eq(ak.location, 'grave', 'DARK sent from the Deck');
+    place(0, T.dark, 'hand');
+    eq(offered(g, 0, grepher), false, 'once per turn');
+  });
+
+  await test('Armageddon Knight: when Normal Summoned, send 1 DARK monster from the Deck to the GY', async () => {
+    const { g, c0, place } = setup();
+    const ak = place(0, cardByName('Armageddon Knight'), 'hand');
+    const mal = deckCard(g, 0, 'Destiny Hero - Malicious');
+    pickOnly(c0, [mal]);
+    await g.normalSummon(0, ak, false);
+    eq(mal.location, 'grave', 'Malicious milled');
+  });
+
+  await test('Destiny HERO - Malicious: banish from the GY to Special Summon another from the Deck, in the position you choose', async () => {
+    const { g, c0, place } = setup();
+    const mal = place(0, cardByName('Destiny Hero - Malicious'), 'grave');
+    eq(offered(g, 0, mal), false, 'no copy in the Deck: not offered');
+    const mal2 = deckCard(g, 0, 'Destiny Hero - Malicious');
+    let asked = false;
+    c0.choosePosition = async (_g: Game, _p: PlayerId, _c: CardInstance, allowed: (BattlePos | 'set')[]) => {
+      asked = allowed.includes('atk') && allowed.includes('def');
+      return 'atk';
+    };
+    await activateCard(g, 0, mal);
+    eq(mal.location, 'banished', 'banished as cost');
+    eq(mal2.location, 'mzone', 'second copy Special Summoned');
+    eq(asked, true, 'player chose the position');
+    eq(mal2.pos, 'atk', 'Attack Position allowed');
+  });
+
+  await test('Emergency Teleport: Level 3 or lower Psychic from hand/Deck only; banished in the End Phase', async () => {
+    const { g, c0, place } = setup();
+    const kreb = deckCard(g, 0, 'Krebons');
+    deckCard(g, 0, 'Telekinetic Shocker');
+    deckCard(g, 0, 'Psychic Commander');
+    const seen = recordPicks(c0);
+    pickOnly(c0, [kreb]);
+    const inner = c0.pick;
+    c0.pick = (gg, req) => (seen.push([...req.candidates]), inner(gg, req));
+    await activateCard(g, 0, place(0, cardByName('Emergency Teleport'), 'hand'));
+    eq(seen.flat().some((c) => c.name === 'Psychic Commander'), true, 'Level 3 Psychic offered');
+    eq(seen.flat().some((c) => c.name === 'Telekinetic Shocker'), false, 'a Level 4 Psychic is not a candidate');
+    eq(kreb.location, 'mzone', 'Krebons Special Summoned');
+    await (g as any).setPhase('end');
+    eq(kreb.location, 'banished', 'banished during the End Phase');
+  });
+
+  await test('Krebons: pay 800 LP to negate an attack that targets it', async () => {
+    const { g, place } = setup();
+    const kreb = place(0, cardByName('Krebons'), 'mzone');
+    const att = place(1, T.brute, 'mzone');
+    g.turnPlayer = 1;
+    g.phase = 'battle';
+    await g.conductAttack(1, att);
+    eq(kreb.location, 'mzone', 'Krebons survives');
+    eq(g.players[0].lp, 8000 - 800, 'paid 800 LP only');
+  });
+
+  await test('Allure of Darkness: draw 2 then banish a DARK from the hand; with none, the whole hand goes to the GY', async () => {
+    const { g, place } = setup();
+    deckCard(g, 0, 'Krebons');
+    deckCard(g, 0, 'Rules Test Wall');
+    await activateCard(g, 0, place(0, cardByName('Allure of Darkness'), 'hand'));
+    eq(g.players[0].banished.some((c) => c.name === 'Krebons'), true, 'Krebons banished');
+    eq(g.players[0].hand.length, 1, 'kept the other drawn card');
+    const s = setup();
+    const keep = s.place(0, T.brute, 'hand');
+    await activateCard(s.g, 0, s.place(0, cardByName('Allure of Darkness'), 'hand'));
+    eq(s.g.players[0].hand.length, 0, 'no DARK: entire hand sent to the GY');
+    eq(keep.location, 'grave', 'other hand card too');
+  });
+
+  await test('Gold Sarcophagus: the banished card arrives on your 2nd Standby Phase after activation, not the 1st', async () => {
+    const { g, c0, place } = setup();
+    const want = deckCard(g, 0, 'Dark Armed Dragon');
+    pickOnly(c0, [want]);
+    const t0 = g.turn;
+    await activateCard(g, 0, place(0, cardByName('Gold Sarcophagus'), 'hand'));
+    eq(want.location, 'banished', 'banished face-up');
+    g.turn = t0 + 2;
+    await (g as any).setPhase('standby');
+    eq(want.location, 'banished', 'still banished on the 1st Standby Phase');
+    g.turn = t0 + 4;
+    await (g as any).setPhase('standby');
+    eq(want.location, 'hand', 'added on the 2nd Standby Phase');
+  });
+
+  await test('Destiny Draw: discard a Destiny HERO as cost, draw 2; not without one', async () => {
+    const { g, place } = setup();
+    const dd = place(0, cardByName('Destiny Draw'), 'hand');
+    place(0, T.dark, 'hand');
+    eq(offered(g, 0, dd), false, 'no Destiny HERO in hand');
+    const mal = place(0, cardByName('Destiny Hero - Malicious'), 'hand');
+    await activateCard(g, 0, dd);
+    eq(mal.location, 'grave', 'Malicious discarded');
+    eq(g.players[0].hand.length, 3, 'drew 2');
+  });
+
+  // ---- Psychic
+  await test('Magical Android: gains 600 LP per face-up Psychic you control in your End Phase only', async () => {
+    const { g, place } = setup();
+    live(place(0, cardByName('Magical Android'), 'mzone'));
+    live(place(0, cardByName('Krebons'), 'mzone'));
+    place(0, cardByName('Psychic Commander'), 'mzone', { faceUp: false, pos: 'def' });
+    g.turnPlayer = 1;
+    await (g as any).setPhase('end');
+    eq(g.players[0].lp, 8000, "nothing in the opponent's End Phase");
+    g.turnPlayer = 0;
+    await (g as any).setPhase('end');
+    eq(g.players[0].lp, 8000 + 1200, '2 face-up Psychics = 1200');
+  });
+
+  await test("Thought Ruler Archfiend: pay 1000 to negate and destroy a Spell that targets 1 Psychic", async () => {
+    const { g, c0, place } = setup();
+    live(place(0, cardByName('Thought Ruler Archfiend'), 'mzone'));
+    const kreb = live(place(0, cardByName('Krebons'), 'mzone'));
+    c0.respond = respondWith('Thought Ruler Archfiend');
+    g.turnPlayer = 1;
+    const bc = place(1, cardByName('Brain Control'), 'hand');
+    const pick1 = (g as any).controllers[1] as TestController;
+    pickOnly(pick1, [kreb]);
+    await activateCard(g, 1, bc);
+    eq(kreb.controller, 0, 'Krebons stays');
+    eq(bc.location, 'grave', 'Brain Control destroyed');
+    eq(g.players[0].lp, 8000 - 1000, 'paid 1000');
+  });
+
+  // ---- HEROes
+  await test('Elemental Hero Stratos: search a HERO; with another face-up HERO, destroy up to that many Spells/Traps', async () => {
+    const { g, place } = setup();
+    const ocean = deckCard(g, 0, 'Elemental Hero Ocean');
+    await g.normalSummon(0, place(0, cardByName('Elemental Hero Stratos'), 'hand'), false);
+    eq(ocean.location, 'hand', 'no other HERO: searched');
+    const s = setup();
+    live(s.place(0, cardByName('Elemental Hero Wildheart'), 'mzone'));
+    const st1 = s.place(1, cardByName('Mirror Force'), 'szone');
+    const st2 = s.place(1, cardByName('Torrential Tribute'), 'szone');
+    s.c0.pick = (_g, req) => req.candidates.slice(0, req.max);
+    await s.g.normalSummon(0, s.place(0, cardByName('Elemental Hero Stratos'), 'hand'), false);
+    eq([st1, st2].filter((c) => c.location === 'grave').length, 1, '1 other HERO = up to 1 Spell/Trap');
+  });
+
+  await test('E - Emergency Call searches an Elemental HERO only (not a Destiny HERO)', async () => {
+    const { g, c0, place } = setup();
+    deckCard(g, 0, 'Destiny Hero - Malicious');
+    deckCard(g, 0, 'Elemental Hero Ocean');
+    const bub = deckCard(g, 0, 'Elemental Hero Bubbleman');
+    const seen = recordPicks(c0);
+    pickOnly(c0, [bub]);
+    const inner = c0.pick;
+    c0.pick = (gg, req) => (seen.push([...req.candidates]), inner(gg, req));
+    await activateCard(g, 0, place(0, cardByName('E - Emergency Call'), 'hand'));
+    eq(seen.flat().some((c) => c.name === 'Elemental Hero Ocean'), true, 'Elemental HEROes offered');
+    eq(seen.flat().some((c) => c.name === 'Destiny Hero - Malicious'), false, 'Malicious is not an Elemental HERO');
+    eq(bub.location, 'hand', 'Bubbleman added');
+  });
+
+  await test('Elemental Hero Absolute Zero: +500 per other face-up WATER except "Absolute Zero"; leaving the field destroys all opponent monsters', async () => {
+    const { g, place } = setup();
+    const az = live(place(0, cardByName('Elemental Hero Absolute Zero'), 'mzone'));
+    live(place(1, cardByName('Elemental Hero Absolute Zero'), 'mzone'));
+    live(place(0, cardByName('Elemental Hero Ocean'), 'mzone'));
+    eq(g.getAtk(az), 3000, 'counts Ocean, not the other Absolute Zero');
+    const s = setup();
+    const az2 = live(s.place(0, cardByName('Elemental Hero Absolute Zero'), 'mzone'));
+    const a = s.place(1, T.brute, 'mzone');
+    const b = s.place(1, T.wall, 'mzone', { faceUp: false, pos: 'def' });
+    await s.g.destroy([az2], 'effect', 1);
+    await s.g.processTriggers(true);
+    eq(a.location, 'grave', 'face-up monster destroyed');
+    eq(b.location, 'grave', 'face-down monster destroyed');
+  });
+
+  await test('Hero Signal: when your monster is destroyed by battle, Special Summon a Level 4 or lower Elemental HERO from the Deck', async () => {
+    const { g, c0, place } = setup();
+    place(0, T.wall, 'mzone');
+    const sig = place(0, cardByName('Hero Signal'), 'szone');
+    const strat = deckCard(g, 0, 'Elemental Hero Stratos');
+    const att = place(1, T.giant, 'mzone');
+    c0.respond = respondWith('Hero Signal');
+    g.turnPlayer = 1;
+    g.phase = 'battle';
+    await g.conductAttack(1, att);
+    eq(sig.location, 'grave', 'Hero Signal activated');
+    eq(strat.location, 'mzone', 'Stratos Special Summoned from the Deck');
+  });
+
+  await test('Elemental Hero Bubbleman: Special Summon only as the sole card in hand; draws 2 with no other cards', async () => {
+    const { g, place } = setup();
+    const bub = place(0, cardByName('Elemental Hero Bubbleman'), 'hand');
+    const other = place(0, T.brute, 'hand');
+    eq(procOffered(g, 0, bub), false, 'not with another card in hand');
+    await g.moveCards([other], 'grave', { reason: 'effect', reasonPlayer: 0 });
+    eq(procOffered(g, 0, bub), true, 'only card in hand');
+    await doProc(g, 0, bub);
+    eq(bub.location, 'mzone', 'Special Summoned');
+    eq(g.players[0].hand.length, 2, 'drew 2');
+  });
+
+  // ---- Generic staples in these decks
+  await test('Brain Control: only a monster that can be Normal Summoned/Set (not Synchro/Fusion or Dark Armed Dragon)', async () => {
+    const { g, c0, place } = setup();
+    const bc = place(0, cardByName('Brain Control'), 'hand');
+    live(place(1, cardByName('Stardust Dragon'), 'mzone'));
+    live(place(1, cardByName('Dark Armed Dragon'), 'mzone'));
+    eq(offered(g, 0, bc), false, 'no legal target');
+    const ok = live(place(1, T.brute, 'mzone'));
+    const seen = recordPicks(c0);
+    await activateCard(g, 0, bc);
+    eq(seen.flat().every((c) => c === ok), true, 'only the Normal-Summonable monster is a candidate');
+    eq(ok.controller, 0, 'taken');
+  });
+
+  await test('Mind Control: can take a face-down monster; it cannot attack or be Tributed', async () => {
+    const { g, place } = setup();
+    const fd = place(1, T.brute, 'mzone', { faceUp: false, pos: 'def' });
+    await activateCard(g, 0, place(0, cardByName('Mind Control'), 'hand'));
+    eq(fd.controller, 0, 'taken');
+    fd.faceUp = true;
+    fd.pos = 'atk';
+    eq(g.canAttack(fd), false, 'cannot attack');
+    eq(g.tributeCandidates(0).includes(fd), false, 'cannot be Tributed');
+  });
+
+  await test('Morphing Jar: FLIP — both players discard their hands, then each draws 5', async () => {
+    const { g, place } = setup();
+    const jar = place(0, cardByName('Morphing Jar'), 'mzone', { faceUp: false, pos: 'def' });
+    const h0 = place(0, T.brute, 'hand');
+    const h1 = place(1, T.brute, 'hand');
+    place(1, T.brute, 'hand');
+    await g.flipSummon(0, jar);
+    eq(h0.location, 'grave', 'my hand discarded');
+    eq(h1.location, 'grave', "opponent's hand discarded");
+    eq(g.players[0].hand.length, 5, 'I drew 5');
+    eq(g.players[1].hand.length, 5, 'opponent drew 5');
+  });
+
+  // ---- Reptilianne / Diva
+  await test('Reptilianne Viper: Normal Summon takes control of a face-up 0-ATK monster permanently', async () => {
+    const { g, place } = setup();
+    const naga = live(place(1, cardByName('Reptilianne Naga'), 'mzone'));
+    await g.normalSummon(0, place(0, cardByName('Reptilianne Viper'), 'hand'), false);
+    eq(naga.controller, 0, 'taken');
+    await (g as any).setPhase('end');
+    eq(naga.controller, 0, 'not returned in the End Phase');
+  });
+
+  await test('Deep Sea Diva: Normal Summon Special Summons a Level 3 or lower Sea Serpent from the Deck', async () => {
+    const { g, place } = setup();
+    const gill = deckCard(g, 0, 'Spined Gillman');
+    await g.normalSummon(0, place(0, cardByName('Deep Sea Diva'), 'hand'), false);
+    eq(gill.location, 'mzone', 'Spined Gillman Special Summoned');
+  });
+}
+
+// ---------------------------------------------------------------- Pre-tournament audit: Plants / Sabers / Six Samurai / Cats
+
+async function plantSaberSamuraiAuditTests() {
+  const live = (c: CardInstance) => {
+    c.faceUp = true;
+    c.activeOnField = true;
+    return c;
+  };
+  const deckCard = (g: Game, p: PlayerId, name: string) => {
+    const c = g.registerCard(new (g.allCards[0].constructor as any)(cardByName(name), p)) as CardInstance;
+    c.location = 'none';
+    g.rawMove(c, 'deck');
+    return c;
+  };
+  const offered = (g: Game, p: PlayerId, card: CardInstance, label?: string) =>
+    g.getActivations(p, { open: true }).some((a) => a.card === card && (!label || a.label === label));
+  const procOffered = (g: Game, p: PlayerId, card: CardInstance) => g.legalMainActions(p).some((a) => a.type === 'proc' && a.card === card);
+  const doProc = async (g: Game, p: PlayerId, card: CardInstance) => {
+    const a = g.legalMainActions(p).find((x) => x.type === 'proc' && x.card === card);
+    if (!a) throw new Error(`${card.name}: no Summon procedure offered`);
+    await g.performAction(p, a);
+  };
+  const pickOnly = (c: TestController, want: CardInstance[]) => {
+    c.pick = (_g, req) => {
+      const w = req.candidates.filter((x) => want.includes(x));
+      return w.length >= req.min && w.length ? w.slice(0, Math.max(req.min, Math.min(w.length, req.max))) : req.candidates.slice(0, req.min);
+    };
+  };
+
+  // ---- Quickdraw Plant / Dandywarrior
+  await test('Quickdraw Synchron: Special Summon needs a monster sent from the hand (not a Spell); the monster goes to the GY', async () => {
+    const { g, place } = setup();
+    const qd = place(0, cardByName('Quickdraw Synchron'), 'hand');
+    place(0, cardByName('Mystical Space Typhoon'), 'hand');
+    eq(procOffered(g, 0, qd), false, 'only a Spell in hand: no Summon');
+    const dandy = place(0, cardByName('Dandylion'), 'hand');
+    await doProc(g, 0, qd);
+    eq(qd.location, 'mzone', 'Quickdraw Special Summoned');
+    eq(dandy.location, 'grave', 'Dandylion sent as the cost');
+    eq(g.monsters(0).filter((m) => m.name === 'Fluff Token').length, 2, 'Dandylion triggered: 2 Fluff Tokens');
+  });
+
+  await test('Quickdraw Synchron: substitutes for a "Synchron" Tuner (Turbo Warrior yes), not material for Stardust Dragon', async () => {
+    const { g, place } = setup();
+    place(0, cardByName('Quickdraw Synchron'), 'mzone');
+    place(0, cardByName('Lonefire Blossom'), 'mzone');
+    const sd = place(0, cardByName('Stardust Dragon'), 'extra');
+    eq(g.canSynchro(0, sd), false, '5 + 3 = 8 but Stardust Dragon lists no "Synchron" Tuner');
+    const r = setup();
+    r.place(0, cardByName('Quickdraw Synchron'), 'mzone');
+    r.place(0, cardByName('Level Eater'), 'mzone');
+    const tw = r.place(0, cardByName('Turbo Warrior'), 'extra');
+    eq(r.g.canSynchro(0, tw), true, 'Quickdraw (5) + Level Eater (1) = Turbo Warrior');
+  });
+
+  await test('Lonefire Blossom: Tribute a face-up Plant to Special Summon a Plant from the Deck; once per turn', async () => {
+    const { g, c0, place } = setup();
+    const lf1 = place(0, cardByName('Lonefire Blossom'), 'mzone');
+    const lf2 = place(0, cardByName('Lonefire Blossom'), 'mzone');
+    const brute = place(0, T.brute, 'mzone');
+    const ty = deckCard(g, 0, 'Tytannial, Princess of Camellias');
+    pickOnly(c0, [lf2, ty]);
+    await activateCard(g, 0, lf1);
+    eq(lf2.location, 'grave', 'the other Lonefire was Tributed');
+    eq(ty.location, 'mzone', 'Tytannial Special Summoned from the Deck');
+    eq(brute.location, 'mzone', 'a non-Plant is never Tribute fodder');
+    eq(offered(g, 0, lf1), false, 'once per turn');
+  });
+
+  await test('Dandylion: sent to the GY -> 2 Fluff Tokens in Defense; they cannot be Tributed for a Tribute Summon that turn', async () => {
+    const { g, place } = setup();
+    const dandy = place(0, cardByName('Dandylion'), 'hand');
+    await g.discard([dandy], 'cost', 0);
+    await g.processTriggers(true);
+    const toks = g.monsters(0).filter((m) => m.name === 'Fluff Token');
+    eq(toks.length, 2, '2 tokens');
+    eq(toks.every((t) => t.pos === 'def'), true, 'in Defense Position');
+    const lv4 = place(0, cardByName('Thunder King Rai-Oh'), 'hand');
+    const lv6 = place(0, cardByName('Caius the Shadow Monarch'), 'hand');
+    eq(g.legalMainActions(0).some((a) => a.type === 'summon' && a.card === lv6), false, 'Fluff Tokens are not Tribute Summon fodder this turn');
+    eq(g.legalMainActions(0).some((a) => a.type === 'summon' && a.card === lv4), true, 'Level 4 still Normal Summonable');
+  });
+
+  await test('Tytannial: WIND; Tributes a Plant to negate and destroy a card that targets a face-up Plant', async () => {
+    const { g, c0, c1, place } = setup();
+    const ty = place(1, cardByName('Tytannial, Princess of Camellias'), 'mzone');
+    eq(ty.data.attribute, 'WIND', 'printed Attribute');
+    const lf = place(1, cardByName('Lonefire Blossom'), 'mzone');
+    const bc = place(0, cardByName('Brain Control'), 'hand');
+    c1.respond = respondWith('Tytannial, Princess of Camellias');
+    pickOnly(c1, [lf]);
+    pickOnly(c0, [ty]);
+    await activateCard(g, 0, bc);
+    eq(lf.location, 'grave', 'Lonefire Tributed as the cost');
+    eq(bc.location, 'grave', 'Brain Control negated and destroyed');
+    eq(ty.controller, 1, 'Tytannial not stolen');
+  });
+
+  await test('Level Eater: from the GY, lowers a Level 5+ monster by 1 and Special Summons itself', async () => {
+    const { g, place } = setup();
+    const le = place(0, cardByName('Level Eater'), 'grave');
+    const qd = place(0, cardByName('Quickdraw Synchron'), 'mzone');
+    await activateCard(g, 0, le);
+    eq(le.location, 'mzone', 'Level Eater revived');
+    eq(g.getLevel(qd), 4, 'Quickdraw is now Level 4');
+    const n = setup();
+    const le2 = n.place(0, cardByName('Level Eater'), 'grave');
+    n.place(0, T.brute, 'mzone');
+    eq(offered(n.g, 0, le2), false, 'no Level 5+ monster: not offered');
+  });
+
+  await test('Debris Dragon: Normal Summon revives a 500-or-less ATK monster in Attack Position with its effects negated', async () => {
+    const { g, place } = setup();
+    const debris = place(0, cardByName('Debris Dragon'), 'hand');
+    const dandy = place(0, cardByName('Dandylion'), 'grave');
+    await g.performAction(0, { type: 'summon', card: debris });
+    eq(dandy.location, 'mzone', 'Dandylion revived');
+    eq(dandy.pos, 'atk', 'in Attack Position');
+    eq(g.isNegated(dandy), true, 'effects negated');
+  });
+
+  // ---- Caliber Cat
+  await test('Rescue Cat: send it to Special Summon 2 Level 3 or lower Beasts from the Deck; they are destroyed in the End Phase', async () => {
+    const { g, place } = setup();
+    const cat = place(0, cardByName('Rescue Cat'), 'mzone');
+    const a1 = deckCard(g, 0, 'X-Saber Airbellum');
+    const a2 = deckCard(g, 0, 'X-Saber Airbellum');
+    const dog = deckCard(g, 0, 'Flamvell Firedog'); // Beast, but Level 4
+    await activateCard(g, 0, cat);
+    eq(cat.location, 'grave', 'Rescue Cat sent as the cost');
+    eq(a1.location, 'mzone', 'Airbellum 1 summoned');
+    eq(a2.location, 'mzone', 'Airbellum 2 summoned');
+    eq(dog.location, 'deck', 'Level 4 Beast not eligible');
+    eq(g.isNegated(a1), false, '2010 text: effects are not negated');
+    await (g as any).setPhase('end');
+    eq(a1.location, 'grave', 'destroyed in the End Phase');
+    eq(a2.location, 'grave', 'destroyed in the End Phase');
+  });
+
+  await test('Doomcaliber Knight: Fiend that cannot be Special Summoned; Tributes itself to negate a monster effect and destroy that monster', async () => {
+    const { g, c1, place } = setup();
+    const dk = place(1, cardByName('Doomcaliber Knight'), 'mzone');
+    eq(dk.data.race, 'Fiend', 'printed Type');
+    const trooper = place(0, cardByName('Card Trooper'), 'mzone');
+    c1.respond = respondWith('Doomcaliber Knight');
+    await activateCard(g, 0, trooper);
+    eq(dk.location, 'grave', 'Doomcaliber Tributed');
+    eq(trooper.location, 'grave', 'Card Trooper destroyed');
+    const r = setup();
+    r.place(0, cardByName('Doomcaliber Knight'), 'grave');
+    const reborn = r.place(0, cardByName('Monster Reborn'), 'hand');
+    eq(offered(r.g, 0, reborn), false, 'Monster Reborn cannot revive Doomcaliber Knight');
+  });
+
+  // ---- Fish OTK
+  await test('Fishborg Blaster: discard to revive only while you control a face-up Level 3 or lower WATER monster', async () => {
+    const { g, place } = setup();
+    const fb = place(0, cardByName('Fishborg Blaster'), 'grave');
+    const disc = place(0, T.brute, 'hand');
+    eq(offered(g, 0, fb), false, 'no WATER monster: not offered');
+    place(0, cardByName('Oyster Meister'), 'mzone');
+    await activateCard(g, 0, fb);
+    eq(fb.location, 'mzone', 'Fishborg revived');
+    eq(disc.location, 'grave', 'discarded as the cost');
+  });
+
+  // ---- X-Sabers
+  await test('XX-Saber Faultroll: Special Summon from the hand needs 2 face-up X-Sabers; revives a Level 4 or lower X-Saber once per turn', async () => {
+    const { g, place } = setup();
+    const ft = place(0, cardByName('XX-Saber Faultroll'), 'hand');
+    place(0, cardByName('X-Saber Airbellum'), 'mzone');
+    eq(procOffered(g, 0, ft), false, '1 X-Saber: no Summon');
+    place(0, cardByName('X-Saber Galahad'), 'mzone', { faceUp: false, pos: 'def' });
+    eq(procOffered(g, 0, ft), false, 'a face-down X-Saber does not count');
+    place(0, cardByName('XX-Saber Emmersblade'), 'mzone');
+    await doProc(g, 0, ft);
+    eq(ft.location, 'mzone', 'Faultroll Special Summoned');
+    const gal = place(0, cardByName('X-Saber Galahad'), 'grave');
+    await activateCard(g, 0, ft);
+    eq(gal.location, 'mzone', 'Galahad revived');
+    eq(offered(g, 0, ft), false, 'once per turn');
+  });
+
+  await test('XX-Saber Gottoms: Level 9 from 1 Tuner + non-Tuner EARTH monsters (Faultroll + Airbellum); Tributes an X-Saber for a random discard', async () => {
+    const { g, place } = setup();
+    const got = place(0, cardByName('XX-Saber Gottoms'), 'extra');
+    eq(got.data.level, 9, 'Level 9');
+    const air = place(0, cardByName('X-Saber Airbellum'), 'mzone');
+    const ft = place(0, cardByName('XX-Saber Faultroll'), 'mzone');
+    eq(g.canSynchro(0, got), true, 'Faultroll (6) + Airbellum (3) = 9');
+    await g.synchroSummon(0, got, [air, ft]);
+    eq(got.location, 'mzone', 'Gottoms Synchro Summoned');
+    const n = setup();
+    const got2 = n.place(0, cardByName('XX-Saber Gottoms'), 'extra');
+    n.place(0, cardByName('X-Saber Airbellum'), 'mzone');
+    n.place(0, cardByName('Caius the Shadow Monarch'), 'mzone'); // DARK Level 6
+    eq(n.g.canSynchro(0, got2), false, 'a non-EARTH non-Tuner cannot be used');
+    const m = setup();
+    const got3 = m.place(0, cardByName('XX-Saber Gottoms'), 'extra');
+    m.place(0, cardByName('Dandylion'), 'mzone'); // EARTH non-X-Saber Level 3
+    m.place(0, T.wall, 'mzone'); // EARTH non-X-Saber Level 4
+    m.place(0, tuner, 'mzone'); // EARTH Tuner Level 2
+    eq(m.g.canSynchro(0, got3), true, 'any EARTH non-Tuners work (Tuner 2 + Wall 4 + Dandylion 3 = 9)');
+    const e = setup();
+    const got4 = e.place(0, cardByName('XX-Saber Gottoms'), 'mzone');
+    const fod = e.place(0, cardByName('X-Saber Airbellum'), 'mzone');
+    const h = e.place(1, T.brute, 'hand');
+    pickOnly(e.c0, [fod]);
+    await activateCard(e.g, 0, got4);
+    eq(fod.location, 'grave', 'X-Saber Tributed');
+    eq(h.location, 'grave', "opponent's only card discarded");
+  });
+
+  await test("Gottoms' Emergency Call: needs a face-up X-Saber on the field; revives 2 X-Sabers from either GY to your field", async () => {
+    const { g, c0, place } = setup();
+    const call = place(0, cardByName("Gottoms' Emergency Call"), 'hand');
+    const mine = place(0, cardByName('X-Saber Airbellum'), 'grave');
+    const theirs = place(1, cardByName('XX-Saber Emmersblade'), 'grave');
+    eq(offered(g, 0, call), false, 'no face-up X-Saber: cannot activate');
+    place(1, cardByName('X-Saber Galahad'), 'mzone'); // the opponent's X-Saber counts ("on the field")
+    pickOnly(c0, [mine, theirs]);
+    await activateCard(g, 0, call);
+    eq(mine.location, 'mzone', 'own GY X-Saber summoned');
+    eq(theirs.location, 'mzone', "opponent's GY X-Saber summoned");
+    eq(theirs.controller, 0, 'to your side of the field');
+  });
+
+  await test('X-Saber Airbellum: a direct attack that deals damage discards 1 random card; X-Saber Galahad is a Warrior', async () => {
+    const { g, place } = setup();
+    const air = place(0, cardByName('X-Saber Airbellum'), 'mzone');
+    const h = place(1, T.brute, 'hand');
+    g.phase = 'battle';
+    await g.conductAttack(0, air);
+    eq(g.players[1].lp, 8000 - 1600, 'direct damage');
+    eq(h.location, 'grave', 'random discard');
+    eq(cardByName('X-Saber Galahad').race, 'Warrior', 'Galahad printed Type: Warrior (Reinforcement of the Army target)');
+  });
+
+  // TODO(held, not confirmed for the April 2010 printing): Saber Slash's current text destroys face-up cards on EITHER
+  // side, exactly as many as your face-up Attack Position X-Sabers, without targeting; ours targets up to that many
+  // of the opponent's face-up cards.
+  // await test('Saber Slash: destroys face-up cards on the field equal to the number of attacking X-Sabers', async () => {});
+
+  // ---- Six Samurai
+  await test('Gateway of the Six: 2 Bushido Counters per Summon, even when several Six Samurai are Special Summoned together', async () => {
+    const { g, place } = setup();
+    const gate = live(place(0, cardByName('Gateway of the Six'), 'szone'));
+    const ssu = live(place(0, cardByName('Six Samurai United'), 'szone'));
+    const a = place(0, cardByName('The Six Samurai - Kamon'), 'grave');
+    const b = place(0, cardByName('The Six Samurai - Yaichi'), 'grave');
+    await g.specialSummon([a, b], 0, { pos: 'atk' });
+    await g.processTriggers(true);
+    eq(a.location === 'mzone' && b.location === 'mzone', true, 'both summoned');
+    eq(gate.counters.bushido ?? 0, 2, 'one Summon = 2 counters');
+    eq(ssu.counters.bushido ?? 0, 1, 'United: 1 counter');
+    const z = place(0, cardByName('The Six Samurai - Zanji'), 'hand');
+    await g.performAction(0, { type: 'summon', card: z });
+    eq(gate.counters.bushido ?? 0, 4, 'a Normal Summon adds 2 more');
+    eq(ssu.counters.bushido ?? 0, 2, 'United: max 2');
+  });
+
+  await test('Hand of the Six Samurai needs another face-up Six Samurai; Enishi is Special Summoned by banishing 2 Six Samurai from the GY', async () => {
+    const { g, c0, place } = setup();
+    const hand = place(0, cardByName('Hand of the Six Samurai'), 'mzone');
+    const v = place(1, T.brute, 'mzone');
+    eq(offered(g, 0, hand), false, 'alone: not offered');
+    const kamon = place(0, cardByName('The Six Samurai - Kamon'), 'mzone');
+    pickOnly(c0, [kamon, v]);
+    await activateCard(g, 0, hand);
+    eq(kamon.location, 'grave', 'Kamon Tributed');
+    eq(v.location, 'grave', 'target destroyed');
+    const n = setup();
+    const en = n.place(0, cardByName("Enishi, Shien's Chancellor"), 'hand');
+    n.place(0, cardByName('The Six Samurai - Kamon'), 'grave');
+    eq(procOffered(n.g, 0, en), false, '1 Six Samurai in the GY: no Summon');
+    const y = n.place(0, cardByName('The Six Samurai - Yaichi'), 'grave');
+    await doProc(n.g, 0, en);
+    eq(en.location, 'mzone', 'Enishi Special Summoned');
+    eq(y.location, 'banished', 'cost banished');
+  });
+}
+
+// ---------------------------------------------------------------- Gladiator Beasts: deep audit (sequences)
+
+async function gladiatorDeepTests() {
+  const live = (c: CardInstance) => {
+    c.faceUp = true;
+    c.activeOnField = true;
+    return c;
+  };
+  const deckCard = (g: Game, p: PlayerId, name: string) => {
+    const c = g.registerCard(new (g.allCards[0].constructor as any)(cardByName(name), p)) as CardInstance;
+    c.location = 'none';
+    g.rawMove(c, 'deck');
+    return c;
+  };
+  const battleEnd = async (g: Game) => {
+    g.beginBatch();
+    g.emit({ type: 'battleEnd', player: g.turnPlayer, phase: 'battle' });
+    await g.processTriggers(true);
+  };
+  const procAct = (g: Game, p: PlayerId, card: CardInstance) => g.legalMainActions(p).find((a) => a.type === 'proc' && a.card === card);
+  const pickOnly = (c: TestController, want: CardInstance[]) => {
+    c.pick = (_g, req) => {
+      const w = want.filter((x) => req.candidates.includes(x));
+      return w.length >= req.min && w.length ? w.slice(0, Math.max(req.min, Math.min(w.length, req.max))) : req.candidates.slice(0, req.min);
+    };
+  };
+  /** Accept only the tag-out among optional triggers (mandatory ones never ask). */
+  const onlyTagOut = (c: TestController) => {
+    (c as any).confirmTrigger = async (_g: Game, _p: PlayerId, act: Activation) => act.label === 'Tag out';
+  };
+  const N = (name: string) => cardByName(name);
+
+  await test('GB audit: card data matches the official text (Hoplomus, Retiari, Secutor, Laquari, Heraklinos)', async () => {
+    const hop = N('Gladiator Beast Hoplomus');
+    eq(`${hop.race}/${hop.atk}/${hop.def}`, 'Rock/700/2100', 'Hoplomus');
+    const ret = N('Gladiator Beast Retiari');
+    eq(`${ret.atk}/${ret.def}`, '1200/800', 'Retiari');
+    const sec = N('Gladiator Beast Secutor');
+    eq(`${sec.attribute}/${sec.race}/${sec.level}/${sec.atk}/${sec.def}`, 'WIND/Reptile/4/400/300', 'Secutor');
+    eq(N('Gladiator Beast Laquari').race, 'Beast-Warrior', 'Laquari');
+    const her = N('Gladiator Beast Heraklinos');
+    eq(`${her.attribute}/${her.race}`, 'FIRE/Beast-Warrior', 'Heraklinos');
+  });
+
+  await test('GB audit: "Special Summoned by a Gladiator Beast effect" — tag-outs (2 at once) give Laquari 2100 / Hoplomus 2400; Monster Reborn, Call of the Haunted, Normal Summon do not', async () => {
+    const a = setup();
+    const laq = deckCard(a.g, 0, 'Gladiator Beast Laquari');
+    const hop = deckCard(a.g, 0, 'Gladiator Beast Hoplomus');
+    const best = a.place(0, N('Gladiator Beast Bestiari'), 'mzone');
+    const dar = a.place(0, N('Gladiator Beast Darius'), 'mzone');
+    best.attackedThisTurnOrWasAttacked = true;
+    dar.attackedThisTurnOrWasAttacked = true;
+    pickOnly(a.c0, [laq, hop]);
+    await battleEnd(a.g);
+    eq(laq.location, 'mzone', 'Laquari tagged in');
+    eq(hop.location, 'mzone', 'Hoplomus tagged in (each Beast tags out separately)');
+    eq(a.g.getAtk(laq), 2100, 'Laquari 2100');
+    eq(a.g.getDef(hop), 2400, 'Hoplomus 2400 DEF');
+    eq(best.location, 'deck', 'Bestiari shuffled in');
+    eq(dar.location, 'deck', 'Darius shuffled in');
+    const r = setup();
+    const l2 = r.place(0, N('Gladiator Beast Laquari'), 'grave');
+    pickOnly(r.c0, [l2]);
+    await activateCard(r.g, 0, r.place(0, N('Monster Reborn'), 'hand'));
+    eq(l2.location, 'mzone', 'revived');
+    eq(r.g.getAtk(l2), 1800, 'Monster Reborn: original 1800');
+    const c = setup();
+    const l3 = c.place(0, N('Gladiator Beast Laquari'), 'grave');
+    const coth = c.place(0, N('Call of the Haunted'), 'szone');
+    pickOnly(c.c0, [l3]);
+    await activateCard(c.g, 0, coth);
+    eq(l3.location, 'mzone', 'Call of the Haunted revived');
+    eq(c.g.getAtk(l3), 1800, 'Call of the Haunted: 1800');
+    const n = setup();
+    const b4 = n.place(0, N('Gladiator Beast Bestiari'), 'hand');
+    const st = n.place(1, N('Mirror Force'), 'szone');
+    await n.g.normalSummon(0, b4, false);
+    await n.g.processTriggers(true);
+    eq(st.location, 'szone', 'Normal Summoned Bestiari: no destruction');
+  });
+
+  await test('GB audit: Bestiari / Murmillo / Equeste effects are mandatory (official text has no "You can")', async () => {
+    const a = setup();
+    const best = deckCard(a.g, 0, 'Gladiator Beast Bestiari');
+    const laq = a.place(0, N('Gladiator Beast Laquari'), 'mzone');
+    const own = a.place(0, N('Mirror Force'), 'szone');
+    laq.attackedThisTurnOrWasAttacked = true;
+    onlyTagOut(a.c0);
+    pickOnly(a.c0, [best, own]);
+    await battleEnd(a.g);
+    eq(best.location, 'mzone', 'Bestiari tagged in');
+    eq(own.location, 'grave', 'with only our own Set card on the field, Bestiari must destroy it');
+    const m = setup();
+    const mur = deckCard(m.g, 0, 'Gladiator Beast Murmillo');
+    const l2 = m.place(0, N('Gladiator Beast Laquari'), 'mzone');
+    l2.attackedThisTurnOrWasAttacked = true;
+    const v = m.place(1, T.brute, 'mzone');
+    onlyTagOut(m.c0);
+    pickOnly(m.c0, [v, mur]);
+    await battleEnd(m.g);
+    eq(v.location, 'grave', 'Murmillo destroyed the face-up monster without being asked');
+    const s = setup();
+    const mur2 = deckCard(s.g, 0, 'Gladiator Beast Murmillo');
+    const l3 = s.place(0, N('Gladiator Beast Laquari'), 'mzone');
+    l3.attackedThisTurnOrWasAttacked = true;
+    pickOnly(s.c0, [mur2]);
+    await battleEnd(s.g);
+    eq(mur2.location, 'grave', 'Murmillo, the only face-up monster, has to target and destroy itself');
+    const e = setup();
+    const equ = deckCard(e.g, 0, 'Gladiator Beast Equeste');
+    const wc = e.place(0, N('Gladiator Beast War Chariot'), 'grave');
+    const l4 = e.place(0, N('Gladiator Beast Laquari'), 'mzone');
+    l4.attackedThisTurnOrWasAttacked = true;
+    onlyTagOut(e.c0);
+    pickOnly(e.c0, [equ, wc]);
+    await battleEnd(e.g);
+    eq(equ.location, 'mzone', 'Equeste tagged in');
+    eq(wc.location, 'hand', 'Equeste added War Chariot');
+  });
+
+  await test('GB audit: Darius targets on activation — D.D. Crow in response leaves it with nothing; Necrovalley negates it', async () => {
+    const a = setup();
+    const dar = deckCard(a.g, 0, 'Gladiator Beast Darius');
+    const best = a.place(0, N('Gladiator Beast Bestiari'), 'grave');
+    const laq = a.place(0, N('Gladiator Beast Laquari'), 'mzone');
+    laq.attackedThisTurnOrWasAttacked = true;
+    const crow = a.place(1, N('D.D. Crow'), 'hand');
+    let seen: CardInstance[] = [];
+    a.c1.respond = (g, req) => {
+      const top = g.chain[g.chain.length - 1];
+      if (top?.card === dar) {
+        seen = top.ctx.targets.slice();
+        return req.options.find((o) => o.card === crow) ?? null;
+      }
+      return null;
+    };
+    pickOnly(a.c0, [dar, best]);
+    pickOnly(a.c1, [best]);
+    await battleEnd(a.g);
+    eq(dar.location, 'mzone', 'Darius tagged in');
+    eq(seen.includes(best), true, 'Bestiari was targeted when Darius activated');
+    eq(best.location, 'banished', 'D.D. Crow banished the target');
+    eq(a.g.monsters(0).length, 1, 'Darius revived nothing');
+    const n = setup();
+    const d2 = deckCard(n.g, 0, 'Gladiator Beast Darius');
+    const b2 = n.place(0, N('Gladiator Beast Bestiari'), 'grave');
+    const l2 = n.place(0, N('Gladiator Beast Laquari'), 'mzone');
+    l2.attackedThisTurnOrWasAttacked = true;
+    live(n.place(1, N('Necrovalley'), 'fzone'));
+    pickOnly(n.c0, [d2, b2]);
+    await battleEnd(n.g);
+    eq(d2.location, 'mzone', 'Darius tagged in');
+    eq(b2.location, 'grave', 'Necrovalley: Bestiari stays in the GY');
+  });
+
+  await test('GB audit: Darius tagging out returns its revived monster; Retiari banishes from the GY (Necrovalley stops it)', async () => {
+    const a = setup();
+    const dar = deckCard(a.g, 0, 'Gladiator Beast Darius');
+    const laqG = a.place(0, N('Gladiator Beast Laquari'), 'grave');
+    const ret = deckCard(a.g, 0, 'Gladiator Beast Retiari');
+    const hop = a.place(0, N('Gladiator Beast Hoplomus'), 'mzone');
+    hop.attackedThisTurnOrWasAttacked = true;
+    pickOnly(a.c0, [dar, laqG]);
+    await battleEnd(a.g);
+    eq(laqG.location, 'mzone', 'Laquari revived by Darius');
+    eq(a.g.getAtk(laqG), 1800, 'negated: no 2100');
+    dar.attackedThisTurnOrWasAttacked = true;
+    const og = a.place(1, T.brute, 'grave');
+    pickOnly(a.c0, [ret, og]);
+    await battleEnd(a.g);
+    eq(dar.location, 'deck', 'Darius tagged out');
+    eq(ret.location, 'mzone', 'Retiari tagged in');
+    eq(laqG.location, 'deck', "Darius's revived Laquari shuffled into the Deck");
+    eq(og.location, 'banished', 'Retiari banished a card from the GY');
+    const n = setup();
+    const r2 = deckCard(n.g, 0, 'Gladiator Beast Retiari');
+    const l2 = n.place(0, N('Gladiator Beast Laquari'), 'mzone');
+    l2.attackedThisTurnOrWasAttacked = true;
+    const og2 = n.place(1, T.brute, 'grave');
+    live(n.place(1, N('Necrovalley'), 'fzone'));
+    pickOnly(n.c0, [r2, og2]);
+    await battleEnd(n.g);
+    eq(r2.location, 'mzone', 'Retiari tagged in');
+    eq(og2.location, 'grave', 'Necrovalley: no banish');
+  });
+
+  await test('GB audit: tag-out needs another Gladiator Beast in the Deck; not after Book of Moon; not without battling', async () => {
+    const a = setup();
+    deckCard(a.g, 0, 'Gladiator Beast Bestiari');
+    const best = a.place(0, N('Gladiator Beast Bestiari'), 'mzone');
+    best.attackedThisTurnOrWasAttacked = true;
+    await battleEnd(a.g);
+    eq(best.location, 'mzone', 'only another Bestiari in the Deck: no tag-out');
+    const b = setup();
+    const laq = deckCard(b.g, 0, 'Gladiator Beast Laquari');
+    const b2 = b.place(0, N('Gladiator Beast Bestiari'), 'mzone');
+    b2.attackedThisTurnOrWasAttacked = true;
+    await b.g.changePosition(b2, 'def', false);
+    await battleEnd(b.g);
+    eq(b2.location, 'mzone', 'face-down: stays');
+    eq(laq.location, 'deck', 'face-down: no tag-out');
+    const c = setup();
+    const laq3 = deckCard(c.g, 0, 'Gladiator Beast Laquari');
+    const b3 = c.place(0, N('Gladiator Beast Bestiari'), 'mzone');
+    await battleEnd(c.g);
+    eq(b3.location, 'mzone', 'did not battle: stays');
+    eq(laq3.location, 'deck', 'did not battle: no tag-out');
+  });
+
+  await test('GB audit: Gyzarus tag-out returns it to the Extra Deck and Special Summons 2 (not Bestiari); both arrivals get their effects', async () => {
+    const { g, c0, place } = setup();
+    const gyz = place(0, N('Gladiator Beast Gyzarus'), 'mzone');
+    gyz.attackedThisTurnOrWasAttacked = true;
+    const best = deckCard(g, 0, 'Gladiator Beast Bestiari');
+    const laq = deckCard(g, 0, 'Gladiator Beast Laquari');
+    const mur = deckCard(g, 0, 'Gladiator Beast Murmillo');
+    const v = place(1, T.brute, 'mzone');
+    pickOnly(c0, [v, best, laq, mur]);
+    await battleEnd(g);
+    eq(gyz.location, 'extra', 'Gyzarus returned to the Extra Deck');
+    eq(best.location, 'deck', 'Bestiari cannot be summoned by it');
+    eq(laq.location, 'mzone', 'Laquari');
+    eq(mur.location, 'mzone', 'Murmillo');
+    eq(g.getAtk(laq), 2100, 'Laquari 2100');
+    eq(v.location, 'grave', 'Murmillo destroyed the opposing monster');
+  });
+
+  await test('GB audit: Secutor (official text) — only if Gladiator-Summoned: after battling it Special Summons 2 and stays; never with only 1 free zone', async () => {
+    const a = setup();
+    const sec = a.place(0, N('Gladiator Beast Secutor'), 'mzone');
+    const laq = deckCard(a.g, 0, 'Gladiator Beast Laquari');
+    deckCard(a.g, 0, 'Gladiator Beast Hoplomus');
+    sec.attackedThisTurnOrWasAttacked = true;
+    await battleEnd(a.g);
+    eq(laq.location, 'deck', 'not Gladiator-Summoned: nothing');
+    eq(sec.location, 'mzone', 'stays');
+    const b = setup();
+    const tiger = b.place(0, N('Test Tiger'), 'mzone');
+    const laqF = b.place(0, N('Gladiator Beast Laquari'), 'mzone');
+    const sec2 = deckCard(b.g, 0, 'Gladiator Beast Secutor');
+    pickOnly(b.c0, [sec2, laqF]);
+    await activateCard(b.g, 0, tiger);
+    eq(sec2.location, 'mzone', 'Secutor tagged in by Test Tiger');
+    const l2 = deckCard(b.g, 0, 'Gladiator Beast Laquari');
+    const h2 = deckCard(b.g, 0, 'Gladiator Beast Hoplomus');
+    sec2.attackedThisTurnOrWasAttacked = true;
+    (b.c0 as any).confirmTrigger = async () => false;
+    pickOnly(b.c0, [l2, h2]);
+    await battleEnd(b.g);
+    eq(l2.location, 'mzone', 'Laquari summoned (mandatory)');
+    eq(h2.location, 'mzone', 'Hoplomus summoned');
+    eq(sec2.location, 'mzone', 'Secutor stays on the field');
+    eq(b.g.getAtk(l2), 2100, 'Summoned by a Gladiator Beast effect');
+    const c = setup();
+    const sec3 = c.place(0, N('Gladiator Beast Secutor'), 'mzone');
+    sec3.flags.gbSummoned = true;
+    sec3.attackedThisTurnOrWasAttacked = true;
+    for (let i = 0; i < 3; i++) c.place(0, T.wall, 'mzone');
+    const l3 = deckCard(c.g, 0, 'Gladiator Beast Laquari');
+    deckCard(c.g, 0, 'Gladiator Beast Hoplomus');
+    await battleEnd(c.g);
+    eq(l3.location, 'deck', 'only 1 free zone: nothing');
+  });
+
+  await test('GB audit: contact fusion — Gyzarus with Prisma named Bestiari; Heraklinos with Prisma named Laquari; never with a face-down or un-named material', async () => {
+    const a = setup();
+    const prisma = a.place(0, N('Elemental Hero Prisma'), 'mzone');
+    const gyz = a.place(0, N('Gladiator Beast Gyzarus'), 'extra');
+    const best = deckCard(a.g, 0, 'Gladiator Beast Bestiari');
+    const laq = a.place(0, N('Gladiator Beast Laquari'), 'mzone');
+    eq(!!procAct(a.g, 0, gyz), false, 'no Bestiari yet');
+    pickOnly(a.c0, [gyz, best]);
+    await activateCard(a.g, 0, prisma);
+    eq(best.location, 'grave', 'Prisma sent Bestiari');
+    eq(prisma.name, 'Gladiator Beast Bestiari', 'Prisma named Bestiari');
+    const st = a.place(1, N('Mirror Force'), 'szone');
+    pickOnly(a.c0, [prisma, laq, st]);
+    await a.g.performAction(0, procAct(a.g, 0, gyz)!);
+    eq(gyz.location, 'mzone', 'Gyzarus contact-fused');
+    eq(prisma.location, 'deck', 'Prisma shuffled in');
+    eq(laq.location, 'deck', 'Laquari shuffled in');
+    eq(st.location, 'grave', 'Gyzarus destroyed a card on Special Summon');
+    const h = setup();
+    const p2 = h.place(0, N('Elemental Hero Prisma'), 'mzone');
+    const her = h.place(0, N('Gladiator Beast Heraklinos'), 'extra');
+    const laqD = deckCard(h.g, 0, 'Gladiator Beast Laquari');
+    h.place(0, N('Gladiator Beast Darius'), 'mzone');
+    h.place(0, N('Gladiator Beast Hoplomus'), 'mzone', { pos: 'def' });
+    pickOnly(h.c0, [her, laqD]);
+    await activateCard(h.g, 0, p2);
+    eq(p2.name, 'Gladiator Beast Laquari', 'Prisma named Laquari');
+    await h.g.performAction(0, procAct(h.g, 0, her)!);
+    eq(her.location, 'mzone', 'Heraklinos contact-fused');
+    const f = setup();
+    const gyz2 = f.place(0, N('Gladiator Beast Gyzarus'), 'extra');
+    f.place(0, N('Gladiator Beast Bestiari'), 'mzone', { faceUp: false, pos: 'def' });
+    f.place(0, N('Gladiator Beast Laquari'), 'mzone');
+    eq(!!procAct(f.g, 0, gyz2), false, 'face-down Bestiari cannot be a material');
+    const t = setup();
+    const gyz3 = t.place(0, N('Gladiator Beast Gyzarus'), 'extra');
+    t.place(0, N('Elemental Hero Prisma'), 'mzone');
+    t.place(0, N('Gladiator Beast Laquari'), 'mzone');
+    eq(!!procAct(t.g, 0, gyz3), false, 'un-named Prisma is not Bestiari');
+  });
+
+  await test('GB audit: Solemn Judgment negates a contact fusion (materials stay shuffled); Bottomless Trap Hole hits a tagged-in Laquari', async () => {
+    const a = setup();
+    a.place(0, N('Gladiator Beast Bestiari'), 'mzone');
+    a.place(0, N('Gladiator Beast Darius'), 'mzone');
+    const gyz = a.place(0, N('Gladiator Beast Gyzarus'), 'extra');
+    a.place(1, N('Solemn Judgment'), 'szone');
+    a.c1.respond = respondWith('Solemn Judgment');
+    await a.g.performAction(0, procAct(a.g, 0, gyz)!);
+    eq(gyz.location, 'grave', 'Gyzarus negated and destroyed');
+    eq(a.g.players[1].lp, 4000, 'half LP paid');
+    eq(a.g.monsters(0).length, 0, 'materials were shuffled in as the summon procedure');
+    const b = setup();
+    const laq = deckCard(b.g, 0, 'Gladiator Beast Laquari');
+    const best = b.place(0, N('Gladiator Beast Bestiari'), 'mzone');
+    best.attackedThisTurnOrWasAttacked = true;
+    b.place(1, N('Bottomless Trap Hole'), 'szone');
+    b.c1.respond = respondWith('Bottomless Trap Hole');
+    await battleEnd(b.g);
+    eq(laq.location, 'banished', 'Bottomless Trap Hole banished the 2100 Laquari');
+  });
+
+  await test('GB audit: Test Tiger tags out Prisma named Bestiari (Laquari still 2100) and Gyzarus (back to the Extra Deck)', async () => {
+    const a = setup();
+    const prisma = a.place(0, N('Elemental Hero Prisma'), 'mzone');
+    a.place(0, N('Gladiator Beast Gyzarus'), 'extra');
+    const best = deckCard(a.g, 0, 'Gladiator Beast Bestiari');
+    pickOnly(a.c0, [best]);
+    await activateCard(a.g, 0, prisma);
+    const laq = deckCard(a.g, 0, 'Gladiator Beast Laquari');
+    const tiger = a.place(0, N('Test Tiger'), 'hand');
+    await a.g.performAction(0, procAct(a.g, 0, tiger)!);
+    eq(tiger.location, 'mzone', 'Test Tiger summoned (Prisma is a Gladiator Beast by name)');
+    pickOnly(a.c0, [prisma, laq]);
+    await activateCard(a.g, 0, tiger);
+    eq(prisma.location, 'deck', 'Prisma shuffled into the Deck');
+    eq(laq.location, 'mzone', 'Laquari');
+    eq(a.g.getAtk(laq), 2100, 'treated as Summoned by a Gladiator Beast effect');
+    const b = setup();
+    const gyz = b.place(0, N('Gladiator Beast Gyzarus'), 'mzone');
+    const t2 = b.place(0, N('Test Tiger'), 'mzone');
+    const mur = deckCard(b.g, 0, 'Gladiator Beast Murmillo');
+    const v = b.place(1, T.brute, 'mzone');
+    pickOnly(b.c0, [v, gyz, mur]);
+    await activateCard(b.g, 0, t2);
+    eq(gyz.location, 'extra', 'Gyzarus returned to the Extra Deck');
+    eq(mur.location, 'mzone', 'Murmillo');
+    eq(v.location, 'grave', 'Murmillo destroyed');
+  });
+
+  await test('GB audit: Heraklinos flipped face-down by Book of Moon in response does not negate', async () => {
+    const { g, c0, c1, place } = setup();
+    const her = place(1, N('Gladiator Beast Heraklinos'), 'mzone');
+    place(1, T.wall, 'hand');
+    place(1, T.brute, 'mzone');
+    const bom = place(0, N('Book of Moon'), 'szone');
+    const sm = place(0, N('Smashing Ground'), 'hand');
+    c1.respond = (gg, req) => (gg.chain[gg.chain.length - 1]?.card === sm ? (req.options.find((o) => o.card === her) ?? null) : null);
+    c0.respond = (gg, req) => (gg.chain[gg.chain.length - 1]?.card === her ? (req.options.find((o) => o.card === bom) ?? null) : null);
+    pickOnly(c0, [her]);
+    await activateCard(g, 0, sm);
+    eq(her.faceUp, false, 'Heraklinos flipped face-down');
+    eq(sm.location, 'grave', 'Smashing Ground resolved and went to the GY');
+    eq(g.monsters(1).some((m) => m.location === 'grave') || g.monsters(1).length === 1, true, 'Smashing Ground destroyed a monster');
+  });
+
+  await test('GB audit: Samnite tagged in searches when it destroys a monster by battle; a Normal Summoned Samnite does not', async () => {
+    const a = setup();
+    const sam = deckCard(a.g, 0, 'Gladiator Beast Samnite');
+    const laq = a.place(0, N('Gladiator Beast Laquari'), 'mzone');
+    laq.attackedThisTurnOrWasAttacked = true;
+    pickOnly(a.c0, [sam]);
+    await battleEnd(a.g);
+    eq(sam.location, 'mzone', 'Samnite tagged in');
+    const wc = deckCard(a.g, 0, 'Gladiator Beast War Chariot');
+    const v = a.place(1, T.dark, 'mzone', { pos: 'def' });
+    pickOnly(a.c0, [wc]);
+    a.g.phase = 'battle';
+    await a.g.conductAttack(0, sam);
+    eq(v.location, 'grave', 'destroyed by battle');
+    eq(wc.location, 'hand', 'Samnite searched War Chariot');
+    const n = setup();
+    const s2 = n.place(0, N('Gladiator Beast Samnite'), 'hand');
+    await n.g.normalSummon(0, s2, false);
+    const wc2 = deckCard(n.g, 0, 'Gladiator Beast War Chariot');
+    const v2 = n.place(1, T.dark, 'mzone', { pos: 'def' });
+    n.g.phase = 'battle';
+    await n.g.conductAttack(0, s2);
+    eq(v2.location, 'grave', 'destroyed by battle');
+    eq(wc2.location, 'deck', 'not Gladiator-Summoned: no search');
+  });
+
+  await test('GB audit: Gladiator Beast War Chariot negates Prisma (a monster effect) while you control a Gladiator Beast', async () => {
+    const { g, c1, place } = setup();
+    const prisma = place(0, N('Elemental Hero Prisma'), 'mzone');
+    place(0, N('Gladiator Beast Gyzarus'), 'extra');
+    const best = deckCard(g, 0, 'Gladiator Beast Bestiari');
+    place(1, N('Gladiator Beast Laquari'), 'mzone');
+    const wc = place(1, N('Gladiator Beast War Chariot'), 'szone');
+    c1.respond = respondWith('Gladiator Beast War Chariot');
+    await activateCard(g, 0, prisma);
+    eq(wc.location, 'grave', 'War Chariot used');
+    eq(prisma.location, 'grave', 'Prisma destroyed');
+    eq(best.location, 'deck', 'nothing sent');
   });
 }

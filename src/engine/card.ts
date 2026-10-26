@@ -181,6 +181,12 @@ export interface EffectDef {
    * an opponent's monster, at the start of the Damage Step before it would be flipped face-up (Game.damageStep).
    */
   faceDownAttacked?: boolean;
+  /**
+   * UI only (never read by the engine): a one-line, player-facing reason this effect can't be used right now, or null
+   * when the card has nothing specific to say. Shown on the disabled rows of the duel action menu and in the pile
+   * viewer before the generic "condition not met" text. Must only read the game state. Most are set in src/cards/why-not.ts.
+   */
+  whyNot?: (ctx: Ctx) => string | null;
 }
 
 // ---------------------------------------------------------------------------

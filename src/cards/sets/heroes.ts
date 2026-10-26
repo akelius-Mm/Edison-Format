@@ -569,14 +569,14 @@ heroFusion(
   'Warrior',
   2500,
   2000,
-  'Gains 500 ATK for each face-up WATER monster on the field, except this card. When this card leaves the field: Destroy all monsters your opponent controls.',
+  'Gains 500 ATK for each face-up WATER monster on the field, except "Elemental Hero Absolute Zero". When this card leaves the field: Destroy all monsters your opponent controls.',
   [
     {
       kind: 'continuous',
       mods: [
         {
           q: 'atk',
-          value: (ctx) => 500 * ctx.faceUpMonsters('both', (c) => c !== ctx.self && c.data.attribute === 'WATER').length,
+          value: (ctx) => 500 * ctx.faceUpMonsters('both', (c) => c !== ctx.self && c.name !== 'Elemental Hero Absolute Zero' && c.data.attribute === 'WATER').length,
         },
       ],
     },

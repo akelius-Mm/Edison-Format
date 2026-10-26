@@ -295,6 +295,8 @@ gadget('Green Gadget', 1400, 600, 'Red Gadget');
 gadget('Red Gadget', 1300, 1500, 'Yellow Gadget');
 gadget('Yellow Gadget', 1200, 1200, 'Green Gadget');
 
+/** Gravekeeper's Descendant's cost: another face-up "Gravekeeper's" monster. */
+const isGKFodder = (c: CardInstance) => c.faceUp && c.isMonster && (c.inSet('gravekeeper') || c.name.startsWith("Gravekeeper's"));
 monster("Gravekeeper's Descendant", {
   attribute: 'DARK',
   race: 'Spellcaster',
@@ -303,16 +305,16 @@ monster("Gravekeeper's Descendant", {
   def: 1200,
   sets: ['gravekeeper'],
   aiValue: 600,
-  text: 'You can Tribute 1 other monster, then target 1 card your opponent controls; destroy that target.',
+  text: 'You can Tribute 1 other face-up "Gravekeeper\'s" monster, then target 1 card your opponent controls; destroy that target.',
   effects: [
     {
       kind: 'ignition',
       label: 'Tribute: destroy 1 card',
       categories: ['destroy'],
       canActivate: (ctx) =>
-        ctx.monsters('me', (c) => c !== ctx.self && !ctx.query(c, 'cannotBeTributed')).length > 0 && ctx.field('opp', (c) => ctx.canTarget(c)).length > 0,
+        ctx.monsters('me', (c) => c !== ctx.self && isGKFodder(c) && !ctx.query(c, 'cannotBeTributed')).length > 0 && ctx.field('opp', (c) => ctx.canTarget(c)).length > 0,
       activate: async (ctx) => {
-        const cost = await ctx.select(ctx.monsters('me', (c) => c !== ctx.self && !ctx.query(c, 'cannotBeTributed')), 1, 1, 'Tribute 1 other monster.', 'tribute');
+        const cost = await ctx.select(ctx.monsters('me', (c) => c !== ctx.self && isGKFodder(c) && !ctx.query(c, 'cannotBeTributed')), 1, 1, 'Tribute 1 other face-up "Gravekeeper\'s" monster.', 'tribute');
         if (!cost.length) return false;
         await tributeCost(ctx, cost);
         await ctx.selectTargets(ctx.field('opp'), 1, 1, 'Target 1 card your opponent controls to destroy.', 'destroy');
@@ -320,7 +322,7 @@ monster("Gravekeeper's Descendant", {
       resolve: destroyTargets,
       ai: {
         score: (ctx) => {
-          const fodder = Math.min(...ctx.monsters('me', (c) => c !== ctx.self && !ctx.query(c, 'cannotBeTributed')).map((c) => cardValue(ctx.game, c)));
+          const fodder = Math.min(...ctx.monsters('me', (c) => c !== ctx.self && isGKFodder(c) && !ctx.query(c, 'cannotBeTributed')).map((c) => cardValue(ctx.game, c)));
           const best = bestTarget(ctx.game, ctx.field('opp', (c) => ctx.canTarget(c)));
           if (!best) return 0;
           const gain = cardValue(ctx.game, best) - fodder;

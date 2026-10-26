@@ -1,6 +1,6 @@
 // Card definitions: X-Sabers / XX-Sabers (archetype group B).
 import { monster, normal, spell, trap } from '../define';
-import { cardValue, selfDestroysByBattle } from '../helpers';
+import { attr, cardValue, selfDestroysByBattle } from '../helpers';
 import type { CardInstance } from '../../engine/card';
 import type { Ctx } from '../../engine/ctx';
 
@@ -162,7 +162,7 @@ monster('XX-Saber Darksoul', {
 
 monster('X-Saber Galahad', {
   attribute: 'EARTH',
-  race: 'Beast-Warrior',
+  race: 'Warrior', // printed Type (YGOJSON), was Beast-Warrior
   level: 4,
   atk: 1800,
   def: 800,
@@ -285,14 +285,19 @@ monster('X-Saber Uruz', {
 // ============================================================ SPELLS / TRAPS
 
 spell("Gottoms' Emergency Call", 'normal', {
-  text: 'Target 2 "X-Saber" monsters in your GY; Special Summon them.',
+  // Printed card: needs a face-up "X-Saber" on the field and targets 2 "X-Saber" monsters in either GY.
+  text: 'Activate only while there is a face-up "X-Saber" monster on the field. Target 2 "X-Saber" monsters in any Graveyard; Special Summon them to your side of the field.',
   effects: [
     {
       kind: 'activate',
       categories: ['specialSummon'],
-      canActivate: (ctx) => ctx.canSpecialSummon() && ctx.freeMZones() >= 2 && ctx.grave('me', (c) => isXS(c) && ctx.canSummonCard(c)).length >= 2,
+      canActivate: (ctx) =>
+        ctx.canSpecialSummon() &&
+        ctx.freeMZones() >= 2 &&
+        ctx.faceUpMonsters('both', isXS).length > 0 &&
+        ctx.grave('both', (c) => isXS(c) && ctx.canSummonCard(c)).length >= 2,
       activate: async (ctx) => {
-        await ctx.selectTargets(ctx.grave('me', (c) => isXS(c) && ctx.canSummonCard(c)), 2, 2, 'Target 2 "X-Saber" monsters in your GY.', 'specialSummon', {
+        await ctx.selectTargets(ctx.grave('both', (c) => isXS(c) && ctx.canSummonCard(c)), 2, 2, 'Target 2 "X-Saber" monsters in any GY.', 'specialSummon', {
           aiScore: (c) => xsPriority(ctx, c),
         });
       },
@@ -302,7 +307,7 @@ spell("Gottoms' Emergency Call", 'normal', {
       },
       ai: {
         score: (ctx) => {
-          const g = ctx.grave('me', (c) => isXS(c) && ctx.canSummonCard(c));
+          const g = ctx.grave('both', (c) => isXS(c) && ctx.canSummonCard(c));
           const hasTuner = g.some((c) => c.isTuner) || ctx.faceUpMonsters('me', (c) => c.isTuner).length > 0;
           return 58 + (hasTuner ? 10 : 0);
         },
@@ -351,14 +356,15 @@ trap('Saber Slash', 'normal', {
 monster('XX-Saber Gottoms', {
   attribute: 'EARTH',
   race: 'Beast-Warrior',
-  level: 7,
+  // Printed card: Level 9, 1 Tuner + 1+ non-Tuner EARTH monsters (YGOJSON; was Level 7 / X-Saber non-Tuners).
+  level: 9,
   atk: 3100,
   def: 2600,
   types: ['synchro'],
   sets: XXS,
   aiValue: 400,
-  text: '1 Tuner + 1 or more non-Tuner "X-Saber" monsters\nYou can Tribute 1 "X-Saber" monster; discard 1 random card from your opponent\'s hand.',
-  synchro: { nonTuner: (c) => c.inSet('x-saber'), desc: '1 Tuner + 1+ non-Tuner "X-Saber" monsters' },
+  text: '1 Tuner + 1 or more non-Tuner EARTH monsters\nYou can Tribute 1 "X-Saber" monster; discard 1 random card from your opponent\'s hand.',
+  synchro: { nonTuner: attr('EARTH'), desc: '1 Tuner + 1+ non-Tuner EARTH monsters' },
   effects: [
     {
       kind: 'ignition',

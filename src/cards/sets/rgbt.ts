@@ -1462,6 +1462,21 @@ monster('Alien Dog', {
   text: 'When you Normal Summon an "Alien" monster, you can Special Summon this card from your hand. When you do, place 2 A-Counters on face-up monster(s) your opponent controls.',
   effects: [
     {
+      // A-Counter rule (same as crms.ts alienBattleRule): a monster with A-Counters battling this "Alien"
+      // loses 300 ATK and DEF for each A-Counter during damage calculation.
+      kind: 'continuous',
+      mods: (['atk', 'def'] as const).map((q) => ({
+        q,
+        to: 'cards' as const,
+        filter: (ctx: Ctx, c: C) => {
+          const b = ctx.battle;
+          if (!b || !b.inDamageStep || (c.counters.A ?? 0) <= 0) return false;
+          return (b.attacker === ctx.self && b.target === c) || (b.target === ctx.self && b.attacker === c);
+        },
+        value: (_ctx: Ctx, c: C) => -300 * (c.counters.A ?? 0),
+      })),
+    },
+    {
       kind: 'trigger',
       event: 'normalSummoned',
       range: ['hand'],
@@ -1482,9 +1497,11 @@ monster('Alien Dog', {
           if (!opp.length) break;
           const [m] = await ctx.select(opp, 1, 1, 'Place 1 A-Counter on a face-up monster your opponent controls.', 'target');
           if (!m) break;
-          m.counters.aCounter = (m.counters.aCounter ?? 0) + 1;
+          // A-Counters live in `card.counters.A` (crms.ts / glas.ts).
+          m.counters.A = (m.counters.A ?? 0) + 1;
           ctx.log(`An A-Counter is placed on ${m.name}.`);
         }
+        ctx.game.update();
       },
       ai: { score: () => 45 },
     },

@@ -291,7 +291,8 @@ monster('Destiny Hero - Malicious', {
       resolve: async (ctx) => {
         if (!ctx.canSpecialSummon()) return;
         const c = ctx.deck('me', (x) => x.name === 'Destiny Hero - Malicious')[0];
-        if (c) await ctx.specialSummon(c, { pos: 'def' });
+        // No position is specified: the player chooses Attack or Defense.
+        if (c) await ctx.specialSummon(c, { pos: 'choose' });
         ctx.game.shuffleDeck(ctx.player);
       },
       ai: {
