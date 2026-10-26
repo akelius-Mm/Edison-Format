@@ -30,6 +30,7 @@ import './sets/archetype-extras';
 import './sets/archetype-extras2';
 import './sets/sdmm';
 import './gy-costs';
+import './why-not';
 import { applyBanlist } from './banlist';
 
 applyBanlist();

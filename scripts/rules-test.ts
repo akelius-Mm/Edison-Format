@@ -21,6 +21,7 @@ import { ensureArchetypeExtras2Patches } from '../src/cards/sets/archetype-extra
 import { AIController } from '../src/ai/ai';
 import { Ctx } from '../src/engine/ctx';
 import { GY_BANISH_COST_PROBLEMS } from '../src/cards/gy-costs';
+import { WHY_NOT_PROBLEMS } from '../src/cards/why-not';
 
 const T = {
   brute: findCard('Rules Test Brute') ?? normal('Rules Test Brute', 'EARTH', 'Warrior', 4, 1800, 1000),
@@ -4030,6 +4031,29 @@ async function fuzzRegressionTests() {
 
   await test('gy-costs table: every card and effect index resolves', async () => {
     eq(GY_BANISH_COST_PROBLEMS.join('; '), '', 'problems');
+  });
+
+  await test('why-not table: every card and effect index resolves; reasons follow the card checks', async () => {
+    eq(WHY_NOT_PROBLEMS.join('; '), '', 'problems');
+    const why = (g: Game, c: CardInstance, i = 0) => {
+      const ef = c.data.effects![i];
+      return ef.whyNot ? ef.whyNot(new Ctx(g, c, ef, c.controller)) : 'none';
+    };
+    const { g, place } = setup();
+    const bc = place(0, cardByName('Brain Control'), 'hand');
+    place(1, cardByName('Stardust Dragon'), 'mzone');
+    eq(/not Synchro\/Fusion\/Ritual/.test(why(g, bc) ?? ''), true, 'Brain Control: only a Stardust Dragon');
+    place(1, T.brute, 'mzone');
+    eq(why(g, bc), null, 'Brain Control: a legal target');
+    g.players[0].lp = 800;
+    eq(/more than 800 LP/.test(why(g, bc) ?? ''), true, 'Brain Control: LP');
+    const dad = place(0, cardByName('Dark Armed Dragon'), 'hand');
+    place(0, cardByName('Dark Armed Dragon'), 'grave');
+    eq(why(g, dad), 'Needs exactly 3 DARK monsters in your Graveyard (you have 1)', 'Dark Armed Dragon count');
+    const frog = place(0, cardByName('Treeborn Frog'), 'grave');
+    eq(why(g, frog), null, 'Treeborn: nothing stops it');
+    place(0, cardByName('Heavy Storm'), 'szone', { faceUp: false });
+    eq(/Spell\/Trap Card/.test(why(g, frog) ?? ''), true, 'Treeborn: a Set card');
   });
 
   await test('Gozen Match: no Synchro Summon that would leave monsters of another Attribute', async () => {
