@@ -167,16 +167,18 @@ spell('Book of Moon', 'quickplay', {
   ],
 });
 
+/** Brain Control: only a monster that can be Normal Summoned/Set (no Fusion/Synchro/Ritual/nomi monsters or Tokens). */
+const brainControllable = (c: CardInstance) => c.isMonster && !c.isExtra && !c.isToken && !c.data.cannotNormalSummon;
 spell('Brain Control', 'normal', {
-  text: 'Pay 800 LP, then target 1 face-up monster your opponent controls; take control of it until the End Phase.',
+  text: 'Pay 800 LP, then target 1 face-up monster your opponent controls that can be Normal Summoned/Set; take control of it until the End Phase.',
   effects: [
     {
       kind: 'activate',
       categories: ['control'],
-      canActivate: (ctx) => ctx.lp > 800 && ctx.freeMZones() > 0 && ctx.faceUpMonsters('opp', (c) => ctx.canTarget(c)).length > 0,
+      canActivate: (ctx) => ctx.lp > 800 && ctx.freeMZones() > 0 && ctx.faceUpMonsters('opp', (c) => brainControllable(c) && ctx.canTarget(c)).length > 0,
       activate: async (ctx) => {
         await ctx.payLp(800);
-        await ctx.selectTargets(ctx.faceUpMonsters('opp'), 1, 1, 'Target 1 face-up monster to take control of.', 'control');
+        await ctx.selectTargets(ctx.faceUpMonsters('opp', brainControllable), 1, 1, 'Target 1 face-up monster to take control of.', 'control');
       },
       resolve: async (ctx) => {
         const t = ctx.validTargets((c) => c.location === 'mzone' && c.faceUp);
@@ -184,7 +186,7 @@ spell('Brain Control', 'normal', {
       },
       ai: {
         score: (ctx) => {
-          const best = bestTarget(ctx.game, ctx.faceUpMonsters('opp'));
+          const best = bestTarget(ctx.game, ctx.faceUpMonsters('opp', brainControllable));
           return best && ctx.atk(best) >= 1800 ? 40 + ctx.atk(best) / 100 : 0;
         },
       },

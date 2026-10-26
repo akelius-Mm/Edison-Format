@@ -892,6 +892,7 @@ function eq(a: unknown, b: unknown, msg: string) {
   await zombieGraveAlienAuditTests();
 
   await blackwingLightswornAuditTests();
+  await heroDadPsychicAuditTests();
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })();
@@ -6136,5 +6137,357 @@ async function blackwingLightswornAuditTests() {
     await g.conductAttack(0, a);
     eq(a.location, 'mzone', 'Mirror Force negated');
     eq(g.players[1].lp, 8000 - 1800, 'direct attack goes through');
+  });
+}
+
+// ---------------------------------------------------------------- HERO / Dark Armed Dragon / Psychic / Reptilianne audit
+
+async function heroDadPsychicAuditTests() {
+  const live = (c: CardInstance) => {
+    c.faceUp = true;
+    c.activeOnField = true;
+    return c;
+  };
+  const deckCard = (g: Game, p: PlayerId, name: string) => {
+    const c = g.registerCard(new (g.allCards[0].constructor as any)(cardByName(name), p)) as CardInstance;
+    c.location = 'none';
+    g.rawMove(c, 'deck');
+    return c;
+  };
+  const offered = (g: Game, p: PlayerId, card: CardInstance) => g.getActivations(p, { open: true }).some((a) => a.card === card);
+  const procOffered = (g: Game, p: PlayerId, card: CardInstance) => g.legalMainActions(p).some((a) => a.type === 'proc' && a.card === card);
+  const doProc = async (g: Game, p: PlayerId, card: CardInstance) => {
+    const a = g.legalMainActions(p).find((x) => x.type === 'proc' && x.card === card);
+    if (!a) throw new Error(`${card.name}: no Summon procedure offered`);
+    await g.performAction(p, a);
+  };
+  const pickOnly = (c: TestController, want: CardInstance[]) => {
+    c.pick = (_g, req) => {
+      const w = req.candidates.filter((x) => want.includes(x));
+      return w.length >= req.min && w.length ? w.slice(0, Math.max(req.min, Math.min(w.length, req.max))) : req.candidates.slice(0, req.min);
+    };
+  };
+  /** Record every candidate list offered to this controller (and pick the first `min`). */
+  const recordPicks = (c: TestController) => {
+    const seen: CardInstance[][] = [];
+    c.pick = (_g, req) => {
+      seen.push([...req.candidates]);
+      return req.candidates.slice(0, req.min);
+    };
+    return seen;
+  };
+
+  // ---- Dark Armed Dragon engine
+  await test('Dark Armed Dragon: Special Summon only from the hand with EXACTLY 3 DARK monsters in the GY; never Normal Summoned', async () => {
+    const { g, place } = setup();
+    const dad = place(0, cardByName('Dark Armed Dragon'), 'hand');
+    place(0, T.dark, 'grave');
+    place(0, T.dark, 'grave');
+    place(0, T.brute, 'grave');
+    eq(procOffered(g, 0, dad), false, '2 DARK (+1 EARTH) in GY');
+    const third = place(0, T.dark, 'grave');
+    eq(procOffered(g, 0, dad), true, 'exactly 3 DARK');
+    place(0, T.dark, 'grave');
+    eq(procOffered(g, 0, dad), false, '4 DARK in GY');
+    eq(g.canNormalSummon(0, dad, false) || g.canNormalSummon(0, dad, true), false, 'cannot be Normal Summoned/Set');
+    void third;
+    const s = setup();
+    const inGy = s.place(0, cardByName('Dark Armed Dragon'), 'grave');
+    s.place(0, T.dark, 'grave');
+    s.place(0, T.dark, 'grave');
+    eq(procOffered(s.g, 0, inGy), false, 'not from the GY (3 DARK counting itself)');
+  });
+
+  await test('Dark Armed Dragon: banish 1 DARK from the GY (cost), target 1 card; usable more than once per turn', async () => {
+    const { g, c0, place } = setup();
+    const dad = place(0, cardByName('Dark Armed Dragon'), 'hand');
+    const d1 = place(0, T.dark, 'grave');
+    const d2 = place(0, T.dark, 'grave');
+    const d3 = place(0, T.dark, 'grave');
+    await doProc(g, 0, dad);
+    eq(dad.location, 'mzone', 'summoned');
+    eq(dad.properlySummoned, true, 'properly Summoned');
+    const mon = place(1, T.brute, 'mzone');
+    const st = place(1, cardByName('Mirror Force'), 'szone');
+    pickOnly(c0, [d1, mon]);
+    await activateCard(g, 0, dad);
+    eq(d1.location, 'banished', 'DARK banished');
+    eq(mon.location, 'grave', 'monster destroyed');
+    pickOnly(c0, [d2, st]);
+    await activateCard(g, 0, dad);
+    eq(d2.location, 'banished', 'second DARK banished');
+    eq(st.location, 'grave', 'Set card destroyed (second use this turn)');
+    eq(d3.location, 'grave', 'only one DARK banished per use');
+  });
+
+  await test('Dark Grepher: Special Summon by discarding a Level 5+ DARK (not Level 4); once per turn discard a DARK to send a DARK from the Deck', async () => {
+    const { g, c0, place } = setup();
+    const grepher = place(0, cardByName('Dark Grepher'), 'hand');
+    const lv4 = place(0, T.dark, 'hand');
+    eq(procOffered(g, 0, grepher), false, 'a Level 4 DARK cannot pay');
+    const mal = place(0, cardByName('Destiny Hero - Malicious'), 'hand');
+    pickOnly(c0, [mal]);
+    await doProc(g, 0, grepher);
+    eq(grepher.location, 'mzone', 'Grepher Special Summoned');
+    eq(mal.location, 'grave', 'Malicious discarded');
+    eq(g.players[0].normalSummonsLeft, 1, 'Normal Summon not used');
+    const ak = deckCard(g, 0, 'Armageddon Knight');
+    deckCard(g, 0, 'Krebons');
+    pickOnly(c0, [lv4, ak]);
+    await activateCard(g, 0, grepher);
+    eq(lv4.location, 'grave', 'DARK discarded');
+    eq(ak.location, 'grave', 'DARK sent from the Deck');
+    place(0, T.dark, 'hand');
+    eq(offered(g, 0, grepher), false, 'once per turn');
+  });
+
+  await test('Armageddon Knight: when Normal Summoned, send 1 DARK monster from the Deck to the GY', async () => {
+    const { g, c0, place } = setup();
+    const ak = place(0, cardByName('Armageddon Knight'), 'hand');
+    const mal = deckCard(g, 0, 'Destiny Hero - Malicious');
+    pickOnly(c0, [mal]);
+    await g.normalSummon(0, ak, false);
+    eq(mal.location, 'grave', 'Malicious milled');
+  });
+
+  await test('Destiny HERO - Malicious: banish from the GY to Special Summon another from the Deck, in the position you choose', async () => {
+    const { g, c0, place } = setup();
+    const mal = place(0, cardByName('Destiny Hero - Malicious'), 'grave');
+    eq(offered(g, 0, mal), false, 'no copy in the Deck: not offered');
+    const mal2 = deckCard(g, 0, 'Destiny Hero - Malicious');
+    let asked = false;
+    c0.choosePosition = async (_g: Game, _p: PlayerId, _c: CardInstance, allowed: (BattlePos | 'set')[]) => {
+      asked = allowed.includes('atk') && allowed.includes('def');
+      return 'atk';
+    };
+    await activateCard(g, 0, mal);
+    eq(mal.location, 'banished', 'banished as cost');
+    eq(mal2.location, 'mzone', 'second copy Special Summoned');
+    eq(asked, true, 'player chose the position');
+    eq(mal2.pos, 'atk', 'Attack Position allowed');
+  });
+
+  await test('Emergency Teleport: Level 3 or lower Psychic from hand/Deck only; banished in the End Phase', async () => {
+    const { g, c0, place } = setup();
+    const kreb = deckCard(g, 0, 'Krebons');
+    deckCard(g, 0, 'Telekinetic Shocker');
+    deckCard(g, 0, 'Psychic Commander');
+    const seen = recordPicks(c0);
+    pickOnly(c0, [kreb]);
+    const inner = c0.pick;
+    c0.pick = (gg, req) => (seen.push([...req.candidates]), inner(gg, req));
+    await activateCard(g, 0, place(0, cardByName('Emergency Teleport'), 'hand'));
+    eq(seen.flat().some((c) => c.name === 'Psychic Commander'), true, 'Level 3 Psychic offered');
+    eq(seen.flat().some((c) => c.name === 'Telekinetic Shocker'), false, 'a Level 4 Psychic is not a candidate');
+    eq(kreb.location, 'mzone', 'Krebons Special Summoned');
+    await (g as any).setPhase('end');
+    eq(kreb.location, 'banished', 'banished during the End Phase');
+  });
+
+  await test('Krebons: pay 800 LP to negate an attack that targets it', async () => {
+    const { g, place } = setup();
+    const kreb = place(0, cardByName('Krebons'), 'mzone');
+    const att = place(1, T.brute, 'mzone');
+    g.turnPlayer = 1;
+    g.phase = 'battle';
+    await g.conductAttack(1, att);
+    eq(kreb.location, 'mzone', 'Krebons survives');
+    eq(g.players[0].lp, 8000 - 800, 'paid 800 LP only');
+  });
+
+  await test('Allure of Darkness: draw 2 then banish a DARK from the hand; with none, the whole hand goes to the GY', async () => {
+    const { g, place } = setup();
+    deckCard(g, 0, 'Krebons');
+    deckCard(g, 0, 'Rules Test Wall');
+    await activateCard(g, 0, place(0, cardByName('Allure of Darkness'), 'hand'));
+    eq(g.players[0].banished.some((c) => c.name === 'Krebons'), true, 'Krebons banished');
+    eq(g.players[0].hand.length, 1, 'kept the other drawn card');
+    const s = setup();
+    const keep = s.place(0, T.brute, 'hand');
+    await activateCard(s.g, 0, s.place(0, cardByName('Allure of Darkness'), 'hand'));
+    eq(s.g.players[0].hand.length, 0, 'no DARK: entire hand sent to the GY');
+    eq(keep.location, 'grave', 'other hand card too');
+  });
+
+  await test('Gold Sarcophagus: the banished card arrives on your 2nd Standby Phase after activation, not the 1st', async () => {
+    const { g, c0, place } = setup();
+    const want = deckCard(g, 0, 'Dark Armed Dragon');
+    pickOnly(c0, [want]);
+    const t0 = g.turn;
+    await activateCard(g, 0, place(0, cardByName('Gold Sarcophagus'), 'hand'));
+    eq(want.location, 'banished', 'banished face-up');
+    g.turn = t0 + 2;
+    await (g as any).setPhase('standby');
+    eq(want.location, 'banished', 'still banished on the 1st Standby Phase');
+    g.turn = t0 + 4;
+    await (g as any).setPhase('standby');
+    eq(want.location, 'hand', 'added on the 2nd Standby Phase');
+  });
+
+  await test('Destiny Draw: discard a Destiny HERO as cost, draw 2; not without one', async () => {
+    const { g, place } = setup();
+    const dd = place(0, cardByName('Destiny Draw'), 'hand');
+    place(0, T.dark, 'hand');
+    eq(offered(g, 0, dd), false, 'no Destiny HERO in hand');
+    const mal = place(0, cardByName('Destiny Hero - Malicious'), 'hand');
+    await activateCard(g, 0, dd);
+    eq(mal.location, 'grave', 'Malicious discarded');
+    eq(g.players[0].hand.length, 3, 'drew 2');
+  });
+
+  // ---- Psychic
+  await test('Magical Android: gains 600 LP per face-up Psychic you control in your End Phase only', async () => {
+    const { g, place } = setup();
+    live(place(0, cardByName('Magical Android'), 'mzone'));
+    live(place(0, cardByName('Krebons'), 'mzone'));
+    place(0, cardByName('Psychic Commander'), 'mzone', { faceUp: false, pos: 'def' });
+    g.turnPlayer = 1;
+    await (g as any).setPhase('end');
+    eq(g.players[0].lp, 8000, "nothing in the opponent's End Phase");
+    g.turnPlayer = 0;
+    await (g as any).setPhase('end');
+    eq(g.players[0].lp, 8000 + 1200, '2 face-up Psychics = 1200');
+  });
+
+  await test("Thought Ruler Archfiend: pay 1000 to negate and destroy a Spell that targets 1 Psychic", async () => {
+    const { g, c0, place } = setup();
+    live(place(0, cardByName('Thought Ruler Archfiend'), 'mzone'));
+    const kreb = live(place(0, cardByName('Krebons'), 'mzone'));
+    c0.respond = respondWith('Thought Ruler Archfiend');
+    g.turnPlayer = 1;
+    const bc = place(1, cardByName('Brain Control'), 'hand');
+    const pick1 = (g as any).controllers[1] as TestController;
+    pickOnly(pick1, [kreb]);
+    await activateCard(g, 1, bc);
+    eq(kreb.controller, 0, 'Krebons stays');
+    eq(bc.location, 'grave', 'Brain Control destroyed');
+    eq(g.players[0].lp, 8000 - 1000, 'paid 1000');
+  });
+
+  // ---- HEROes
+  await test('Elemental Hero Stratos: search a HERO; with another face-up HERO, destroy up to that many Spells/Traps', async () => {
+    const { g, place } = setup();
+    const ocean = deckCard(g, 0, 'Elemental Hero Ocean');
+    await g.normalSummon(0, place(0, cardByName('Elemental Hero Stratos'), 'hand'), false);
+    eq(ocean.location, 'hand', 'no other HERO: searched');
+    const s = setup();
+    live(s.place(0, cardByName('Elemental Hero Wildheart'), 'mzone'));
+    const st1 = s.place(1, cardByName('Mirror Force'), 'szone');
+    const st2 = s.place(1, cardByName('Torrential Tribute'), 'szone');
+    s.c0.pick = (_g, req) => req.candidates.slice(0, req.max);
+    await s.g.normalSummon(0, s.place(0, cardByName('Elemental Hero Stratos'), 'hand'), false);
+    eq([st1, st2].filter((c) => c.location === 'grave').length, 1, '1 other HERO = up to 1 Spell/Trap');
+  });
+
+  await test('E - Emergency Call searches an Elemental HERO only (not a Destiny HERO)', async () => {
+    const { g, c0, place } = setup();
+    deckCard(g, 0, 'Destiny Hero - Malicious');
+    deckCard(g, 0, 'Elemental Hero Ocean');
+    const bub = deckCard(g, 0, 'Elemental Hero Bubbleman');
+    const seen = recordPicks(c0);
+    pickOnly(c0, [bub]);
+    const inner = c0.pick;
+    c0.pick = (gg, req) => (seen.push([...req.candidates]), inner(gg, req));
+    await activateCard(g, 0, place(0, cardByName('E - Emergency Call'), 'hand'));
+    eq(seen.flat().some((c) => c.name === 'Elemental Hero Ocean'), true, 'Elemental HEROes offered');
+    eq(seen.flat().some((c) => c.name === 'Destiny Hero - Malicious'), false, 'Malicious is not an Elemental HERO');
+    eq(bub.location, 'hand', 'Bubbleman added');
+  });
+
+  await test('Elemental Hero Absolute Zero: +500 per other face-up WATER except "Absolute Zero"; leaving the field destroys all opponent monsters', async () => {
+    const { g, place } = setup();
+    const az = live(place(0, cardByName('Elemental Hero Absolute Zero'), 'mzone'));
+    live(place(1, cardByName('Elemental Hero Absolute Zero'), 'mzone'));
+    live(place(0, cardByName('Elemental Hero Ocean'), 'mzone'));
+    eq(g.getAtk(az), 3000, 'counts Ocean, not the other Absolute Zero');
+    const s = setup();
+    const az2 = live(s.place(0, cardByName('Elemental Hero Absolute Zero'), 'mzone'));
+    const a = s.place(1, T.brute, 'mzone');
+    const b = s.place(1, T.wall, 'mzone', { faceUp: false, pos: 'def' });
+    await s.g.destroy([az2], 'effect', 1);
+    await s.g.processTriggers(true);
+    eq(a.location, 'grave', 'face-up monster destroyed');
+    eq(b.location, 'grave', 'face-down monster destroyed');
+  });
+
+  await test('Hero Signal: when your monster is destroyed by battle, Special Summon a Level 4 or lower Elemental HERO from the Deck', async () => {
+    const { g, c0, place } = setup();
+    place(0, T.wall, 'mzone');
+    const sig = place(0, cardByName('Hero Signal'), 'szone');
+    const strat = deckCard(g, 0, 'Elemental Hero Stratos');
+    const att = place(1, T.giant, 'mzone');
+    c0.respond = respondWith('Hero Signal');
+    g.turnPlayer = 1;
+    g.phase = 'battle';
+    await g.conductAttack(1, att);
+    eq(sig.location, 'grave', 'Hero Signal activated');
+    eq(strat.location, 'mzone', 'Stratos Special Summoned from the Deck');
+  });
+
+  await test('Elemental Hero Bubbleman: Special Summon only as the sole card in hand; draws 2 with no other cards', async () => {
+    const { g, place } = setup();
+    const bub = place(0, cardByName('Elemental Hero Bubbleman'), 'hand');
+    const other = place(0, T.brute, 'hand');
+    eq(procOffered(g, 0, bub), false, 'not with another card in hand');
+    await g.moveCards([other], 'grave', { reason: 'effect', reasonPlayer: 0 });
+    eq(procOffered(g, 0, bub), true, 'only card in hand');
+    await doProc(g, 0, bub);
+    eq(bub.location, 'mzone', 'Special Summoned');
+    eq(g.players[0].hand.length, 2, 'drew 2');
+  });
+
+  // ---- Generic staples in these decks
+  await test('Brain Control: only a monster that can be Normal Summoned/Set (not Synchro/Fusion or Dark Armed Dragon)', async () => {
+    const { g, c0, place } = setup();
+    const bc = place(0, cardByName('Brain Control'), 'hand');
+    live(place(1, cardByName('Stardust Dragon'), 'mzone'));
+    live(place(1, cardByName('Dark Armed Dragon'), 'mzone'));
+    eq(offered(g, 0, bc), false, 'no legal target');
+    const ok = live(place(1, T.brute, 'mzone'));
+    const seen = recordPicks(c0);
+    await activateCard(g, 0, bc);
+    eq(seen.flat().every((c) => c === ok), true, 'only the Normal-Summonable monster is a candidate');
+    eq(ok.controller, 0, 'taken');
+  });
+
+  await test('Mind Control: can take a face-down monster; it cannot attack or be Tributed', async () => {
+    const { g, place } = setup();
+    const fd = place(1, T.brute, 'mzone', { faceUp: false, pos: 'def' });
+    await activateCard(g, 0, place(0, cardByName('Mind Control'), 'hand'));
+    eq(fd.controller, 0, 'taken');
+    fd.faceUp = true;
+    fd.pos = 'atk';
+    eq(g.canAttack(fd), false, 'cannot attack');
+    eq(g.tributeCandidates(0).includes(fd), false, 'cannot be Tributed');
+  });
+
+  await test('Morphing Jar: FLIP — both players discard their hands, then each draws 5', async () => {
+    const { g, place } = setup();
+    const jar = place(0, cardByName('Morphing Jar'), 'mzone', { faceUp: false, pos: 'def' });
+    const h0 = place(0, T.brute, 'hand');
+    const h1 = place(1, T.brute, 'hand');
+    place(1, T.brute, 'hand');
+    await g.flipSummon(0, jar);
+    eq(h0.location, 'grave', 'my hand discarded');
+    eq(h1.location, 'grave', "opponent's hand discarded");
+    eq(g.players[0].hand.length, 5, 'I drew 5');
+    eq(g.players[1].hand.length, 5, 'opponent drew 5');
+  });
+
+  // ---- Reptilianne / Diva
+  await test('Reptilianne Viper: Normal Summon takes control of a face-up 0-ATK monster permanently', async () => {
+    const { g, place } = setup();
+    const naga = live(place(1, cardByName('Reptilianne Naga'), 'mzone'));
+    await g.normalSummon(0, place(0, cardByName('Reptilianne Viper'), 'hand'), false);
+    eq(naga.controller, 0, 'taken');
+    await (g as any).setPhase('end');
+    eq(naga.controller, 0, 'not returned in the End Phase');
+  });
+
+  await test('Deep Sea Diva: Normal Summon Special Summons a Level 3 or lower Sea Serpent from the Deck', async () => {
+    const { g, place } = setup();
+    const gill = deckCard(g, 0, 'Spined Gillman');
+    await g.normalSummon(0, place(0, cardByName('Deep Sea Diva'), 'hand'), false);
+    eq(gill.location, 'mzone', 'Spined Gillman Special Summoned');
   });
 }
