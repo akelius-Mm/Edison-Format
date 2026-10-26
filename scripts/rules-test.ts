@@ -889,6 +889,7 @@ function eq(a: unknown, b: unknown, msg: string) {
   await extraDeckTests();
   await graveEffectTests();
   await archetypeAuditTests();
+  await zombieGraveAlienAuditTests();
 
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
@@ -5367,4 +5368,315 @@ async function archetypeAuditTests() {
     await d.g.processTriggers(true);
     eq(sw.location, 'hand', 'Dupe Frog added Swap Frog');
   });
+}
+
+// ---------------------------------------------------------------- Pre-tournament audit: Zombies, Gravekeepers, Aliens, Fortune Ladies, Morphtronics, Koa'ki Meiru, Ancient Gear
+
+async function zombieGraveAlienAuditTests() {
+  const live = (c: CardInstance) => {
+    c.faceUp = true;
+    c.activeOnField = true;
+    return c;
+  };
+  const deckCard = (g: Game, p: PlayerId, name: string) => {
+    const c = g.registerCard(new (g.allCards[0].constructor as any)(cardByName(name), p)) as CardInstance;
+    c.location = 'none';
+    g.rawMove(c, 'deck');
+    return c;
+  };
+  const standby = async (g: Game, p: PlayerId) => {
+    g.turnPlayer = p;
+    g.phase = 'standby';
+    g.beginBatch();
+    g.emit({ type: 'phaseStart', phase: 'standby', player: p } as any);
+    await g.processTriggers(true);
+    g.phase = 'main1';
+  };
+  const offered = (g: Game, p: PlayerId, card: CardInstance) => g.getActivations(p, { open: true }).some((a) => a.card === card);
+  const procOffered = (g: Game, p: PlayerId, card: CardInstance) => g.legalMainActions(p).some((a) => a.type === 'proc' && a.card === card);
+  const pickOnly = (c: TestController, want: CardInstance[]) => {
+    c.pick = (_g, req) => {
+      const w = req.candidates.filter((x) => want.includes(x));
+      return w.length >= req.min && w.length ? w.slice(0, Math.max(req.min, Math.min(w.length, req.max))) : req.candidates.slice(0, req.min);
+    };
+  };
+
+  // ---- Zombies
+  await test('Audit: Zombie Master discards a monster to revive a Level 4 or lower Zombie from either GY, once per turn', async () => {
+    const { g, c0, place } = setup();
+    const zm = place(0, cardByName('Zombie Master'), 'mzone');
+    const fodder = place(0, T.brute, 'hand');
+    place(1, cardByName('Vampire Lord'), 'grave'); // Level 5: not a target
+    const target = place(1, cardByName('Goblin Zombie'), 'grave');
+    pickOnly(c0, [fodder, target]);
+    await activateCard(g, 0, zm);
+    eq(fodder.location, 'grave', 'monster discarded as the cost');
+    eq(target.location, 'mzone', "opponent's Zombie revived");
+    eq(target.controller, 0, 'on my side');
+    place(0, T.brute, 'hand');
+    place(0, cardByName('Mezuki'), 'grave');
+    eq(offered(g, 0, zm), false, 'once per turn');
+    const s = setup();
+    const zm2 = s.place(0, cardByName('Zombie Master'), 'mzone');
+    s.place(0, cardByName('Vampire Lord'), 'grave');
+    s.place(0, T.brute, 'hand');
+    eq(offered(s.g, 0, zm2), false, 'no Level 4 or lower Zombie to revive');
+  });
+
+  await test('Audit: Goblin Zombie searches a 1200-or-less-DEF Zombie when sent from the field to the GY, not when discarded', async () => {
+    const { g, c0, place } = setup();
+    const gz = place(0, cardByName('Goblin Zombie'), 'mzone');
+    const mez = deckCard(g, 0, 'Mezuki');
+    pickOnly(c0, [mez]);
+    await g.destroy([gz], 'effect', 1);
+    await g.processTriggers(true);
+    eq(mez.location, 'hand', 'Mezuki added');
+    const s = setup();
+    const gz2 = s.place(0, cardByName('Goblin Zombie'), 'hand');
+    const mez2 = deckCard(s.g, 0, 'Mezuki');
+    await s.g.discard([gz2], 'effect', 1);
+    await s.g.processTriggers(true);
+    eq(mez2.location, 'deck', 'no search from the hand');
+  });
+
+  await test('Audit: Red-Eyes Zombie Dragon takes only a Zombie-Type monster it destroys (any monster under Zombie World)', async () => {
+    const { g, place } = setup();
+    const rezd = place(0, cardByName('Red-Eyes Zombie Dragon'), 'mzone');
+    const v = place(1, T.brute, 'mzone');
+    await g.conductAttack(0, rezd);
+    eq(v.location, 'grave', 'a non-Zombie stays in the GY');
+    const s = setup();
+    const rezd2 = s.place(0, cardByName('Red-Eyes Zombie Dragon'), 'mzone');
+    const z = s.place(1, cardByName('Mezuki'), 'mzone');
+    await s.g.conductAttack(0, rezd2);
+    eq(z.location, 'mzone', 'the Zombie is Special Summoned');
+    eq(z.controller, 0, 'to my side');
+    const w = setup();
+    const rezd3 = w.place(0, cardByName('Red-Eyes Zombie Dragon'), 'mzone');
+    live(w.place(0, cardByName('Zombie World'), 'fzone'));
+    const v3 = w.place(1, T.brute, 'mzone');
+    await w.g.conductAttack(0, rezd3);
+    eq(v3.location, 'mzone', 'Zombie World: the destroyed monster is a Zombie');
+    eq(v3.controller, 0, 'to my side');
+  });
+
+  await test('Audit: Il Blud (Gemini Summoned) revives a Zombie from either GY once per turn; they are destroyed when it leaves', async () => {
+    const { g, c0, place } = setup();
+    const il = place(0, cardByName('Il Blud'), 'mzone');
+    const z = place(1, cardByName('Mezuki'), 'grave');
+    const revive = () => g.getActivations(0, { open: true }).some((a) => a.card === il && a.label === 'Summon a Zombie from hand or either GY');
+    eq(revive(), false, 'a Normal Monster until Gemini Summoned');
+    il.flags.geminiSummoned = true;
+    pickOnly(c0, [z]);
+    await activateCard(g, 0, il);
+    eq(z.location, 'mzone', "opponent's Zombie Special Summoned");
+    eq(z.controller, 0, 'to my side');
+    place(0, cardByName('Goblin Zombie'), 'grave');
+    eq(revive(), false, 'once per turn');
+    await g.destroy([il], 'effect', 1);
+    await g.processTriggers(true);
+    eq(z.location, 'grave', 'destroyed when Il Blud left the field');
+  });
+
+  await test('Audit: Pyramid Turtle destroyed by battle Special Summons a Zombie with 2000 or less DEF from the Deck', async () => {
+    const { g, place } = setup();
+    const pt = place(1, cardByName('Pyramid Turtle'), 'mzone');
+    const rk = deckCard(g, 1, 'Ryu Kokki'); // DEF 2200: not eligible
+    const vl = deckCard(g, 1, 'Vampire Lord');
+    const a = place(0, T.brute, 'mzone');
+    await g.conductAttack(0, a);
+    eq(pt.location, 'grave', 'Turtle destroyed');
+    eq(vl.location, 'mzone', 'Vampire Lord Special Summoned');
+    eq(rk.location, 'deck', 'Ryu Kokki (DEF 2200) stays');
+  });
+
+  // ---- Gravekeepers
+  await test("Audit: Gravekeeper's Descendant Tributes only another face-up Gravekeeper's monster", async () => {
+    const { g, c0, place } = setup();
+    const desc = place(0, cardByName("Gravekeeper's Descendant"), 'mzone');
+    place(0, T.brute, 'mzone');
+    const st = place(1, cardByName('Mirror Force'), 'szone');
+    eq(offered(g, 0, desc), false, "a non-Gravekeeper's monster cannot be Tributed");
+    place(0, cardByName("Gravekeeper's Spy"), 'mzone', { faceUp: false, pos: 'def' });
+    eq(offered(g, 0, desc), false, "a face-down Gravekeeper's Spy cannot be Tributed");
+    const spy = place(0, cardByName("Gravekeeper's Spy"), 'mzone');
+    pickOnly(c0, [spy, st]);
+    await activateCard(g, 0, desc);
+    eq(spy.location, 'grave', 'Spy Tributed');
+    eq(st.location, 'grave', 'target destroyed');
+  });
+
+  await test("Audit: Gravekeeper's Commandant discards itself to add Necrovalley; Royal Tribute needs Necrovalley and discards monsters from both hands", async () => {
+    const { g, place } = setup();
+    const cmd = place(0, cardByName("Gravekeeper's Commandant"), 'hand');
+    const nv = deckCard(g, 0, 'Necrovalley');
+    await activateCard(g, 0, cmd);
+    eq(cmd.location, 'grave', 'Commandant discarded');
+    eq(nv.location, 'hand', 'Necrovalley added');
+    const s = setup();
+    const rt = s.place(0, cardByName('Royal Tribute'), 'hand');
+    const mine = s.place(0, T.brute, 'hand');
+    const theirs = s.place(1, T.brute, 'hand');
+    const spell = s.place(1, cardByName('Dark Hole'), 'hand');
+    eq(offered(s.g, 0, rt), false, 'no Necrovalley: cannot activate');
+    live(s.place(0, cardByName('Necrovalley'), 'fzone'));
+    await activateCard(s.g, 0, rt);
+    eq(mine.location, 'grave', 'my monster discarded');
+    eq(theirs.location, 'grave', "opponent's monster discarded");
+    eq(spell.location, 'hand', 'non-monsters stay');
+  });
+
+  // ---- Aliens
+  await test('Audit: Alien Dog comes out when an Alien is Normal Summoned, places 2 real A-Counters, and its battles use them', async () => {
+    const { g, place } = setup();
+    const dog = place(0, cardByName('Alien Dog'), 'hand');
+    const kid = place(0, cardByName('Alien Kid'), 'hand');
+    const v = place(1, T.brute, 'mzone');
+    await g.normalSummon(0, kid, false);
+    eq(dog.location, 'mzone', 'Alien Dog Special Summoned');
+    eq(v.counters.A ?? 0, 2, "2 A-Counters on the opponent's monster");
+    eq(g.getAtk(v), 1800, 'no loss outside damage calculation');
+    dog.pos = 'atk';
+    await g.conductAttack(0, dog);
+    eq(v.location, 'grave', '1500 beats 1800 - 600');
+    eq(g.players[1].lp, 8000 - 300, '300 damage');
+  });
+
+  await test('Audit: Alien Overlord Special Summons itself by removing 2 A-Counters and counters every opposing face-up monster once per turn', async () => {
+    const { g, place } = setup();
+    const ov = place(0, cardByName('Alien Overlord'), 'hand');
+    const v = place(1, T.brute, 'mzone');
+    const w = place(1, T.wall, 'mzone');
+    eq(procOffered(g, 0, ov), false, 'no A-Counters');
+    v.counters.A = 2;
+    eq(procOffered(g, 0, ov), true, '2 A-Counters on the field');
+    await g.performAction(0, g.legalMainActions(0).find((a) => a.type === 'proc' && a.card === ov)!);
+    eq(ov.location, 'mzone', 'Overlord Special Summoned');
+    eq(v.counters.A ?? 0, 0, 'counters removed');
+    await activateCard(g, 0, ov);
+    eq(v.counters.A ?? 0, 1, 'counter on the first monster');
+    eq(w.counters.A ?? 0, 1, 'counter on the second monster');
+    eq(offered(g, 0, ov), false, 'once per turn');
+  });
+
+  await test('Audit: Cell Explosion Virus only answers an attack by a monster with an A-Counter and destroys all Attack Position monsters', async () => {
+    const { g, c1, place } = setup();
+    const a = place(0, T.brute, 'mzone');
+    const cev = place(1, cardByName('Cell Explosion Virus'), 'szone', { faceUp: false });
+    place(1, T.giant, 'mzone');
+    c1.respond = respondWith('Cell Explosion Virus');
+    await g.conductAttack(0, a);
+    eq(cev.location, 'szone', 'no A-Counter: not activated');
+    const s = setup();
+    const a2 = s.place(0, T.brute, 'mzone');
+    const b2 = s.place(0, T.dark, 'mzone');
+    const d2 = s.place(0, T.wall, 'mzone', { pos: 'def' });
+    s.place(1, cardByName('Cell Explosion Virus'), 'szone', { faceUp: false });
+    s.place(1, T.giant, 'mzone');
+    a2.counters.A = 1;
+    s.c1.respond = respondWith('Cell Explosion Virus');
+    await s.g.conductAttack(0, a2);
+    eq(a2.location, 'grave', 'attacker destroyed');
+    eq(b2.location, 'grave', 'other Attack Position monster destroyed');
+    eq(d2.location, 'mzone', 'Defense Position monster survives');
+  });
+
+  // ---- Fortune Ladies
+  await test("Audit: Fortune Lady ATK/DEF follow the Level, which rises in its controller's Standby Phase only", async () => {
+    const { g, place } = setup();
+    const fl = place(0, cardByName('Fortune Lady Light'), 'mzone');
+    eq(g.getAtk(fl), 200, 'Level 1 x 200');
+    await standby(g, 1);
+    eq(g.getLevel(fl), 1, "not in the opponent's Standby Phase");
+    await standby(g, 0);
+    eq(g.getLevel(fl), 2, 'Level 2');
+    eq(g.getAtk(fl), 400, 'ATK 400');
+    eq(g.getDef(fl), 400, 'DEF 400');
+  });
+
+  await test('Audit: Fortune Lady Dark revives a Fortune Lady after a Fortune Lady wins a battle; Solitaire Magician lowers a Level by 3 to destroy a monster', async () => {
+    const { g, c0, place } = setup();
+    const dark = place(0, cardByName('Fortune Lady Dark'), 'mzone');
+    const light = place(0, cardByName('Fortune Lady Light'), 'grave');
+    place(1, T.wall, 'mzone');
+    pickOnly(c0, [light]);
+    await g.conductAttack(0, dark);
+    eq(light.location, 'mzone', 'Fortune Lady Light revived');
+    const s = setup();
+    const sm = s.place(0, cardByName('Solitaire Magician'), 'mzone');
+    const d2 = s.place(0, cardByName('Fortune Lady Dark'), 'mzone');
+    const v = s.place(1, T.brute, 'mzone');
+    pickOnly(s.c0, [d2, v]);
+    await activateCard(s.g, 0, sm);
+    eq(v.location, 'grave', 'other monster destroyed');
+    eq(s.g.getLevel(d2), 2, 'Level 5 - 3');
+    eq(s.g.getAtk(d2), 800, 'ATK = Level x 400');
+  });
+
+  await test("Audit: Fortune's Future returns a banished Fortune Lady to the GY and draws 2", async () => {
+    const { g, place } = setup();
+    const ff = place(0, cardByName("Fortune's Future"), 'hand');
+    eq(offered(g, 0, ff), false, 'no banished Fortune Lady');
+    const b = place(0, cardByName('Fortune Lady Light'), 'banished');
+    await activateCard(g, 0, ff);
+    eq(b.location, 'grave', 'returned to the GY');
+    eq(g.players[0].hand.length, 2, 'drew 2');
+  });
+
+  // ---- Morphtronics
+  await test('Audit: Morphtronic Radion +800 ATK in Attack Position / +1000 DEF in Defense Position; Scopen is Level 4 in Defense Position', async () => {
+    const { g, place } = setup();
+    const r = place(0, cardByName('Morphtronic Radion'), 'mzone');
+    const bx = place(0, cardByName('Morphtronic Boomboxen'), 'mzone');
+    const other = place(0, T.brute, 'mzone');
+    eq(g.getAtk(bx), 2000, 'Boomboxen 1200 + 800');
+    eq(g.getAtk(r), 1800, 'Radion boosts itself');
+    eq(g.getAtk(other), 1800, 'non-Morphtronic unaffected');
+    r.pos = 'def';
+    g.update();
+    eq(g.getAtk(bx), 1200, 'no ATK boost in Defense Position');
+    eq(g.getDef(bx), 1400, 'Boomboxen 400 + 1000 DEF');
+    const sc = place(0, cardByName('Morphtronic Scopen'), 'mzone');
+    eq(g.getLevel(sc), 3, 'Level 3 in Attack Position');
+    sc.pos = 'def';
+    g.update();
+    eq(g.getLevel(sc), 4, 'Level 4 in Defense Position');
+  });
+
+  await test('Audit: Morphtronic Boomboxen in Defense Position negates an attack on a face-up Morphtronic', async () => {
+    const { g, place } = setup();
+    const bx = place(1, cardByName('Morphtronic Boomboxen'), 'mzone', { pos: 'def' });
+    const a = place(0, T.giant, 'mzone');
+    await g.conductAttack(0, a);
+    eq(bx.location, 'mzone', 'attack negated');
+    eq(g.players[1].lp, 8000, 'no damage');
+  });
+
+  // ---- Koa'ki Meiru / Ancient Gear
+  await test("Audit: Koa'ki Meiru Rooklord can be Tribute Summoned with 1 Koa'ki Meiru monster only", async () => {
+    const { g, place } = setup();
+    const rook = place(0, cardByName("Koa'ki Meiru Rooklord"), 'hand');
+    place(0, T.brute, 'mzone');
+    eq(procOffered(g, 0, rook), false, "no Koa'ki Meiru to Tribute");
+    place(0, cardByName("Koa'ki Meiru Boulder"), 'mzone');
+    eq(procOffered(g, 0, rook), true, "1 Koa'ki Meiru Tribute");
+  });
+
+  await test('Audit: Ultimate Ancient Gear Golem destroyed revives Ancient Gear Golem from the GY', async () => {
+    const { g, place } = setup();
+    const uagg = place(0, cardByName('Ultimate Ancient Gear Golem'), 'mzone');
+    const agg = place(0, cardByName('Ancient Gear Golem'), 'grave');
+    await g.destroy([uagg], 'effect', 1);
+    await g.processTriggers(true);
+    eq(agg.location, 'mzone', 'Ancient Gear Golem Special Summoned');
+  });
+
+  // TODO (held, engine has no per-card Tribute filter): Red-Eyes Zombie Dragon can only be Tribute Summoned by Tributing Zombies.
+  // await test('Audit: Red-Eyes Zombie Dragon cannot be Tribute Summoned with non-Zombie Tributes', async () => {
+  //   const { g, place } = setup();
+  //   const rezd = place(0, cardByName('Red-Eyes Zombie Dragon'), 'hand');
+  //   place(0, T.brute, 'mzone');
+  //   place(0, T.wall, 'mzone');
+  //   eq(g.canNormalSummon(0, rezd, false), false, 'non-Zombie Tributes');
+  // });
 }
