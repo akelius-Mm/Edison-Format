@@ -883,6 +883,7 @@ function eq(a: unknown, b: unknown, msg: string) {
   await archetypeExtrasTests();
   await archetypeExtras2Tests();
   await fuzzRegressionTests();
+  await sdmmTests();
 
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
@@ -4048,5 +4049,148 @@ async function fuzzRegressionTests() {
     eq(g.canAttack(brute), false, "cannot attack in its controller's next turn (turn 4)");
     g.turn = 6;
     eq(g.canAttack(brute), true, 'can attack again afterwards');
+  });
+}
+
+// ---------------------------------------------------------------- Structure Deck: Machina Mayhem (SDMM)
+
+async function sdmmTests() {
+  const live = (c: CardInstance) => {
+    c.faceUp = true;
+    c.activeOnField = true;
+    return c;
+  };
+
+  await test('SDMM: Machina Soldier Special Summons a "Machina" monster from the hand when Normal Summoned alone', async () => {
+    const { g, place } = setup();
+    const soldier = place(0, cardByName('Machina Soldier'), 'hand');
+    const sniper = place(0, cardByName('Machina Sniper'), 'hand');
+    await g.performAction(0, { type: 'summon', card: soldier });
+    eq(sniper.location, 'mzone', 'Machina Sniper Special Summoned');
+
+    const b = setup();
+    b.place(0, T.wall, 'mzone');
+    const s2 = b.place(0, cardByName('Machina Soldier'), 'hand');
+    const sn2 = b.place(0, cardByName('Machina Sniper'), 'hand');
+    await b.g.performAction(0, { type: 'summon', card: s2 });
+    eq(sn2.location, 'hand', 'no Special Summon while you control another monster');
+  });
+
+  await test('SDMM: Machina Sniper — other face-up "Machina" monsters cannot be attacked', async () => {
+    const { g, place } = setup();
+    const sniper = place(1, cardByName('Machina Sniper'), 'mzone');
+    const soldier = place(1, cardByName('Machina Soldier'), 'mzone');
+    const wall = place(1, T.wall, 'mzone');
+    const brute = place(0, T.brute, 'mzone');
+    const t = g.attackTargets(brute);
+    eq(t.targets.includes(sniper), true, 'Sniper can be attacked');
+    eq(t.targets.includes(soldier), false, 'Soldier cannot be attacked');
+    eq(t.targets.includes(wall), true, 'non-Machina can be attacked');
+    eq(t.direct, false, 'no direct attack');
+  });
+
+  await test('SDMM: Machina Force — pay 1000 LP to attack; cannot attack at 1000 LP or less; revives the trio', async () => {
+    const { g, place } = setup();
+    const force = place(0, cardByName('Machina Force'), 'mzone');
+    place(1, T.wall, 'mzone');
+    eq(g.canAttack(force), true, 'can attack');
+    await g.conductAttack(0, force);
+    eq(g.players[0].lp, 7000, '1000 LP paid');
+    force.attacksThisTurn = 0;
+    g.players[0].lp = 1000;
+    eq(g.canAttack(force), false, 'cannot pay 1000 LP');
+    eq(g.canNormalSummon(0, place(0, cardByName('Machina Force'), 'hand'), false), false, 'cannot be Normal Summoned');
+
+    const b = setup();
+    const f2 = b.place(0, cardByName('Machina Force'), 'mzone');
+    const trio = ['Machina Soldier', 'Machina Sniper', 'Machina Defender'].map((n) => b.place(0, cardByName(n), 'grave'));
+    await activateCard(b.g, 0, f2);
+    eq(f2.location, 'grave', 'Force sent to the GY');
+    eq(trio.every((c) => c.location === 'mzone'), true, 'Soldier, Sniper and Defender Special Summoned');
+  });
+
+  await test('SDMM: Cipher Soldier gains 2000 ATK/DEF in damage calculation against a Warrior', async () => {
+    const { g, place } = setup();
+    const cipher = place(1, cardByName('Cipher Soldier'), 'mzone');
+    const brute = place(0, T.brute, 'mzone');
+    eq(g.getAtk(cipher), 1350, 'base ATK outside battle');
+    await g.conductAttack(0, brute);
+    eq(brute.location, 'grave', 'Warrior destroyed');
+    eq(cipher.location, 'mzone', 'Cipher Soldier survives');
+    eq(g.players[0].lp, 8000 - 1550, '3350 - 1800 damage');
+  });
+
+  await test('SDMM: Scrap Recycler sends a Machine to the GY on summon, then returns 2 Level 4 EARTH Machines to draw 1', async () => {
+    const { g, place } = setup();
+    const rec = place(0, cardByName('Scrap Recycler'), 'hand');
+    const fort = place(0, cardByName('Machina Fortress'), 'deck');
+    await g.performAction(0, { type: 'summon', card: rec });
+    eq(fort.location, 'grave', 'Machine sent from the Deck to the GY');
+    const a = place(0, cardByName('Machina Soldier'), 'grave');
+    const b = place(0, cardByName('Machina Sniper'), 'grave');
+    const hand = g.players[0].hand.length;
+    await activateCard(g, 0, rec);
+    eq(a.location === 'deck' && b.location === 'deck', true, 'both returned to the Deck');
+    eq(g.players[0].hand.length, hand + 1, 'drew 1');
+    eq(g.getActivations(0, { open: true }).some((x) => x.card === rec), false, 'once per turn');
+  });
+
+  await test('SDMM: Card Trader shuffles 1 card from the hand into the Deck and draws 1 in the Standby Phase', async () => {
+    const { g, place } = setup();
+    live(place(0, cardByName('Card Trader'), 'szone'));
+    const junk = place(0, T.giant, 'hand');
+    await (g as any).setPhase('standby');
+    eq(junk.location, 'deck', 'card shuffled into the Deck');
+    eq(g.players[0].hand.length, 1, 'drew 1');
+  });
+
+  await test('SDMM: Frontline Base Special Summons a Level 4 or lower Union monster from the hand once per turn', async () => {
+    const { g, place } = setup();
+    const base = live(place(0, cardByName('Frontline Base'), 'szone'));
+    const pk = place(0, cardByName('Machina Peacekeeper'), 'hand');
+    const pk2 = place(0, cardByName('Machina Peacekeeper'), 'hand');
+    await activateCard(g, 0, base);
+    eq(pk.location === 'mzone' || pk2.location === 'mzone', true, 'Union monster Special Summoned');
+    eq(g.getActivations(0, { open: true }).some((x) => x.card === base), false, 'once per turn');
+  });
+
+  await test('SDMM: Machina Armored Unit Special Summons a weaker same-Attribute Machine when one is destroyed by battle', async () => {
+    const { g, place } = setup();
+    g.turnPlayer = 1;
+    live(place(0, cardByName('Machina Armored Unit'), 'szone'));
+    const sniper = place(0, cardByName('Machina Sniper'), 'mzone');
+    const soldier = place(0, cardByName('Machina Soldier'), 'deck');
+    await g.conductAttack(1, place(1, T.giant, 'mzone'));
+    eq(sniper.location, 'grave', 'Sniper destroyed');
+    eq(soldier.location, 'mzone', 'Soldier (1600 < 1800, EARTH) Special Summoned from the Deck');
+  });
+
+  await test('SDMM: The Big Saturn — not from the hand, +1000 ATK for a discard and 1000 LP, burns both players', async () => {
+    const { g, place } = setup();
+    const inHand = place(0, cardByName('The Big Saturn'), 'hand');
+    eq((await g.specialSummon([inHand], 0, { pos: 'atk' })).length, 0, 'cannot be Special Summoned from the hand');
+    const sat = place(0, cardByName('The Big Saturn'), 'mzone');
+    await activateCard(g, 0, sat);
+    eq(g.getAtk(sat), 3800, '+1000 ATK');
+    eq(g.players[0].lp, 7000, 'paid 1000 LP');
+    eq(inHand.location, 'grave', 'discarded');
+    await g.destroy([sat], 'effect', 1);
+    await g.processTriggers(true);
+    eq(g.players[0].lp, 7000 - 2800, 'controller takes its GY ATK');
+    eq(g.players[1].lp, 8000 - 2800, 'opponent takes its GY ATK');
+  });
+
+  await test('SDMM: Roll Out! equips a Union monster from the GY to an appropriate monster', async () => {
+    const { g, place } = setup();
+    const host = place(0, cardByName('Machina Soldier'), 'mzone');
+    const pk = place(0, cardByName('Machina Peacekeeper'), 'grave');
+    const ro = place(0, cardByName('Roll Out!'), 'szone', { faceUp: false });
+    await activateCard(g, 0, ro);
+    eq(pk.location, 'szone', 'Peacekeeper in the S/T zone');
+    eq(pk.equippedTo, host.uid, 'equipped to the Machine');
+    g.turnPlayer = 1;
+    await g.conductAttack(1, place(1, T.giant, 'mzone'));
+    eq(host.location, 'mzone', 'host survives the battle');
+    eq(pk.location, 'grave', 'the Union is destroyed instead');
   });
 }

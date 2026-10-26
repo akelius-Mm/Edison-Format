@@ -1001,6 +1001,7 @@ export class Game {
       if (this.freeMZones(ctrl) - list.length <= 0) break;
       if (!opts.ignoreConditions && c.data.nomi && !c.properlySummoned && (c.location === 'grave' || c.location === 'banished')) continue;
       if (!opts.faceDown && this.queryCard(c, 'cannotBeSummoned')) continue;
+      if (!opts.ignoreConditions && c.data.noSpecialFrom?.includes(c.location)) continue;
       list.push(c);
     }
     if (!list.length) return [];
@@ -2250,6 +2251,7 @@ export class Game {
     if (c.controller !== this.turnPlayer) return false;
     if (this.queryCard(c, 'cannotAttack')) return false;
     if (c.flags.cannotAttackTurn === this.turn) return false;
+    if (c.data.attackLpCost && !this.isNegated(c) && this.players[c.controller].lp <= c.data.attackLpCost) return false;
     const max = 1 + this.queryCardNum(c, 'extraAttacks');
     return c.attacksThisTurn < max;
   }
@@ -2304,6 +2306,8 @@ export class Game {
     if (choice === 'cancel') return;
     if (choice === null && !direct) return;
     const target = choice;
+    // SDMM: "You must pay X LP to declare an attack with this card" (Machina Force).
+    if (attacker.data.attackLpCost && !this.isNegated(attacker)) await this.payLp(p, attacker.data.attackLpCost);
     attacker.attacksThisTurn++;
     attacker.attackedThisTurnOrWasAttacked = true;
     if (target) target.attackedThisTurnOrWasAttacked = true;

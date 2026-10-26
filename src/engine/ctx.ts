@@ -123,6 +123,7 @@ export class Ctx {
   canSummonCard(c: CardInstance, side: 'me' | 'opp' = 'me') {
     if (!this.canSpecialSummon(side)) return false;
     if (this.game.queryCard(c, 'cannotBeSummoned')) return false;
+    if (c.data.noSpecialFrom?.includes(c.location)) return false;
     if (c.data.nomi && !c.properlySummoned && (c.location === 'grave' || c.location === 'banished')) return false;
     if (c.data.nomi && (c.location === 'hand' || c.location === 'deck')) return false;
     if (c.isExtra && c.location !== 'extra' && !c.properlySummoned) return false;

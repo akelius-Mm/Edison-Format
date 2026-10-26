@@ -232,6 +232,10 @@ export interface CardData {
    * (checked by Ctx.canTarget with the targeting effect's Ctx), e.g. Turbo Warrior vs Level 6 or lower monsters.
    */
   targetImmunity?: (self: CardInstance, source: CardInstance, ctx: Ctx) => boolean;
+  /** SDMM (Machina Force): LP its controller must pay to declare an attack with it (not while its effects are negated). */
+  attackLpCost?: number;
+  /** SDMM (The Big Saturn): locations it cannot be Special Summoned from (unless the effect ignores Summoning conditions). */
+  noSpecialFrom?: Location[];
 }
 
 // ---------------------------------------------------------------------------
