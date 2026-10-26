@@ -1567,6 +1567,43 @@ async function crmsTests() {
     eq(other.location, 'grave', 'other monster destroyed');
   });
 
+  await test('Priority (2010 rule): Judgment Dragon uses its effect before Bottomless Trap Hole; Bottomless chained to it still lets the wipe resolve', async () => {
+    const { g, c0, c1, place } = setup();
+    for (const n of ['Ryko, Lightsworn Hunter', 'Lumina, Lightsworn Summoner', 'Wulf, Lightsworn Beast', 'Lyla, Lightsworn Sorceress']) place(0, cardByName(n), 'grave');
+    const jd = place(0, cardByName('Judgment Dragon'), 'hand');
+    const bottomless = place(1, cardByName('Bottomless Trap Hole'), 'szone', { faceUp: false });
+    const oppMon = place(1, T.brute, 'mzone');
+    const myOther = place(0, T.wall, 'mzone');
+    let priorityOffered = false;
+    c0.respond = (_g, req) => {
+      if (req.kind === 'priority') priorityOffered = true;
+      return req.options.find((o) => o.card === jd) ?? null;
+    };
+    c1.respond = respondWith('Bottomless Trap Hole');
+    const proc = g.legalMainActions(0).find((a) => a.type === 'proc' && a.card === jd);
+    eq(!!proc, true, 'Judgment Dragon can be summoned');
+    await g.performAction(0, proc!);
+    eq(priorityOffered, true, 'the turn player gets priority after the summon');
+    eq(jd.location, 'banished', 'Bottomless (chained to the effect) banishes Judgment Dragon');
+    eq(bottomless.location, 'grave', 'Bottomless was used');
+    eq(oppMon.location, 'grave', "Judgment Dragon's effect still resolves: opponent's monster destroyed");
+    eq(myOther.location, 'grave', 'and your other cards too');
+    eq(g.players[0].lp, 8000 - 1000, 'paid 1000 LP');
+  });
+
+  await test('Priority: without a usable effect, the opponent responds first as usual', async () => {
+    const { g, c0, c1, place } = setup();
+    const mon = place(0, T.brute, 'hand');
+    place(1, cardByName('Bottomless Trap Hole'), 'szone', { faceUp: false });
+    const kinds: string[] = [];
+    c0.respond = (_g, req) => (kinds.push('me:' + req.kind), null);
+    c1.respond = respondWith('Bottomless Trap Hole');
+    const a = g.legalMainActions(0).find((x) => x.type === 'summon' && x.card === mon)!;
+    await g.performAction(0, a);
+    eq(kinds.includes('me:priority'), false, 'no priority window for a monster with no effect');
+    eq(mon.location, 'banished', 'Bottomless banishes the 1800 ATK monster');
+  });
+
   await test('Brain Control: pay 800, take a face-up monster until the End Phase, then it goes back', async () => {
     const { g, place } = setup();
     const bc = place(0, cardByName('Brain Control'), 'hand');
