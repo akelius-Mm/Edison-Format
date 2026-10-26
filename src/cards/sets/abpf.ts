@@ -511,7 +511,7 @@ monster('Ogre of the Scarlet Sorrow', {
         const b = ctx.battle;
         if (ctx.isMyTurn || !b || b.target || b.inDamageStep || attackFinished(ctx.game)) return false;
         const directs = eventsThisTurn(ctx.game).filter((e) => e.type === 'attackDeclared' && !e.other && e.player === ctx.opp);
-        return directs.length === 2 && ctx.canSpecialSummon() && ctx.canSummonCard(ctx.self);
+        return directs.length === 2 && ctx.canSummonSelf() && ctx.canSummonCard(ctx.self);
       },
       activate: async (ctx) => {
         ctx.data.first = eventsThisTurn(ctx.game).find((e) => e.type === 'attackDeclared' && !e.other && e.player === ctx.opp)?.card;
@@ -714,7 +714,7 @@ monster('Sword Master', {
         const b = ctx.battle;
         return !!a && !!t && !!b && ev.player === ctx.player && isRace(a, 'Warrior') && t.location === 'mzone' && t.moveId === b.targetMoveId && t.controller === ctx.opp;
       },
-      condition: (ctx) => ctx.canSpecialSummon() && ctx.canSummonCard(ctx.self),
+      condition: (ctx) => ctx.canSummonSelf() && ctx.canSummonCard(ctx.self),
       resolve: async (ctx) => {
         if (ctx.self.location === 'hand') await ctx.specialSummon(ctx.self, { pos: 'choose' });
       },
@@ -770,7 +770,7 @@ monster('Rose Fairy', {
       label: 'Special Summon',
       categories: ['specialSummon'],
       eventFilter: (ctx, ev) => ev.card === ctx.self && ev.from === 'deck' && ev.reason !== 'draw',
-      condition: (ctx) => ctx.canSpecialSummon() && ctx.canSummonCard(ctx.self),
+      condition: (ctx) => ctx.canSummonSelf() && ctx.canSummonCard(ctx.self),
       resolve: async (ctx) => {
         if (ctx.self.location === 'hand') await ctx.specialSummon(ctx.self, { pos: 'choose' });
       },
@@ -824,7 +824,7 @@ monster('Dragon Queen of Tragic Endings', {
       label: 'Revive',
       categories: ['specialSummon'],
       eventFilter: (ctx, ev) => ev.phase === 'standby' && ctx.isMyTurn && !!ctx.self.flags.fromField,
-      condition: (ctx) => ctx.canSpecialSummon() && ctx.canSummonCard(ctx.self),
+      condition: (ctx) => ctx.canSummonSelf() && ctx.canSummonCard(ctx.self),
       canActivate: (ctx) => contSpells(ctx).length > 0,
       activate: async (ctx) => {
         const s = await ctx.select(contSpells(ctx), 1, 1, 'Send 1 face-up Continuous Spell you control to the GY.', 'cost');
@@ -1110,7 +1110,7 @@ monster('Weeping Idol', {
       range: ['hand'],
       label: 'Banish a Tuner: Special Summon',
       categories: ['specialSummon'],
-      canActivate: (ctx) => ctx.grave('me', (c) => c.isMonster && c.isTuner).length > 0 && ctx.canSpecialSummon() && ctx.canSummonCard(ctx.self),
+      canActivate: (ctx) => ctx.grave('me', (c) => c.isMonster && c.isTuner).length > 0 && ctx.canSummonSelf() && ctx.canSummonCard(ctx.self),
       activate: async (ctx) => {
         const s = await ctx.select(ctx.grave('me', (c) => c.isMonster && c.isTuner), 1, 1, 'Banish 1 Tuner from your GY.', 'cost');
         if (!s.length) return false;
@@ -1529,7 +1529,7 @@ monster('Oilman', {
       condition: (ctx) =>
         ctx.self.location === 'mzone'
           ? ctx.self.faceUp && ctx.freeSZones() > 0 && unionTargets(ctx).some((c) => ctx.canTarget(c))
-          : ctx.self.location === 'szone' && !!ctx.self.flags.unionEquipped && ctx.equipTarget !== undefined && ctx.canSpecialSummon(),
+          : ctx.self.location === 'szone' && !!ctx.self.flags.unionEquipped && ctx.equipTarget !== undefined && ctx.canSummonSelf(),
       activate: async (ctx) => {
         ctx.data.mode = ctx.self.location === 'mzone' ? 'equip' : 'unequip';
         if (ctx.data.mode === 'equip') await ctx.selectTargets(unionTargets(ctx), 1, 1, 'Target 1 Machine-Type monster you control to equip Oilman to.', 'equip');

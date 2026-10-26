@@ -1472,7 +1472,7 @@ monster('Alien Dog', {
         const c = evc(ev);
         return !!c && c !== ctx.self && c.controller === ctx.player && isAlien(c);
       },
-      condition: (ctx) => ctx.canSpecialSummon(),
+      condition: (ctx) => ctx.canSummonSelf(),
       resolve: async (ctx) => {
         if (ctx.self.location !== 'hand' || !ctx.canSpecialSummon()) return;
         const r = await ctx.specialSummon(ctx.self, { pos: aiPos(ctx, ctx.self) });

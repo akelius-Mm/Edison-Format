@@ -210,7 +210,7 @@ monster('Plaguespreader Zombie', {
       label: 'Return a card to the Deck: revive',
       categories: ['specialSummon'],
       eventFilter: (ctx, ev) => ev.phase === 'standby' && ctx.isMyTurn,
-      condition: (ctx) => ctx.canSpecialSummon() && ctx.hand().length > 0,
+      condition: (ctx) => ctx.canSummonSelf() && ctx.hand().length > 0,
       activate: async (ctx) => {
         const sel = await ctx.select(ctx.hand(), 1, 1, 'Place 1 card from your hand on top of your Deck.', 'cost', { aiScore: (c) => putBackScore(ctx, c) });
         if (!sel.length) return false;
@@ -476,7 +476,7 @@ monster('Despair from the Dark', {
         if (rc) return rc.controller !== ctx.self.owner;
         return ev.reasonPlayer !== undefined && ev.reasonPlayer !== ctx.self.owner;
       },
-      condition: (ctx) => ctx.canSpecialSummon(),
+      condition: (ctx) => ctx.canSummonSelf(),
       resolve: async (ctx) => {
         if (ctx.self.location === 'grave') await ctx.specialSummon(ctx.self);
       },

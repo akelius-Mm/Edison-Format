@@ -119,6 +119,10 @@ export class Ctx {
   canSpecialSummon(side: 'me' | 'opp' = 'me') {
     return !this.game.queryPlayer(this.pid(side), 'cannotSpecialSummon') && this.freeMZones(side) > 0;
   }
+  /** Can this effect's own card Special Summon itself right now (a free zone, no lock on Special Summons or on this card). */
+  canSummonSelf(side: 'me' | 'opp' = 'me') {
+    return this.canSpecialSummon(side) && !this.game.queryCard(this.self, 'cannotBeSummoned') && !this.self.data.noSpecialFrom?.includes(this.self.location);
+  }
   /** Can the given card be Special Summoned by an effect right now (zone + restrictions + nomi). */
   canSummonCard(c: CardInstance, side: 'me' | 'opp' = 'me') {
     if (!this.canSpecialSummon(side)) return false;

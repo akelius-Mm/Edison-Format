@@ -4996,4 +4996,15 @@ async function graveEffectTests() {
     eq(mezuki.location, 'banished', 'Mezuki banished as the cost');
     eq(zombie.location, 'mzone', 'Zombie Special Summoned');
   });
+
+  await test('Plaguespreader Zombie is not offered (no card put back) when it cannot be Summoned, e.g. under Consecrated Light', async () => {
+    const { g, place } = setup();
+    const plague = place(0, cardByName('Plaguespreader Zombie'), 'grave');
+    const card = place(0, T.giant, 'hand');
+    const light = place(1, cardByName('Consecrated Light'), 'mzone');
+    light.faceUp = true;
+    await (g as any).setPhase('standby');
+    eq(plague.location, 'grave', 'still in the GY');
+    eq(card.location, 'hand', 'no card was put back on the Deck');
+  });
 }

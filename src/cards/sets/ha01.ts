@@ -160,7 +160,7 @@ monster('Mist Valley Thunderbird', {
       label: 'Special Summon itself',
       categories: ['specialSummon'],
       eventFilter: (ctx, ev) => ev.card === ctx.self && ev.from === 'mzone' && !!ev.fromFaceUp && ctx.self.location === 'hand',
-      condition: (ctx) => ctx.canSpecialSummon(),
+      condition: (ctx) => ctx.canSummonSelf(),
       resolve: async (ctx) => {
         if (ctx.self.location !== 'hand' || !ctx.canSpecialSummon()) return;
         const r = await ctx.specialSummon(ctx.self);

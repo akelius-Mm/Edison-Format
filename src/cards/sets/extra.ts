@@ -126,7 +126,7 @@ monster('Stardust Dragon', {
       label: 'Return from the GY',
       categories: ['specialSummon'],
       eventFilter: (ctx, ev) => ev.phase === 'end' && ctx.self.flags.stardustRevive === ctx.turn,
-      condition: (ctx) => ctx.canSpecialSummon(),
+      condition: (ctx) => ctx.canSummonSelf(),
       resolve: async (ctx) => {
         if (ctx.self.location === 'grave') await ctx.specialSummon(ctx.self, { ignoreConditions: true });
       },
@@ -877,7 +877,7 @@ monster('Ancient Sacred Wyvern', {
       label: 'Pay 1000: revive',
       categories: ['specialSummon'],
       eventFilter: (ctx, ev) => ev.card === ctx.self && ctx.self.location === 'grave',
-      condition: (ctx) => ctx.canSpecialSummon() && ctx.lp > 1000,
+      condition: (ctx) => ctx.canSummonSelf() && ctx.lp > 1000,
       activate: async (ctx) => {
         await ctx.payLp(1000);
       },

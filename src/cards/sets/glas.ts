@@ -2251,7 +2251,7 @@ M('Spirit of the Six Samurai', {
       condition: (ctx) =>
         ctx.self.location === 'mzone'
           ? ctx.self.faceUp && ctx.freeSZones() > 0 && spiritTargets(ctx).some((c) => ctx.canTarget(c))
-          : ctx.self.location === 'szone' && !!ctx.self.flags.unionEquipped && ctx.equipTarget !== undefined && ctx.canSpecialSummon(),
+          : ctx.self.location === 'szone' && !!ctx.self.flags.unionEquipped && ctx.equipTarget !== undefined && ctx.canSummonSelf(),
       activate: async (ctx) => {
         ctx.data.mode = ctx.self.location === 'mzone' ? 'equip' : 'unequip';
         if (ctx.data.mode === 'equip') await ctx.selectTargets(spiritTargets(ctx), 1, 1, 'Target 1 face-up "Six Samurai" monster you control.', 'equip', { aiScore: (c) => ctx.atk(c) });

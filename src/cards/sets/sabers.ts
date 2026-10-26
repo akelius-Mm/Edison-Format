@@ -235,7 +235,7 @@ monster('X-Saber Palomuro', {
         const c = ev.card as CardInstance;
         return c !== ctx.self && isXS(c) && ev.fromController === ctx.player && c.location === 'grave';
       },
-      condition: (ctx) => ctx.lp > 500 && ctx.canSpecialSummon(),
+      condition: (ctx) => ctx.lp > 500 && ctx.canSummonSelf(),
       activate: async (ctx) => {
         await ctx.payLp(500);
       },
