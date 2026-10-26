@@ -77,6 +77,7 @@ export interface ConfirmRequest {
 export type WindowKind =
   | 'chain' // responding to a chain link
   | 'response' // after something happened (summon etc.)
+  | 'priority' // the turn player's priority right after their own summon (2010 rule): Spell Speed 1 effects of that monster first
   | 'summonNegation'
   | 'attack' // attack declaration
   | 'damage' // damage step

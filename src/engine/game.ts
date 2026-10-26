@@ -150,6 +150,13 @@ export class Game {
   phase: Phase = 'draw';
   chain: ChainLink[] = [];
   resolvingChain = false;
+  /**
+   * Turn player priority (the rule until 2014, so in Edison): monsters the turn player just summoned in their Main
+   * Phase, outside a chain. Their Ignition Effects may be activated as Chain Link 1 before the opponent responds.
+   */
+  private prioritySummoned: CardInstance[] = [];
+  /** The monsters whose Ignition Effects the current 'priority' window offers. */
+  private priorityCards: CardInstance[] = [];
   /** Index of the chain link currently resolving (1-based) or 0. */
   resolvingLink: ChainLink | null = null;
   pending: PendingTrigger[] = [];
@@ -451,6 +458,8 @@ export class Game {
   }
 
   emit(ev: Omit<GameEvent, 'seq' | 'batch'>): GameEvent {
+    if (ev.type === 'summoned' && ev.card && ev.player === this.turnPlayer && !this.chain.length && !this.resolvingChain && !this.battle && (this.phase === 'main1' || this.phase === 'main2'))
+      this.prioritySummoned.push(ev.card as CardInstance);
     const full: GameEvent = {
       ...ev,
       seq: ++this.eventSeq,
@@ -1239,7 +1248,8 @@ export class Game {
       const top = this.chain[this.chain.length - 1];
       if (speed < 2 || speed < top.speed) return null;
     } else if (speed === 1) {
-      if (!(mode.open && isOwnTurn && (this.phase === 'main1' || this.phase === 'main2'))) return null;
+      const priority = window === 'priority' && isOwnTurn && ef.kind === 'ignition' && this.priorityCards.includes(card);
+      if (!priority && !(mode.open && isOwnTurn && (this.phase === 'main1' || this.phase === 'main2'))) return null;
     }
 
     if (ef.kind === 'proc') return null; // procs handled as actions
@@ -1452,6 +1462,7 @@ export class Game {
     if (kind === 'damage') return 'Damage Step. Activate a card?';
     if (kind === 'summonNegation' && this.pendingSummon) return `${this.pendingSummon.cards.map((c) => c.name).join(', ')} is being summoned. Negate?`;
     if (kind === 'phase') return `${phaseName(this.phase)}. Activate a card?`;
+    if (kind === 'priority') return `${this.priorityCards.map((c) => c.name).join(', ')} was summoned. Respond?`;
     const last = this.recentEvents[this.recentEvents.length - 1];
     if (last?.type === 'summoned' || last?.type === 'specialSummoned' || last?.type === 'normalSummoned') {
       return `${(last.card as CardInstance)?.name ?? 'A monster'} was summoned. Respond?`;
@@ -1562,8 +1573,19 @@ export class Game {
       }
       if (openResponse && !respondedOnce && this.recentEvents.length && this.recentEvents.some((e) => !e.minor)) {
         respondedOnce = true;
+        // Turn player priority after their own summon: they act first, and may start the chain with the summoned
+        // monster's Ignition Effect (Judgment Dragon before Bottomless Trap Hole); the opponent can still chain to it.
+        const prio = this.prioritySummoned.filter((c) => c.location === 'mzone' && c.faceUp && c.controller === this.turnPlayer);
+        this.prioritySummoned = [];
         const first = responseFirst ?? this.opp(this.turnPlayer);
-        await this.responseLoop('response', first);
+        this.priorityCards = prio;
+        try {
+          if (prio.length && !this.chain.length && this.getActivations(this.turnPlayer, { open: false, window: 'priority' }).some((a) => prio.includes(a.card)))
+            await this.responseLoop('priority', this.turnPlayer);
+          else await this.responseLoop('response', first);
+        } finally {
+          this.priorityCards = [];
+        }
         if (this.chain.length) {
           await this.resolveChain();
           respondedOnce = false;

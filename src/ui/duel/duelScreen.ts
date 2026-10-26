@@ -1210,6 +1210,8 @@ class DuelScreen implements HumanUI {
     if (!req.options.length) return false;
     if (getSettings().responsePrompts === 'always') return true;
     if (req.kind === 'chain' || req.kind === 'attack' || req.kind === 'damage' || req.kind === 'summonNegation') return true;
+    // priority after your own summon: always ask when the monster you just summoned has an effect to use
+    if (req.kind === 'priority' && req.options.some((o) => o.effect.kind === 'ignition' && o.card.controller === p && o.card.location === 'mzone')) return true;
     return req.options.some((o) => {
       if (o.event) return true;
       const c = o.card;
@@ -1254,6 +1256,10 @@ class DuelScreen implements HumanUI {
         break;
       case 'phase':
         title = `${phaseName(g.phase)} — activate a card?`;
+        break;
+      case 'priority':
+        // the turn player acts first after their own summon; the opponent then responds as usual
+        title = g.turnPlayer === p ? 'You have priority: use its effect first?' : 'Respond?';
         break;
       default:
         title = 'Respond?';
