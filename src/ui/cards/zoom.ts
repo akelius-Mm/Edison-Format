@@ -20,7 +20,7 @@ function addStyle() {
   animation: czIn 160ms ease-out;
   cursor: zoom-out;
 }
-.card-zoom-inner { position: relative; display: grid; justify-items: center; gap: 10px; animation: czPop 220ms cubic-bezier(.2,1.3,.4,1); }
+.card-zoom-inner { position: relative; display: grid; justify-items: center; gap: 10px; animation: czPop var(--dur-base) var(--ease-spring); }
 .card-zoom .yc { --yc-w: min(88vw, calc((100dvh - 90px) * 59 / 86), 560px); box-shadow: 0 20px 60px rgba(0,0,0,.8), 0 0 0 1px rgba(255,255,255,.08); }
 .card-zoom-scan { width: min(88vw, calc((100dvh - 90px) * 59 / 86), 560px); aspect-ratio: 59 / 86; border-radius: 3.5%; box-shadow: 0 20px 60px rgba(0,0,0,.8); display: block; }
 .card-zoom-hint { font: 500 13px -apple-system, BlinkMacSystemFont, system-ui, sans-serif; color: rgba(236, 235, 231, .6); }

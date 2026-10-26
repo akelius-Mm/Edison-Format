@@ -211,6 +211,8 @@ export async function runMatch(setup: MatchSetup): Promise<MatchOutcome> {
           caption: game.caption,
           allowSurrender: true,
           resumable: !!rec,
+          // every runMatch duel is against the AI (friends play through friend.ts / friendLocals.ts)
+          allowUndo: gameSides.some(isHuman) && !gameSides.every(isHuman),
           replay: game.log.length ? game.log : undefined,
           onDecision: rec
             ? (log, g) => {

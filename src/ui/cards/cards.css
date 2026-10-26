@@ -242,7 +242,7 @@
   background-size: 260% 260%;
   background-position: 100% 100%;
   mix-blend-mode: overlay;
-  transition: background-position 0.9s var(--ease-out);
+  transition: background-position calc(var(--dur-big) * 1.5) var(--ease-out);
 }
 .yc:hover .yc-foil { background-position: 0% 0%; }
 

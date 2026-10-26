@@ -165,6 +165,8 @@ export class Game {
   winReason = '';
   over = false;
   hooks: GameHooks = {};
+  /** Counts 'reveal' / 'coin' / 'draw' / 'shuffle' animations (hidden information shown; engine/undo.ts). */
+  revealSeq = 0;
   logEntries: LogEntry[] = [];
   options: Required<GameOptions>;
 
@@ -261,6 +263,8 @@ export class Game {
   }
 
   async anim(a: AnimEvent) {
+    // hidden information shown to the players (a revealed card, a coin toss, a draw): see engine/undo.ts
+    if (a.type === 'reveal' || a.type === 'coin' || a.type === 'draw' || a.type === 'shuffle') this.revealSeq++;
     this.hooks.update?.();
     if (this.hooks.anim) await this.hooks.anim(a);
   }

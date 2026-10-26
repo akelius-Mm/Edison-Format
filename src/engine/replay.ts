@@ -94,6 +94,11 @@ export interface RecordingOptions {
   onReplayEnd?: () => void;
   /** Called when a recorded decision does not fit the game (the game then ends). */
   onMismatch?: (detail: string) => void;
+  /**
+   * Called when a decision is requested, replayed or live, before it is answered. `index` is the
+   * position the decision will take in the log (engine/undo.ts marks its undo points here).
+   */
+  onRequest?: (kind: DecisionKind, game: Game, index: number) => void;
 }
 
 export class RecordingController implements PlayerController {
@@ -121,6 +126,7 @@ export class RecordingController implements PlayerController {
   /** Next recorded decision of kind `k`, or null when live. Throws on mismatch. */
   private next<K extends DecisionKind>(game: Game, k: K): Extract<Decision, { k: K }> | null {
     if (this.mismatch) throw new ReplayMismatch(this.mismatch);
+    this.o.onRequest?.(k, game, this.log.length);
     if (!this.queue.length) {
       if (!this.ended) {
         this.ended = true;

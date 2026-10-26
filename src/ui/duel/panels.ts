@@ -8,6 +8,7 @@ import { renderAvatar } from '../theme/avatars';
 import { isTouchUI } from './dialogs';
 import { esc } from '../theme/util';
 import type { DuelSide } from './api';
+import { lpEase } from './sound';
 
 function h<K extends keyof HTMLElementTagNameMap>(tag: K, cls = '', html = ''): HTMLElementTagNameMap[K] {
   const e = document.createElement(tag);
@@ -28,7 +29,7 @@ export class PlayerPanel {
   private raf = 0;
   readonly avatarEl: HTMLElement;
   /** Called when the LP number starts rolling, with the roll length in ms (for the counter sound). */
-  onLpRoll?: (ms: number, up: boolean) => void;
+  onLpRoll?: (ms: number, up: boolean, amount: number) => void;
 
   constructor(
     side: DuelSide,
@@ -78,6 +79,14 @@ export class PlayerPanel {
     this.lpNum.classList.remove('dmg', 'heal');
   }
 
+  /** Restart a one-shot CSS animation class (the LP flash and punch). */
+  private pulse(el: HTMLElement, cls: string[], on: string[], ms: number) {
+    el.classList.remove(...cls);
+    void el.offsetWidth;
+    el.classList.add(...on);
+    window.setTimeout(() => el.classList.remove(...on), ms);
+  }
+
   setLp(lp: number) {
     if (lp === this.targetLp) return;
     const from = this.shownLp;
@@ -87,7 +96,10 @@ export class PlayerPanel {
     this.lpFill.style.transform = `scaleX(${pct.toFixed(4)})`;
     this.lpGhost.style.transform = `scaleX(${pct.toFixed(4)})`;
     this.el.classList.toggle('is-low', lp <= this.startLp * 0.25);
-    const dur = 600 * this.speed();
+    // bigger changes roll a little longer (a 500 hit ~0.5 s, 4000 ~1.1 s at Normal speed)
+    const amount = Math.abs(lp - from);
+    const sp = this.speed();
+    const dur = (450 + Math.min(650, amount * 0.16)) * sp;
     cancelAnimationFrame(this.raf);
     if (dur <= 0) {
       this.shownLp = lp;
@@ -96,11 +108,16 @@ export class PlayerPanel {
     }
     this.lpNum.classList.toggle('dmg', lp < from);
     this.lpNum.classList.toggle('heal', lp > from);
-    if (lp !== from) this.onLpRoll?.(dur, lp > from);
+    if (lp !== from) {
+      this.onLpRoll?.(dur, lp > from, amount);
+      // the panel flashes red (green when healing) and the number takes the hit; big hits jolt it
+      const flash = lp < from ? (amount >= 2000 ? ['lp-hit', 'is-big'] : ['lp-hit']) : ['lp-heal'];
+      this.pulse(this.el, ['lp-hit', 'lp-heal', 'is-big'], flash, 700 * sp + 60);
+    }
     const t0 = performance.now();
     const step = (t: number) => {
       const k = Math.min(1, (t - t0) / dur);
-      const e = 1 - Math.pow(1 - k, 3);
+      const e = lpEase(k);
       this.shownLp = Math.round(from + (lp - from) * e);
       this.lpNum.textContent = String(this.shownLp);
       if (k < 1) this.raf = requestAnimationFrame(step);

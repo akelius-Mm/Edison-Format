@@ -202,8 +202,8 @@
   font: 500 15px var(--font);
   opacity: 0;
   transition:
-    opacity 0.25s ease,
-    transform 0.25s ease;
+    opacity var(--dur-base) var(--ease-out),
+    transform var(--dur-base) var(--ease-out);
 }
 body.in-duel .err-toast {
   bottom: calc(16px + env(safe-area-inset-bottom, 0px));
@@ -245,8 +245,8 @@ body.in-duel .err-toast {
   border: 1px solid rgba(90, 169, 255, 0.35);
   color: var(--text);
   transition:
-    opacity 0.25s ease,
-    transform 0.25s ease;
+    opacity var(--dur-base) var(--ease-out),
+    transform var(--dur-base) var(--ease-out);
   min-width: 0;
 }
 .br-banner.is-gone {

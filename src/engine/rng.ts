@@ -1,10 +1,13 @@
 /** Small seeded PRNG (mulberry32) so duels are reproducible. */
 export class Rng {
   private s: number;
+  /** Numbers drawn so far (the undo rule: any random result since a decision makes it final). */
+  calls = 0;
   constructor(seed: number) {
     this.s = seed >>> 0 || 0x9e3779b9;
   }
   next(): number {
+    this.calls++;
     let t = (this.s += 0x6d2b79f5);
     t = Math.imul(t ^ (t >>> 15), t | 1);
     t ^= t + Math.imul(t ^ (t >>> 7), t | 61);

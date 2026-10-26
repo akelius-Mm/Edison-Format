@@ -10,7 +10,7 @@
 // Throttled to one event per 40 ms; off when Settings → Haptics is off.
 import { getSettings } from './settings';
 
-export type HapticKind = 'light' | 'medium' | 'heavy' | 'success' | 'warning' | 'error' | 'selection';
+export type HapticKind = 'light' | 'medium' | 'heavy' | 'impact' | 'success' | 'warning' | 'error' | 'selection';
 
 /** Vibration API patterns (ms on / off / on …). */
 const VIBRATE: Record<HapticKind, number | number[]> = {
@@ -18,12 +18,14 @@ const VIBRATE: Record<HapticKind, number | number[]> = {
   light: 12,
   medium: 22,
   heavy: [34, 40, 22],
+  /** A big hit (large LP loss): a strong knock with a rumble after it. */
+  impact: [45, 35, 30, 35, 18],
   success: [16, 60, 26],
   warning: [24, 70, 24],
   error: [30, 60, 30, 60, 40],
 };
 /** iOS switch ticks per kind (each tick is the same system haptic). */
-const TICKS: Record<HapticKind, number> = { selection: 1, light: 1, medium: 1, heavy: 2, success: 2, warning: 2, error: 3 };
+const TICKS: Record<HapticKind, number> = { selection: 1, light: 1, medium: 1, heavy: 2, impact: 3, success: 2, warning: 2, error: 3 };
 const TICK_GAP_MS = 70;
 const MIN_GAP_MS = 40;
 
@@ -80,6 +82,11 @@ export function haptic(kind: HapticKind = 'light') {
   } catch {
     /* never let feedback break the app */
   }
+}
+
+/** Haptic for losing (or dealing) `amount` LP: stronger for bigger hits. */
+export function damageHaptic(amount: number): HapticKind {
+  return amount >= 3000 ? 'impact' : amount >= 1500 ? 'heavy' : amount >= 500 ? 'medium' : 'light';
 }
 
 /** The most recent haptics requested (newest last), for tests and diagnostics. */

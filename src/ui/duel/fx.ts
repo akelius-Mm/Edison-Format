@@ -6,7 +6,8 @@ import type { PlayerId } from '../../engine/types';
 import { renderCard } from '../cards/render';
 import type { BoardView, RenderOpts } from './board';
 import type { ChainStack, PlayerPanel } from './panels';
-import { type HapticKind, haptic } from '../haptics';
+import { type HapticKind, damageHaptic, haptic } from '../haptics';
+import { EASE, reducedMotion } from '../motion';
 import type { Sfx } from './sound';
 
 export interface FxHost {
@@ -35,9 +36,6 @@ export function perfTrace(): PerfMark[] | null {
   const t = (globalThis as { __fxTrace?: PerfMark[] }).__fxTrace;
   return Array.isArray(t) ? t : null;
 }
-
-/** The system asks for less motion: no shaking, lunging or flying cards (steps still fade). */
-const reducedMotion = () => typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 export const sleep = (ms: number) => new Promise<void>((r) => window.setTimeout(r, ms));
 
@@ -87,6 +85,8 @@ export class FxDirector {
   /** Pending waits (animation steps and AI pacing): a tap on the board ends them at once. */
   private waiters = new Set<() => void>();
   private active = 0;
+  /** When the board last shook (one hit shakes it once, not once per step of the same hit). */
+  private shookAt = -1e9;
   constructor(private h: FxHost) {}
 
   /** An animation step is playing. */
@@ -224,8 +224,8 @@ export class FxDirector {
           for (const u of uids) this.synchroBurst(u);
           return this.wait(STEP.synchro);
         }
-        h.sfx.play('summon');
-        this.feel('medium', who);
+        h.sfx.play(method === 'tribute' ? 'tribute' : method === 'normal' ? 'summon' : 'special');
+        this.feel(method === 'tribute' ? 'heavy' : 'medium', who);
         for (const u of uids) {
           this.pulse(u, method === 'tribute' ? 'fx-summon fx-tribute' : 'fx-summon', 520);
           this.ring(u, method === 'tribute' ? 'ring--tribute' : 'ring--summon');
@@ -234,9 +234,11 @@ export class FxDirector {
       }
       case 'activate': {
         h.flush();
-        h.sfx.play('activate');
-        this.feel('medium', a.player as PlayerId);
         const c = h.game.card(a.card);
+        // a Spell rings, a Trap snaps, a monster effect shines; each new chain link adds a clink
+        h.sfx.play(c?.isSpell ? 'spell' : c?.isTrap ? 'trap' : 'activate');
+        if ((a.chainIndex as number) >= 2) h.sfx.chain(a.chainIndex as number);
+        this.feel('medium', a.player as PlayerId);
         if (c) {
           h.spotlight(c);
           this.pulse(c.uid, 'fx-activate', 580);
@@ -297,16 +299,24 @@ export class FxDirector {
         }
         if (at) this.shakeEl(at);
         if (tgt) this.shakeEl(tgt);
+        // a strong monster hitting the player directly: the board takes it
+        const atk = h.game.card(a.attacker);
+        if (a.target == null && atk && h.game.getAtk(atk) >= 2000) this.shakeScreen(0.8);
         return this.wait(STEP.battle);
       }
       case 'damage': {
         h.flush();
         const amt = a.amount as number;
-        const big = amt >= 2000 && a.kind !== 'cost';
-        h.sfx.play(big ? 'bigDamage' : 'damage');
-        this.feel(a.kind === 'cost' ? 'light' : 'heavy', a.player as PlayerId);
-        this.floatNumber(a.player as PlayerId, `-${amt}`, a.kind === 'cost' ? 'num--cost' : 'num--dmg', big);
-        if (big) this.shakeScreen();
+        const cost = a.kind === 'cost';
+        const big = amt >= 2000 && !cost;
+        h.sfx.hit(amt, cost ? 'cost' : a.kind === 'battle' ? 'battle' : 'effect');
+        // felt by the one losing LP, scaled by the amount; a lighter knock for dealing it
+        if (!h.spectator) {
+          if (a.player === h.me) haptic(cost ? 'light' : damageHaptic(amt));
+          else if (!cost) haptic(amt >= 2000 ? 'medium' : 'light');
+        }
+        this.floatNumber(a.player as PlayerId, `\u2212${amt}`, cost ? 'num--cost' : 'num--dmg', big);
+        if (big) this.shakeScreen(amt >= 4000 ? 1.2 : 1);
         if (a.kind !== 'cost') this.flashSide(a.player as PlayerId, 'flash--dmg');
         // the LP counter keeps ticking down under the next step
         return this.wait(big ? STEP.bigDamage : STEP.damage);
@@ -332,6 +342,8 @@ export class FxDirector {
         }
         h.flush({ drop, instant: drop });
         if (any) h.sfx.play('destroy');
+        // destroyed by battle: the clash shakes the board a little
+        if (any && a.reason === 'battle') this.shakeScreen(0.6);
         return this.wait(any ? STEP.destroy : STEP.move);
       }
       case 'flip': {
@@ -434,7 +446,7 @@ export class FxDirector {
         { transform: 'translate(-50%,-50%) scale(1)', opacity: 1, offset: 0.8 },
         { transform: 'translate(-50%,-50%) scale(.92)', opacity: 0 },
       ],
-      { duration: 680 * sp, easing: 'cubic-bezier(.2,.8,.2,1)', fill: 'forwards' },
+      { duration: 680 * sp, easing: EASE.out, fill: 'forwards' },
     );
     this.autoRemove(box, 720);
   }
@@ -480,7 +492,7 @@ export class FxDirector {
         { transform: `translate(${dx}px, ${dy}px) scale(1.12)`, offset: 0.6 },
         { transform: 'translate(0,0) scale(1)' },
       ],
-      { duration: 440 * sp, easing: 'cubic-bezier(.3,.7,.3,1)' },
+      { duration: 440 * sp, easing: EASE.inOut },
     );
   }
 
@@ -503,19 +515,31 @@ export class FxDirector {
     );
   }
 
-  private shakeScreen() {
+  /**
+   * A light shake of the whole board for a big hit: a few px, decaying over ~250 ms. `strength`
+   * scales the distance (1 = about 5 px). Only one shake per hit (a direct attack shakes on impact,
+   * the damage that follows a moment later doesn't shake again). `translate`, so it composes with
+   * whatever transform the stage has; skipped for reduced motion and at Instant speed.
+   */
+  private shakeScreen(strength = 1) {
     const sp = this.h.speed();
     if (sp <= 0 || reducedMotion()) return;
+    const now = performance.now();
+    if (now - this.shookAt < 650) return;
+    this.shookAt = now;
+    const d = 5 * strength;
+    const px = (x: number, y: number) => `${(x * d).toFixed(1)}px ${(y * d).toFixed(1)}px`;
     this.h.board.stage.animate(
       [
-        { transform: 'translate(0,0)' },
-        { transform: 'translate(-9px,5px)' },
-        { transform: 'translate(8px,-6px)' },
-        { transform: 'translate(-6px,-4px)' },
-        { transform: 'translate(5px,4px)' },
-        { transform: 'translate(0,0)' },
+        { translate: '0px 0px' },
+        { translate: px(-1, 0.6), offset: 0.12 },
+        { translate: px(0.85, -0.7), offset: 0.3 },
+        { translate: px(-0.5, -0.35), offset: 0.5 },
+        { translate: px(0.3, 0.3), offset: 0.7 },
+        { translate: px(-0.1, 0), offset: 0.86 },
+        { translate: '0px 0px' },
       ],
-      { duration: 360 * sp },
+      { duration: 250 * Math.min(1.5, Math.max(0.6, sp)), easing: 'linear' },
     );
   }
 
@@ -524,8 +548,11 @@ export class FxDirector {
     const panel = this.h.panels[p];
     const lp = panel.el.querySelector('.pp-lp') ?? panel.el;
     const c = center(lp);
-    const n = el(`fx-num ${cls}${big ? ' is-big' : ''}`, text);
-    this.place(n, c.x, c.y);
+    // just outside the panel (above yours, below the opponent's), so the rolling LP stays readable
+    const pr = panel.el.getBoundingClientRect();
+    const below = p !== this.h.me;
+    const n = el(`fx-num ${cls}${big ? ' is-big' : ''}${below ? ' is-below' : ''}`, text);
+    this.place(n, c.x, below ? pr.bottom + 22 : pr.top - 22);
     this.autoRemove(n, 940);
     // second number over that player's field
     const side = this.h.board.sideOf(p).root;
@@ -579,7 +606,7 @@ export class FxDirector {
             { transform: `${base} translate(${Math.cos(ang) * 6}px, ${Math.sin(ang) * 6}px)`, opacity: 1, filter: 'brightness(1.6)', offset: 0.15 },
             { transform: `${base} translate(${Math.cos(ang) * dist}px, ${Math.sin(ang) * dist + 30}px) rotate(${(Math.random() - 0.5) * 120}deg)`, opacity: 0, filter: 'brightness(1)' },
           ],
-          { duration: 440 * sp, easing: 'cubic-bezier(.2,.6,.4,1)', fill: 'forwards' },
+          { duration: 440 * sp, easing: EASE.out, fill: 'forwards' },
         );
         this.autoRemove(piece, 480);
       }
@@ -718,7 +745,7 @@ export class FxDirector {
         { transform: `rotateZ(${endZ + 30 * dir}deg) rotateX(${spinX * 0.12}deg) rotateY(${spinY * 0.12}deg) ${rest}`, offset: 0.7 },
         { transform: final },
       ],
-      { duration: ms, easing: 'cubic-bezier(.2,.65,.3,1)' },
+      { duration: ms, easing: EASE.out },
     );
     // travel across the table with two small bounces before settling
     s.thrower.animate(
@@ -731,9 +758,9 @@ export class FxDirector {
         { transform: 'translate(0, -2%) scale(1.005)', offset: 0.92 },
         { transform: 'translate(0, 0) scale(1)' },
       ],
-      { duration: ms, easing: 'ease-out' },
+      { duration: ms, easing: EASE.out },
     );
-    s.shadow.animate([{ opacity: 0, transform: 'scale(.6)' }, { opacity: 0.5, transform: 'scale(.8)', offset: 0.5 }, { opacity: 1, transform: 'scale(1)' }], { duration: ms, easing: 'ease-out' });
+    s.shadow.animate([{ opacity: 0, transform: 'scale(.6)' }, { opacity: 0.5, transform: 'scale(.8)', offset: 0.5 }, { opacity: 1, transform: 'scale(1)' }], { duration: ms, easing: EASE.out });
   }
 }
 

@@ -5,6 +5,7 @@ import { localsScreen } from './locals';
 import { eventsScreen } from './events';
 import { profileScreen } from './profile';
 import { reportError } from '../diag';
+import { DUR } from '../motion';
 
 export interface Screen {
   el: HTMLElement;
@@ -103,7 +104,8 @@ function mount(screen: Screen, key: string) {
     } catch (e) {
       console.error(e);
     }
-    setTimeout(() => old.el.remove(), 240);
+    // the leaving screen fades out (motion.css): remove it once that has played
+    setTimeout(() => old.el.remove(), DUR.base + 20);
   }
   screen.onShow?.();
   if (!screen.el.contains(document.activeElement)) {

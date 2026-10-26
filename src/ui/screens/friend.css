@@ -409,8 +409,8 @@
   opacity: 0;
   transform: translateY(-3px);
   transition:
-    opacity 0.2s ease,
-    transform 0.2s ease;
+    opacity var(--dur-base) var(--ease-out),
+    transform var(--dur-base) var(--ease-out);
 }
 .fr-chip.is-on {
   opacity: 1;

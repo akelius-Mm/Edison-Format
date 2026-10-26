@@ -435,7 +435,7 @@ body.dr-immersive.has-tabbar .dr-root .frame {
   animation: drFloat 3.2s ease-in-out infinite;
 }
 .dr-pack-btn.is-shake .dr-rpack {
-  animation: drShake var(--t-shake, 220ms) ease-in-out;
+  animation: drShake var(--t-shake, 220ms) var(--ease-in-out);
 }
 .dr-pack-btn.is-torn .dr-rpack {
   animation: none;
@@ -443,15 +443,15 @@ body.dr-immersive.has-tabbar .dr-root .frame {
 .dr-pack-btn.is-torn .dr-rpack-top {
   transition:
     transform var(--t-tear, 420ms) var(--ease-out),
-    opacity var(--t-tear, 420ms) ease-in;
+    opacity var(--t-tear, 420ms) var(--ease-in);
   transform: translate(26%, -60%) rotate(16deg);
   opacity: 0;
 }
 .dr-pack-btn.is-torn .dr-rpack-body,
 .dr-pack-btn.is-torn .dr-rpack .dr-pack-sheen {
   transition:
-    transform var(--t-drop, 520ms) cubic-bezier(0.5, 0, 0.75, 0) calc(var(--t-tear, 420ms) * 0.35),
-    opacity var(--t-drop, 520ms) ease-in calc(var(--t-tear, 420ms) * 0.35);
+    transform var(--t-drop, 520ms) var(--ease-in) calc(var(--t-tear, 420ms) * 0.35),
+    opacity var(--t-drop, 520ms) var(--ease-in) calc(var(--t-tear, 420ms) * 0.35);
   transform: translateY(70%);
   opacity: 0;
 }
@@ -671,7 +671,7 @@ body.dr-immersive.has-tabbar .dr-root .frame {
   }
 }
 .dr-pack-btn.is-shake .dr-pack {
-  animation: drShake var(--t-shake, 220ms) ease-in-out;
+  animation: drShake var(--t-shake, 220ms) var(--ease-in-out);
 }
 @keyframes drShake {
   0%,
@@ -694,7 +694,7 @@ body.dr-immersive.has-tabbar .dr-root .frame {
 .dr-pack-btn.is-torn .dr-pack-top {
   transition:
     transform var(--t-tear, 420ms) var(--ease-out),
-    opacity var(--t-tear, 420ms) ease-in;
+    opacity var(--t-tear, 420ms) var(--ease-in);
   transform: translate(26%, -120%) rotate(16deg);
   opacity: 0;
 }
@@ -702,8 +702,8 @@ body.dr-immersive.has-tabbar .dr-root .frame {
 .dr-pack-btn.is-torn .dr-pack-bottom,
 .dr-pack-btn.is-torn .dr-pack-sheen {
   transition:
-    transform var(--t-drop, 520ms) cubic-bezier(0.5, 0, 0.75, 0) calc(var(--t-tear, 420ms) * 0.35),
-    opacity var(--t-drop, 520ms) ease-in calc(var(--t-tear, 420ms) * 0.35);
+    transform var(--t-drop, 520ms) var(--ease-in) calc(var(--t-tear, 420ms) * 0.35),
+    opacity var(--t-drop, 520ms) var(--ease-in) calc(var(--t-tear, 420ms) * 0.35);
   transform: translateY(70%);
   opacity: 0;
 }
@@ -771,7 +771,7 @@ body.dr-immersive.has-tabbar .dr-root .frame {
   inset: 0;
   transform-style: preserve-3d;
   -webkit-transform-style: preserve-3d;
-  transition: transform var(--t-flip, 320ms) cubic-bezier(0.3, 0.7, 0.3, 1);
+  transition: transform var(--t-flip, 320ms) var(--ease-out);
 }
 .dr-ocard.is-up .dr-ocard-in {
   transform: rotateY(180deg);
@@ -823,7 +823,7 @@ body.dr-immersive.has-tabbar .dr-root .frame {
   opacity: 0;
 }
 .dr-ocard.is-up.is-foil .dr-ocard-front::before {
-  animation: drFlash calc(var(--t-flip, 320ms) * 2.6) ease-out calc(var(--t-flip, 320ms) * 0.5) both;
+  animation: drFlash calc(var(--t-flip, 320ms) * 2.6) var(--ease-out) calc(var(--t-flip, 320ms) * 0.5) both;
 }
 @keyframes drFlash {
   0% {
@@ -1065,8 +1065,8 @@ body.dr-immersive.has-tabbar .dr-root .frame {
 /* pick animation */
 .dr-tile.is-taken {
   transition:
-    transform var(--t-take, 420ms) cubic-bezier(0.5, 0, 0.3, 1),
-    opacity var(--t-take, 420ms) ease-in;
+    transform var(--t-take, 420ms) var(--ease-in-out),
+    opacity var(--t-take, 420ms) var(--ease-in);
   transform: translate(var(--tx, 0), var(--ty, 120px)) scale(0.25);
   opacity: 0;
   z-index: 5;
@@ -1074,8 +1074,8 @@ body.dr-immersive.has-tabbar .dr-root .frame {
 }
 .dr-tile.is-away {
   transition:
-    transform var(--t-pass, 320ms) cubic-bezier(0.55, 0, 0.75, 0.2) var(--d, 0ms),
-    opacity var(--t-pass, 320ms) ease-in var(--d, 0ms);
+    transform var(--t-pass, 320ms) var(--ease-in) var(--d, 0ms),
+    opacity var(--t-pass, 320ms) var(--ease-in) var(--d, 0ms);
   transform: translateX(calc(var(--dir, -1) * 110vw));
   opacity: 0;
 }

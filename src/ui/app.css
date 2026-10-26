@@ -691,7 +691,9 @@ input[type='range'] {
   text-align: center;
   opacity: 0;
   transform: translateY(12px);
-  transition: all var(--dur-slow) var(--ease-out);
+  transition:
+    opacity var(--dur-slow) var(--ease-out),
+    transform var(--dur-slow) var(--ease-out);
 }
 .ui-toast.in {
   opacity: 1;
