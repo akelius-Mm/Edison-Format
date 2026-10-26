@@ -896,6 +896,7 @@ function eq(a: unknown, b: unknown, msg: string) {
   await heroDadPsychicAuditTests();
   await plantSaberSamuraiAuditTests();
   await gladiatorDeepTests();
+  await deckExtras3Tests();
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })();
@@ -7215,5 +7216,92 @@ async function gladiatorDeepTests() {
     eq(wc.location, 'grave', 'War Chariot used');
     eq(prisma.location, 'grave', 'Prisma destroyed');
     eq(best.location, 'deck', 'nothing sent');
+  });
+}
+
+// ---------------------------------------------------------------- Deck extras, wave 3 (tournament4 decks)
+
+async function deckExtras3Tests() {
+  const fish = findCard('Rules Test Fish') ?? normal('Rules Test Fish', 'WATER', 'Fish', 3, 1200, 800);
+  const bigFish = findCard('Rules Test Big Fish') ?? normal('Rules Test Big Fish', 'WATER', 'Fish', 4, 1600, 800);
+  const small = findCard('Rules Test Small') ?? normal('Rules Test Small', 'EARTH', 'Warrior', 3, 1400, 800);
+  const dragon = findCard('Rules Test Wyrm') ?? normal('Rules Test Wyrm', 'WIND', 'Dragon', 4, 1500, 1000);
+  const darkColossus = findCard('Rules Test Dark Colossus') ?? normal('Rules Test Dark Colossus', 'DARK', 'Fiend', 8, 6000, 0);
+  const lightColossus = findCard('Rules Test Light Colossus') ?? normal('Rules Test Light Colossus', 'LIGHT', 'Fairy', 8, 6000, 0);
+
+  await test('Salvage: adds 2 WATER monsters with 1500 or less ATK from the GY; needs 2', async () => {
+    const { g, place } = setup();
+    const sal = place(0, cardByName('Salvage'), 'hand');
+    const a = place(0, fish, 'grave');
+    place(0, bigFish, 'grave');
+    eq(g.getActivations(0, { open: true }).some((x) => x.card === sal), false, 'not with only 1 eligible monster');
+    const b = place(0, fish, 'grave');
+    await activateCard(g, 0, sal);
+    eq(a.location, 'hand', 'first added');
+    eq(b.location, 'hand', 'second added');
+  });
+
+  await test('Terraforming: adds a Field Spell from the Deck', async () => {
+    const { g, place } = setup();
+    const tf = place(0, cardByName('Terraforming'), 'hand');
+    const field = place(0, cardByName('Necrovalley'), 'deck');
+    await activateCard(g, 0, tf);
+    eq(field.location, 'hand', 'Necrovalley added');
+  });
+
+  await test('Volcanic Shell: pay 500 LP from the GY to add a Shell, once per turn', async () => {
+    const { g, place } = setup();
+    const gy = place(0, cardByName('Volcanic Shell'), 'grave');
+    const d1 = place(0, cardByName('Volcanic Shell'), 'deck');
+    place(0, cardByName('Volcanic Shell'), 'deck');
+    await activateCard(g, 0, gy);
+    eq(g.players[0].lp, 7500, 'paid 500 LP');
+    eq(g.players[0].hand.filter((c) => c.name === 'Volcanic Shell').length, 1, 'a Shell added');
+    void d1;
+    eq(g.getActivations(0, { open: true }).some((x) => x.card === gy), false, 'only once per turn');
+  });
+
+  await test('King Tiger Wanghu: destroys a monster with 1400 or less ATK when it is Summoned', async () => {
+    const { g, place } = setup();
+    place(1, cardByName('King Tiger Wanghu'), 'mzone');
+    const s = place(0, small, 'hand');
+    await g.performAction(0, { type: 'summon', card: s });
+    eq(s.location, 'grave', '1400 ATK monster destroyed');
+    const b = setup();
+    b.place(1, cardByName('King Tiger Wanghu'), 'mzone');
+    const big = b.place(0, T.brute, 'hand');
+    await b.g.performAction(0, { type: 'summon', card: big });
+    eq(big.location, 'mzone', '1800 ATK monster stays');
+  });
+
+  await test('Tuningware: counts as Level 1 or 2 for a Synchro Summon and draws 1', async () => {
+    const { g, place } = setup();
+    const brionac = place(0, cardByName('Brionac, Dragon of the Ice Barrier'), 'extra');
+    const tw = place(0, cardByName('Tuningware'), 'mzone');
+    place(0, T.brute, 'mzone');
+    eq(g.canSynchro(0, brionac), true, 'Level 2 + Level 4 = Brionac (6)');
+    const hand = g.players[0].hand.length;
+    await g.performAction(0, { type: 'synchro', card: brionac });
+    eq(brionac.location, 'mzone', 'Brionac Synchro Summoned');
+    eq(tw.location, 'grave', 'Tuningware used');
+    eq(g.players[0].hand.length, hand + 1, 'drew 1 card');
+  });
+
+  await test('Five-Headed Dragon: only a LIGHT monster destroys it in battle; Future Fusion sends 5 Dragons', async () => {
+    const { g, place } = setup();
+    const fhd = place(1, cardByName('Five-Headed Dragon'), 'mzone');
+    await g.conductAttack(0, place(0, darkColossus, 'mzone'));
+    eq(fhd.location, 'mzone', 'survives a DARK 6000');
+    const b = setup();
+    const fhd2 = b.place(1, cardByName('Five-Headed Dragon'), 'mzone');
+    await b.g.conductAttack(0, b.place(0, lightColossus, 'mzone'));
+    eq(fhd2.location, 'grave', 'destroyed by a LIGHT 6000');
+
+    const c = setup();
+    c.place(0, cardByName('Five-Headed Dragon'), 'extra');
+    const ds = [0, 1, 2, 3, 4].map(() => c.place(0, dragon, 'deck'));
+    const ff = c.place(0, cardByName('Future Fusion'), 'hand');
+    await activateCard(c.g, 0, ff);
+    eq(ds.every((d) => d.location === 'grave'), true, '5 Dragons sent from the Deck');
   });
 }

@@ -55,6 +55,7 @@ interface MonsterOpts {
   targetImmunity?: CardData['targetImmunity'];
   attackLpCost?: number;
   noSpecialFrom?: CardData['noSpecialFrom'];
+  synchroLevel?: number;
 }
 
 /** Define an effect / normal / extra deck monster. */
@@ -86,6 +87,7 @@ export function monster(name: string, o: MonsterOpts): CardData {
     targetImmunity: o.targetImmunity,
     attackLpCost: o.attackLpCost,
     noSpecialFrom: o.noSpecialFrom,
+    synchroLevel: o.synchroLevel,
   });
 }
 

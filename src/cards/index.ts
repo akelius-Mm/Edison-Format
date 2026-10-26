@@ -29,6 +29,7 @@ import './sets/tdgs';
 import './sets/archetype-extras';
 import './sets/archetype-extras2';
 import './sets/sdmm';
+import './sets/deck-extras3';
 import './gy-costs';
 import './why-not';
 import { applyBanlist } from './banlist';

@@ -1936,8 +1936,10 @@ export class Game {
         const sel: CardInstance[] = [];
         for (let i = 0; i < n; i++) if (mask & (1 << i)) sel.push(nonT[i]);
         if (sel.length < minN || sel.length > maxN) continue;
-        const total = this.getLevel(t) + sel.reduce((a, c) => a + this.getLevel(c), 0);
-        if (total !== lv) continue;
+        // a material that can be treated as another Level for a Synchro Summon (Tuningware) may count either way
+        const levels = [t, ...sel].map((c) => (c.data.synchroLevel != null ? [this.getLevel(c), c.data.synchroLevel] : [this.getLevel(c)]));
+        const totals = levels.reduce((acc, ls) => acc.flatMap((a) => ls.map((l) => a + l)), [0]);
+        if (!totals.includes(lv)) continue;
         const combo = [t, ...sel];
         if (combo.some((c) => c.data.synchroMaterialCheck && !c.data.synchroMaterialCheck(synchro, combo, c))) continue;
         if (req.check && !req.check(combo)) continue; // ABPF
