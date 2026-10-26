@@ -88,7 +88,7 @@ class DuelScreen implements HumanUI {
   readonly dialogs: Dialogs;
   readonly sfx = new Sfx();
   readonly fx: FxDirector;
-  /** Idle hand-shuffle while the opponent plays (fidget.ts). */
+  /** Hand-shuffle fidget, on either turn (fidget.ts). */
   readonly fidget: HandFidget;
   readonly me: PlayerId;
   readonly viewer: PlayerId | null;
@@ -246,7 +246,9 @@ class DuelScreen implements HumanUI {
       me: this.me,
       spectator: this.spectator,
       speed: () => this.speed(),
-      deciding: () => this.deciding(),
+      // your own Main Phase choice doesn't stop it (swipe while you think); a prompt, a menu or attack targets do
+      deciding: () => !!this.attackState || !!this.root.querySelector('.dlg-layer:not(.is-closing), .ctx-menu'),
+      myTurn: () => this.game.turnPlayer === this.me,
     });
     // a card entering or leaving the hand stops a shuffle at once
     this.board.onHandChange = () => this.fidget.cancel();

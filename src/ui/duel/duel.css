@@ -741,6 +741,8 @@
   align-items: flex-end;
 }
 .hand-me .dc { transform-origin: 50% 130%; }
+/* sideways swipes on your hand are the shuffle (fidget.ts), not a browser pan (that cancels the pointer) */
+.hand-me .dc { touch-action: pan-y; }
 .hand-me .dc:hover {
   transform: translateY(calc(var(--ch) * -0.34)) rotate(0deg) scale(1.14);
   z-index: 60 !important;
