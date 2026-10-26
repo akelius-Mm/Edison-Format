@@ -130,7 +130,7 @@ export function titleScreen(): Screen {
     'div',
     { class: 'home', tabindex: '-1' },
     hero,
-    h('div', { class: 'home-body' }, browserBanner(), rulesNotesCard(), duelCard, resume, thisWeek, h('h2', { class: 'home-h' }, 'Your cards'), tiles, more, h('p', { class: 'home-foot' }, 'Fan-made, non-commercial simulator. Not affiliated with the card game’s publisher.')),
+    h('div', { class: 'home-body' }, browserBanner(), duelCard, resume, thisWeek, h('h2', { class: 'home-h' }, 'Your cards'), tiles, more, rulesNotesCard(), h('p', { class: 'home-foot' }, 'Fan-made, non-commercial simulator. Not affiliated with the card game’s publisher.')),
   );
 
   return { el };
