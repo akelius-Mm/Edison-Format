@@ -28,6 +28,8 @@ export interface Settings {
   confirmEndTurn: boolean;
   /** Opt-in: show official card artwork fetched from the YGOPRODeck database. */
   officialImages: boolean;
+  /** Test: strings of state flags and warm bulbs hung in 3D over the board. */
+  stringLights: boolean;
   /** Built-in music tracks the player switched off (track ids). */
   musicOff: string[];
   /** Play a friend: PeerJS signalling server ("host:port/path"); empty = the free PeerJS cloud. */
@@ -52,6 +54,7 @@ export const DEFAULT_SETTINGS: Settings = {
   showLog: true,
   confirmEndTurn: false,
   officialImages: true,
+  stringLights: false,
   musicOff: [],
   netServer: '',
 };

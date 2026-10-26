@@ -94,6 +94,10 @@ class DuelScreen implements HumanUI {
   private attackState: AttackState | null = null;
   private attackBar: ModalHandle | null = null;
   private unsubSettings: () => void;
+  /** The string lights over the board (Settings test toggle), while shown. */
+  private lights: { dispose(): void } | null = null;
+  private lightsLoading = false;
+  private tornDown = false;
   private yieldCounter = 0;
   private speedBtns: HTMLButtonElement[] = [];
   private soundBtn!: HTMLButtonElement;
@@ -245,7 +249,9 @@ class DuelScreen implements HumanUI {
       },
     };
     let officialImages = s.officialImages;
+    this.syncLights(s.stringLights);
     this.unsubSettings = onSettingsChange((st) => {
+      this.syncLights(st.stringLights);
       if (st.officialImages !== officialImages) {
         officialImages = st.officialImages;
         this.board.invalidateFaces();
@@ -656,8 +662,30 @@ class DuelScreen implements HumanUI {
     return out;
   }
 
+  /** Show or remove the string lights; three.js loads only the first time they are shown. */
+  private syncLights(on: boolean) {
+    if (!on) {
+      this.lights?.dispose();
+      this.lights = null;
+      return;
+    }
+    if (this.lights || this.lightsLoading || this.tornDown) return;
+    this.lightsLoading = true;
+    void import('./stringLights')
+      .then((m) => {
+        if (!this.tornDown && getSettings().stringLights && !this.lights) this.lights = m.mountStringLights(this.board.stage);
+      })
+      .catch(() => {
+        /* decorative: the duel carries on without them */
+      })
+      .finally(() => (this.lightsLoading = false));
+  }
+
   private teardown() {
     setDuelDiag(null);
+    this.tornDown = true;
+    this.lights?.dispose();
+    this.lights = null;
     this.unsubSettings();
     this.dialogs.dispose();
     this.board.destroy();

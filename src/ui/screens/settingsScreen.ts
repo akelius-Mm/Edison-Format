@@ -93,7 +93,10 @@ export function settingsScreen(): Screen {
     ),
     iosGroup(
       'Display',
-      [iosRow('Official card images', null, toggle(s.officialImages, (v) => set({ officialImages: v }), 'Load official card images'))],
+      [
+        iosRow('Official card images', null, toggle(s.officialImages, (v) => set({ officialImages: v }), 'Load official card images')),
+        iosRow('String lights (test)', 'State flags and warm bulbs strung over the board.', toggle(s.stringLights, (v) => set({ stringLights: v }), 'String lights')),
+      ],
       'Loads card artwork from the YGOPRODeck database when online. Card art is © its owners; generated art is used when it is unavailable.',
     ),
     iosGroup('Audio', [
