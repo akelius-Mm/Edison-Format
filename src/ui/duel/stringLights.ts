@@ -1,5 +1,5 @@
-// String lights (test toggle): strings of the 50 state flags with warm bulbs, hung in 3D over the
-// board like event decorations. The flags sway and the bulbs twinkle; real shadows fall on the mats.
+// Regional decorations: strings of the 50 state flags with warm bulbs, hung in 3D over the
+// board like at a real event. The flags sway and the bulbs twinkle; real shadows fall on the mats.
 // Loaded on demand (three.js is a separate chunk), so it costs nothing while the toggle is off.
 import * as THREE from 'three';
 

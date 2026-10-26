@@ -166,6 +166,11 @@ export interface EffectDef {
    * Applies to the source's own card (e.g. range ['hand']) or, for a card on the field, to its controller's summons.
    */
   altTribute?: (ctx: Ctx, summoned: CardInstance, tribute: CardInstance) => boolean;
+  /**
+   * SDMM (Blast Sphere): a 'trigger' with no event that activates while this card is a face-down monster attacked by
+   * an opponent's monster, at the start of the Damage Step before it would be flipped face-up (Game.damageStep).
+   */
+  faceDownAttacked?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -232,6 +237,10 @@ export interface CardData {
    * (checked by Ctx.canTarget with the targeting effect's Ctx), e.g. Turbo Warrior vs Level 6 or lower monsters.
    */
   targetImmunity?: (self: CardInstance, source: CardInstance, ctx: Ctx) => boolean;
+  /** SDMM (Machina Force): LP its controller must pay to declare an attack with it (not while its effects are negated). */
+  attackLpCost?: number;
+  /** SDMM (The Big Saturn): locations it cannot be Special Summoned from (unless the effect ignores Summoning conditions). */
+  noSpecialFrom?: Location[];
 }
 
 // ---------------------------------------------------------------------------

@@ -92,6 +92,7 @@ export interface SavedDuel {
     stats?: { deckKey: string; deckName: string };
     /** Draft / Sealed: siding moves cards freely between deck and pool. */
     limited?: boolean;
+    decor?: 'regional';
   };
   /** Match seed: AI siding derives from it, so a resumed match sides the same way. */
   seed?: number;

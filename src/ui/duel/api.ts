@@ -29,6 +29,8 @@ export interface DuelOptions {
   seed?: number;
   /** Header text, e.g. "Game 2 of 3". */
   caption?: string;
+  /** Event decorations over the board: 'regional' hangs strings of state flags. */
+  decor?: 'regional';
   /** Allow surrendering (always true for humans). */
   allowSurrender?: boolean;
   /** Overrides the "first player skips draw" setting (a resumed duel keeps the rule it started with). */

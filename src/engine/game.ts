@@ -1001,6 +1001,7 @@ export class Game {
       if (this.freeMZones(ctrl) - list.length <= 0) break;
       if (!opts.ignoreConditions && c.data.nomi && !c.properlySummoned && (c.location === 'grave' || c.location === 'banished')) continue;
       if (!opts.faceDown && this.queryCard(c, 'cannotBeSummoned')) continue;
+      if (!opts.ignoreConditions && c.data.noSpecialFrom?.includes(c.location)) continue;
       list.push(c);
     }
     if (!list.length) return [];
@@ -2250,6 +2251,7 @@ export class Game {
     if (c.controller !== this.turnPlayer) return false;
     if (this.queryCard(c, 'cannotAttack')) return false;
     if (c.flags.cannotAttackTurn === this.turn) return false;
+    if (c.data.attackLpCost && !this.isNegated(c) && this.players[c.controller].lp <= c.data.attackLpCost) return false;
     const max = 1 + this.queryCardNum(c, 'extraAttacks');
     return c.attacksThisTurn < max;
   }
@@ -2304,6 +2306,8 @@ export class Game {
     if (choice === 'cancel') return;
     if (choice === null && !direct) return;
     const target = choice;
+    // SDMM: "You must pay X LP to declare an attack with this card" (Machina Force).
+    if (attacker.data.attackLpCost && !this.isNegated(attacker)) await this.payLp(p, attacker.data.attackLpCost);
     attacker.attacksThisTurn++;
     attacker.attackedThisTurnOrWasAttacked = true;
     if (target) target.attackedThisTurnOrWasAttacked = true;
@@ -2376,7 +2380,28 @@ export class Game {
     this.damageStepId++;
     let target = b.target;
     this.recentEvents = [];
-    if (target && !target.faceUp) {
+    // SDMM: effects of a face-down monster that activate when it is attacked, before it is flipped (Blast Sphere).
+    if (target && !target.faceUp && target.location === 'mzone' && target.controller === opp) {
+      const effs = target.data.effects ?? [];
+      const idx = effs.findIndex((e) => e.kind === 'trigger' && e.faceDownAttacked);
+      if (idx >= 0) {
+        const ef = effs[idx];
+        const ctx = new Ctx(this, target, ef, opp);
+        ctx.effectIndex = idx;
+        let ok = false;
+        try {
+          ok = (!ef.condition || ef.condition(ctx)) && (!ef.canActivate || ef.canActivate(ctx));
+        } catch (e) {
+          console.error('condition error', target.name, e);
+        }
+        if (ok) {
+          const link = await this.activate(opp, { card: target, effect: ef, effectIndex: idx, label: ef.label ?? 'Trigger' });
+          if (link) await this.runChain();
+          target = b.target;
+        }
+      }
+    }
+    if (target && !target.faceUp && target.location === 'mzone') {
       // flip face-up (flip effects resolve after damage calculation)
       target.faceUp = true;
       this.beginBatch();
