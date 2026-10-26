@@ -888,6 +888,7 @@ function eq(a: unknown, b: unknown, msg: string) {
   await locationRulesTests();
   await extraDeckTests();
   await graveEffectTests();
+  await archetypeAuditTests();
 
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
@@ -5006,5 +5007,364 @@ async function graveEffectTests() {
     await (g as any).setPhase('standby');
     eq(plague.location, 'grave', 'still in the GY');
     eq(card.location, 'hand', 'no card was put back on the Deck');
+  });
+}
+
+// ---------------------------------------------------------------- Archetype audit: Gladiator Beasts, Machina/Gadgets, Monarchs/Frogs
+async function archetypeAuditTests() {
+  const live = (c: CardInstance) => {
+    c.faceUp = true;
+    c.activeOnField = true;
+    return c;
+  };
+  const deckCard = (g: Game, p: PlayerId, name: string) => {
+    const c = g.registerCard(new (g.allCards[0].constructor as any)(cardByName(name), p)) as CardInstance;
+    c.location = 'none';
+    g.rawMove(c, 'deck');
+    return c;
+  };
+  const battleEnd = async (g: Game) => {
+    g.beginBatch();
+    g.emit({ type: 'battleEnd', player: g.turnPlayer, phase: 'battle' });
+    await g.processTriggers(true);
+  };
+  const standby = async (g: Game, p: PlayerId) => {
+    g.turnPlayer = p;
+    g.phase = 'standby';
+    g.beginBatch();
+    g.emit({ type: 'phaseStart', phase: 'standby', player: p } as any);
+    await g.processTriggers(true);
+    g.phase = 'main1';
+  };
+  const offered = (g: Game, p: PlayerId, card: CardInstance, label?: string) =>
+    g.getActivations(p, { open: true }).some((a) => a.card === card && (!label || a.label === label));
+  const procOffered = (g: Game, p: PlayerId, card: CardInstance) => g.legalMainActions(p).some((a) => a.type === 'proc' && a.card === card);
+  const pickOnly = (c: TestController, want: CardInstance[]) => {
+    c.pick = (_g, req) => {
+      const w = req.candidates.filter((x) => want.includes(x));
+      return w.length >= req.min && w.length ? w.slice(0, Math.max(req.min, Math.min(w.length, req.max))) : req.candidates.slice(0, req.min);
+    };
+  };
+
+  // ---- Gladiator Beasts
+  await test('GB tag-out: after a real attack it shuffles itself in and tags in a different Gladiator Beast; Bestiari pops a Spell/Trap', async () => {
+    const { g, c0, place } = setup();
+    const best = deckCard(g, 0, 'Gladiator Beast Bestiari');
+    const dar = place(0, cardByName('Gladiator Beast Darius'), 'mzone');
+    deckCard(g, 0, 'Gladiator Beast Darius');
+    const bystander = place(0, cardByName('Gladiator Beast Laquari'), 'mzone');
+    const v = place(1, T.wall, 'mzone', { pos: 'def' });
+    const st = place(1, cardByName('Mirror Force'), 'szone');
+    pickOnly(c0, [best, st]);
+    g.phase = 'battle';
+    await g.conductAttack(0, dar);
+    eq(v.location, 'mzone', '2000 DEF wall survives');
+    await battleEnd(g);
+    eq(dar.location, 'deck', 'Darius shuffled into the Deck');
+    eq(best.location, 'mzone', 'Bestiari tagged in (not another Darius)');
+    eq(st.location, 'grave', 'Bestiari destroyed the Set trap');
+    eq(bystander.location, 'mzone', 'Laquari did not battle: no tag-out');
+  });
+
+  await test('GB tag-out: not offered when the Gladiator Beast was destroyed, or while its effects are negated', async () => {
+    const { g, place } = setup();
+    const laq = deckCard(g, 0, 'Gladiator Beast Laquari');
+    const best = place(0, cardByName('Gladiator Beast Bestiari'), 'mzone');
+    place(1, T.brute, 'mzone');
+    g.phase = 'battle';
+    await g.conductAttack(0, best);
+    eq(best.location, 'grave', 'Bestiari destroyed by battle');
+    await battleEnd(g);
+    eq(laq.location, 'deck', 'no tag-out from the GY');
+    const n = setup();
+    const laq2 = deckCard(n.g, 0, 'Gladiator Beast Laquari');
+    const b2 = n.place(0, cardByName('Gladiator Beast Bestiari'), 'mzone');
+    b2.attackedThisTurnOrWasAttacked = true;
+    b2.tempMods.push({ q: 'negated', value: true, until: 'turn', turn: n.g.turn });
+    await battleEnd(n.g);
+    eq(b2.location, 'mzone', 'negated: stays');
+    eq(laq2.location, 'deck', 'negated: nothing tagged in');
+  });
+
+  await test("GB tag-out: Vanity's Fiend stops it (the Beast stays); Royal Oppression cannot negate the tag-out but can negate a contact fusion", async () => {
+    const { g, place } = setup();
+    const laq = deckCard(g, 0, 'Gladiator Beast Laquari');
+    const best = place(0, cardByName('Gladiator Beast Bestiari'), 'mzone');
+    place(1, cardByName("Vanity's Fiend"), 'mzone');
+    best.attackedThisTurnOrWasAttacked = true;
+    await battleEnd(g);
+    eq(best.location, 'mzone', 'Bestiari stays on the field');
+    eq(laq.location, 'deck', 'no Special Summon');
+    const r = setup();
+    const laq2 = deckCard(r.g, 0, 'Gladiator Beast Laquari');
+    const b2 = r.place(0, cardByName('Gladiator Beast Bestiari'), 'mzone');
+    live(r.place(1, cardByName('Royal Oppression'), 'szone'));
+    r.c1.respond = respondWith('Royal Oppression');
+    b2.attackedThisTurnOrWasAttacked = true;
+    await battleEnd(r.g);
+    eq(laq2.location, 'mzone', 'tag-out Special Summon is not negatable by Royal Oppression');
+    eq(r.g.players[1].lp, 8000, 'no LP paid');
+    const f = setup();
+    f.place(0, cardByName('Gladiator Beast Bestiari'), 'mzone');
+    f.place(0, cardByName('Gladiator Beast Darius'), 'mzone');
+    const gy = f.place(0, cardByName('Gladiator Beast Gyzarus'), 'extra');
+    live(f.place(1, cardByName('Royal Oppression'), 'szone'));
+    f.c1.respond = respondWith('Royal Oppression');
+    const a = f.g.legalMainActions(0).find((x) => x.type === 'proc' && x.card === gy)!;
+    await f.g.performAction(0, a);
+    eq(gy.location, 'grave', 'contact fusion negated and destroyed');
+    eq(f.g.players[1].lp, 7200, '800 LP paid');
+  });
+
+  await test('Darius: revives a Gladiator Beast whose effects are negated (no Bestiari trigger); it returns to the Deck when Darius leaves', async () => {
+    const { g, c0, place } = setup();
+    const dar = deckCard(g, 0, 'Gladiator Beast Darius');
+    const best = place(0, cardByName('Gladiator Beast Bestiari'), 'grave');
+    const laq = place(0, cardByName('Gladiator Beast Laquari'), 'mzone');
+    const st = place(1, cardByName('Mirror Force'), 'szone');
+    pickOnly(c0, [dar, best, st]);
+    laq.attackedThisTurnOrWasAttacked = true;
+    await battleEnd(g);
+    eq(dar.location, 'mzone', 'Darius tagged in');
+    eq(best.location, 'mzone', 'Bestiari revived');
+    eq(g.isNegated(best), true, 'its effects are negated');
+    eq(st.location, 'szone', 'negated Bestiari did not destroy a Spell/Trap');
+    await g.destroy([dar], 'effect', 1);
+    await g.processTriggers(true);
+    eq(best.location, 'deck', 'Bestiari shuffled into the Deck when Darius left the field');
+  });
+
+  await test('Test Tiger: Special Summons itself from the hand while you control a face-up Gladiator Beast; its tag gives Laquari 2100 ATK', async () => {
+    const { g, c0, place } = setup();
+    const tiger = place(0, cardByName('Test Tiger'), 'hand');
+    eq(procOffered(g, 0, tiger), false, 'no Gladiator Beast: no Special Summon');
+    const sec = place(0, cardByName('Gladiator Beast Secutor'), 'mzone');
+    eq(procOffered(g, 0, tiger), true, 'with a face-up Gladiator Beast: Special Summon from the hand');
+    await g.performAction(0, g.legalMainActions(0).find((x) => x.type === 'proc' && x.card === tiger)!);
+    eq(tiger.location, 'mzone', 'Test Tiger Special Summoned');
+    const laq = deckCard(g, 0, 'Gladiator Beast Laquari');
+    pickOnly(c0, [sec, laq]);
+    await activateCard(g, 0, tiger);
+    eq(tiger.location, 'grave', 'Test Tiger Tributed');
+    eq(sec.location, 'deck', 'Secutor shuffled into the Deck');
+    eq(laq.location, 'mzone', 'Laquari Special Summoned');
+    eq(g.getAtk(laq), 2100, 'treated as Summoned by a Gladiator Beast effect');
+  });
+
+  await test('Gladiator Beast War Chariot: only while you control a face-up Gladiator Beast; negates and destroys a monster effect', async () => {
+    const { g, c0, c1, place } = setup();
+    const wc = place(1, cardByName('Gladiator Beast War Chariot'), 'szone');
+    c1.respond = respondWith('Gladiator Beast War Chariot');
+    const dad = place(0, cardByName('Dark Armed Dragon'), 'mzone');
+    place(0, T.dark, 'grave');
+    const st = place(1, cardByName('Mirror Force'), 'szone');
+    pickOnly(c0, [st]);
+    await activateCard(g, 0, dad);
+    eq(wc.location, 'szone', 'no Gladiator Beast: War Chariot not activated');
+    eq(st.location, 'grave', 'DAD resolved');
+    const t = setup();
+    const wc2 = t.place(1, cardByName('Gladiator Beast War Chariot'), 'szone');
+    t.place(1, cardByName('Gladiator Beast Hoplomus'), 'mzone', { pos: 'def' });
+    t.c1.respond = respondWith('Gladiator Beast War Chariot');
+    const dad2 = t.place(0, cardByName('Dark Armed Dragon'), 'mzone');
+    t.place(0, T.dark, 'grave');
+    const st2 = t.place(1, cardByName('Mirror Force'), 'szone');
+    pickOnly(t.c0, [st2]);
+    await activateCard(t.g, 0, dad2);
+    eq(wc2.location, 'grave', 'War Chariot used');
+    eq(dad2.location, 'grave', 'DAD destroyed');
+    eq(st2.location, 'szone', 'its effect negated');
+  });
+
+  await test('Gyzarus: its destroy trigger is for its own Special Summon only; Heraklinos discards to negate a Spell', async () => {
+    const { g, c0, place } = setup();
+    place(0, cardByName('Gladiator Beast Gyzarus'), 'mzone');
+    const st = place(1, cardByName('Mirror Force'), 'szone');
+    const laq = place(0, cardByName('Gladiator Beast Laquari'), 'grave');
+    pickOnly(c0, [laq, st]);
+    await activateCard(g, 0, place(0, cardByName('Monster Reborn'), 'hand'));
+    eq(laq.location, 'mzone', 'revived');
+    eq(st.location, 'szone', 'Gyzarus did not trigger on another monster');
+    const h = setup();
+    const her = h.place(1, cardByName('Gladiator Beast Heraklinos'), 'mzone');
+    const disc = h.place(1, T.wall, 'hand');
+    h.c1.respond = (_g, req) => req.options.find((o) => o.card === her) ?? null;
+    const target = h.place(1, T.brute, 'mzone');
+    const sm = h.place(0, cardByName('Smashing Ground'), 'hand');
+    await activateCard(h.g, 0, sm);
+    eq(disc.location, 'grave', 'discarded 1 card');
+    eq(target.location, 'mzone', 'Smashing Ground negated');
+    eq(sm.location, 'grave', 'and destroyed');
+  });
+
+  // ---- Machina / Gadgets
+  await test('Machina Fortress: Special Summons itself from the GY by discarding Machines with total Levels 8+; one Gadget is not enough', async () => {
+    const { g, place } = setup();
+    const fort = place(0, cardByName('Machina Fortress'), 'grave');
+    const g1 = place(0, cardByName('Green Gadget'), 'hand');
+    eq(offered(g, 0, fort), false, 'only 4 Levels in hand');
+    const g2 = place(0, cardByName('Red Gadget'), 'hand');
+    eq(offered(g, 0, fort), true, '4 + 4 Levels');
+    await activateCard(g, 0, fort);
+    eq(fort.location, 'mzone', 'Fortress revived');
+    eq(g1.location, 'grave', 'Green discarded');
+    eq(g2.location, 'grave', 'Red discarded');
+    const h = setup();
+    const f2 = h.place(0, cardByName('Machina Fortress'), 'hand');
+    h.place(0, cardByName('Machina Fortress'), 'grave');
+    eq(offered(h.g, 0, f2), false, 'a Fortress in the hand cannot discard itself');
+  });
+
+  await test('Machina Fortress: destroyed by battle → destroy 1 card the opponent controls', async () => {
+    const { g, c1, place } = setup();
+    const fort = place(1, cardByName('Machina Fortress'), 'mzone');
+    const atk = place(0, T.giant, 'mzone');
+    const st = place(0, cardByName('Mirror Force'), 'szone');
+    pickOnly(c1, [st]);
+    g.phase = 'battle';
+    await g.conductAttack(0, atk);
+    eq(fort.location, 'grave', 'Fortress destroyed');
+    eq(st.location, 'grave', 'it destroyed a card the attacker controls');
+  });
+
+  await test('Gadgets search the next colour on Normal and Special Summon, not on a Flip Summon', async () => {
+    const { g, place } = setup();
+    const red = deckCard(g, 0, 'Red Gadget');
+    const green = place(0, cardByName('Green Gadget'), 'hand');
+    await g.normalSummon(0, green, false);
+    eq(red.location, 'hand', 'Green found Red');
+    const yel = deckCard(g, 0, 'Yellow Gadget');
+    await g.specialSummon([red], 0, {});
+    await g.processTriggers(true);
+    eq(yel.location, 'hand', 'Red Special Summoned found Yellow');
+    const f = setup();
+    const r2 = deckCard(f.g, 0, 'Red Gadget');
+    const set = f.place(0, cardByName('Green Gadget'), 'mzone', { faceUp: false, pos: 'def' });
+    await f.g.flipSummon(0, set);
+    eq(set.faceUp, true, 'flipped');
+    eq(r2.location, 'deck', 'no search on a Flip Summon');
+  });
+
+  await test('Machina Gearframe searches a "Machina" monster except Gearframe; Machine Duplication copies a 500-ATK Machine', async () => {
+    const { g, c0, place } = setup();
+    const fort = deckCard(g, 0, 'Machina Fortress');
+    const gf2 = deckCard(g, 0, 'Machina Gearframe');
+    const gf = place(0, cardByName('Machina Gearframe'), 'hand');
+    c0.pick = (_g, req) => (req.candidates.includes(gf2) ? [gf2] : req.candidates.slice(0, Math.max(1, req.min)));
+    await g.normalSummon(0, gf, false);
+    eq(gf2.location, 'deck', 'Gearframe not searchable');
+    eq(fort.location, 'hand', 'Fortress added');
+    const d = setup();
+    d.place(0, cardByName('Machina Peacekeeper'), 'mzone');
+    const p2 = deckCard(d.g, 0, 'Machina Peacekeeper');
+    const p3 = deckCard(d.g, 0, 'Machina Peacekeeper');
+    d.c0.pick = (_g, req) => req.candidates.slice(0, req.max);
+    await activateCard(d.g, 0, d.place(0, cardByName('Machine Duplication'), 'hand'));
+    eq(p2.location, 'mzone', 'copy 1');
+    eq(p3.location, 'mzone', 'copy 2');
+  });
+
+  await test('Limiter Removal doubles Machines and destroys them in the End Phase', async () => {
+    const { g, place } = setup();
+    const cd = place(0, cardByName('Cyber Dragon'), 'mzone');
+    const other = place(0, T.brute, 'mzone');
+    await activateCard(g, 0, place(0, cardByName('Limiter Removal'), 'hand'));
+    eq(g.getAtk(cd), 4200, 'doubled');
+    eq(g.getAtk(other), 1800, 'non-Machine unchanged');
+    await (g as any).setPhase('end');
+    eq(cd.location, 'grave', 'destroyed in the End Phase');
+    eq(other.location, 'mzone', 'Warrior stays');
+  });
+
+  // ---- Monarchs / Frogs
+  await test('Monarchs: Caius triggers on a Tribute Summon (1000 for a DARK), not on a Special Summon; Thestalos burns Level x 100', async () => {
+    const { g, c0, place } = setup();
+    place(0, cardByName('Treeborn Frog'), 'mzone');
+    const caius = place(0, cardByName('Caius the Shadow Monarch'), 'hand');
+    const d = place(1, T.dark, 'mzone');
+    pickOnly(c0, [d]);
+    await g.normalSummon(0, caius, false);
+    eq(d.location, 'banished', 'banished');
+    eq(g.players[1].lp, 7000, '1000 for a DARK');
+    const r = setup();
+    const c2 = r.place(0, cardByName('Caius the Shadow Monarch'), 'grave');
+    const v = r.place(1, T.brute, 'mzone');
+    pickOnly(r.c0, [c2]);
+    await activateCard(r.g, 0, r.place(0, cardByName('Monster Reborn'), 'hand'));
+    eq(c2.location, 'mzone', 'Caius revived');
+    eq(v.location, 'mzone', 'no Tribute Summon: no banish');
+    const t = setup();
+    t.place(0, T.wall, 'mzone');
+    const th = t.place(0, cardByName('Thestalos the Firestorm Monarch'), 'hand');
+    const h = t.place(1, T.giant, 'hand');
+    await t.g.normalSummon(0, th, false);
+    eq(h.location, 'grave', 'random discard (only card)');
+    eq(t.g.players[1].lp, 8000 - 800, 'Level 8 x 100');
+  });
+
+  await test("Monarchs: a Tribute Set then Flip Summon does not trigger; Soul Exchange Tributes the opponent's monster for Raiza", async () => {
+    const { g, place } = setup();
+    place(0, T.wall, 'mzone');
+    const raiza = place(0, cardByName('Raiza the Storm Monarch'), 'hand');
+    const v = place(1, T.brute, 'mzone');
+    await g.normalSummon(0, raiza, true);
+    g.turn += 1;
+    await g.flipSummon(0, raiza);
+    eq(raiza.faceUp, true, 'flipped');
+    eq(v.location, 'mzone', 'no Raiza trigger on a Flip Summon');
+    const s = setup();
+    const opp = s.place(1, T.brute, 'mzone');
+    const st = s.place(1, cardByName('Mirror Force'), 'szone');
+    pickOnly(s.c0, [opp, st]);
+    await activateCard(s.g, 0, s.place(0, cardByName('Soul Exchange'), 'hand'));
+    const r2 = s.place(0, cardByName('Raiza the Storm Monarch'), 'hand');
+    eq(s.g.canNormalSummon(0, r2, false), true, "can Tribute the opponent's monster");
+    await s.g.normalSummon(0, r2, false);
+    eq(opp.location, 'grave', "opponent's monster Tributed (to its owner's GY)");
+    eq(r2.location, 'mzone', 'Raiza Tribute Summoned');
+    eq(st.location, 'deck', 'Raiza spun the Set trap');
+  });
+
+  await test("Treeborn Frog: each copy revives in your Standby Phase; any Spell/Trap you control (Set card, Field Spell) stops it; not on the opponent's Standby; Necrovalley stops it", async () => {
+    const { g, place } = setup();
+    const f1 = place(0, cardByName('Treeborn Frog'), 'grave');
+    const f2 = place(0, cardByName('Treeborn Frog'), 'grave');
+    await standby(g, 1);
+    eq(f1.location, 'grave', "not in the opponent's Standby Phase");
+    await standby(g, 0);
+    eq(f1.location, 'mzone', 'first copy');
+    eq(f2.location, 'mzone', 'second copy');
+    const s = setup();
+    const f3 = s.place(0, cardByName('Treeborn Frog'), 'grave');
+    s.place(0, cardByName('Mirror Force'), 'szone');
+    await standby(s.g, 0);
+    eq(f3.location, 'grave', 'a Set card blocks it');
+    const fz = setup();
+    const f4 = fz.place(0, cardByName('Treeborn Frog'), 'grave');
+    live(fz.place(0, cardByName('Necrovalley'), 'fzone'));
+    await standby(fz.g, 0);
+    eq(f4.location, 'grave', 'own Field Spell blocks it');
+    const nv = setup();
+    const f5 = nv.place(0, cardByName('Treeborn Frog'), 'grave');
+    live(nv.place(1, cardByName('Necrovalley'), 'fzone'));
+    await standby(nv.g, 0);
+    eq(f5.location, 'grave', "opponent's Necrovalley blocks it");
+  });
+
+  await test('Frogs: Substitoad Tributes for a Frog from the Deck; Dupe Frog sent from the field adds a Frog', async () => {
+    const { g, c0, place } = setup();
+    const sub = place(0, cardByName('Substitoad'), 'mzone');
+    const fodder = place(0, T.wall, 'mzone');
+    const swap = deckCard(g, 0, 'Swap Frog');
+    pickOnly(c0, [fodder, swap]);
+    await activateCard(g, 0, sub);
+    eq(fodder.location, 'grave', 'Tributed');
+    eq(swap.location, 'mzone', 'Swap Frog Special Summoned');
+    const d = setup();
+    const dupe = d.place(0, cardByName('Dupe Frog'), 'mzone');
+    const sw = deckCard(d.g, 0, 'Swap Frog');
+    await d.g.destroy([dupe], 'effect', 1);
+    await d.g.processTriggers(true);
+    eq(sw.location, 'hand', 'Dupe Frog added Swap Frog');
   });
 }

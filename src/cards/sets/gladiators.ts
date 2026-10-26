@@ -354,8 +354,14 @@ monster('Test Tiger', {
   atk: 600,
   def: 300,
   aiValue: 500,
-  text: 'You can Tribute this card, then target 1 face-up "Gladiator Beast" monster you control; shuffle it into the Deck, then Special Summon 1 "Gladiator Beast" monster from your Deck.',
+  text: 'If you control a face-up "Gladiator Beast" monster, you can Special Summon this card (from your hand). You can Tribute this card to target 1 face-up "Gladiator Beast" monster you control; shuffle that target into the Deck, then Special Summon 1 "Gladiator Beast" from your Deck, and treat it as if it was Special Summoned by the effect of a "Gladiator Beast" monster.',
   effects: [
+    {
+      // Inherent Special Summon from the hand (official text; was missing).
+      kind: 'proc',
+      label: 'Special Summon',
+      condition: (ctx) => ctx.freeMZones() > 0 && ctx.faceUpMonsters('me', isGB).length > 0,
+    },
     {
       kind: 'ignition',
       label: 'Tag a Gladiator Beast',
