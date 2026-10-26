@@ -320,6 +320,9 @@
 
 /* Real card scans (official images setting) */
 .yc--official { background: #111; }
+/* The real scan is on its way: show a plain face for a moment rather than the drawing. */
+.yc--awaiting-art { background: #15171b; }
+.yc--awaiting-art > :not(.yc-limit):not(.yc-badge) { visibility: hidden; }
 .yc--official > .official-card {
   position: absolute;
   inset: 0;

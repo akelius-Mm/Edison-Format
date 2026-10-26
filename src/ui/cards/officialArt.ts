@@ -142,8 +142,20 @@ export function attachOfficialArt(artEl: HTMLElement, cardName: string, mode: 'a
  */
 export function attachOfficialCard(cardEl: HTMLElement, cardName: string) {
   if (!officialArtEnabled()) return;
+  // When the scan is known, hide the drawn face while it loads (briefly), so a played card never shows the
+  // drawing first; if it is slow or fails, the drawn face comes back.
+  const known = cachedOfficialImage(cardName);
+  let waitTimer = 0;
+  const stopWaiting = () => {
+    window.clearTimeout(waitTimer);
+    cardEl.classList.remove('yc--awaiting-art');
+  };
+  if (known) {
+    cardEl.classList.add('yc--awaiting-art');
+    waitTimer = window.setTimeout(stopWaiting, 900);
+  }
   void getOfficialImage(cardName).then((img) => {
-    if (!img) return;
+    if (!img) return stopWaiting();
     const el = new Image();
     el.decoding = 'async';
     el.alt = cardName;
@@ -153,8 +165,31 @@ export function attachOfficialCard(cardEl: HTMLElement, cardName: string) {
       const keep = [...cardEl.querySelectorAll(':scope > .yc-limit, :scope > .yc-badge')];
       cardEl.replaceChildren(el, ...keep);
       cardEl.classList.add('yc--official');
+      stopWaiting();
     };
+    el.onerror = stopWaiting;
     el.src = img.full;
+  });
+}
+
+/**
+ * Warm the card scans of a duel's decks, one at a time, into the offline cache (the service worker stores
+ * card images on disk), without keeping any image in memory. Played cards then load almost at once.
+ */
+export function prefetchOfficialImages(names: Iterable<string>) {
+  if (!officialArtEnabled()) return;
+  // Look every name up at once (the lookups are batched into a few requests and remembered), then download
+  // the scans one by one.
+  const lookups = [...new Set(names)].map((n) => getOfficialImage(n));
+  void Promise.all(lookups).then(async (imgs) => {
+    for (const img of imgs) {
+      if (!img || !officialArtEnabled()) continue;
+      try {
+        await fetch(img.full, { mode: 'no-cors' });
+      } catch {
+        /* offline: skip */
+      }
+    }
   });
 }
 
