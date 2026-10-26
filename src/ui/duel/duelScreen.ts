@@ -41,7 +41,7 @@ import { Sfx } from './sound';
 import { music } from '../audio/music';
 import { haptic } from '../haptics';
 import { duelLogLine, reportError, setDuelDiag } from '../diag';
-import { genericWhyNot } from '../../cards/why-not';
+import { genericWhyNot, whyRow, whySentence } from '../../cards/why-not';
 import { openReportSheet } from '../screens/report';
 
 export async function startDuel(container: HTMLElement, opts: DuelOptions): Promise<DuelResult> {
@@ -1149,7 +1149,7 @@ class DuelScreen implements HumanUI {
             !procs
               ? { label: "Summon: can't be Normal Summoned", sub: 'Special Summon it with a card effect' }
               : why
-                ? { label: "Summon: its condition isn't met", sub: why }
+                ? whyRow('Summon', why)
                 : !mainPhase
                   ? { label: 'Summon: only in your Main Phase', sub: 'It is Special Summoned by its own condition' }
                   : { label: "Summon: its condition isn't met", sub: 'It can only be Special Summoned by its own condition' },
@@ -1171,7 +1171,7 @@ class DuelScreen implements HumanUI {
       // a monster that can also Special Summon itself from the hand (Cyber Dragon, Blackwings, Test Tiger...)
       if (!c.data.cannotNormalSummon && mainPhase && !has('proc')) {
         const why = this.whyNotFor(c, ['proc']);
-        if (why) out.push({ label: "Special Summon: its condition isn't met", sub: why });
+        if (why) out.push(whyRow('Special Summon', why));
       }
       // an effect that only works once the monster is on the field (Test Tiger, Card Trooper...)
       const fieldOnly = (c.data.effects ?? []).some((ef) => (ef.kind === 'ignition' || ef.kind === 'quick') && !g.defaultRange(c, ef).includes('hand') && g.defaultRange(c, ef).includes('mzone'));
@@ -1185,14 +1185,20 @@ class DuelScreen implements HumanUI {
         if (g.queryPlayer(me, 'cannotActivateSpells')) out.push({ label: 'Activate: Spells are blocked by a card effect' });
         else if (!quick && !mainPhase) out.push({ label: 'Activate: only in your Main Phase', sub: g.chain.length ? 'Normal Spells cannot be chained' : undefined });
         else if (c.data.stype !== 'field' && g.freeSZones(me) <= 0) out.push({ label: 'Activate: your Spell & Trap Zones are full' });
-        else out.push({ label: "Activate: its condition isn't met", sub: this.whyNotFor(c, ['activate']) ?? 'Check the card text: it needs a target or a cost you cannot pay' });
+        else {
+          const why = this.whyNotFor(c, ['activate']);
+          out.push(why ? whyRow('Activate', why) : { label: "Activate: its condition isn't met", sub: 'It needs a target or a cost you can’t pay' });
+        }
       }
     } else if (c.location === 'szone' && !c.faceUp && !has('activate')) {
       const waits = c.isTrap || c.data.stype === 'quickplay';
       if (waits && c.setTurn === g.turn) out.push({ label: 'Activate: Set this turn', sub: `${c.isTrap ? 'Traps' : 'Quick-Play Spells'} Set this turn can be activated from the next turn` });
       else if (c.isTrap && g.queryPlayer(me, 'cannotActivateTraps')) out.push({ label: 'Activate: Traps are blocked by a card effect' });
       else if (c.isSpell && !waits && !mainPhase) out.push({ label: 'Activate: only in your Main Phase' });
-      else out.push({ label: "Activate: its condition isn't met", sub: this.whyNotFor(c, ['activate']) ?? 'It needs a trigger, a target or a cost that is not there right now' });
+      else {
+        const why = this.whyNotFor(c, ['activate']);
+        out.push(why ? whyRow('Activate', why) : { label: "Activate: its condition isn't met", sub: 'It needs a trigger, a target or a cost' });
+      }
     }
     return out;
   }
@@ -1223,7 +1229,10 @@ class DuelScreen implements HumanUI {
     if (c.onField && g.isNegated(c)) return { label: "can't be used right now", sub: 'Its effects are negated' };
     const mainPhase = g.turnPlayer === this.me && (g.phase === 'main1' || g.phase === 'main2') && !g.chain.length;
     if (!mainPhase && effs.every(({ ef }) => ef.kind === 'ignition')) return { label: "can't be used right now", sub: 'Only in your Main Phase' };
-    return { label: "can't be used right now", sub: this.whyNotFor(c, ['ignition', 'quick'], effs.map(({ ef }) => ef)) ?? 'Condition or timing not met' };
+    const why = this.whyNotFor(c, ['ignition', 'quick'], effs.map(({ ef }) => ef));
+    if (!why) return { label: "can't be used right now", sub: 'Condition or timing not met' };
+    const row = whyRow('', why);
+    return { label: row.label.slice(2), sub: row.sub };
   }
 
   /**
@@ -1288,7 +1297,7 @@ class DuelScreen implements HumanUI {
     if (c.location === 'extra') {
       const mainPhase = g.turnPlayer === this.me && (g.phase === 'main1' || g.phase === 'main2') && !g.chain.length;
       const why = this.whyNotFor(c, ['proc']);
-      return why ? (mainPhase ? `${why}.` : `${why}, in your Main Phase.`) : null;
+      return why ? (mainPhase ? whySentence(why) : `${whySentence(why)} Only in your Main Phase.`) : null;
     }
     if (c.location !== 'grave' && c.location !== 'banished') return null;
     // rules listeners that watch every zone (their range includes 'deck') are not Graveyard effects
@@ -1298,7 +1307,7 @@ class DuelScreen implements HumanUI {
     if (effs.every((e) => e.opt && g.isOptUsed(g.optKey(c, e, (c.data.effects ?? []).indexOf(e), this.me)))) return 'Already used this turn.';
     // the card's own reason it can't be used right now (Treeborn Frog: you control a Spell/Trap; Necrovalley...)
     const why = this.whyNotFor(c, [], effs);
-    if (why) return `${why}.`;
+    if (why) return whySentence(why);
     const when = ef.kind === 'proc' ? null : pileWhen(c.data.text, c.location);
     if (ef.kind === 'trigger') return `${when ?? 'It activates at a set time'}. You'll be asked then.`;
     if (ef.kind === 'ignition') return when ? `${when}, in your Main Phase.` : 'Only in your Main Phase.';
