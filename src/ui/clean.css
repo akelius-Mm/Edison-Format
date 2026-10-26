@@ -493,12 +493,12 @@ body::after {
   }
 }
 
-/* "Update ready" banner shown while a duel is in progress */
+/* "Update ready" note: only on Home, just above the tab bar */
 .update-banner {
   position: fixed;
   z-index: 9999;
   left: 50%;
-  top: calc(env(safe-area-inset-top, 0px) + 8px);
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 90px);
   transform: translateX(-50%);
   display: flex;
   align-items: center;
@@ -511,6 +511,9 @@ body::after {
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
   font: 500 13px/1.3 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   color: #e9e6df;
+}
+.update-banner[hidden] {
+  display: none;
 }
 .update-banner button {
   flex: none;

@@ -1,6 +1,8 @@
 // Keeps the installed app up to date: checks for a newer published version when the app opens,
-// when it comes back to the foreground, and every 15 minutes. A new version is applied straight
-// away unless a duel is in progress; then it waits until the duel ends.
+// when it comes back to the foreground, and every 15 minutes. A new version never interrupts play:
+// it installs right away only while the app is still starting up on Home, otherwise quietly the next
+// time the app goes to the background (outside a duel or an online room), or when the player taps
+// "Restart" on the small note on Home.
 declare const __BUILD_ID__: string;
 
 const CHECK_EVERY_MS = 15 * 60 * 1000;
@@ -8,6 +10,10 @@ let pending = false;
 let reloading = false;
 let banner: HTMLElement | null = null;
 let target = '';
+/** The first seconds after launch, before the player has done anything: an update then just looks like loading. */
+const startedAt = Date.now();
+let interacted = false;
+const STARTUP_MS = 8000;
 const TRIED_KEY = 'edison.updateTried';
 
 /** The version we last reloaded for. If a reload didn't bring it, don't keep reloading for it. */
@@ -34,25 +40,30 @@ function reloadNow() {
   location.reload();
 }
 
-/** Reload now if nothing is in progress, otherwise as soon as the duel ends. */
+const onHome = () => /^#?\/?(title)?$/.test(location.hash.replace(/\?.*$/, ''));
+
+/** Apply at launch on Home; otherwise wait for the background (or the player's tap), never mid-play. */
 function applyWhenSafe() {
   pending = true;
-  if (!busy()) return reloadNow();
+  if (!busy() && !interacted && Date.now() - startedAt < STARTUP_MS && onHome()) return reloadNow();
   showBanner();
 }
 
+/** A small note, shown only on Home (never over a duel): the update installs next time, or now on a tap. */
 function showBanner() {
-  if (banner) return;
-  banner = document.createElement('div');
-  banner.className = 'update-banner';
-  banner.setAttribute('role', 'status');
-  banner.innerHTML = '<span>Update ready. It installs when this duel ends.</span>';
-  const now = document.createElement('button');
-  now.type = 'button';
-  now.textContent = 'Update now';
-  now.onclick = reloadNow;
-  banner.append(now);
-  document.body.append(banner);
+  if (!banner) {
+    banner = document.createElement('div');
+    banner.className = 'update-banner';
+    banner.setAttribute('role', 'status');
+    banner.innerHTML = '<span>Update ready. It installs next time you open the app.</span>';
+    const now = document.createElement('button');
+    now.type = 'button';
+    now.textContent = 'Restart';
+    now.onclick = reloadNow;
+    banner.append(now);
+    document.body.append(banner);
+  }
+  banner.hidden = busy() || !onHome();
 }
 
 async function check() {
@@ -72,17 +83,17 @@ async function check() {
 export function startUpdater() {
   if (location.protocol !== 'https:' || location.hostname.endsWith('claude.ai')) return;
 
-  // Apply a waiting update the moment a duel finishes.
-  new MutationObserver(() => {
-    if (pending && !busy()) reloadNow();
-  }).observe(document.body, { attributes: true, attributeFilter: ['class'] });
-  // ...or the moment the player leaves the online room
-  window.addEventListener('hashchange', () => {
-    if (pending && !busy()) reloadNow();
-  });
+  for (const ev of ['pointerdown', 'keydown']) window.addEventListener(ev, () => (interacted = true), { once: true, capture: true });
+  // The note only shows on Home, outside duels.
+  window.addEventListener('hashchange', () => pending && showBanner());
+  new MutationObserver(() => pending && showBanner()).observe(document.body, { attributes: true, attributeFilter: ['class'] });
 
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState !== 'visible') return;
+    // a waiting update installs while the app is in the background, so the next open is simply up to date
+    if (document.visibilityState === 'hidden') {
+      if (pending && !busy()) reloadNow();
+      return;
+    }
     void check();
     void navigator.serviceWorker?.getRegistration().then((r) => r?.update());
   });
