@@ -1,9 +1,9 @@
 // Hand-shuffle fidget: swipe sideways across your own hand and it is shuffled the way players do it at
-// locals. The fan closes into a squared stack held up in front of you; the front card stays held while
-// small packets are pulled off the back of the stack, slid out to the side and pushed back in right
-// behind the held card, packet after packet, quickly; then the hand fans back out. On either turn the
-// leftmost card is the held one and packets come out to the right. Purely cosmetic: the hand ends in its original order, nothing is selected or played, and it
-// never runs while you are asked to pick something (a prompt, a menu, attack targets). On your own turn
+// locals. The fan closes into a squared stack held up in front of you (the leftmost card in front);
+// small packets are pulled off the back of the stack, slid out to the right and dropped on the front,
+// packet after packet, quickly, so the front card is buried and works its way round to the front again;
+// then the hand fans back out. The same on either turn. Purely cosmetic: the hand ends in its original
+// order, nothing is selected or played, and it never runs while you are asked to pick something (a prompt, a menu, attack targets). On your own turn
 // a tap on the hand stops it at once, so the tap selects the card under your finger as usual.
 //  - one shuffle per swipe (a swipe that keeps going queues one more)
 //  - cancels at once (cards snap home) when a decision comes up or a card enters or leaves the hand
@@ -40,26 +40,25 @@ const PACKETS = [2, 1, 2, 3];
 const ROUNDS = 2;
 
 /**
- * The packets for a hand of n cards: one card is held, the other n - 1 go round once in total, so the
- * hand ends in its original order. A packet is never all the loose cards (that would not move anything).
+ * The packets for a hand of n cards: together they move all n cards round once, so the hand ends in its
+ * original order. A packet is never the whole stack (that would not move anything).
  */
 export function packetSizes(n: number): number[] {
-  const m = n - 1;
-  if (m <= 1) return m === 1 ? [1] : [];
+  if (n < 2) return [];
   const out: number[] = [];
-  let rem = m;
+  let rem = n;
   for (let i = 0; rem > 0; i++) {
-    const k = Math.min(PACKETS[i % PACKETS.length], rem, m - 1);
+    const k = Math.min(PACKETS[i % PACKETS.length], rem, n - 1);
     out.push(k);
     rem -= k;
   }
   return out;
 }
 
-/** The stack after one packet: `order[0]` is the held (front) card; the last k go in right behind it. */
+/** The stack after one packet: `order[0]` is the front card; the last k (the back) are dropped on the front. */
 export function packetStep(order: number[], k: number): number[] {
   const n = order.length;
-  return [order[0], ...order.slice(n - k), ...order.slice(1, n - k)];
+  return [...order.slice(n - k), ...order.slice(0, n - k)];
 }
 
 interface Slot {
@@ -75,7 +74,7 @@ export class HandFidget {
   private anims: Animation[] = [];
   /** The steps of the shuffle in progress (gather, packets..., spread), run one after another. */
   private plan: (() => number)[] = [];
-  /** order[depth] = the card (index into `cards`) at that depth of the stack, 0 = the held front card. */
+  /** order[depth] = the card (index into `cards`) at that depth of the stack, 0 = the front card. */
   private order: number[] = [];
   /** The stack's centre (page px) and card size. */
   private sx = 0;
@@ -185,11 +184,11 @@ export class HandFidget {
     });
     this.cw = this.cards[0].offsetWidth || 60;
     const ch = this.cards[0].offsetHeight || this.cw * 1.45;
-    // the stack is held up in the middle of the hand, a little to the held card's side
+    // the stack is held up in the middle of the hand, a little to the left
     const mid = this.slots[Math.floor((n - 1) / 2)];
     this.sx = (this.slots[0].x + this.slots[n - 1].x) / 2 - this.cw * 0.25;
     this.sy = mid.y - ch * 0.38;
-    // held card in front: the leftmost
+    // the leftmost card in front
     this.order = this.cards.map((_, i) => i);
     const sizes = packetSizes(n);
     this.plan = [() => this.gather()];
@@ -235,7 +234,7 @@ export class HandFidget {
     return ms;
   }
 
-  /** Pull the back k cards out to the side and push them in right behind the held card. */
+  /** Pull the back k cards out to the side and drop them on the front of the stack. */
   private pull(k: number) {
     const ms = this.ms(PULL_MS);
     const n = this.order.length;
@@ -245,7 +244,7 @@ export class HandFidget {
     const out = this.cw * 0.62;
     packet.forEach((card, j) => {
       const d0 = n - k + j;
-      const d1 = 1 + j;
+      const d1 = j;
       const [x0, y0] = [this.sx + d0 * 0.8, this.sy + d0 * 0.6];
       const [x1, y1] = [this.sx + d1 * 0.8, this.sy + d1 * 0.6];
       this.animate(
@@ -267,15 +266,13 @@ export class HandFidget {
         EASE.inOut,
       );
     });
-    // the held card stays squarely in front (its stack pose is re-stated: the previous step's animations end)
-    this.animate(from[0], [{ transform: this.inStack(from[0], 0) }, { transform: this.inStack(from[0], 0) }], ms, 'linear');
-    // the rest of the stack shuffles back to make room
-    from.slice(1, n - k).forEach((card, j) => {
-      const d0 = 1 + j;
+    // the rest of the stack goes back to make room
+    from.slice(0, n - k).forEach((card, j) => {
+      const d0 = j;
       this.animate(card, [{ transform: this.inStack(card, d0) }, { transform: this.inStack(card, d0 + k) }], ms, EASE.out);
     });
     this.order = to;
-    // the packet goes back in behind the held card once it is out of the stack
+    // the packet goes on the front once it is out of the stack
     window.setTimeout(() => {
       if (this.running && this.order === to) this.stackZ();
     }, ms * 0.5);

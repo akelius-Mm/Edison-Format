@@ -1,8 +1,9 @@
 // Hand shuffle (fidget.ts) in a real duel (Playwright, Chromium, iPhone 13 portrait 390×844, touch).
 //
 // On your own turn, waiting in Main Phase 1: a sideways swipe across your hand shuffles it the locals way — the fan
-// closes into a stack, the leftmost card stays held in front while packets pulled off the back come out to the right
-// and go back in behind it, then the hand fans out in its original order. The opponent's turn looks the same.
+// closes into a stack with the leftmost card in front, packets pulled off the back come out to the right and are
+// dropped on the front (burying that first card for a while), then the hand fans out in its original order. The
+// opponent's turn looks the same.
 // A tap on the hand mid-shuffle stops it and selects the tapped card as usual.
 //
 // Usage (Playwright is not a project dependency):
@@ -79,7 +80,7 @@ function sample(page, ms) {
           frames.push(
             cards.map((c) => {
               const r = c.querySelector('.dc-fx').getBoundingClientRect();
-              return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+              return { x: r.left + r.width / 2, y: r.top + r.height / 2, z: +c.style.zIndex || 0 };
             }),
           );
           if (performance.now() - t0 < ms) requestAnimationFrame(tick);
@@ -92,30 +93,28 @@ function sample(page, ms) {
 }
 
 /**
- * held: the card that should stay put while packets are pulled. Returns how far the held card moved during the
- * middle of the shuffle (the pulls), how far cards were pulled out past it (+ = to the right), and whether the hand
- * ever closed into a stack (all centres within one card width).
+ * first: the card in front when the stack closes. Returns whether the hand closed into a stack (all centres within
+ * about two card widths), how far cards were pulled out past the stack's middle (+ = to the right, in card widths),
+ * whether that first card was ever covered by others (buried) and whether it was back in front by the end.
  */
-function summarize(res, held) {
+function summarize(res, first) {
   const { frames, n, cw } = res;
   const stacked = frames.map((f) => Math.max(...f.map((p) => p.x)) - Math.min(...f.map((p) => p.x)) < cw * 2.2);
   const i0 = stacked.indexOf(true);
   const i1 = stacked.lastIndexOf(true);
-  if (i0 < 0) return { n, stacked: false, heldMove: Infinity, outRight: 0, outLeft: 0 };
-  const mid = frames.slice(i0 + Math.round((i1 - i0) * 0.15), i1 - Math.round((i1 - i0) * 0.15));
-  const hx = mid.map((f) => f[held].x);
-  const hy = mid.map((f) => f[held].y);
-  const heldMove = Math.max(Math.max(...hx) - Math.min(...hx), Math.max(...hy) - Math.min(...hy));
-  const rel = mid.flatMap((f) => f.map((p, i) => (i === held ? 0 : p.x - f[held].x)));
-  // the held card is in the stack: most cards sit within half a card of it in every frame of the pulls
-  const inStack = mid.every((f) => f.filter((p) => Math.abs(p.x - f[held].x) < cw * 0.5).length >= Math.ceil(n / 2));
+  if (i0 < 0) return { n, stacked: false, outRight: 0, outLeft: 0, buried: false, backOnTop: false };
+  const mid = frames.slice(i0 + Math.round((i1 - i0) * 0.1), i1 - Math.round((i1 - i0) * 0.1));
+  const median = (f) => f.map((p) => p.x).sort((a, b) => a - b)[Math.floor(n / 2)];
+  const rel = mid.flatMap((f) => f.map((p) => p.x - median(f)));
+  const top = (f) => f[first].z >= Math.max(...f.map((p) => p.z));
   return {
     n,
     stacked: true,
-    heldMove,
-    inStack,
     outRight: Math.max(...rel) / cw,
     outLeft: -Math.min(...rel) / cw,
+    buried: mid.some((f) => !top(f)),
+    // the last frame still in the stack (z-indexes 70+ while stacked; the fan's are lower)
+    backOnTop: top(frames.filter((f) => Math.min(...f.map((p) => p.z)) >= 70).pop() ?? frames[i1]),
   };
 }
 
@@ -164,8 +163,9 @@ function summarize(res, held) {
     const res = await sample(page, 3200);
     const mine = summarize(res, 0);
     check(mine.stacked, `the hand closes into a stack on your own turn (${mine.n} cards)`);
-    check(mine.heldMove < 3 && mine.inStack, `the leftmost card stays held in front of the stack while packets are pulled (moved ${mine.heldMove.toFixed(1)}px)`);
-    check(mine.outRight > 0.4 && mine.outLeft < 0.2, `packets come out to the right (${mine.outRight.toFixed(2)} card widths)`);
+    check(mine.buried, 'packets land in front of the first card (it is buried)');
+    check(mine.backOnTop, 'the first card is back in front before the hand fans out');
+    check(mine.outRight > 0.4 && mine.outLeft < 0.3, `packets come out to the right (${mine.outRight.toFixed(2)} card widths)`);
     fs.writeFileSync(path.join(OUT, 'my-turn-frames.json'), JSON.stringify(res));
     await sleep(600);
     check((await orderOf()) === before, 'the hand ends in its original order');
@@ -185,8 +185,9 @@ function summarize(res, held) {
       ctl.game.turnPlayer = ctl.__realTurn;
     });
     check(opp.stacked, 'the hand closes into a stack');
-    check(opp.heldMove < 3 && opp.inStack, `the leftmost card stays held in front of the stack (moved ${opp.heldMove.toFixed(1)}px)`);
-    check(opp.outRight > 0.4 && opp.outLeft < 0.2, `packets come out to the right (${opp.outRight.toFixed(2)} card widths)`);
+    check(opp.buried, 'packets land in front of the first card (it is buried)');
+    check(opp.backOnTop, 'the first card is back in front before the hand fans out');
+    check(opp.outRight > 0.4 && opp.outLeft < 0.3, `packets come out to the right (${opp.outRight.toFixed(2)} card widths)`);
     await sleep(600);
     check((await orderOf()) === before, 'the hand ends in its original order');
 
