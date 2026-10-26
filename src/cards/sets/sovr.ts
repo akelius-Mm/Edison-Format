@@ -7,7 +7,7 @@
 // src/engine/card.ts and src/engine/game.ts ('atkBecomes', 'deckTopInsteadOfGrave', BattleState.calc).
 import { monster, normal, spell, token, trap } from '../define';
 import { bestTarget, cardValue, flip, selfDestroysByBattle } from '../helpers';
-import type { CardInstance, EffectDef, TempMod } from '../../engine/card';
+import { dataVariant, type CardInstance, type EffectDef, type TempMod } from '../../engine/card';
 import { Ctx } from '../../engine/ctx';
 import { GameOver, type Game } from '../../engine/game';
 import type { Attribute, GameEvent, Location, PlayerId, Race } from '../../engine/types';
@@ -100,13 +100,6 @@ const isNormalLike = (c: C) =>
 function makeGeminiActive(ctx: Ctx, c: C) {
   if (c.location !== 'mzone' || !c.faceUp || !isGemini(c)) return;
   c.flags.geminiSummoned = true;
-  if (c.data.name === 'Tuned Magician') {
-    // The engine reads CardInstance.isTuner; Tuned Magician is a Tuner only while Gemini Summoned.
-    Object.defineProperty(c, 'isTuner', {
-      configurable: true,
-      get: () => (c.data.mtypes ?? []).includes('tuner') || (c.location === 'mzone' && c.faceUp && !!c.flags.geminiSummoned),
-    });
-  }
   ctx.log(`${c.name} is now treated as an Effect Monster.`);
   ctx.game.update();
 }
@@ -1439,6 +1432,13 @@ monster('Tuned Magician', {
       delete (ctx.self as { isTuner?: boolean }).isTuner;
       return can ? 60 : 0;
     }),
+    {
+      // "● This card is treated as a Tuner monster." (only while Gemini Summoned; a dataMod, so hasType('tuner') and
+      // isTuner both see it, and it is lost when the effect is negated).
+      kind: 'continuous',
+      active: (ctx) => !!ctx.self.flags.geminiSummoned,
+      dataMod: { apply: (d) => (d.mtypes?.includes('tuner') ? d : dataVariant(d, 'tuner', { mtypes: [...(d.mtypes ?? []), 'tuner'] })) },
+    },
   ],
 });
 
