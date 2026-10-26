@@ -6,7 +6,7 @@
 // has no hook for the exact rule (per-card summon restrictions, name changes, etc.).
 import { findCard, monster, spell, trap } from '../define';
 import { attr, bestTarget, cardValue, destroyTargets, flip, race, selfDestroysByBattle } from '../helpers';
-import type { CardInstance, EffectDef } from '../../engine/card';
+import { dataVariant, type CardInstance, type EffectDef } from '../../engine/card';
 import type { Ctx } from '../../engine/ctx';
 import type { ChainLink, Game } from '../../engine/game';
 import type { GameEvent, Location, PlayerId } from '../../engine/types';
@@ -84,13 +84,12 @@ function renameUntilEndPhase(game: Game, card: C, name: string) {
   const mid = card.moveId;
   const turn = game.turn;
   const tags = findCard(name)?.sets ?? [];
-  const on = () => card.moveId === mid && game.turn === turn && card.location === 'mzone';
-  Object.defineProperty(card, 'name', { configurable: true, get: () => (on() ? name : card.data.name) });
-  Object.defineProperty(card, 'inSet', {
-    configurable: true,
-    writable: true,
-    value: (tag: string) => (card.data.sets ?? []).includes(tag) || (on() && tags.includes(tag)),
-  });
+  // A data patch, so `name`, `data.name` and the archetype tags all change while it is face-up on the field this turn.
+  card.addDataPatch((d, c) =>
+    c.moveId === mid && game.turn === turn && c.location === 'mzone' && c.faceUp
+      ? dataVariant(d, `prisma:${name}`, { name, sets: [...new Set([...(d.sets ?? []), ...tags])] })
+      : undefined,
+  );
 }
 
 // ============================================================ MAIN DECK MONSTERS

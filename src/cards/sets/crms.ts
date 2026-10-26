@@ -113,30 +113,11 @@ function oncePerBatch(card: C, key: string, ev: GameEvent) {
 // `data` with a modified copy while a condition holds (Scanner, Psychic Tuning, Ivy Shackles). The real CardData
 // is never modified. An existing override (e.g. from abpf.ts) is kept underneath.
 type DataPatch = (orig: CardData, card: C) => CardData | undefined;
-const dataPatches = new WeakMap<C, DataPatch[]>();
+const dataPatches = new WeakSet<C>();
 function patchData(card: C, fn: DataPatch) {
-  let list = dataPatches.get(card);
-  if (!list) {
-    const l: DataPatch[] = [];
-    list = l;
-    dataPatches.set(card, l);
-    const desc = Object.getOwnPropertyDescriptor(card, 'data');
-    const base = (): CardData => (desc?.get ? desc.get.call(card) : desc?.value);
-    Object.defineProperty(card, 'data', {
-      configurable: true,
-      enumerable: true,
-      get: () => {
-        const orig = base();
-        for (const f of l) {
-          const d = f(orig, card);
-          if (d) return d;
-        }
-        return orig;
-      },
-      set: () => {},
-    });
-  }
-  list.push(fn);
+  // Engine API (CardInstance.addDataPatch): patches from every set compose in order, under the engine's rule view.
+  dataPatches.add(card);
+  card.addDataPatch(fn);
 }
 const variants = new WeakMap<CardData, Map<string, CardData>>();
 function variant(orig: CardData, key: string, change: Partial<CardData>): CardData {

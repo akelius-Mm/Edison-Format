@@ -1131,6 +1131,11 @@ monster('Kycoo the Ghost Destroyer', {
         if (sel.length) await ctx.banish(sel);
       },
     },
+    {
+      // "Your opponent cannot banish cards from either GY."
+      kind: 'continuous',
+      mods: [{ q: 'cannotBanishFromGY', to: 'players', filter: (ctx, p) => p === ctx.opp }],
+    },
   ],
 });
 
@@ -1735,7 +1740,8 @@ monster('Sacred Phoenix of Nephthys', {
             if (me.location !== 'grave' || me.moveId !== id) return;
             const r = await game.specialSummon([me], me.owner, { pos: 'atk', reasonCard: me });
             if (!r.length) return;
-            const st = game.allFieldCards().filter((c) => c.isSpell || c.isTrap);
+            // Every card in the Spell & Trap Zones (an equipped Union monster is an Equip Spell there).
+            const st = game.allFieldCards().filter((c) => c.location === 'szone' || c.location === 'fzone');
             if (st.length) await game.destroy(st, 'effect', me.controller, me);
           },
           1,

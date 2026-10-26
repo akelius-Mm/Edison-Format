@@ -885,6 +885,8 @@ function eq(a: unknown, b: unknown, msg: string) {
   await fuzzRegressionTests();
   await sdmmTests();
   await geminiTests();
+  await locationRulesTests();
+  await extraDeckTests();
 
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
@@ -4349,5 +4351,633 @@ async function geminiTests() {
     weak.faceUp = true;
     await activateCard(g, 0, blast);
     eq(alius.location, 'hand', 'Neos Alius added to the hand');
+  });
+}
+
+// ---------------------------------------------------------------- Location-dependent Type / name / kind / status (rules audit)
+
+async function locationRulesTests() {
+  const live = (c: CardInstance) => {
+    c.faceUp = true;
+    c.activeOnField = true;
+    return c;
+  };
+  const deckCard = (g: Game, p: PlayerId, name: string) => {
+    const c = g.registerCard(new (g.allCards[0].constructor as any)(cardByName(name), p)) as CardInstance;
+    c.location = 'none';
+    g.rawMove(c, 'deck');
+    return c;
+  };
+  const offered = (g: Game, p: PlayerId, card: CardInstance) => g.getActivations(p, { open: true }).some((a) => a.card === card);
+
+  // 1. Zombie World
+  await test('Zombie World: monsters on the field and in the GY are Zombie-Type, monsters in the hand are not', async () => {
+    const { g, place } = setup();
+    const onField = place(0, T.brute, 'mzone');
+    const inGy = place(1, T.brute, 'grave');
+    const inHand = place(0, T.brute, 'hand');
+    const zw = live(place(0, cardByName('Zombie World'), 'fzone'));
+    eq(onField.data.race, 'Zombie', 'field');
+    eq(inGy.data.race, 'Zombie', 'GY');
+    eq(inHand.data.race, 'Warrior', 'hand');
+    await g.sendToGrave([zw], 'effect');
+    eq(onField.data.race, 'Warrior', 'field after Zombie World left');
+    eq(inGy.data.race, 'Warrior', 'GY after Zombie World left');
+  });
+
+  await test('Zombie World: Doomkaiser Dragon can use a non-Zombie as material; Book of Life can revive a non-Zombie', async () => {
+    const { g, c0, place } = setup();
+    place(0, cardByName('Plaguespreader Zombie'), 'mzone');
+    place(0, T.brute, 'mzone');
+    const dk = place(0, cardByName('Doomkaiser Dragon'), 'extra');
+    eq(g.canSynchro(0, dk), false, 'no Zombie World: Warrior is not a Zombie');
+    live(place(0, cardByName('Zombie World'), 'fzone'));
+    eq(g.canSynchro(0, dk), true, 'Zombie World: the Warrior is a Zombie');
+    const mine = place(0, T.giant, 'grave');
+    const theirs = place(1, T.wall, 'grave');
+    c0.pick = (_g, req) => (req.candidates.includes(mine) ? [mine] : req.candidates.includes(theirs) ? [theirs] : req.candidates.slice(0, req.min));
+    await activateCard(g, 0, place(0, cardByName('Book of Life'), 'hand'));
+    eq(mine.location, 'mzone', 'Book of Life revived the (Zombie World) Zombie');
+    eq(theirs.location, 'banished', 'and banished the other target');
+  });
+
+  await test('Zombie World + Necrovalley: the Type change does not apply in the GY, still on the field', async () => {
+    const { place } = setup();
+    const onField = place(0, T.brute, 'mzone');
+    const inGy = place(0, T.brute, 'grave');
+    live(place(0, cardByName('Zombie World'), 'fzone'));
+    live(place(1, cardByName('Necrovalley'), 'fzone'));
+    eq(onField.data.race, 'Zombie', 'field');
+    eq(inGy.data.race, 'Warrior', 'GY: negated by Necrovalley');
+  });
+
+  // 2. "name becomes" cards
+  await test('Proto-Cyber Dragon: "Cyber Dragon" only while face-up on the field (also when placed without a Summon event)', async () => {
+    const { g, place } = setup();
+    const up = place(0, cardByName('Proto-Cyber Dragon'), 'mzone');
+    eq(up.name, 'Cyber Dragon', 'face-up on the field');
+    const down = place(0, cardByName('Proto-Cyber Dragon'), 'mzone', { faceUp: false, pos: 'def' });
+    eq(down.name, 'Proto-Cyber Dragon', 'face-down');
+    const inHand = place(0, cardByName('Proto-Cyber Dragon'), 'hand');
+    eq(inHand.name, 'Proto-Cyber Dragon', 'hand');
+    const cfd = place(0, cardByName('Chimeratech Fortress Dragon'), 'extra');
+    place(0, cardByName('Cyber Valley'), 'mzone');
+    eq(g.legalMainActions(0).some((a) => a.type === 'proc' && a.card === cfd), true, 'Chimeratech Fortress Dragon can use Proto-Cyber Dragon as "Cyber Dragon"');
+    await g.sendToGrave([up], 'effect');
+    eq(up.name, 'Proto-Cyber Dragon', 'GY');
+  });
+
+  await test("Elemental Hero Prisma: takes the sent monster's name (and archetype) while face-up on the field this turn", async () => {
+    const { g, place } = setup();
+    const prisma = place(0, cardByName('Elemental Hero Prisma'), 'mzone');
+    place(0, cardByName('Elemental Hero Flame Wingman'), 'extra');
+    const avian = deckCard(g, 0, 'Elemental Hero Avian');
+    await activateCard(g, 0, prisma);
+    eq(avian.location, 'grave', 'Avian sent');
+    eq(prisma.name, avian.name, 'name copied');
+    eq(prisma.data.name, avian.name, 'data name copied too');
+    await g.changePosition(prisma, 'def', false);
+    eq(prisma.name, 'Elemental Hero Prisma', 'own name while face-down');
+    await g.changePosition(prisma, 'atk', true);
+    eq(prisma.name, avian.name, 'face-up again, same turn');
+    g.turn++;
+    eq(prisma.name, 'Elemental Hero Prisma', 'own name after the turn');
+  });
+
+  // 3. Union monsters while equipped
+  await test('Union: an equipped Union is a Spell/Trap on the field (MST, Heavy Storm, Giant Trunade) and a monster again in the GY', async () => {
+    const mk = () => {
+      const s = setup();
+      const host = s.place(0, cardByName('Machina Fortress'), 'mzone');
+      const gear = s.place(0, cardByName('Machina Gearframe'), 'mzone');
+      return { ...s, host, gear };
+    };
+    const s = mk();
+    await activateCard(s.g, 0, s.gear, 'Equip to a Machine monster');
+    eq(s.gear.location, 'szone', 'equipped');
+    s.c1.pick = (_g, req) => (req.candidates.includes(s.gear) ? [s.gear] : req.candidates.slice(0, req.min));
+    s.g.turnPlayer = 1;
+    await activateCard(s.g, 1, s.place(1, cardByName('Mystical Space Typhoon'), 'hand'));
+    eq(s.gear.location, 'grave', 'MST destroyed the equipped Union');
+    eq(s.gear.isMonster, true, 'a monster in the GY');
+    eq(s.host.location, 'mzone', 'host untouched');
+    const s2 = mk();
+    await activateCard(s2.g, 0, s2.gear, 'Equip to a Machine monster');
+    s2.g.turnPlayer = 1;
+    await activateCard(s2.g, 1, s2.place(1, cardByName('Giant Trunade'), 'hand'));
+    eq(s2.gear.location, 'hand', 'Giant Trunade returned the equipped Union');
+    const s3 = mk();
+    await activateCard(s3.g, 0, s3.gear, 'Equip to a Machine monster');
+    s3.g.turnPlayer = 1;
+    await activateCard(s3.g, 1, s3.place(1, cardByName('Heavy Storm'), 'hand'));
+    eq(s3.gear.location, 'grave', 'Heavy Storm destroyed it');
+  });
+
+  await test('Union: if the equipped monster would be destroyed by a card effect, the Union is destroyed instead', async () => {
+    const { g, place } = setup();
+    const host = place(0, cardByName('Machina Fortress'), 'mzone');
+    const gear = place(0, cardByName('Machina Gearframe'), 'mzone');
+    await activateCard(g, 0, gear, 'Equip to a Machine monster');
+    await g.destroy([host], 'effect', 1);
+    eq(host.location, 'mzone', 'host survives');
+    eq(gear.location, 'grave', 'Union destroyed instead');
+  });
+
+  // 4. Judgment Dragon / Lightsworn names
+  await test('Judgment Dragon needs 4 differently named "Lightsworn" monsters; Judgment Dragon, duplicates and Lightsworn Spells do not count', async () => {
+    const { g, place } = setup();
+    const jd = place(0, cardByName('Judgment Dragon'), 'hand');
+    place(0, cardByName('Ryko, Lightsworn Hunter'), 'grave');
+    place(0, cardByName('Ryko, Lightsworn Hunter'), 'grave');
+    place(0, cardByName('Lumina, Lightsworn Summoner'), 'grave');
+    place(0, cardByName('Wulf, Lightsworn Beast'), 'grave');
+    place(0, cardByName('Judgment Dragon'), 'grave');
+    place(0, cardByName('Solar Recharge'), 'grave');
+    place(0, cardByName('Charge of the Light Brigade'), 'grave');
+    const can = () => g.legalMainActions(0).some((a) => a.type === 'proc' && a.card === jd);
+    eq(can(), false, '3 names only');
+    place(1, cardByName('Garoth, Lightsworn Warrior'), 'grave');
+    eq(can(), false, "a Lightsworn in the opponent's GY does not count");
+    place(0, cardByName('Garoth, Lightsworn Warrior'), 'grave');
+    eq(can(), true, '4 names');
+  });
+
+  // 5. Necrovalley
+  await test("Necrovalley: Gravekeeper's Stele is not negated", async () => {
+    const { g, place } = setup();
+    live(place(0, cardByName('Necrovalley'), 'fzone'));
+    const a = place(0, cardByName("Gravekeeper's Spy"), 'grave');
+    const b = place(0, cardByName("Gravekeeper's Guard"), 'grave');
+    await activateCard(g, 0, place(0, cardByName("Gravekeeper's Stele"), 'hand'));
+    eq(a.location, 'hand', 'Spy added');
+    eq(b.location, 'hand', 'Guard added');
+  });
+
+  await test('Necrovalley: non-targeting effects that move cards out of the GY are negated (Rekindling); cards in the GY cannot be banished (Kycoo)', async () => {
+    const { g, place } = setup();
+    live(place(1, cardByName('Necrovalley'), 'fzone'));
+    const fire = place(0, cardByName('Flamvell Firedog'), 'grave');
+    await activateCard(g, 0, place(0, cardByName('Rekindling'), 'hand'));
+    eq(fire.location, 'grave', 'Rekindling cannot take it out of the GY');
+    const k = setup();
+    live(k.place(1, cardByName('Necrovalley'), 'fzone'));
+    const kycoo = k.place(0, cardByName('Kycoo the Ghost Destroyer'), 'mzone');
+    const dead = k.place(1, T.brute, 'grave');
+    await k.g.conductAttack(0, kycoo);
+    eq(dead.location, 'grave', 'Kycoo cannot banish from the GY');
+  });
+
+  await test("Gravekeeper's Priestess: with no face-up Field Spell the field is Necrovalley (GY lock included)", async () => {
+    const { g, place } = setup();
+    place(1, cardByName("Gravekeeper's Priestess"), 'mzone');
+    const dad = place(0, cardByName('Dark Armed Dragon'), 'mzone');
+    for (let i = 0; i < 3; i++) place(0, T.dark, 'grave');
+    place(1, T.brute, 'mzone');
+    eq(offered(g, 0, dad), false, 'DAD cost cannot be paid under the Priestess');
+    const dead = place(0, T.brute, 'grave');
+    await activateCard(g, 0, place(0, cardByName('Monster Reborn'), 'hand'));
+    eq(dead.location, 'grave', 'Monster Reborn negated');
+    live(place(0, cardByName('Zombie World'), 'fzone'));
+    eq(offered(g, 0, dad), true, 'a face-up Field Spell turns the Priestess Necrovalley off');
+  });
+
+  await test('Kycoo the Ghost Destroyer: its opponent cannot banish cards from either GY', async () => {
+    const { g, place } = setup();
+    place(1, cardByName('Kycoo the Ghost Destroyer'), 'mzone');
+    const dad = place(0, cardByName('Dark Armed Dragon'), 'mzone');
+    for (let i = 0; i < 3; i++) place(0, T.dark, 'grave');
+    place(1, T.brute, 'mzone');
+    eq(offered(g, 0, dad), false, "Kycoo's opponent cannot banish from the GY");
+    const mine = setup();
+    mine.place(0, cardByName('Kycoo the Ghost Destroyer'), 'mzone');
+    const dad2 = mine.place(0, cardByName('Dark Armed Dragon'), 'mzone');
+    for (let i = 0; i < 3; i++) mine.place(0, T.dark, 'grave');
+    mine.place(1, T.brute, 'mzone');
+    eq(offered(mine.g, 0, dad2), true, "Kycoo's controller still can");
+  });
+
+  // 6. Macro Cosmos: banished instead of sent to the GY
+  await test('Macro Cosmos: no "sent to the GY" effects (Card Trooper, Sangan, Wulf)', async () => {
+    const { g, place } = setup();
+    live(place(1, cardByName('Macro Cosmos'), 'szone'));
+    const trooper = place(0, cardByName('Card Trooper'), 'mzone');
+    const sangan = place(0, cardByName('Sangan'), 'mzone');
+    const hand = g.players[0].hand.length;
+    await g.destroy([trooper, sangan], 'effect', 1);
+    eq(trooper.location, 'banished', 'Card Trooper banished');
+    eq(sangan.location, 'banished', 'Sangan banished');
+    await g.processTriggers(true);
+    eq(g.players[0].hand.length, hand, 'no draw, no search');
+    const wulf = deckCard(g, 0, 'Wulf, Lightsworn Beast');
+    await g.mill(0, 1);
+    await g.processTriggers(true);
+    eq(wulf.location, 'banished', 'Wulf banished, not Special Summoned');
+  });
+
+  // 7. Hand effects timing
+  await test('Gorz: only while you control no cards', async () => {
+    const mk = (withCard: boolean) => {
+      const s = setup();
+      s.g.turnPlayer = 1;
+      const gorz = s.place(0, cardByName('Gorz the Emissary of Darkness'), 'hand');
+      if (withCard) s.place(0, cardByName('Mirror Force'), 'szone', { faceUp: false });
+      s.c0.respond = (_g, req) => req.options.find((x) => x.card === gorz) ?? null;
+      return { ...s, gorz };
+    };
+    const a = mk(false);
+    await a.g.conductAttack(1, a.place(1, T.brute, 'mzone'));
+    await a.g.processTriggers(true);
+    eq(a.gorz.location, 'mzone', 'Gorz Special Summoned with an empty field');
+    const b = mk(true);
+    await b.g.conductAttack(1, b.place(1, T.brute, 'mzone'));
+    await b.g.processTriggers(true);
+    eq(b.gorz.location, 'hand', 'not while controlling a Set card');
+  });
+
+  await test('Tragoedia: battle damage only; Battle Fader: direct attacks only', async () => {
+    const { g, place } = setup();
+    g.turnPlayer = 1;
+    const tr = place(0, cardByName('Tragoedia'), 'hand');
+    await g.damage(0, 500, 'effect', undefined, 1);
+    await g.processTriggers(true);
+    eq(tr.location, 'hand', 'no Tragoedia on effect damage');
+    const b = setup();
+    b.g.turnPlayer = 1;
+    const bf = b.place(0, cardByName('Battle Fader'), 'hand');
+    b.c0.respond = (_g, req) => req.options.find((x) => x.card === bf) ?? null;
+    b.place(0, T.wall, 'mzone', { pos: 'def' });
+    await b.g.conductAttack(1, b.place(1, T.brute, 'mzone'));
+    eq(bf.location, 'hand', 'no Battle Fader when a monster is attacked');
+  });
+
+  await test("D.D. Crow: needs a card in the opponent's GY; under Necrovalley the banish is negated (Crow still discarded)", async () => {
+    const { g, place } = setup();
+    const crow = place(0, cardByName('D.D. Crow'), 'hand');
+    eq(offered(g, 0, crow), false, "nothing in the opponent's GY");
+    place(0, T.brute, 'grave');
+    eq(offered(g, 0, crow), false, 'a card in your own GY is not enough');
+    const dead = place(1, T.brute, 'grave');
+    eq(offered(g, 0, crow), true, "a card in the opponent's GY");
+    live(place(1, cardByName('Necrovalley'), 'fzone'));
+    await activateCard(g, 0, crow);
+    eq(crow.location, 'grave', 'Crow discarded as the cost');
+    eq(dead.location, 'grave', 'target not banished');
+  });
+
+  await test('Honest: from the hand in the Damage Step, only for a LIGHT monster you control that battles', async () => {
+    const run = (attackerData: CardData) => {
+      const s = setup();
+      const honest = s.place(0, cardByName('Honest'), 'hand');
+      let seen = false;
+      s.c0.respond = (_g, req) => {
+        const o = req.options.find((x) => x.card === honest);
+        if (o) seen = true;
+        return o ?? null;
+      };
+      const a = s.place(0, attackerData, 'mzone');
+      const d = s.place(1, T.brute, 'mzone');
+      return { ...s, honest, a, d, seen: () => seen };
+    };
+    const light = run(cardByName('Proto-Cyber Dragon'));
+    await light.g.conductAttack(0, light.a);
+    eq(light.seen(), true, 'offered for a LIGHT monster');
+    eq(light.honest.location, 'grave', 'Honest sent');
+    eq(light.d.location, 'grave', 'boosted LIGHT monster wins the battle');
+    const dark = run(T.dark);
+    await dark.g.conductAttack(0, dark.a);
+    eq(dark.seen(), false, 'not offered for a DARK monster');
+  });
+
+  // 8. Discarded / sent / milled
+  await test('Wulf: Special Summons itself only when sent from the Deck to the GY, not from the hand or the field', async () => {
+    const { g, place } = setup();
+    const w1 = place(0, cardByName('Wulf, Lightsworn Beast'), 'hand');
+    await g.discard([w1], 'cost', 0);
+    await g.processTriggers(true);
+    eq(w1.location, 'grave', 'discarded Wulf stays in the GY');
+    const w2 = place(0, cardByName('Wulf, Lightsworn Beast'), 'mzone');
+    await g.destroy([w2], 'effect', 1);
+    await g.processTriggers(true);
+    eq(w2.location, 'grave', 'destroyed Wulf stays in the GY');
+    const w3 = deckCard(g, 0, 'Wulf, Lightsworn Beast');
+    await g.mill(0, 1);
+    await g.processTriggers(true);
+    eq(w3.location, 'mzone', 'milled Wulf Special Summoned');
+  });
+
+  // 9. Gladiator Beasts
+  await test('Gladiator Beast Laquari: the boost needs a Gladiator Beast effect; Monster Reborn does not give it', async () => {
+    const { g, c0, place } = setup();
+    const laq = place(0, cardByName('Gladiator Beast Laquari'), 'grave');
+    c0.pick = (_g, req) => (req.candidates.includes(laq) ? [laq] : req.candidates.slice(0, req.min));
+    await activateCard(g, 0, place(0, cardByName('Monster Reborn'), 'hand'));
+    eq(laq.location, 'mzone', 'revived');
+    eq(g.getAtk(laq), 1800, 'no boost from Monster Reborn');
+    const t = setup();
+    const laq2 = deckCard(t.g, 0, 'Gladiator Beast Laquari');
+    const best = t.place(0, cardByName('Gladiator Beast Bestiari'), 'mzone');
+    best.attackedThisTurnOrWasAttacked = true;
+    t.g.beginBatch();
+    t.g.emit({ type: 'battleEnd', player: 0, phase: 'battle' } as any);
+    await t.g.processTriggers(true);
+    eq(laq2.location, 'mzone', 'tagged in');
+    eq(t.g.getAtk(laq2), 2100, 'boosted by the tag-out');
+  });
+
+  // 10. Extra Deck monsters never go to the hand / Deck
+  await test('Synchro/Fusion monsters returned to the hand or Deck go to the Extra Deck', async () => {
+    const { g, place } = setup();
+    const sd = place(0, cardByName('Stardust Dragon'), 'mzone');
+    const cfd = place(0, cardByName('Chimeratech Fortress Dragon'), 'mzone');
+    await g.toHand([sd], 'effect', 1);
+    await g.toDeck([cfd], 'effect', 'shuffle', 1);
+    eq(sd.location, 'extra', 'Stardust Dragon to the Extra Deck');
+    eq(cfd.location, 'extra', 'Chimeratech to the Extra Deck');
+  });
+}
+
+// ---------------------------------------------------------------- Extra Deck rules (rules audit, items 11-14) + GY costs under Necrovalley
+
+async function extraDeckTests() {
+  const live = (c: CardInstance) => {
+    c.faceUp = true;
+    c.activeOnField = true;
+    return c;
+  };
+  const deckCard = (g: Game, p: PlayerId, name: string) => {
+    const c = g.registerCard(new (g.allCards[0].constructor as any)(cardByName(name), p)) as CardInstance;
+    c.location = 'none';
+    g.rawMove(c, 'deck');
+    return c;
+  };
+  const offered = (g: Game, p: PlayerId, card: CardInstance) => g.getActivations(p, { open: true }).some((a) => a.card === card);
+  const procOffered = (g: Game, p: PlayerId, card: CardInstance) => g.legalMainActions(p).some((a) => a.type === 'proc' && a.card === card);
+  const doProc = async (g: Game, p: PlayerId, card: CardInstance) => {
+    const a = g.legalMainActions(p).find((x) => x.type === 'proc' && x.card === card);
+    if (!a) throw new Error(`${card.name}: no Summon procedure offered`);
+    await g.performAction(p, a);
+  };
+  const lv2 = findCard('Rules Test Lv2') ?? normal('Rules Test Lv2', 'EARTH', 'Warrior', 2, 400, 400);
+  const lv3 = findCard('Rules Test Lv3') ?? normal('Rules Test Lv3', 'EARTH', 'Warrior', 3, 1200, 1000);
+  /** Pick only from `want` when the request allows it. */
+  const pickOnly = (c: TestController, want: CardInstance[]) => {
+    c.pick = (_g, req) => {
+      const w = req.candidates.filter((x) => want.includes(x));
+      return w.length >= req.min && w.length ? w.slice(0, Math.max(req.min, Math.min(w.length, req.max))) : req.candidates.slice(0, req.min);
+    };
+  };
+
+  // 11. Proper Summon / Extra Deck returns
+  await test('Extra Deck: a Synchro not properly Summoned cannot be revived; a properly Synchro Summoned one can', async () => {
+    const { g, place } = setup();
+    place(0, cardByName('Stardust Dragon'), 'grave');
+    const reborn = place(0, cardByName('Monster Reborn'), 'hand');
+    eq(offered(g, 0, reborn), false, 'Monster Reborn has no legal target');
+    const call = place(0, cardByName('Call of the Haunted'), 'szone', { faceUp: false });
+    eq(offered(g, 0, call), false, 'nor Call of the Haunted');
+    const t = place(0, tuner, 'mzone');
+    const n = place(0, lv2, 'mzone');
+    n.flags.baseLevel = 6;
+    const sd = place(0, cardByName('Stardust Dragon'), 'extra');
+    await g.synchroSummon(0, sd, [t, n]);
+    eq(sd.location, 'mzone', 'Synchro Summoned');
+    await g.destroy([sd], 'effect', 1);
+    eq(sd.properlySummoned, true, 'still marked properly Summoned in the GY');
+    eq(offered(g, 0, reborn), true, 'Monster Reborn can target it now');
+  });
+
+  await test('Extra Deck: bounced Synchro/Fusion monsters go to the Extra Deck (Compulsory Evacuation Device, Phoenix Wing Wind Blast); Book of Moon keeps them on the field', async () => {
+    const { g, c0, place } = setup();
+    const sd = place(1, cardByName('Stardust Dragon'), 'mzone');
+    pickOnly(c0, [sd]);
+    await activateCard(g, 0, place(0, cardByName('Compulsory Evacuation Device'), 'szone', { faceUp: false }));
+    eq(sd.location, 'extra', 'Compulsory: Stardust to the Extra Deck');
+    const p = setup();
+    const gy = p.place(1, cardByName('Gladiator Beast Gyzarus'), 'mzone');
+    p.place(0, T.wall, 'hand');
+    p.c0.pick = (_g, req) => (req.candidates.includes(gy) ? [gy] : req.candidates.slice(0, req.min));
+    await activateCard(p.g, 0, p.place(0, cardByName('Phoenix Wing Wind Blast'), 'szone', { faceUp: false }));
+    eq(gy.location, 'extra', 'Phoenix Wing: Gyzarus to the Extra Deck, not the top of the Deck');
+    const b = setup();
+    const goyo = b.place(1, cardByName('Goyo Guardian'), 'mzone');
+    pickOnly(b.c0, [goyo]);
+    await activateCard(b.g, 0, b.place(0, cardByName('Book of Moon'), 'hand'));
+    eq(goyo.location, 'mzone', 'Book of Moon: stays on the field');
+    eq(goyo.faceUp, false, 'face-down');
+  });
+
+  // 12. Synchro Material restrictions
+  await test('Synchro: Plaguespreader Zombie revived by its effect is banished when used as Synchro Material', async () => {
+    const { g, place } = setup();
+    const ps = place(0, cardByName('Plaguespreader Zombie'), 'grave');
+    place(0, T.wall, 'hand');
+    g.phase = 'standby';
+    g.beginBatch();
+    g.emit({ type: 'phaseStart', phase: 'standby', player: 0 } as any);
+    await g.processTriggers(true);
+    eq(ps.location, 'mzone', 'revived');
+    g.phase = 'main1';
+    const a = place(0, lv3, 'mzone');
+    const b = place(0, lv2, 'mzone');
+    const brd = place(0, cardByName('Black Rose Dragon'), 'extra');
+    await g.synchroSummon(0, brd, [ps, a, b]);
+    eq(brd.location, 'mzone', 'Black Rose Dragon Synchro Summoned (2 + 3 + 2)');
+    eq(ps.location, 'banished', 'Plaguespreader banished, not sent to the GY');
+    eq(a.location, 'grave', 'other material in the GY');
+  });
+
+  await test('Synchro: Debris Dragon — Dragon Synchros only, no Level 4 partners; its revived monster has its effects negated', async () => {
+    const { g, place } = setup();
+    place(0, cardByName('Debris Dragon'), 'mzone');
+    place(0, lv3, 'mzone');
+    eq(g.canSynchro(0, place(0, cardByName('Black Rose Dragon'), 'extra')), true, 'Debris + Level 3 → Black Rose Dragon (Dragon)');
+    const b = setup();
+    b.place(0, cardByName('Debris Dragon'), 'mzone');
+    b.place(0, lv2, 'mzone');
+    eq(b.g.canSynchro(0, b.place(0, cardByName('Brionac, Dragon of the Ice Barrier'), 'extra')), false, 'not for a non-Dragon (Brionac)');
+    const c = setup();
+    c.place(0, cardByName('Debris Dragon'), 'mzone');
+    c.place(0, T.brute, 'mzone');
+    eq(c.g.canSynchro(0, c.place(0, cardByName('Stardust Dragon'), 'extra')), false, 'not with a Level 4 monster');
+    const d = setup();
+    const dandy = d.place(0, cardByName('Dandylion'), 'grave');
+    const debris = d.place(0, cardByName('Debris Dragon'), 'hand');
+    await d.g.performAction(0, { type: 'summon', card: debris });
+    await d.g.processTriggers(true);
+    eq(dandy.location, 'mzone', 'Dandylion revived');
+    eq(d.g.isNegated(dandy), true, 'its effects are negated');
+  });
+
+  await test('Synchro: Quickdraw Synchron only for monsters that list a "Synchron" Tuner; Fluff Tokens can be Synchro Material', async () => {
+    const { g, place } = setup();
+    place(0, cardByName('Quickdraw Synchron'), 'mzone');
+    place(0, lv2, 'mzone');
+    eq(g.canSynchro(0, place(0, cardByName('Nitro Warrior'), 'extra')), true, 'Quickdraw + Level 2 → Nitro Warrior');
+    const b = setup();
+    b.place(0, cardByName('Quickdraw Synchron'), 'mzone');
+    b.place(0, lv3, 'mzone');
+    eq(b.g.canSynchro(0, b.place(0, cardByName('Stardust Dragon'), 'extra')), false, 'not for Stardust Dragon');
+    const c = setup();
+    c.place(0, tuner, 'mzone');
+    c.place(0, T.brute, 'mzone');
+    const dandy = c.place(0, cardByName('Dandylion'), 'hand');
+    await c.g.discard([dandy], 'cost', 0);
+    await c.g.processTriggers(true);
+    const toks = c.g.monsters(0).filter((m) => m.isToken);
+    eq(toks.length, 2, 'Dandylion made 2 Fluff Tokens');
+    const brd = c.place(0, cardByName('Black Rose Dragon'), 'extra');
+    eq(c.g.synchroCombos(0, brd).some((m) => m.includes(toks[0])), true, 'Fluff Token usable (2 + 4 + 1)');
+  });
+
+  await test('Synchro: Tuned Magician is a Tuner only once Gemini Summoned; Synchros use the current Level', async () => {
+    const { g, place } = setup();
+    const tm = place(0, cardByName('Tuned Magician'), 'mzone');
+    place(0, T.brute, 'mzone');
+    const sd = place(0, cardByName('Stardust Dragon'), 'extra');
+    eq(g.canSynchro(0, sd), false, 'not a Tuner before the Gemini Summon');
+    eq(tm.hasType('tuner'), false, 'no Tuner type yet');
+    await activateCard(g, 0, tm, 'Gemini Summon (Normal Summon again)');
+    eq(tm.isTuner, true, 'Tuner once Gemini Summoned');
+    eq(g.canSynchro(0, sd), true, 'usable as the Tuner (4 + 4)');
+    const sk = place(1, cardByName('Skill Drain'), 'szone', { faceUp: true });
+    sk.activeOnField = true;
+    eq(tm.isTuner, false, 'not a Tuner while its effects are negated (Skill Drain)');
+    const b = setup();
+    b.place(0, tuner, 'mzone');
+    const big = b.place(0, T.giant, 'mzone');
+    const sd2 = b.place(0, cardByName('Stardust Dragon'), 'extra');
+    eq(b.g.canSynchro(0, sd2), false, '2 + 8 is not 8');
+    b.g.addTempMod(big, 'level', -2, 'field');
+    eq(b.g.canSynchro(0, sd2), true, '2 + (8 - 2) = 8');
+  });
+
+  // 13. Extra Deck monsters' effects
+  await test('Stardust Dragon: Tributes itself to negate a destroying card, then returns from the GY in the End Phase', async () => {
+    const { g, c0, place } = setup();
+    g.turnPlayer = 1;
+    const sd = place(0, cardByName('Stardust Dragon'), 'mzone');
+    sd.properlySummoned = true;
+    c0.respond = respondWith('Stardust Dragon');
+    const hole = place(1, cardByName('Dark Hole'), 'hand');
+    await activateCard(g, 1, hole);
+    eq(hole.location, 'grave', 'Dark Hole negated and destroyed');
+    eq(sd.location, 'grave', 'Stardust Tributed');
+    g.phase = 'end';
+    g.beginBatch();
+    g.emit({ type: 'phaseStart', phase: 'end', player: 1 } as any);
+    await g.processTriggers(true);
+    eq(sd.location, 'mzone', 'back in the End Phase');
+  });
+
+  await test('Goyo Guardian takes the destroyed monster in face-up Defense Position; Colossal Fighter counts Warriors in both GYs and revives one', async () => {
+    const { g, place } = setup();
+    const goyo = place(0, cardByName('Goyo Guardian'), 'mzone');
+    const v = place(1, T.brute, 'mzone');
+    await g.conductAttack(0, goyo);
+    await g.processTriggers(true);
+    eq(v.location, 'mzone', 'stolen');
+    eq(v.controller, 0, 'on your side');
+    eq(v.pos, 'def', 'in Defense Position');
+    eq(v.faceUp, true, 'face-up');
+    const b = setup();
+    const cf = b.place(0, cardByName('Colossal Fighter'), 'mzone');
+    b.place(0, T.brute, 'grave');
+    const theirs = b.place(1, T.brute, 'grave');
+    b.place(1, T.wall, 'grave');
+    eq(b.g.getAtk(cf), 2800 + 200, '+100 per Warrior in either GY');
+    b.g.turnPlayer = 1;
+    b.c0.pick = (_g, req) => (req.candidates.includes(theirs) ? [theirs] : req.candidates.slice(0, req.min));
+    const big = b.place(1, T.giant, 'mzone');
+    big.flags.baseAtk = 5000;
+    await b.g.conductAttack(1, big);
+    await b.g.processTriggers(true);
+    eq(cf.location, 'grave', 'Colossal destroyed by battle');
+    eq(theirs.location, 'mzone', "revived a Warrior from the opponent's GY");
+  });
+
+  await test('Contact Fusions: Gyzarus shuffles its materials into the Deck; Chimeratech sends "Cyber Dragon" (Proto-Cyber) + Machines from either field to the GY', async () => {
+    const { g, place } = setup();
+    const b = place(0, cardByName('Gladiator Beast Bestiari'), 'mzone');
+    const l = place(0, cardByName('Gladiator Beast Laquari'), 'mzone');
+    const gy = place(0, cardByName('Gladiator Beast Gyzarus'), 'extra');
+    await doProc(g, 0, gy);
+    eq(gy.location, 'mzone', 'Gyzarus summoned');
+    eq(b.location, 'deck', 'Bestiari shuffled into the Deck');
+    eq(l.location, 'deck', 'Laquari shuffled into the Deck');
+    const c = setup();
+    const proto = c.place(0, cardByName('Proto-Cyber Dragon'), 'mzone');
+    const oppMachine = c.place(1, cardByName('Cyber Valley'), 'mzone');
+    const cfd = c.place(0, cardByName('Chimeratech Fortress Dragon'), 'extra');
+    pickOnly(c.c0, [proto, oppMachine]);
+    await doProc(c.g, 0, cfd);
+    eq(cfd.location, 'mzone', 'Chimeratech summoned');
+    eq(proto.location, 'grave', 'Proto-Cyber Dragon sent to the GY');
+    eq(oppMachine.location, 'grave', "the opponent's Machine sent to the GY");
+    eq(c.g.getAtk(cfd), 2000, '1000 x 2 materials');
+  });
+
+  await test('Miracle Fusion banishes materials from the field and GY; under Necrovalley GY materials cannot be used', async () => {
+    const n = setup();
+    n.place(0, cardByName('Elemental Hero Avian'), 'mzone');
+    n.place(0, cardByName('Elemental Hero Burstinatrix'), 'grave');
+    n.place(0, cardByName('Elemental Hero Flame Wingman'), 'extra');
+    live(n.place(1, cardByName('Necrovalley'), 'fzone'));
+    eq(offered(n.g, 0, n.place(0, cardByName('Miracle Fusion'), 'hand')), false, 'Necrovalley: GY material unusable');
+    const { g, place } = setup();
+    const avian = place(0, cardByName('Elemental Hero Avian'), 'mzone');
+    const burst = place(0, cardByName('Elemental Hero Burstinatrix'), 'grave');
+    const fw = place(0, cardByName('Elemental Hero Flame Wingman'), 'extra');
+    await activateCard(g, 0, place(0, cardByName('Miracle Fusion'), 'hand'));
+    eq(fw.location, 'mzone', 'Flame Wingman summoned');
+    eq(avian.location, 'banished', 'field material banished');
+    eq(burst.location, 'banished', 'GY material banished');
+  });
+
+  await test('Polymerization: Prisma named "Elemental Hero Avian" is that Fusion Material', async () => {
+    const { g, place } = setup();
+    const prisma = place(0, cardByName('Elemental Hero Prisma'), 'mzone');
+    const fw = place(0, cardByName('Elemental Hero Flame Wingman'), 'extra');
+    deckCard(g, 0, 'Elemental Hero Avian');
+    await activateCard(g, 0, prisma);
+    const burst = place(0, cardByName('Elemental Hero Burstinatrix'), 'hand');
+    await activateCard(g, 0, place(0, cardByName('Polymerization'), 'hand'));
+    eq(fw.location, 'mzone', 'Flame Wingman Fusion Summoned');
+    eq(prisma.location, 'grave', 'Prisma used as Avian');
+    eq(burst.location, 'grave', 'Burstinatrix used');
+  });
+
+  // 14. Extra Deck visibility and size
+  await test('Extra Deck: hidden from the opponent; more than 15 cards is an invalid deck', async () => {
+    const { g, place } = setup();
+    const sd = place(0, cardByName('Stardust Dragon'), 'extra');
+    eq(g.isPublic(sd, 0), true, 'owner sees it');
+    eq(g.isPublic(sd, 1), false, 'opponent does not');
+    const deck = PREMADE_DECKS[0];
+    const extra: [string, number][] = [...deck.extra, ['Stardust Dragon', 3], ['Goyo Guardian', 3], ['Black Rose Dragon', 3], ['Colossal Fighter', 3], ['Brionac, Dragon of the Ice Barrier', 3]];
+    eq(validateDeck({ main: deck.main, extra }).some((e) => /Extra Deck has \d+ cards \(maximum 15\)/.test(e)), true, '16+ Extra Deck cards rejected');
+  });
+
+  // Costs that move cards out of a GY under Necrovalley
+  await test('Necrovalley: GY-banish costs cannot be paid (Chaos Sorcerer, DAD effect); DAD itself and hand costs still work; a cost move out of the GY is not dropped like an effect', async () => {
+    const { g, place } = setup();
+    live(place(1, cardByName('Necrovalley'), 'fzone'));
+    for (let i = 0; i < 3; i++) place(0, T.dark, 'grave');
+    place(0, cardByName('Ryko, Lightsworn Hunter'), 'grave');
+    const cs = place(0, cardByName('Chaos Sorcerer'), 'hand');
+    eq(procOffered(g, 0, cs), false, 'Chaos Sorcerer cannot banish its cost from the GY');
+    const dad = place(0, cardByName('Dark Armed Dragon'), 'hand');
+    await doProc(g, 0, dad);
+    eq(dad.location, 'mzone', 'Dark Armed Dragon can still be Special Summoned (no banish)');
+    place(1, T.brute, 'mzone');
+    eq(offered(g, 0, dad), false, "but its banish-from-GY effect can't be paid");
+    const qd = place(0, cardByName('Quickdraw Synchron'), 'hand');
+    place(0, T.wall, 'hand');
+    eq(procOffered(g, 0, qd), true, 'a hand cost (Quickdraw Synchron) still works');
+    const inGy = place(0, T.brute, 'grave');
+    await g.moveCards([inGy], 'deck', { reason: 'cost', reasonPlayer: 0, reasonCard: qd });
+    eq(inGy.location, 'deck', 'a cost that returns a GY card to the Deck is paid');
+    const inGy2 = place(0, T.brute, 'grave');
+    await g.moveCards([inGy2], 'deck', { reason: 'effect', reasonPlayer: 0, reasonCard: qd });
+    eq(inGy2.location, 'grave', 'the same move by an effect is negated');
   });
 }

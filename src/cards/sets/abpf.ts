@@ -9,6 +9,7 @@ import type { CardData, CardInstance, EffectDef } from '../../engine/card';
 import type { Ctx } from '../../engine/ctx';
 import type { ChainLink, Game } from '../../engine/game';
 import type { GameEvent, Location, PlayerId, Race, Reason } from '../../engine/types';
+import { necrovalleyNegates } from '../necrovalley';
 
 type C = CardInstance;
 
@@ -140,33 +141,15 @@ function summonedFromGrave(g: Game, c: C): boolean {
 }
 
 // ---------------------------------------------------------------- per-instance data overrides
-// APPROX: the engine has no Type/Name-change or "Trap Monster" hook. These cards shadow the card instance's `data`
+// Per-instance changes (CardInstance.addDataPatch): these cards shadow the card instance's `data`
 // with a modified copy while the condition holds (Reptilianne Rage, Alien Brain, Cyber Dragon Zwei,
 // Forgotten Temple of the Deep, Machine King - 3000 B.C.). The real CardData is never modified.
 type DataPatch = (orig: CardData, card: C) => CardData | undefined;
-const dataPatches = new WeakMap<C, DataPatch[]>();
-// LODT: exported so lodt.ts reuses the same per-instance override chain.
+const dataPatches = new WeakSet<C>();
 export function patchData(card: C, fn: DataPatch) {
-  let list = dataPatches.get(card);
-  if (!list) {
-    const l: DataPatch[] = [];
-    list = l;
-    dataPatches.set(card, l);
-    const orig = card.data;
-    Object.defineProperty(card, 'data', {
-      configurable: true,
-      enumerable: true,
-      get: () => {
-        for (const f of l) {
-          const d = f(orig, card);
-          if (d) return d;
-        }
-        return orig;
-      },
-      set: () => {},
-    });
-  }
-  list.push(fn);
+  // Engine API (CardInstance.addDataPatch): patches from every set compose in order, under the engine's rule view.
+  dataPatches.add(card);
+  card.addDataPatch(fn);
 }
 const variants = new WeakMap<CardData, Map<string, CardData>>();
 export function variant(orig: CardData, key: string, change: Partial<CardData>): CardData {
@@ -392,6 +375,11 @@ const DJINN_TEXT_NOTE = 'djinn-of-rituals';
 
 // ============================================================ MONSTERS
 
+/** Gravekeeper's Priestess: "While there is no face-up Field Spell, the field is treated as 'Necrovalley'". */
+const priestessValley = (ctx: Ctx) => {
+  const g = ctx.game;
+  return ![g.players[0].fzone, g.players[1].fzone].some((f) => f && f.faceUp);
+};
 monster("Gravekeeper's Priestess", {
   attribute: 'DARK',
   race: 'Spellcaster',
@@ -403,25 +391,37 @@ monster("Gravekeeper's Priestess", {
   text: `While there is no face-up Field Spell, the field is treated as "Necrovalley". All "Gravekeeper's" monsters on the field gain 200 ATK/DEF.`,
   effects: [
     {
-      // APPROX: only Necrovalley's "+500 ATK/DEF to Gravekeeper's monsters" is applied; its Graveyard lock
-      // (no banishing from the GY, negating effects that move cards in the GY) has no engine hook.
+      // Necrovalley's "+500 ATK/DEF to Gravekeeper's monsters" and its GY lock (src/cards/necrovalley.ts) apply while
+      // there is no face-up Field Spell.
       kind: 'continuous',
-      mods: (['atk', 'def'] as const).flatMap((q) => [
-        { q, to: 'cards' as const, filter: (_ctx: Ctx, c: C) => c.faceUpMonster && isGK(c), value: 200 },
-        {
-          q,
-          to: 'cards' as const,
-          filter: (ctx: Ctx, c: C) => {
-            if (!c.faceUpMonster || !isGK(c)) return false;
-            const g = ctx.game;
-            if ([g.players[0].fzone, g.players[1].fzone].some((f) => f && f.faceUp)) return false;
-            // Only one "Necrovalley" applies, however many Priestesses there are.
-            const first = [...g.faceUpMonsters(0), ...g.faceUpMonsters(1)].filter((m) => m.name === ctx.self.name).sort((a, b) => a.uid - b.uid)[0];
-            return first === ctx.self;
+      mods: [
+        ...(['atk', 'def'] as const).flatMap((q) => [
+          { q, to: 'cards' as const, filter: (_ctx: Ctx, c: C) => c.faceUpMonster && isGK(c), value: 200 },
+          {
+            q,
+            to: 'cards' as const,
+            filter: (ctx: Ctx, c: C) => {
+              if (!c.faceUpMonster || !isGK(c) || !priestessValley(ctx)) return false;
+              // Only one "Necrovalley" applies, however many Priestesses there are.
+              const g = ctx.game;
+              const first = [...g.faceUpMonsters(0), ...g.faceUpMonsters(1)].filter((m) => m.name === ctx.self.name).sort((a, b) => a.uid - b.uid)[0];
+              return first === ctx.self;
+            },
+            value: 500,
           },
-          value: 500,
-        },
-      ]),
+        ]),
+        { q: 'cannotBanishFromGY', to: 'players', filter: (ctx: Ctx) => priestessValley(ctx), value: true },
+        { q: 'gyLock', to: 'players', filter: (ctx: Ctx) => priestessValley(ctx), value: true },
+      ],
+    },
+    {
+      kind: 'trigger',
+      event: 'chainActivated',
+      label: 'Necrovalley (negate)',
+      eventFilter: (ctx, ev) => {
+        if (ctx.self.faceUpMonster && !ctx.game.isNegated(ctx.self) && priestessValley(ctx)) necrovalleyNegates(ctx, ev, ctx.self.name);
+        return false;
+      },
     },
   ],
 });
@@ -2626,6 +2626,7 @@ spell('Iron Core Specimen Lab', 'field', {
 
 spell("Gravekeeper's Stele", 'normal', {
   sets: ['gravekeeper'],
+  ignoresGyLock: true,
   text: 'Target 2 "Gravekeeper\'s" monsters in your GY; add those targets to your hand. This effect cannot be negated by the effect of "Necrovalley".',
   effects: [
     {

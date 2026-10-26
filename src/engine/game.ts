@@ -190,6 +190,10 @@ export class Game {
   private actionCounter = 0;
   /** Depth guard for continuous queries. */
   private queryDepth = 0;
+  /** Cards with a `dataMod` effect (Zombie World, Proto-Cyber Dragon), wherever they are. See cardView. */
+  private dataModSources: CardInstance[] = [];
+  /** Re-entrancy guard for cardView: data read while working out a view is the unviewed data. */
+  private viewing = 0;
   /** Summon negation state. */
   pendingSummon: { cards: CardInstance[]; player: PlayerId; method: string; negated: boolean } | null = null;
 
@@ -240,8 +244,45 @@ export class Game {
   registerCard(c: CardInstance) {
     this.allCards.push(c);
     if (c.data.effects?.some((e) => e.kind === 'continuous')) this.continuousSources.push(c);
+    if (c.data.effects?.some((e) => e.kind === 'continuous' && e.dataMod)) this.dataModSources.push(c);
+    c.view = this.cardView;
     return c;
   }
+
+  /**
+   * The data of `c` as changed by 'continuous' dataMod effects that apply right now (Zombie World: monsters on the field
+   * and in the GYs are Zombie-Type; Proto-Cyber Dragon: named "Cyber Dragon" while face-up on the field). A change to a
+   * card in the GY does not apply while the GY is locked (Necrovalley: "negate any card effect that changes Types or
+   * Attributes in the GY"). APPROX: a Spell/Trap source is not checked for negation (only monsters are).
+   */
+  private cardView = (c: CardInstance, d: CardData): CardData => {
+    if (!this.dataModSources.length || this.viewing) return d;
+    this.viewing++;
+    try {
+      let out = d;
+      for (const src of this.dataModSources) {
+        const effs = src.data.effects;
+        if (!effs) continue;
+        for (const ef of effs) {
+          const m = ef.dataMod;
+          if (!m || ef.kind !== 'continuous') continue;
+          if ((m.to ?? 'self') === 'self' && c !== src) continue;
+          const range = ef.range ?? (src.isMonster ? ['mzone'] : ['szone', 'fzone']);
+          if (!range.includes(src.location)) continue;
+          if (src.onField && !src.faceUp) continue;
+          if (!src.isMonster && src.onField && !src.activeOnField) continue;
+          if (m.to === 'cards' && m.filter && !m.filter(c)) continue;
+          if (src.isMonster && this.isNegated(src)) continue;
+          if (ef.active && !ef.active(this.effectCtx(src, ef))) continue;
+          if (c.location === 'grave' && this.gyLocked()) continue;
+          out = m.apply(out, c);
+        }
+      }
+      return out;
+    } finally {
+      this.viewing--;
+    }
+  };
 
   // -------------------------------------------------------------------------
   // Utility
@@ -403,9 +444,27 @@ export class Game {
     return this.collectMods(q, p).some((v) => !!v);
   }
 
-  /** Cards in the GY cannot be banished (Necrovalley): costs that banish from a GY cannot be paid. */
-  gyBanishLocked(): boolean {
+  /**
+   * Cards in the GY cannot be banished (Necrovalley: by anyone; Kycoo: by its opponent): costs that banish from a GY
+   * cannot be paid, and Game.banish leaves GY cards where they are. `p`: the player banishing (default: either).
+   */
+  gyBanishLocked(p?: PlayerId): boolean {
+    if (p !== undefined) return this.queryPlayer(p, 'cannotBanishFromGY');
     return this.queryPlayer(0, 'cannotBanishFromGY') || this.queryPlayer(1, 'cannotBanishFromGY');
+  }
+
+  /** Necrovalley's GY lock applies (query 'gyLock'): effects that move cards in the GY, or change their Types, are negated. */
+  gyLocked(): boolean {
+    return this.queryPlayer(0, 'gyLock') || this.queryPlayer(1, 'gyLock');
+  }
+
+  /** Necrovalley: a card effect of `reasonCard` that would move `cards` out of the GY does not move them. Returns the rest. */
+  private dropGyLocked(cards: CardInstance[], reason: Reason, reasonCard?: CardInstance): CardInstance[] {
+    if (reason !== 'effect' || !reasonCard || reasonCard.data.ignoresGyLock || !cards.some((c) => c.location === 'grave')) return cards;
+    if (!this.gyLocked()) return cards;
+    const kept = cards.filter((c) => c.location === 'grave');
+    this.log(`Necrovalley: ${kept.map((c) => c.name).join(', ')} cannot leave the GY.`, 'info');
+    return cards.filter((c) => c.location !== 'grave');
   }
 
   isNegated(card: CardInstance): boolean {
@@ -664,6 +723,7 @@ export class Game {
       noAnim?: boolean;
     },
   ): Promise<CardInstance[]> {
+    cards = this.dropGyLocked(cards, opts.reason, opts.reasonCard);
     if (!cards.length) return [];
     this.beginBatch();
     const moved: { card: CardInstance; from: Location; to: Location; fromFaceUp: boolean; fromCtrl: PlayerId; wasMonster: boolean }[] = [];
@@ -876,6 +936,7 @@ export class Game {
   }
 
   async banish(cards: CardInstance[], reason: Reason, reasonPlayer?: PlayerId, reasonCard?: CardInstance, faceDown = false) {
+    if (cards.some((c) => c.location === 'grave') && this.gyBanishLocked(reasonPlayer)) cards = cards.filter((c) => c.location !== 'grave');
     return this.moveCards(cards, 'banished', { reason, reasonPlayer, reasonCard, faceUp: !faceDown });
   }
 
@@ -1001,7 +1062,7 @@ export class Game {
     const ctrl = opts.controller ?? player;
     if (this.queryPlayer(player, 'cannotSpecialSummon')) return [];
     const list: CardInstance[] = [];
-    for (const c of cards) {
+    for (const c of this.dropGyLocked(cards, 'effect', opts.reasonCard)) {
       if (this.freeMZones(ctrl) - list.length <= 0) break;
       if (!opts.ignoreConditions && c.data.nomi && !c.properlySummoned && (c.location === 'grave' || c.location === 'banished')) continue;
       if (!opts.faceDown && this.queryCard(c, 'cannotBeSummoned')) continue;
@@ -1258,7 +1319,7 @@ export class Game {
     }
 
     if (ef.kind === 'proc') return null; // procs handled as actions
-    if (ef.gyBanishCost && this.gyBanishLocked()) return null;
+    if (ef.gyBanishCost && this.gyBanishLocked(player)) return null;
 
     // Card state requirements
     if (ef.kind === 'activate') {
@@ -1612,7 +1673,7 @@ export class Game {
       if (ef.when && !ef.mandatory && t.event.batch !== this.lastBatch && !sameDamageStep) continue; // missed timing
       const player = t.player;
       if (ef.opt && this.isOptUsed(this.optKey(card, ef, idx, player))) continue;
-      if (ef.gyBanishCost && this.gyBanishLocked()) continue;
+      if (ef.gyBanishCost && this.gyBanishLocked(player)) continue;
       // monster on field must still be face-up and not negated
       if (card.location === 'mzone' && !card.faceUp && t.event.type !== 'flipped') continue;
       if (card.location === 'mzone' && this.isNegated(card)) continue;
@@ -2157,7 +2218,7 @@ export class Game {
     if (this.chain.length) return false;
     if (this.queryPlayer(p, 'cannotSpecialSummon')) return false;
     if (this.queryCard(c, 'cannotBeSummoned')) return false;
-    if (ef.gyBanishCost && this.gyBanishLocked()) return false;
+    if (ef.gyBanishCost && this.gyBanishLocked(p)) return false;
     if (c.location === 'mzone') {
       // e.g. contact fusion from field, handled via extra deck card; not supported here
       return false;

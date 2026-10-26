@@ -163,28 +163,11 @@ async function tributeByEffect(ctx: Ctx, cards: C[]) {
 // APPROX (same technique as abpf.ts): the engine has no "Trap Monster" hook, so the card instance's `data` is
 // shadowed by a monster copy while it is in the Monster Zone. The real CardData is never modified.
 type DataPatch = (orig: CardData, card: C) => CardData | undefined;
-const dataPatches = new WeakMap<C, DataPatch[]>();
+const dataPatches = new WeakSet<C>();
 function patchData(card: C, fn: DataPatch) {
-  let list = dataPatches.get(card);
-  if (!list) {
-    const l: DataPatch[] = [];
-    list = l;
-    dataPatches.set(card, l);
-    const orig = card.data;
-    Object.defineProperty(card, 'data', {
-      configurable: true,
-      enumerable: true,
-      get: () => {
-        for (const f of l) {
-          const d = f(orig, card);
-          if (d) return d;
-        }
-        return orig;
-      },
-      set: () => {},
-    });
-  }
-  list.push(fn);
+  // Engine API (CardInstance.addDataPatch): patches from every set compose in order, under the engine's rule view.
+  dataPatches.add(card);
+  card.addDataPatch(fn);
 }
 const variants = new WeakMap<CardData, Map<string, CardData>>();
 function variant(orig: CardData, key: string, change: Partial<CardData>): CardData {

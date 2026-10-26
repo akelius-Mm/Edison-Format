@@ -117,10 +117,12 @@ interface STOpts {
   sets?: string[];
   effects?: EffectDef[];
   aiValue?: number;
+  /** Its effects cannot be negated by Necrovalley (CardData.ignoresGyLock). */
+  ignoresGyLock?: boolean;
 }
 
 export function spell(name: string, stype: SpellType, o: STOpts): CardData {
-  return register({ id: slug(name), name, kind: 'spell', stype, text: o.text, sets: o.sets, effects: o.effects, aiValue: o.aiValue });
+  return register({ id: slug(name), name, kind: 'spell', stype, text: o.text, sets: o.sets, effects: o.effects, aiValue: o.aiValue, ignoresGyLock: o.ignoresGyLock });
 }
 
 export function trap(name: string, ttype: TrapType, o: STOpts): CardData {
