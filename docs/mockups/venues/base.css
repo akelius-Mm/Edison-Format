@@ -1,0 +1,21 @@
+html,body{margin:0;background:#000;font-family:-apple-system,Inter,sans-serif}
+.v{position:relative;width:390px;height:844px;overflow:hidden}
+.grain{position:absolute;inset:0;filter:url(#grain);opacity:.18;mix-blend-mode:overlay;background:#808080;pointer-events:none}
+.mat{position:absolute;left:8px;right:8px;height:206px;border-radius:14px;overflow:hidden;box-shadow:0 16px 26px -8px rgba(0,0,0,.8),0 3px 8px rgba(0,0,0,.6)}
+.mat .art{position:absolute;inset:0}
+.mat .stitch{position:absolute;inset:5px;border-radius:10px;border:2px dashed rgba(230,210,170,.5)}
+.mat .vig{position:absolute;inset:0;box-shadow:inset 0 0 36px 8px rgba(0,0,0,.55)}
+.zones{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);display:grid;grid-template-columns:repeat(7,44px);grid-template-rows:repeat(2,64px);gap:9px 6px}
+.z{border:1.5px solid rgba(255,236,190,.55);border-radius:5px;background:rgba(0,0,0,.14);position:relative}
+.z.round{border-radius:50%/40%}
+.card{position:absolute;inset:0;border-radius:3px}
+.back{background:radial-gradient(circle,#e9873a 0 9px,#6a2b0f 10px 11px,transparent 12px),linear-gradient(135deg,#5a3418,#2b1708);box-shadow:0 0 0 2px #1c0f06 inset,0 6px 10px rgba(0,0,0,.55)}
+.face{background:linear-gradient(#c87633,#a85a21);box-shadow:0 6px 10px rgba(0,0,0,.55)}
+.face::before{content:"";position:absolute;left:5px;right:5px;top:10px;height:24px;background:linear-gradient(135deg,#f4e3b0,#c9a54a 40%,#6b4a1c)}
+.face::after{content:"";position:absolute;left:5px;right:5px;bottom:5px;height:16px;background:#f1e2c2}
+.hud{position:absolute;left:12px;right:12px;height:46px;border-radius:12px;background:rgba(14,14,16,.78);backdrop-filter:blur(6px);color:#f2efe8;display:flex;align-items:center;justify-content:space-between;padding:0 16px;font-weight:700;font-size:16px;box-shadow:0 4px 12px rgba(0,0,0,.4)}
+.hud b{font-size:22px}.hud small{opacity:.6;font-weight:600;margin-right:6px;font-size:12px}
+.tag{position:absolute;left:0;right:0;text-align:center;color:#f2efe8;font:700 11px Inter,sans-serif;letter-spacing:.2em;text-transform:uppercase;opacity:.85}
+.prop{position:absolute;filter:drop-shadow(0 6px 6px rgba(0,0,0,.6))}
+.hand{position:absolute;left:0;right:0;bottom:22px;display:flex;justify-content:center}
+.hand .card{position:relative;width:58px;height:84px;margin:0 -4px}
