@@ -109,6 +109,35 @@ async function flushSingles() {
   void singleMode;
 }
 
+/** Images fetched ahead of time (a duel's decks), kept so the browser holds them in its memory cache. */
+const ready = new Map<string, HTMLImageElement>();
+const READY_MAX = 160;
+
+function warm(url: string) {
+  if (ready.has(url)) return;
+  if (ready.size >= READY_MAX) ready.delete(ready.keys().next().value as string);
+  const im = new Image();
+  im.decoding = 'async';
+  im.src = url;
+  ready.set(url, im);
+}
+
+/** True once `url` has loaded: a new <img> for it can be shown at once, with no drawn-art frame first. */
+const isReady = (url: string) => {
+  const im = ready.get(url);
+  return !!im && im.complete && im.naturalWidth > 0;
+};
+
+/** Fetch the card scans for these cards now (e.g. both decks when a duel starts), so plays show the real card straight away. */
+export function preloadOfficialImages(names: Iterable<string>) {
+  if (!officialArtEnabled()) return;
+  for (const name of new Set(names)) {
+    void getOfficialImage(name).then((img) => {
+      if (img) warm(img.full);
+    });
+  }
+}
+
 /**
  * Replace the contents of a card's art box with the official artwork once it loads.
  * `artEl` keeps its procedural SVG until the image has actually loaded.
@@ -142,19 +171,26 @@ export function attachOfficialArt(artEl: HTMLElement, cardName: string, mode: 'a
  */
 export function attachOfficialCard(cardEl: HTMLElement, cardName: string) {
   if (!officialArtEnabled()) return;
-  void getOfficialImage(cardName).then((img) => {
-    if (!img) return;
+  const show = (url: string, now: boolean) => {
     const el = new Image();
-    el.decoding = 'async';
+    el.decoding = now ? 'sync' : 'async';
     el.alt = cardName;
     el.draggable = false;
     el.className = 'official-card';
-    el.onload = () => {
+    const swap = () => {
       const keep = [...cardEl.querySelectorAll(':scope > .yc-limit, :scope > .yc-badge')];
       cardEl.replaceChildren(el, ...keep);
       cardEl.classList.add('yc--official');
     };
-    el.src = img.full;
+    el.src = url;
+    // Already loaded (preloaded for this duel): show the real card straight away, never the drawn face first.
+    if (now) swap();
+    else el.onload = swap;
+  };
+  const hit = cachedOfficialImage(cardName);
+  if (hit && isReady(hit.full)) return show(hit.full, true);
+  void getOfficialImage(cardName).then((img) => {
+    if (img) show(img.full, isReady(img.full));
   });
 }
 
