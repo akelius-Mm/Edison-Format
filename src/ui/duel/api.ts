@@ -44,6 +44,14 @@ export interface DuelOptions {
   onGameOver?: (result: DuelResult) => void;
   /** The duel is saved: the exit button offers "Leave and save" next to "Concede". */
   resumable?: boolean;
+  /**
+   * Offer Undo for misclicks (engine/undo.ts). Only honoured in a human-vs-AI duel: never with a
+   * `remote` seat, spectating, or two humans. An undo rebuilds the duel from its seed and the log
+   * minus the undone decisions and reports the shortened log through `onDecision`.
+   */
+  allowUndo?: boolean;
+  /** @internal Set by startDuel when rebuilding after an undo: the previous screen, kept on top until the rebuild is shown. */
+  undoCover?: HTMLElement;
 
   // ---- Play a friend (src/net, src/ui/screens/friend.ts) ---------------------------------
   /** Controller for the seat that is not 'human' in place of an AI: the friend's phone. */

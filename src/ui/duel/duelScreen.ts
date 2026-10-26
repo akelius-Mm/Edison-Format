@@ -7,7 +7,8 @@ import type { CardData, CardInstance, EffectDef } from '../../engine/card';
 import type { Action, Activation, ConfirmRequest, OptionRequest, PlayerController, ResponseRequest, SelectRequest } from '../../engine/controller';
 import { Ctx } from '../../engine/ctx';
 import { Game, GameOver, phaseName, type LogEntry } from '../../engine/game';
-import { RecordingController } from '../../engine/replay';
+import { RecordingController, type Decision } from '../../engine/replay';
+import { UndoTracker } from '../../engine/undo';
 import type { BattlePos, PlayerId } from '../../engine/types';
 import { ICONS } from '../cards/icons';
 import { preloadOfficialImages } from '../cards/officialArt';
@@ -43,8 +44,14 @@ import { duelLogLine, reportError, setDuelDiag } from '../diag';
 import { openReportSheet } from '../screens/report';
 
 export async function startDuel(container: HTMLElement, opts: DuelOptions): Promise<DuelResult> {
-  const screen = new DuelScreen(container, opts);
-  return screen.run();
+  let o = opts;
+  for (;;) {
+    const screen = new DuelScreen(container, o);
+    const res = await screen.run();
+    // Undo: rebuild the same duel from its seed and the shortened log, instantly, under the old board
+    if (!screen.undoTo) return res;
+    o = { ...opts, seed: screen.game.options.seed, skipFirstDraw: screen.game.options.skipFirstDraw, replay: screen.undoTo, undoCover: screen.root };
+  }
 }
 
 interface ActionState {
@@ -110,6 +117,11 @@ class DuelScreen implements HumanUI {
   private left = false;
   /** Play a friend: told about every abort (surrender included). */
   private externalAbort: ((winner: PlayerId | null, reason: string) => void)[] = [];
+  /** Undo for misclicks (vs AI only): decides when an undo is fair (engine/undo.ts). */
+  private undo: UndoTracker | null = null;
+  private undoBtn: HTMLButtonElement | null = null;
+  /** Set when the player pressed Undo: the log to rebuild the duel from (see startDuel). */
+  undoTo: Decision[] | null = null;
 
   constructor(
     private container: HTMLElement,
@@ -126,23 +138,32 @@ class DuelScreen implements HumanUI {
     // One seed drives the shuffle, coin toss, card effects and the AI, so a duel is reproducible
     // from its seed, decks and the human's decisions (see engine/replay.ts).
     const seed = opts.seed ?? Math.floor(Math.random() * 2 ** 31);
-    this.replaying = !!opts.replay?.length || !!opts.spectate?.catchUp;
+    this.replaying = !!opts.replay?.length || !!opts.spectate?.catchUp || !!opts.undoCover;
+    // Undo only against the AI: one human seat, an AI on the other, nothing from the network
+    const vsAI = humanIdx >= 0 && opts.sides[1 - humanIdx].control !== 'human';
+    if (opts.allowUndo && vsAI && !opts.remote && !opts.spectate) this.undo = new UndoTracker(humanIdx as PlayerId);
     const controllers = opts.sides.map((side, i) => {
       // Friends Locals spectating: both seats come from the players' decision logs.
       if (opts.spectate) return this.spectateSeat(opts.spectate.controllers[i]);
       // Play a friend: the friend's seat is driven from the network.
       if (opts.remote && side.control !== 'human') return this.remoteSeat(opts.remote);
       if (side.control === 'human') {
-        const rec = new RecordingController(opts.localDriver ?? new HumanController(this), {
+        const rec: RecordingController = new RecordingController(opts.localDriver ?? new HumanController(this), {
           replay: opts.replay,
           onDecision: (log, game) => opts.onDecision?.(log, game),
           onReplayEnd: () => this.endReplay(),
+          onRequest: (k, game, index) => {
+            this.undo?.onRequest(k, game, index);
+            // an undo back to the very first decision has no log to replay: show the board at the first prompt
+            if (opts.undoCover && this.replaying && !rec.replaying) this.endReplay();
+          },
         });
         this.recorder ??= rec;
         return rec;
       }
       const ai = createAI(side.control, seed + i * 7919);
-      return new PacedController(ai, { pace: (ms) => this.aiPace(ms) });
+      const paced = new PacedController(ai, { pace: (ms) => this.aiPace(ms) });
+      return this.undo ? this.undo.watchOpponent(paced) : paced;
     }) as [any, any];
 
     this.game = new Game([opts.sides[0].deck, opts.sides[1].deck], controllers, {
@@ -187,7 +208,8 @@ class DuelScreen implements HumanUI {
     this.root.append(left, center, right, this.overlay);
     this.setupPhoneGestures(center);
     setupHurry(this, center);
-    container.innerHTML = '';
+    // after an undo the previous board stays on top (.is-undo-cover) until this one is ready
+    if (!opts.undoCover) container.innerHTML = '';
     container.appendChild(this.root);
     this.board.mount(mat);
     // Each player has their own mat on their half of the table, like at a real event.
@@ -237,6 +259,7 @@ class DuelScreen implements HumanUI {
     this.phaseBar.btnBattle.onclick = () => this.clickPhase('battle');
     this.phaseBar.btnMain2.onclick = () => this.clickPhase('main2');
     this.phaseBar.btnEnd.onclick = () => this.clickPhase('end');
+    if (this.undo) this.buildUndoButton();
     this.root.addEventListener('click', () => this.dialogs.closeMenu());
 
     this.game.hooks = {
@@ -527,6 +550,13 @@ class DuelScreen implements HumanUI {
         res = { winner: null, reason: `Engine error: ${(e as Error)?.message ?? e}`, turns: this.game.turn };
       }
     }
+    if (this.undoTo) {
+      // Undo: startDuel rebuilds the duel; this board stays up as the cover until then
+      this.clearInteraction();
+      this.dialogs.closeAll();
+      this.teardown(true);
+      return { winner: null, reason: 'Undo', turns: this.game.turn };
+    }
     const mismatch = this.recorder?.mismatch;
     if (mismatch || this.left) {
       if (mismatch) console.warn('Duel could not be restored:', mismatch);
@@ -608,6 +638,7 @@ class DuelScreen implements HumanUI {
   /** Resuming: hide the board while the saved decisions are fed back. */
   private beginReplay() {
     this.sfx.enabled = false;
+    if (this.opts.undoCover) return; // an undo rebuild is instant: the old board covers it
     this.root.classList.add('is-restoring');
     this.restoringEl = h('div', 'duel-restoring', `<div class="duel-restoring-box"><span class="spinner"></span><b>${this.opts.spectate ? 'Catching up…' : 'Restoring your duel…'}</b></div>`);
     this.root.appendChild(this.restoringEl);
@@ -653,6 +684,7 @@ class DuelScreen implements HumanUI {
     this.replaying = false;
     this.sfx.enabled = getSettings().sound;
     this.root.classList.remove('is-restoring');
+    if (this.opts.undoCover) this.finishUndo(this.opts.undoCover);
     const r = this.restoringEl;
     this.restoringEl = null;
     if (r) {
@@ -676,7 +708,7 @@ class DuelScreen implements HumanUI {
     return out;
   }
 
-  private teardown() {
+  private teardown(keepAsCover = false) {
     setDuelDiag(null);
     this.unsubSettings();
     this.dialogs.dispose();
@@ -684,6 +716,12 @@ class DuelScreen implements HumanUI {
     this.board.destroy();
     if (this.raf) cancelAnimationFrame(this.raf);
     window.setTimeout(() => this.sfx.dispose(), 1500);
+    if (keepAsCover) {
+      this.root.classList.add('is-undo-cover');
+      // safety net: never leave a dead board on top
+      window.setTimeout(() => this.root.remove(), 8000);
+      return;
+    }
     music.setScene('menu', { delay: 0.4 });
     this.root.remove();
     document.querySelectorAll('body > .dc-ghost').forEach((e) => e.remove());
@@ -879,6 +917,7 @@ class DuelScreen implements HumanUI {
     this.phaseBar.btnEnd.disabled = !has('end');
     this.phaseBar.el.classList.add('is-active');
     this.root.classList.add('awaiting-action');
+    this.refreshUndo();
     return this.guard(promise);
   }
 
@@ -908,6 +947,7 @@ class DuelScreen implements HumanUI {
     this.phaseBar.btnEnd.disabled = true;
     this.phaseBar.el.classList.remove('is-active');
     this.root.classList.remove('awaiting-action');
+    this.refreshUndo();
     this.sfx.play('click');
     // ending the turn gets a light tap; other choices a selection tick (the play itself follows)
     haptic(a.type === 'phase' && a.to === 'end' ? 'light' : 'selection');
@@ -924,6 +964,54 @@ class DuelScreen implements HumanUI {
     this.phaseBar.btnMain2.disabled = true;
     this.phaseBar.btnEnd.disabled = true;
     this.root.classList.remove('awaiting-action');
+    this.refreshUndo();
+  }
+
+  // ------------------------------------------------------------------ undo (vs AI)
+  private buildUndoButton() {
+    const b = h('button', 'btn btn--phase btn--undo', `${UNDO_ICON}<span>Undo</span>`) as HTMLButtonElement;
+    b.type = 'button';
+    b.title = 'Take back your last play';
+    b.setAttribute('aria-label', 'Undo your last play');
+    b.dataset.test = 'undo';
+    b.hidden = true;
+    b.onclick = (ev) => {
+      ev.stopPropagation();
+      this.requestUndo();
+    };
+    this.undoBtn = b;
+    const btns = this.phaseBar.el.querySelector('.phasebar-btns');
+    (btns ?? this.phaseBar.el).prepend(b);
+  }
+
+  /** Index the log would be cut back to, or -1. Only at a main-action prompt (the board is at rest). */
+  private undoIndex(): number {
+    if (!this.undo || !this.recorder || !this.actionState || this.replaying || this.aborted || this.undoTo) return -1;
+    return this.undo.undoIndex(this.game, this.recorder.log.length);
+  }
+
+  private refreshUndo() {
+    if (this.undoBtn) this.undoBtn.hidden = this.undoIndex() < 0;
+  }
+
+  private requestUndo() {
+    const i = this.undoIndex();
+    if (i < 0 || !this.recorder) return this.refreshUndo();
+    this.undoTo = this.recorder.log.slice(0, i);
+    this.sfx.play('click');
+    haptic('light');
+    this.abort(new GameOver(null, 'Undo'));
+  }
+
+  /** The rebuild after an undo is ready: drop the old board, save the shortened log, say so. */
+  private finishUndo(cover: HTMLElement) {
+    cover.remove();
+    try {
+      if (this.recorder) this.opts.onDecision?.(this.recorder.log, this.game);
+    } catch (e) {
+      console.error(e);
+    }
+    this.toast('Undone');
   }
 
   private async clickPhase(to: 'battle' | 'main2' | 'end') {
@@ -1336,6 +1424,8 @@ class DuelScreen implements HumanUI {
 }
 
 /** PlayerController's request methods (the friend's seat is wrapped per request). */
+const UNDO_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14 4 9l5-5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>';
+
 const CONTROLLER_METHODS = new Set(['chooseAction', 'chooseResponse', 'selectCards', 'chooseOption', 'confirm', 'choosePosition', 'chooseAttackTarget', 'confirmTrigger', 'declareCard']);
 
 /** A full-screen cover with no progress for this long offers a way out. */
