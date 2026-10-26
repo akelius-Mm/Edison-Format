@@ -2422,7 +2422,7 @@
 .tile-zmap > span { width: 10px; height: 13px; border-radius: 2px; border: 1px solid rgba(236, 235, 231, 0.35); }
 .tile-zmap > span.on { background: #f2efe8; border-color: #f2efe8; }
 
-/* String lights (Settings test toggle): a 3D layer over the board that never takes taps. */
+/* Regional string lights: a 3D layer over the board that never takes taps. */
 .string-lights {
   position: absolute;
   inset: 0;
