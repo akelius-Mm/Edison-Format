@@ -887,6 +887,7 @@ function eq(a: unknown, b: unknown, msg: string) {
   await geminiTests();
   await locationRulesTests();
   await extraDeckTests();
+  await graveEffectTests();
 
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
@@ -4979,5 +4980,20 @@ async function extraDeckTests() {
     const inGy2 = place(0, T.brute, 'grave');
     await g.moveCards([inGy2], 'deck', { reason: 'effect', reasonPlayer: 0, reasonCard: qd });
     eq(inGy2.location, 'grave', 'the same move by an effect is negated');
+  });
+}
+
+// ---------------------------------------------------------------- effects used from the Graveyard
+
+async function graveEffectTests() {
+  await test('Mezuki: banish it from the GY to Special Summon a Zombie from the GY; not offered without one', async () => {
+    const { g, place } = setup();
+    const mezuki = place(0, cardByName('Mezuki'), 'grave');
+    eq(g.getActivations(0, { open: true }).some((a) => a.card === mezuki), false, 'no Zombie to revive: not offered');
+    const zombie = place(0, cardByName('Goblin Zombie'), 'grave');
+    eq(g.getActivations(0, { open: true }).some((a) => a.card === mezuki), true, 'offered from the GY');
+    await activateCard(g, 0, mezuki);
+    eq(mezuki.location, 'banished', 'Mezuki banished as the cost');
+    eq(zombie.location, 'mzone', 'Zombie Special Summoned');
   });
 }
