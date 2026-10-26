@@ -149,7 +149,7 @@ monster('Wulf, Lightsworn Beast', {
       label: 'Special Summon itself',
       categories: ['specialSummon'],
       eventFilter: (ctx, ev) => ev.card === ctx.self && ev.from === 'deck' && ctx.self.location === 'grave',
-      condition: (ctx) => ctx.canSpecialSummon(),
+      condition: (ctx) => ctx.canSummonSelf(),
       resolve: async (ctx) => {
         if (ctx.self.location === 'grave' && ctx.canSpecialSummon()) await ctx.specialSummon(ctx.self);
       },

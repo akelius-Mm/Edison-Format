@@ -2004,7 +2004,7 @@ monster('Puppet King', {
         for (let i = log.length - 1; i >= 0 && log[i].batch === ev.batch; i--) if (log[i].type === 'drawn' && log[i].card === c) return false;
         return true;
       },
-      canActivate: (ctx) => ctx.canSpecialSummon() && ctx.canSummonCard(ctx.self),
+      canActivate: (ctx) => ctx.canSummonSelf() && ctx.canSummonCard(ctx.self),
       resolve: async (ctx) => {
         if (ctx.self.location !== 'hand' || !ctx.canSpecialSummon()) return;
         const r = await ctx.specialSummon(ctx.self, { pos: 'choose' });
@@ -2123,7 +2123,7 @@ monster(IDO, {
         const d = idoDestroyed.get(ctx.self);
         return ev.phase === 'standby' && !!d && d.moveId === ctx.self.moveId && ctx.turn === d.turn + 1;
       },
-      condition: (ctx) => ctx.canSpecialSummon(),
+      condition: (ctx) => ctx.canSummonSelf(),
       resolve: async (ctx) => {
         if (ctx.self.location !== 'grave' || !ctx.canSpecialSummon()) return;
         const r = await ctx.specialSummon(ctx.self, { pos: 'choose', proper: true });

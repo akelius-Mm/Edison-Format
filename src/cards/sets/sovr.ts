@@ -493,7 +493,7 @@ monster('Stardust Xiaolong', {
       label: 'Special Summon from GY',
       categories: ['specialSummon'],
       eventFilter: (ctx, ev) => evc(ev)?.name === 'Stardust Dragon' && ev.player === ctx.player,
-      condition: (ctx) => ctx.canSpecialSummon(),
+      condition: (ctx) => ctx.canSummonSelf(),
       resolve: async (ctx) => {
         if (ctx.self.location === 'grave') await ctx.specialSummon(ctx.self, { pos: 'atk' });
       },
@@ -2089,7 +2089,7 @@ monster('Yellow Baboon, Archer of the Forest', {
         const c = evc(ev);
         return !!c && ev.fromController === ctx.player && raceIs(c, 'Beast') && c.location === 'grave';
       },
-      canActivate: (ctx) => ctx.canSpecialSummon() && ctx.grave('me', (c) => raceIs(c, 'Beast')).length >= 2,
+      canActivate: (ctx) => ctx.canSummonSelf() && ctx.grave('me', (c) => raceIs(c, 'Beast')).length >= 2,
       activate: async (ctx) => {
         const cost = await ctx.select(ctx.grave('me', (c) => raceIs(c, 'Beast')), 2, 2, 'Banish 2 Beast-Type monsters from your GY.', 'cost');
         if (cost.length < 2) return false;

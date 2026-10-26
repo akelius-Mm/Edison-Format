@@ -306,7 +306,7 @@ monster('Gorz the Emissary of Darkness', {
       categories: ['specialSummon', 'recover'],
       eventFilter: (ctx, ev) =>
         ev.player === ctx.player && ev.reasonPlayer === ctx.opp && (ev.amount ?? 0) > 0 && ctx.field('me').length === 0,
-      condition: (ctx) => ctx.canSpecialSummon() && ctx.canSummonCard(ctx.self),
+      condition: (ctx) => ctx.canSummonSelf() && ctx.canSummonCard(ctx.self),
       resolve: async (ctx) => {
         if (ctx.self.location !== 'hand') return;
         const r = await ctx.specialSummon(ctx.self, { pos: 'choose' });
@@ -348,7 +348,7 @@ monster('Tragoedia', {
       label: 'Special Summon Tragoedia',
       categories: ['specialSummon'],
       eventFilter: (ctx, ev) => ev.player === ctx.player && (ev.amount ?? 0) > 0,
-      condition: (ctx) => ctx.canSpecialSummon() && ctx.canSummonCard(ctx.self),
+      condition: (ctx) => ctx.canSummonSelf() && ctx.canSummonCard(ctx.self),
       resolve: async (ctx) => {
         if (ctx.self.location === 'hand') await ctx.specialSummon(ctx.self, { pos: 'choose' });
       },
@@ -432,7 +432,7 @@ monster('Battle Fader', {
       categories: ['specialSummon', 'negateAttack'],
       eventFilter: (ctx, ev) => evC(ev)?.controller === ctx.opp && !ev.other,
       condition: (ctx) =>
-        !!ctx.battle && !ctx.battle.target && !ctx.battle.inDamageStep && !attackFinished(ctx.game) && ctx.canSpecialSummon() && ctx.canSummonCard(ctx.self),
+        !!ctx.battle && !ctx.battle.target && !ctx.battle.inDamageStep && !attackFinished(ctx.game) && ctx.canSummonSelf() && ctx.canSummonCard(ctx.self),
       resolve: async (ctx) => {
         if (ctx.self.location !== 'hand') return;
         const r = await ctx.specialSummon(ctx.self, { pos: 'def' });
@@ -1421,7 +1421,7 @@ monster('Totem Dragon', {
       categories: ['specialSummon'],
       eventFilter: (ctx, ev) => ev.phase === 'standby' && ctx.isMyTurn,
       condition: (ctx) =>
-        ctx.monsters('me').length === 0 && ctx.canSpecialSummon() && ctx.grave('me', (c) => c.isMonster).every((c) => c.data.race === 'Dragon'),
+        ctx.monsters('me').length === 0 && ctx.canSummonSelf() && ctx.grave('me', (c) => c.isMonster).every((c) => c.data.race === 'Dragon'),
       resolve: async (ctx) => {
         if (ctx.self.location !== 'grave' || ctx.monsters('me').length) return;
         const r = await ctx.specialSummon(ctx.self, { pos: 'atk' });

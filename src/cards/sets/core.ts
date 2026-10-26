@@ -595,7 +595,7 @@ monster('Treeborn Frog', {
       label: 'Revive',
       categories: ['specialSummon'],
       eventFilter: (ctx, ev) => ev.phase === 'standby' && ctx.isMyTurn,
-      condition: (ctx) => ctx.spellTraps('me').length === 0 && ctx.canSpecialSummon(),
+      condition: (ctx) => ctx.spellTraps('me').length === 0 && ctx.canSummonSelf(),
       resolve: async (ctx) => {
         if (ctx.self.location === 'grave' && ctx.spellTraps('me').length === 0) await ctx.specialSummon(ctx.self);
       },

@@ -384,7 +384,7 @@ monster('Level Eater', {
       range: ['grave'],
       label: 'Lower a Level, revive itself',
       categories: ['specialSummon'],
-      canActivate: (ctx) => ctx.canSpecialSummon() && ctx.faceUpMonsters('me', (c) => ctx.level(c) >= 5 && ctx.canTarget(c)).length > 0,
+      canActivate: (ctx) => ctx.canSummonSelf() && ctx.faceUpMonsters('me', (c) => ctx.level(c) >= 5 && ctx.canTarget(c)).length > 0,
       activate: async (ctx) => {
         await ctx.selectTargets(ctx.faceUpMonsters('me', (c) => ctx.level(c) >= 5), 1, 1, 'Target 1 Level 5 or higher monster you control.', 'target', {
           aiScore: (c) => (c.isExtra ? 300 : 0) + (c.isTuner ? -200 : 100) + (c.name === 'Quickdraw Synchron' ? 150 : 0),

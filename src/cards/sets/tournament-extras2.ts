@@ -134,7 +134,7 @@ function unionEffects(): EffectDef[] {
       label: 'Unequip and Special Summon',
       categories: ['specialSummon'],
       condition: (ctx) => !ctx.usedThisTurn(key(ctx)) && !!host(ctx),
-      canActivate: (ctx) => ctx.canSpecialSummon(),
+      canActivate: (ctx) => ctx.canSummonSelf(),
       activate: async (ctx) => {
         ctx.markUsed(key(ctx));
       },
@@ -344,9 +344,9 @@ once('Phantom Dragon', () =>
           const c = evc(ev);
           return !!c && c.controller === ctx.opp && c.location === 'mzone' && !ctx.battle?.inDamageStep;
         },
-        condition: (ctx) => ctx.canSpecialSummon(),
+        condition: (ctx) => ctx.canSummonSelf(),
         resolve: async (ctx) => {
-          if (ctx.self.location === 'hand' && ctx.canSpecialSummon()) await ctx.specialSummon(ctx.self);
+          if (ctx.self.location === 'hand' && ctx.canSummonSelf()) await ctx.specialSummon(ctx.self);
         },
       },
       {
@@ -428,7 +428,7 @@ once('Machina Fortress', () =>
         label: 'Discard Machines (Levels 8+): Special Summon',
         categories: ['specialSummon', 'discard'],
         canActivate: (ctx) => {
-          if (!ctx.canSpecialSummon()) return false;
+          if (!ctx.canSummonSelf()) return false;
           const lv = ctx.hand('me', (c) => c !== ctx.self && isMachine(c)).reduce((a, c) => a + (c.data.level ?? 0), 0);
           return lv >= 8;
         },
@@ -451,7 +451,7 @@ once('Machina Fortress', () =>
           await ctx.discard(picked, 'cost');
         },
         resolve: async (ctx) => {
-          if ((ctx.self.location === 'hand' || ctx.self.location === 'grave') && ctx.canSpecialSummon()) await ctx.specialSummon(ctx.self);
+          if ((ctx.self.location === 'hand' || ctx.self.location === 'grave') && ctx.canSummonSelf()) await ctx.specialSummon(ctx.self);
         },
         ai: {
           score: (ctx) => {

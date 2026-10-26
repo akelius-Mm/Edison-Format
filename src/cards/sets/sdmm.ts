@@ -106,7 +106,7 @@ monster('Heavy Mech Support Platform', {
       condition: (ctx) =>
         ctx.self.location === 'mzone'
           ? ctx.self.faceUp && ctx.freeSZones() > 0 && hmspHosts(ctx).some((c) => ctx.canTarget(c))
-          : ctx.self.location === 'szone' && !!ctx.self.flags.unionEquipped && ctx.equipTarget !== undefined && ctx.canSpecialSummon(),
+          : ctx.self.location === 'szone' && !!ctx.self.flags.unionEquipped && ctx.equipTarget !== undefined && ctx.canSummonSelf(),
       activate: async (ctx) => {
         ctx.data.mode = ctx.self.location === 'mzone' ? 'equip' : 'unequip';
         if (ctx.data.mode === 'equip')

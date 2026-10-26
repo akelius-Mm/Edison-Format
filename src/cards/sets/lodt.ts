@@ -2306,7 +2306,7 @@ M(TUALATIN, {
         tualRecord(ctx.game, ev);
         return ctx.self.location === 'hand' && tualatinReady(ctx.game, ctx.player, evc(ev));
       },
-      condition: (ctx) => ctx.canSpecialSummon(),
+      condition: (ctx) => ctx.canSummonSelf(),
       resolve: async (ctx) => {
         if (ctx.self.location !== 'hand') return;
         const r = await ctx.specialSummon(ctx.self, { pos: 'choose' });

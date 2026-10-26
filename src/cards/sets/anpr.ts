@@ -1278,7 +1278,7 @@ monster('Fishborg Blaster', {
       label: 'Discard: revive',
       categories: ['specialSummon'],
       canActivate: (ctx) =>
-        ctx.canSpecialSummon() && ctx.hand().length > 0 && ctx.faceUpMonsters('me', (c) => c.data.attribute === 'WATER' && ctx.level(c) <= 3).length > 0,
+        ctx.canSummonSelf() && ctx.hand().length > 0 && ctx.faceUpMonsters('me', (c) => c.data.attribute === 'WATER' && ctx.level(c) <= 3).length > 0,
       activate: async (ctx) => {
         await ctx.discardFromHand(1, undefined, 'cost', ctx.player, 'Discard 1 card.');
       },
