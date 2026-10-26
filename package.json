@@ -27,7 +27,6 @@
   },
   "devDependencies": {
     "@types/node": "^22.20.5",
-    "@types/three": "^0.160.0",
     "peer": "^1.0.2",
     "tsx": "^4.23.15",
     "typescript": "^5.9.3",
@@ -35,7 +34,6 @@
     "vite-plugin-singlefile": "^2.3.4"
   },
   "dependencies": {
-    "peerjs": "^1.5.5",
-    "three": "^0.160.0"
+    "peerjs": "^1.5.5"
   }
 }

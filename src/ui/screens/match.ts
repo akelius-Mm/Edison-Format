@@ -36,8 +36,6 @@ export interface MatchSetup {
   resume?: ResumeTag;
   /** Draft / Sealed: the Side Deck is the rest of the pool and siding is not one-for-one. */
   limited?: boolean;
-  /** Event decorations over the board (see DuelOptions.decor). */
-  decor?: 'regional';
 }
 
 export interface MatchOutcome {
@@ -55,7 +53,7 @@ export function setupFromSaved(d: SavedDuel): MatchSetup | null {
   const a = fromSavedSide(d.setup.sides[0]);
   const b = fromSavedSide(d.setup.sides[1]);
   if (!a || !b) return null;
-  return { sides: [a, b], bestOf: d.setup.bestOf, playmat: d.setup.playmat, caption: d.setup.caption, requireWinner: d.setup.requireWinner, stats: d.setup.stats, resume: d.tag, limited: d.setup.limited, decor: d.setup.decor };
+  return { sides: [a, b], bestOf: d.setup.bestOf, playmat: d.setup.playmat, caption: d.setup.caption, requireWinner: d.setup.requireWinner, stats: d.setup.stats, resume: d.tag, limited: d.setup.limited };
 }
 
 export async function runMatch(setup: MatchSetup): Promise<MatchOutcome> {
@@ -86,7 +84,6 @@ export async function runMatch(setup: MatchSetup): Promise<MatchOutcome> {
           requireWinner: setup.requireWinner,
           stats: setup.stats,
           ...(setup.limited ? { limited: true } : {}),
-          ...(setup.decor ? { decor: setup.decor } : {}),
         },
         games: [],
         game: null,
@@ -212,7 +209,6 @@ export async function runMatch(setup: MatchSetup): Promise<MatchOutcome> {
           seed: game.seed,
           skipFirstDraw: game.skipFirstDraw,
           caption: game.caption,
-          decor: setup.decor,
           allowSurrender: true,
           resumable: !!rec,
           replay: game.log.length ? game.log : undefined,

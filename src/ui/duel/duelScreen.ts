@@ -94,9 +94,6 @@ class DuelScreen implements HumanUI {
   private attackState: AttackState | null = null;
   private attackBar: ModalHandle | null = null;
   private unsubSettings: () => void;
-  /** Regional decorations over the board (strings of state flags), once loaded. */
-  private lights: { dispose(): void } | null = null;
-  private tornDown = false;
   private yieldCounter = 0;
   private speedBtns: HTMLButtonElement[] = [];
   private soundBtn!: HTMLButtonElement;
@@ -248,7 +245,6 @@ class DuelScreen implements HumanUI {
       },
     };
     let officialImages = s.officialImages;
-    if (opts.decor === 'regional') this.showLights();
     this.unsubSettings = onSettingsChange((st) => {
       if (st.officialImages !== officialImages) {
         officialImages = st.officialImages;
@@ -660,22 +656,8 @@ class DuelScreen implements HumanUI {
     return out;
   }
 
-  /** Regional duels: strings of state flags over the board (three.js loads only for these). */
-  private showLights() {
-    void import('./stringLights')
-      .then((m) => {
-        if (!this.tornDown) this.lights = m.mountStringLights(this.board.stage);
-      })
-      .catch(() => {
-        /* decorative: the duel carries on without them */
-      });
-  }
-
   private teardown() {
     setDuelDiag(null);
-    this.tornDown = true;
-    this.lights?.dispose();
-    this.lights = null;
     this.unsubSettings();
     this.dialogs.dispose();
     this.board.destroy();
