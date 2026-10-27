@@ -533,8 +533,12 @@ async function playOne(job: Job, doReplay: boolean): Promise<GameReport> {
     const c0 = cancels;
     const before = 'card' in a ? a.card.location : null;
     const moveId = 'card' in a ? a.card.moveId : 0;
+    // A Gemini Summon leaves the monster where it is (same zone, same moveId); it worked if the monster is now Gemini Summoned.
+    const gemini = a.type === 'proc' && !!a.act.effect.geminiSummon;
+    const wasGemini = gemini && !!a.card.flags.geminiSummoned;
     const r = await origPerform(player, a);
-    if ((a.type === 'summon' || a.type === 'set' || a.type === 'proc' || a.type === 'synchro') && !g.over && a.card.location === before && a.card.moveId === moveId)
+    const geminiDone = gemini && !wasGemini && !!a.card.flags.geminiSummoned;
+    if ((a.type === 'summon' || a.type === 'set' || a.type === 'proc' || a.type === 'synchro') && !g.over && a.card.location === before && a.card.moveId === moveId && !geminiDone)
       noteFizzle(`${a.type} of ${a.card.name}${a.type === 'proc' ? ` (${a.act.effect.label ?? 'proc'})` : ''}`, p0, c0);
     return r;
   };
