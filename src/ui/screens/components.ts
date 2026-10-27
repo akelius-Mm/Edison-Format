@@ -259,7 +259,17 @@ export function deckCarousel(
       ];
   const track = h('div', { class: 'dkc-track', role: 'radiogroup', 'aria-label': opts.label ?? 'Deck' });
   const boxes: { key: string | null; el: HTMLButtonElement }[] = [];
+  // "Hold a deck to see its list", plus a button for the selected deck's list
+  const viewBtn = h('button', { type: 'button', class: 'dkc-view', 'data-test': 'deck-view' }, icon('list'), h('span', null, ''));
+  const hint = h('p', { class: 'dkc-hint' }, h('span', null, 'Hold a deck to see its list'), viewBtn);
+  const syncView = () => {
+    const d = decks.find((x) => x.key === cur);
+    viewBtn.hidden = !d;
+    (viewBtn.lastChild as HTMLElement).textContent = d ? `View ${d.name}` : '';
+    viewBtn.onclick = () => d && openDecklist(d);
+  };
   const sync = () => {
+    syncView();
     for (const b of boxes) {
       const on = b.key === cur;
       b.el.classList.toggle('on', on);
@@ -296,6 +306,8 @@ export function deckCarousel(
   for (const d of sorted) {
     const n = deckCount(d.main);
     const ev = deckEvent(d);
+    let lpTimer = 0;
+    let longPressed = false;
     const tag = ev ? ev.place : d.ref.kind === 'custom' ? 'Custom' : d.tier === 1 ? 'Tier 1' : d.tier === 2 ? 'Tier 2' : 'Rogue';
     const line = d.problems.length
       ? h('span', { class: 'dkc-warn' }, icon('warn'), 'Not legal')
@@ -310,8 +322,27 @@ export function deckCarousel(
         role: 'radio',
         style: { '--deck': d.color },
         title: d.problems.length ? d.problems.join('\n') : ev ? `${ev.place} · ${ev.name}${ev.pilot ? ` · ${ev.pilot}` : ''}` : d.description,
-        onclick: () => pick(d.key, d),
+        onclick: (e: MouseEvent) => {
+          if (longPressed) {
+            longPressed = false;
+            e.preventDefault();
+            return;
+          }
+          pick(d.key, d);
+        },
         onkeydown: onKey,
+        onpointerdown: () => {
+          window.clearTimeout(lpTimer);
+          lpTimer = window.setTimeout(() => {
+            longPressed = true;
+            haptic('selection');
+            openDecklist(d);
+          }, 450);
+        },
+        onpointerup: () => window.clearTimeout(lpTimer),
+        onpointerleave: () => window.clearTimeout(lpTimer),
+        onpointercancel: () => window.clearTimeout(lpTimer),
+        oncontextmenu: (e: MouseEvent) => e.preventDefault(),
       },
       deckArt(d, 'dkc-art'),
       h('span', { class: 'dkc-shade' }),
@@ -338,7 +369,7 @@ export function deckCarousel(
     if (on && track.scrollWidth > track.clientWidth) track.scrollLeft = Math.max(0, on.offsetLeft - track.offsetLeft - 16);
   };
   requestAnimationFrame(reveal);
-  return Object.assign(h('div', { class: 'dkc' }, track), {
+  return Object.assign(h('div', { class: 'dkc' }, track, sorted.length ? hint : null), {
     setSelected: (key: string | null) => {
       cur = key;
       sync();
@@ -404,6 +435,53 @@ export function deckShelf(
       : null;
   show(tab);
   return h('div', { class: 'shelf' }, seg, holder);
+}
+
+/** The full list of a deck (Main by type, Extra, Side), tap a card to read it. */
+export function openDecklist(d: DeckInfo) {
+  const ev = deckEvent(d);
+  const total = (l: [string, number][]) => l.reduce((a, [, n]) => a + n, 0);
+  const kindOf = (name: string) => findCard(name)?.kind ?? 'monster';
+  const group = (title: string, list: [string, number][]) =>
+    list.length
+      ? h(
+          'section',
+          { class: 'dl-group' },
+          h('h3', null, title, h('span', { class: 'dl-count' }, String(total(list)))),
+          h(
+            'ul',
+            null,
+            list.map(([name, n]) => {
+              const c = findCard(name);
+              return h(
+                'li',
+                null,
+                h(
+                  'button',
+                  { type: 'button', class: 'dl-card', onclick: () => c && zoomCard(c as CardData) },
+                  h('span', { class: 'dl-n' }, `${n}×`),
+                  h('span', { class: 'dl-name' }, name),
+                ),
+              );
+            }),
+          ),
+        )
+      : null;
+  const main = d.main as [string, number][];
+  const body = h(
+    'div',
+    { class: 'dl' },
+    h('p', { class: 'dl-meta' }, ev ? `${ev.place} · ${ev.name}${ev.pilot ? ` · ${ev.pilot}` : ''}` : d.archetype),
+    d.description ? h('p', { class: 'dl-desc' }, d.description) : null,
+    d.problems.length ? h('p', { class: 'dl-warn' }, icon('warn'), d.problems.join(' ')) : null,
+    h('p', { class: 'dl-sizes' }, `Main ${total(main)} · Extra ${total(d.extra as [string, number][])} · Side ${total(d.side as [string, number][])}`),
+    group('Monsters', main.filter(([n]) => kindOf(n) === 'monster')),
+    group('Spells', main.filter(([n]) => kindOf(n) === 'spell')),
+    group('Traps', main.filter(([n]) => kindOf(n) === 'trap')),
+    group('Extra Deck', d.extra as [string, number][]),
+    group('Side Deck', d.side as [string, number][]),
+  );
+  modal(d.name, body, [{ label: 'Done', variant: 'primary' }], { wide: true });
 }
 
 // ------------------------------------------------------------------ avatars & personas
