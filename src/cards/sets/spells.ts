@@ -1725,11 +1725,16 @@ spell('Butterfly Dagger - Elma', 'equip', {
     equipActivate({ score: buffEquipScore(() => 300) }),
     { kind: 'continuous', mods: [{ q: 'atk', to: 'cards', filter: equipped, value: 300 }] },
     {
+      // 2010 rulings: an optional "when ... you can" effect, so it misses the timing if this card is destroyed in the
+      // middle of a Chain; and it does not return when it is sent to the GY because the equipped monster left the field.
+      // https://edisonrul.ing/cards/b/butterfly-dagger-elma.html
       kind: 'trigger',
       event: 'sentToGrave',
+      when: true,
       label: 'Return to hand',
       categories: ['toHand'],
-      eventFilter: (ctx, ev) => ev.card === ctx.self && (ev.from === 'szone' || ev.from === 'fzone') && (ev.reasons ?? []).includes('destroy'),
+      eventFilter: (ctx, ev) =>
+        ev.card === ctx.self && (ev.from === 'szone' || ev.from === 'fzone') && (ev.reasons ?? []).includes('destroy') && !(ev.reasons ?? []).includes('rule'),
       resolve: async (ctx) => {
         if (ctx.self.location === 'grave') await ctx.toHand(ctx.self);
       },
@@ -1946,7 +1951,7 @@ spell('Double Summon', 'normal', {
 });
 
 spell('Card of Safe Return', 'continuous', {
-  text: 'When a monster is Special Summoned from your GY to your field: You can draw 1 card.',
+  text: 'When a monster is Special Summoned from your Graveyard to the field, you can draw 1 card.',
   effects: [
     { kind: 'activate', categories: ['draw'], ai: { score: (ctx) => (ctx.grave('me', isMonster).length ? 28 : 15) } },
     {
@@ -1955,9 +1960,11 @@ spell('Card of Safe Return', 'continuous', {
       range: ['szone'],
       label: 'Draw',
       categories: ['draw'],
+      // 2010 ruling: it also draws when your opponent Special Summons a monster from your GY ("Monster Reborn").
+      // https://edisonrul.ing/cards/c/card-of-safe-return.html
       eventFilter: (ctx, ev) => {
         const c = ev.card as CardInstance;
-        return ev.from === 'grave' && !!c && c.owner === ctx.player && c.controller === ctx.player;
+        return ev.from === 'grave' && !!c && c.owner === ctx.player;
       },
       condition: activeST,
       resolve: async (ctx) => {

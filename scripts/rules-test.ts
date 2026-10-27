@@ -1948,6 +1948,7 @@ async function crmsTests() {
     const mine = place(0, T.brute, 'mzone');
     place(0, cardByName('Assault Mode Activate'), 'grave');
     const am = place(0, cardByName('Colossal Fighter/Assault Mode'), 'grave');
+    am.properlySummoned = true; // 2010 ruling: only one that was properly Special Summoned before (edisonrul.ing)
     const ar = place(0, cardByName('Assault Revival'), 'hand');
     await activateCard(g, 0, ar);
     eq(mine.location, 'grave', 'own monster destroyed');

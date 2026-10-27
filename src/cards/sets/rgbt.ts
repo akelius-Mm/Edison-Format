@@ -2471,7 +2471,10 @@ spell('Against the Wind', 'normal', {
       resolve: async (ctx) => {
         const t = ctx.validTargets((c) => c.location === 'grave')[0];
         if (!t) return;
-        await ctx.damage(ctx.player, t.data.atk ?? 0);
+        // 2010 ruling: if the damage becomes 0 (Des Wombat), the monster is not added to the hand.
+        // https://edisonrul.ing/cards/a/against-the-wind.html
+        const dealt = await ctx.damage(ctx.player, t.data.atk ?? 0);
+        if ((t.data.atk ?? 0) > 0 && !dealt) return;
         await ctx.toHand(t);
       },
       ai: {
@@ -3397,6 +3400,7 @@ trap('Automatic Laser', 'normal', {
 });
 
 /** Attack of the Cornered Rat: my Level 3 or lower Normal Monster in the current battle, and its opponent. */
+const ratUsed = new WeakMap<C, object>();
 function ratBattle(ctx: Ctx): { mine: C; theirs: C } | null {
   const b = ctx.battle;
   if (!b || !b.target || !b.inDamageStep || b.calc) return null;
@@ -3415,7 +3419,9 @@ trap('Attack of the Cornered Rat', 'continuous', {
       damageStep: true,
       label: 'Pay LP: reduce ATK',
       categories: ['atkChange'],
-      condition: (ctx) => stActive(ctx) && ctx.lp > 100 && !!ratBattle(ctx),
+      // 2010 ruling: it can only be activated once during the same Damage Step.
+      // https://edisonrul.ing/cards/a/attack-of-the-cornered-rat.html
+      condition: (ctx) => stActive(ctx) && ctx.lp > 100 && !!ratBattle(ctx) && ratUsed.get(ctx.self) !== ctx.battle,
       activate: async (ctx) => {
         const r = ratBattle(ctx)!;
         const cap = Math.min(ctx.atk(r.theirs), Math.floor((ctx.lp - 1) / 100) * 100, 5000);
@@ -3428,6 +3434,7 @@ trap('Attack of the Cornered Rat', 'continuous', {
         const i = await ctx.option('Pay how many Life Points?', Array.from({ length: steps }, (_, k) => `${(k + 1) * 100}`), (k) => -Math.abs((k + 1) * 100 - want));
         const amount = (i + 1) * 100;
         await ctx.payLp(amount);
+        ratUsed.set(ctx.self, ctx.battle!);
         ctx.data.theirs = r.theirs;
         ctx.data.amount = amount;
       },
@@ -3478,24 +3485,44 @@ trap('Bone Temple Block', 'normal', {
   text: 'Discard 1 card. Special Summon 1 Level 4 or lower monster from your opponent\'s Graveyard to your side of the field, and your opponent Special Summons 1 Level 4 or lower monster from your Graveyard to your opponent\'s side of the field. Those monsters are destroyed during the End Phase of the next turn.',
   effects: [
     {
+      // 2010 rulings: discarding is part of the resolution (not a cost), the effects happen in sequence, and the
+      // monsters chosen by each player (the turn player first) are targeted. https://edisonrul.ing/cards/b/bone-temple-block.html
       kind: 'activate',
       categories: ['specialSummon'],
-      canActivate: (ctx) => ctx.hand().length > 0 && ctx.canSpecialSummon() && boneOppCands(ctx).length > 0,
+      canActivate: (ctx) => ctx.hand().length > 0 && ctx.canSpecialSummon() && boneOppCands(ctx).some((c) => ctx.canTarget(c)),
       activate: async (ctx) => {
-        await ctx.discardFromHand(1, undefined, 'cost');
+        const theirs = ctx.grave('me', (c) => c.isMonster && lvl(c) <= 4 && ctx.canSummonCard(c, 'opp') && ctx.canTarget(c));
+        const oppCan = theirs.length > 0 && ctx.game.freeMZones(ctx.opp) > 0 && !ctx.game.queryPlayer(ctx.opp, 'cannotSpecialSummon');
+        const pickMine = async () => {
+          const [c] = await ctx.selectTargets(boneOppCands(ctx), 1, 1, "Target 1 Level 4 or lower monster in your opponent's GY.", 'specialSummon', { aiScore: summonScore });
+          ctx.data.mine = c;
+        };
+        const pickTheirs = async () => {
+          if (!oppCan) return;
+          const [c] = await ctx.select(theirs, 1, 1, "Target 1 Level 4 or lower monster in your opponent's GY.", 'specialSummon', { player: ctx.opp, aiScore: summonScore });
+          if (c) ctx.addTargets([c]);
+          ctx.data.theirs = c;
+        };
+        if (ctx.game.turnPlayer === ctx.player) {
+          await pickMine();
+          await pickTheirs();
+        } else {
+          await pickTheirs();
+          await pickMine();
+        }
       },
       resolve: async (ctx) => {
         const g = ctx.game;
+        if (!ctx.hand().length) return;
+        const d = await ctx.discardFromHand(1, undefined, 'effect');
+        if (!d.length) return;
+        const valid = ctx.validTargets((c) => c.location === 'grave');
         const summoned: C[] = [];
-        const mine = boneOppCands(ctx);
-        if (mine.length && ctx.canSpecialSummon()) {
-          const [c] = await ctx.select(mine, 1, 1, "Special Summon 1 Level 4 or lower monster from your opponent's GY.", 'specialSummon', { aiScore: summonScore });
-          if (c) summoned.push(...(await ctx.specialSummon(c, { pos: aiPos(ctx, c) })));
-        }
-        const theirs = ctx.grave('me', (c) => c.isMonster && lvl(c) <= 4 && ctx.canSummonCard(c, 'opp'));
-        if (theirs.length && g.freeMZones(ctx.opp) > 0 && !g.queryPlayer(ctx.opp, 'cannotSpecialSummon')) {
-          const [c] = await ctx.select(theirs, 1, 1, "Special Summon 1 Level 4 or lower monster from your opponent's GY.", 'specialSummon', { player: ctx.opp, aiScore: summonScore });
-          if (c) summoned.push(...(await g.specialSummon([c], ctx.opp, { pos: 'choose', reasonCard: ctx.self })));
+        const mine = ctx.data.mine as C | undefined;
+        if (mine && valid.includes(mine) && ctx.canSpecialSummon() && ctx.canSummonCard(mine)) summoned.push(...(await ctx.specialSummon(mine, { pos: aiPos(ctx, mine) })));
+        const theirs = ctx.data.theirs as C | undefined;
+        if (theirs && valid.includes(theirs) && g.freeMZones(ctx.opp) > 0 && !g.queryPlayer(ctx.opp, 'cannotSpecialSummon')) {
+          summoned.push(...(await g.specialSummon([theirs], ctx.opp, { pos: 'choose', reasonCard: ctx.self })));
         }
         const marks = summoned.map((c) => ({ c, mid: c.moveId }));
         ctx.later(

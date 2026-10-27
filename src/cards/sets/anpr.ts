@@ -202,15 +202,19 @@ export function ensureAnprPatches(g: Game) {
   };
 
   const origCanNS = g.canNormalSummon.bind(g);
+  const origNormalSummon = g.normalSummon.bind(g);
+  anyG.normalSummon = async (p: PlayerId, card: C, set: boolean) => {
+    labGrant(g, p);
+    return origNormalSummon(p, card, set);
+  };
   anyG.canNormalSummon = (p: PlayerId, card: C, set = false) => {
+    // Brain Research Lab: its extra Psychic Normal Summon is granted as soon as the turn player's Normal Summons are looked at.
+    labGrant(g, p);
     if (!origCanNS(p, card, set)) return false;
     if (!set && isEI(card) && anyFaceUpEI(g)) return false;
     // AI guard (not a rule): the AI does not Summon an Earthbound Immortal that would destroy itself at once.
     if (isEI(card) && !faceUpFieldSpell(g) && !g.controllers[p].isHuman) return false;
     if (!set && card.name === 'Jester Confit' && g.faceUpMonsters(p).some((c) => c.name === 'Jester Confit')) return false;
-    const lab = g.turnData[`anpr:brl:${p}`];
-    // Brain Research Lab's extra Normal Summon: a Psychic-Type monster, face-up (not a Set).
-    if (lab?.pending && g.players[p].normalSummonsLeft <= 1 && (set || card.data.race !== 'Psychic')) return false;
     return true;
   };
 
@@ -1189,12 +1193,14 @@ monster('Armed Sea Hunter', {
   atk: 1800,
   def: 400,
   aiValue: 200,
-  text: 'After damage calculation, if this card battles an Effect Monster: Negate the effects of that monster (including in the Graveyard). You must control another face-up WATER monster to activate and to resolve this effect. If this card would be destroyed, you can destroy 1 face-up Level 3 or lower WATER monster you control instead.',
+  text: 'If you control another face-up WATER monster, negate the effects of the monster that battled with this card, after damage calculation. If this card would be destroyed, you can destroy 1 face-up Level 3 or lower WATER monster you control instead.',
   effects: [
     {
+      // 2010 rulings: it activates after damage calculation (before battle-destroyed monsters leave the field), even
+      // if this card is destroyed by that battle; it does not target. https://edisonrul.ing/cards/a/armed-sea-hunter.html
       // APPROX: the negation only applies while that monster stays on the field (no GY negation hook).
       kind: 'trigger',
-      event: 'damageStepEnd',
+      event: 'damageCalculated',
       mandatory: true,
       label: 'Negate battled monster',
       categories: ['negate'],
@@ -1221,7 +1227,11 @@ monster('Armed Sea Hunter', {
       label: 'Destroy a WATER instead',
       replaceDestroy: async (ctx, cards) => {
         if (!cards.includes(ctx.self)) return [];
-        const subs = ctx.faceUpMonsters('me', (c) => c !== ctx.self && !cards.includes(c) && c.data.attribute === 'WATER' && ctx.level(c) <= 3);
+        // 2010 ruling: a monster that cannot be destroyed ("Aegis of the Ocean Dragon Lord") cannot be the substitute.
+        const subs = ctx.faceUpMonsters(
+          'me',
+          (c) => c !== ctx.self && !cards.includes(c) && c.data.attribute === 'WATER' && ctx.level(c) <= 3 && !ctx.game.queryCard(c, 'indestructibleEffect'),
+        );
         if (!subs.length) return [];
         if (!(await ctx.confirm(`Destroy 1 Level 3 or lower WATER monster instead of ${ctx.self.name}?`))) return [];
         const [s] = await ctx.select(subs, 1, 1, 'Destroy 1 face-up Level 3 or lower WATER monster you control instead.', 'cost');
@@ -1908,6 +1918,9 @@ monster('Card Blocker', {
         const t = evo(ev);
         return !!t && t !== ctx.self && t.controller === ctx.player && t.faceUp && faceUpOn(ctx.self);
       },
+      // 2010 ruling: with several "Card Blocker", only 1 of them can change the attack target for that attack.
+      // https://edisonrul.ing/cards/c/card-blocker.html
+      canActivate: (ctx) => !ctx.game.chain.some((l) => l.card.name === 'Card Blocker' && l.effect.label === 'Become the attack target'),
       resolve: async (ctx) => {
         const b = ctx.battle;
         if (!b || b.negated || !faceUpOn(ctx.self)) return;
@@ -1933,16 +1946,18 @@ monster('Card Blocker', {
       categories: ['mill', 'atkChange'],
       eventFilter: (ctx, ev) => evo(ev) === ctx.self && faceUpOn(ctx.self) && evc(ev)?.controller === ctx.opp,
       canActivate: (ctx) => ctx.deck().length > 1,
+      // 2010 ruling: sending up to 3 cards from the Deck to the Graveyard is a cost. https://edisonrul.ing/cards/c/card-blocker.html
       activate: async (ctx) => {
         const max = Math.min(3, ctx.deck().length - 1);
         const a = ctx.battle ? ctx.atk(ctx.battle.attacker) : 0;
         const need = Math.max(1, Math.min(max, Math.ceil((a + 1 - ctx.def(ctx.self)) / 500)));
         const opts = Array.from({ length: max }, (_, i) => `${i + 1}`);
-        ctx.data.n = (await ctx.option('Send how many cards from the top of your Deck?', opts, (i) => (i + 1 === need ? 10 : -i))) + 1;
+        const n = (await ctx.option('Send how many cards from the top of your Deck?', opts, (i) => (i + 1 === need ? 10 : -i))) + 1;
+        const sent = await ctx.game.mill(ctx.player, n, 'cost', ctx.self);
+        ctx.data.n = sent.filter((c) => c.location === 'grave').length;
       },
       resolve: async (ctx) => {
-        const r = await ctx.mill(ctx.data.n);
-        if (faceUpOn(ctx.self) && r.length) ctx.addTempMod(ctx.self, 'def', 500 * r.length, 'turn');
+        if (faceUpOn(ctx.self) && ctx.data.n) ctx.addTempMod(ctx.self, 'def', 500 * ctx.data.n, 'turn');
       },
       ai: {
         score: (ctx) => {
@@ -2274,8 +2289,10 @@ monster('Arcana Knight Joker', {
   },
   effects: [
     {
+      // 2010 ruling: it can be activated during the Damage Step. https://edisonrul.ing/cards/a/arcana-knight-joker.html
       kind: 'quick',
       opt: true,
+      damageStep: true,
       label: 'Discard: negate',
       categories: ['negate'],
       condition: (ctx) => {
@@ -2436,13 +2453,17 @@ spell('Ancient Forest', 'field', {
       },
     },
     {
-      // Bookkeeping: mark each monster that attacks while this card is face-up (never activates).
+      // Bookkeeping: mark each monster that attacks while this card is face-up (never activates). 2010 rulings: a
+      // monster that attacks while this card is negated is still destroyed if the negation is gone by the end of the
+      // Battle Phase; one whose attack was negated ("Magic Cylinder") is not. https://edisonrul.ing/cards/a/ancient-forest.html
       kind: 'trigger',
-      event: 'attackDeclared',
+      event: ['attackDeclared', 'attackNegated'],
       range: ['fzone'],
       eventFilter: (ctx, ev) => {
         const a = evc(ev);
-        if (a && stActive(ctx)) a.flags.anprForestTurn = ctx.game.turn;
+        if (!a || !ctx.self.faceUp || !ctx.self.activeOnField) return false;
+        if (ev.type === 'attackDeclared') a.flags.anprForestTurn = ctx.game.turn;
+        else if (a.flags.anprForestTurn === ctx.game.turn) delete a.flags.anprForestTurn;
         return false;
       },
     },
@@ -2732,40 +2753,44 @@ const waterHazardOk = (c: C) => c.isMonster && !c.isExtra && c.data.attribute ==
 
 /** Brain Research Lab: counters survive the move that resets them, so its leave-field damage can read them. */
 const labCounters = new WeakMap<C, { moveId: number; n: number }>();
+interface LabGrant {
+  lab: C;
+  entry: { allow: (card: C, set: boolean) => boolean };
+  used: boolean;
+}
+const labLive = (g: Game, lab: C, p: PlayerId) =>
+  lab.location === 'fzone' && lab.faceUp && lab.activeOnField && lab.controller === p && !g.isNegated(lab);
+/** Brain Research Lab: once per turn, the turn player with a face-up Lab gets 1 extra Normal Summon for a Psychic-Type monster. */
+function labGrant(g: Game, p: PlayerId) {
+  if (g.turnPlayer !== p || g.turnData[`anpr:brl:${p}`]) return;
+  const lab = g.players[p].fzone;
+  if (!lab || lab.name !== 'Brain Research Lab' || !labLive(g, lab, p)) return;
+  const entry = { allow: (card: C, set: boolean) => !set && card.data.race === 'Psychic' && labLive(g, lab, p) };
+  const ps = g.players[p];
+  ps.normalSummonsLeft += 1;
+  (ps.restrictedSummons ??= []).push(entry);
+  g.turnData[`anpr:brl:${p}`] = { lab, entry, used: false } satisfies LabGrant;
+}
 spell('Brain Research Lab', 'field', {
   text: 'Once per turn, you can Normal Summon 1 Psychic-Type monster in addition to your Normal Summon or Set. If successful, place 1 Psychic Counter on this card. You can also place 1 Psychic Counter on this card instead of paying Life Points to activate any Psychic-Type monster\'s effect that you control. When this card is removed from the field, the controller of this card takes 1000 damage for each Psychic Counter on it.',
   effects: [
     PATCH_LISTENER,
     { kind: 'activate', categories: ['lockdown'], ai: { score: (ctx) => (ctx.hand('me', isRace('Psychic')).length >= 2 ? 25 : 0) } },
     {
-      // APPROX: the extra Normal Summon is offered as an ignition effect once the regular one is used.
-      // The "Psychic Counter instead of paying LP" option is not implemented.
-      kind: 'ignition',
-      opt: true,
-      label: 'Extra Psychic Normal Summon',
-      categories: ['specialSummon'],
-      condition: (ctx) => ctx.game.players[ctx.player].normalSummonsLeft === 0 && ctx.hand('me', isRace('Psychic')).length > 0,
-      resolve: async (ctx) => {
-        if (!stActive(ctx)) return;
-        ensureAnprPatches(ctx.game);
-        ctx.gainNormalSummon(1);
-        ctx.game.turnData[`anpr:brl:${ctx.player}`] = { pending: true, lab: ctx.self };
-      },
-      ai: {
-        score: (ctx) =>
-          ctx.hand('me', (c) => isRace('Psychic')(c) && (lvl(c) <= 4 || ctx.monsters('me').length >= (lvl(c) >= 7 ? 2 : 1))).length && ctx.freeMZones() > 0 ? 45 : 0,
-      },
-    },
-    {
-      // Bookkeeping: count the Psychic Counter when the extra Normal Summon is used (never activates).
+      // 2010 rulings: the extra Normal Summon is a Continuous-like effect (no Chain, nothing to activate). It can be used
+      // before or after your regular Normal Summon/Set, only to Normal (Tribute) Summon a Psychic-Type monster (not to
+      // Set), and only once per turn even with 2 copies (the grant is per player, see labGrant). The Psychic Counter is
+      // placed when it is used. https://edisonrul.ing/cards/b/brain-research-lab.html
+      // APPROX: the "Psychic Counter instead of paying Life Points" option is not implemented.
+      // Bookkeeping (never activates): place the Psychic Counter when the extra Normal Summon was used.
       kind: 'trigger',
       event: 'normalSummoned',
       range: ['fzone'],
       eventFilter: (ctx, ev) => {
-        const lab = ctx.game.turnData[`anpr:brl:${ctx.player}`];
+        const grant = ctx.game.turnData[`anpr:brl:${ctx.player}`] as LabGrant | undefined;
         const c = evc(ev);
-        if (lab?.pending && lab.lab === ctx.self && c && ev.player === ctx.player && c.data.race === 'Psychic') {
-          lab.pending = false;
+        if (grant && !grant.used && grant.lab === ctx.self && c && ev.player === ctx.player && !(ctx.game.players[ctx.player].restrictedSummons ?? []).includes(grant.entry)) {
+          grant.used = true;
           ctx.self.counters.psychic = (ctx.self.counters.psychic ?? 0) + 1;
           labCounters.set(ctx.self, { moveId: ctx.self.moveId, n: ctx.self.counters.psychic });
           ctx.game.log(`A Psychic Counter is placed on ${ctx.self.name}.`, 'action', ctx.player);
@@ -3272,7 +3297,10 @@ trap('Battle Teleportation', 'normal', {
     {
       kind: 'activate',
       categories: ['atkChange', 'control'],
-      condition: (ctx) => ctx.isMyTurn && (ctx.phase === 'main1' || ctx.phase === 'battle') && !ctx.battle,
+      // 2010 rulings: it can be activated any time from your Draw Phase to the end of your Battle Phase (not if you cannot
+      // conduct a Battle Phase); if your opponent has no open Monster Card Zone, the monster cannot move and is
+      // destroyed. https://edisonrul.ing/cards/b/battle-teleportation.html
+      condition: (ctx) => ctx.isMyTurn && ctx.game.turn > 1 && ['draw', 'standby', 'main1', 'battle'].includes(ctx.phase),
       canActivate: (ctx) => {
         const ps = ctx.faceUpMonsters('me', isRace('Psychic'));
         return ps.length === 1 && ctx.canTarget(ps[0]);
@@ -3305,7 +3333,9 @@ trap('Battle Teleportation', 'normal', {
       resolve: async (ctx) => {
         for (const e of teleported(ctx)) {
           delete ctx.game.turnData[`anpr:teleport:${e.card.uid}`];
-          if (e.card.location === 'mzone' && e.card.moveId === e.moveId && e.card.controller !== e.to) await ctx.game.takeControl(e.card, e.to, false);
+          if (e.card.location !== 'mzone' || e.card.moveId !== e.moveId || e.card.controller === e.to) continue;
+          if (ctx.game.freeMZones(e.to) <= 0) await ctx.game.destroy([e.card], 'effect', ctx.player, ctx.self);
+          else await ctx.game.takeControl(e.card, e.to, false);
         }
       },
     },
@@ -3404,7 +3434,9 @@ trap('Battle of the Elements', 'normal', {
     {
       kind: 'activate',
       categories: ['toDeck', 'destroyMulti'],
-      condition: (ctx) => ctx.monsters('both').length > 0 && ctx.monsters('both').every((c) => c.faceUp),
+      // 2010 ruling: it can only be activated with at least 1 face-up monster on each side of the field.
+      // https://edisonrul.ing/cards/b/battle-of-the-elements.html
+      condition: (ctx) => ctx.monsters('me').length > 0 && ctx.monsters('opp').length > 0 && ctx.monsters('both').every((c) => c.faceUp),
       canActivate: (ctx) => [ctx.player, ctx.opp].some((p) => attrGroups(ctx.game, p).size > 1),
       resolve: async (ctx) => {
         if (!ctx.monsters('both').every((c) => c.faceUp)) return;
@@ -3442,18 +3474,18 @@ function attrGroups(g: Game, p: PlayerId) {
 }
 
 trap('Aegis of the Ocean Dragon Lord', 'normal', {
-  text: 'Until the End Phase, face-up Level 3 or lower WATER monsters you control cannot be destroyed by battle or by card effects.',
+  text: 'Until the End Phase of this turn, face-up Level 3 or lower WATER monsters you control cannot be destroyed by battle or by card effects.',
   effects: [
     {
+      // 2010 rulings: it can be activated with no such monster, and it also covers the ones Summoned after it resolved
+      // (a lingering effect for the rest of the turn). https://edisonrul.ing/cards/a/aegis-of-the-ocean-dragon-lord.html
       kind: 'activate',
       damageStep: true,
       categories: ['protect'],
-      canActivate: (ctx) => ctx.faceUpMonsters('me', aegisOk(ctx)).length > 0,
       resolve: async (ctx) => {
-        for (const c of ctx.faceUpMonsters('me', aegisOk(ctx))) {
-          ctx.addTempMod(c, 'indestructibleBattle', true, 'turn');
-          ctx.addTempMod(c, 'indestructibleEffect', true, 'turn');
-        }
+        const list = ((ctx.game.turnData.anprAegis ??= []) as { uid: number; p: PlayerId }[]);
+        list.push({ uid: ctx.self.uid, p: ctx.player });
+        ctx.game.update();
       },
       ai: {
         score: (ctx) => {
@@ -3468,6 +3500,17 @@ trap('Aegis of the Ocean Dragon Lord', 'normal', {
           return 0;
         },
       },
+    },
+    {
+      kind: 'continuous',
+      range: ALL_LOCS,
+      active: (ctx) => ((ctx.game.turnData.anprAegis ?? []) as { uid: number }[]).some((e) => e.uid === ctx.self.uid),
+      mods: (['indestructibleBattle', 'indestructibleEffect'] as const).map((q) => ({
+        q,
+        to: 'cards' as const,
+        filter: (ctx: Ctx, c: C) =>
+          faceUpOn(c) && aegisOk(ctx)(c) && ((ctx.game.turnData.anprAegis ?? []) as { uid: number; p: PlayerId }[]).some((e) => e.uid === ctx.self.uid && e.p === c.controller),
+      })),
     },
   ],
 });

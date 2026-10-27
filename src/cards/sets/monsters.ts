@@ -4,6 +4,7 @@
 import { monster, normal, token } from '../define';
 import { attr, bestTarget, cardValue, destroyTargets, flip, selfFieldToGrave, selfDestroysByBattle } from '../helpers';
 import type { CardInstance, EffectDef } from '../../engine/card';
+import { faceUpFlag } from '../../engine/card';
 import type { Ctx } from '../../engine/ctx';
 import type { ChainLink, Game } from '../../engine/game';
 import type { Attribute, GameEvent, PlayerId, Race } from '../../engine/types';
@@ -1446,6 +1447,7 @@ monster('Totem Dragon', {
 
 // ------------------------------------------------------------ Forbidden effect monsters
 
+faceUpFlag('blsEnvoyTurn');
 monster('Black Luster Soldier - Envoy of the Beginning', {
   attribute: 'LIGHT',
   race: 'Warrior',
@@ -1459,14 +1461,17 @@ monster('Black Luster Soldier - Envoy of the Beginning', {
   effects: [
     envoyProc(),
     {
+      // 2010 rulings: "once per turn" is per card: if this card is banished and returned, Special Summoned again, or
+      // flipped face-down and face-up again, it can use an effect again that turn.
+      // https://edisonrul.ing/cards/b/black-luster-soldier-envoy-of-the-beginning.html
       kind: 'ignition',
-      opt: 'bls-envoy',
       label: 'Banish 1 monster',
       categories: ['banish'],
-      condition: (ctx) => ctx.self.attacksThisTurn === 0,
+      condition: (ctx) => ctx.self.attacksThisTurn === 0 && ctx.self.flags.blsEnvoyTurn !== ctx.turn,
       canActivate: (ctx) => ctx.monsters('both', (c) => c !== ctx.self && ctx.canTarget(c)).length > 0,
       activate: async (ctx) => {
         await ctx.selectTargets(ctx.monsters('both', (c) => c !== ctx.self), 1, 1, 'Target 1 monster to banish.', 'banish');
+        ctx.self.flags.blsEnvoyTurn = ctx.turn;
         ctx.self.flags.cannotAttackTurn = ctx.turn;
       },
       resolve: async (ctx) => {
@@ -1487,10 +1492,12 @@ monster('Black Luster Soldier - Envoy of the Beginning', {
     {
       kind: 'trigger',
       event: 'battleDestroyed',
-      opt: 'bls-envoy',
       label: 'Attack again',
       categories: ['atkChange'],
-      eventFilter: (ctx, ev) => selfDestroysByBattle(ctx, ev) && ctx.battle?.attacker === ctx.self && ctx.self.attacksThisTurn === 1,
+      eventFilter: (ctx, ev) => selfDestroysByBattle(ctx, ev) && ctx.battle?.attacker === ctx.self && ctx.self.attacksThisTurn === 1 && ctx.self.flags.blsEnvoyTurn !== ctx.turn,
+      activate: async (ctx) => {
+        ctx.self.flags.blsEnvoyTurn = ctx.turn;
+      },
       resolve: async (ctx) => {
         if (ctx.self.location === 'mzone' && ctx.self.faceUp) ctx.addTempMod(ctx.self, 'extraAttacks', 1, 'turn');
       },

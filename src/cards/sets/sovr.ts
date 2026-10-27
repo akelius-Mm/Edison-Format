@@ -26,7 +26,6 @@ const lvl = (c: C) => c.data.level ?? 0;
 const stActive = (ctx: Ctx) => ctx.self.onField && ctx.self.faceUp && ctx.self.activeOnField && !ctx.game.isNegated(ctx.self);
 /** Turn offset of this player's next turn (for ctx.later). */
 const nextOwnTurn = (ctx: Ctx) => (ctx.isMyTurn ? 2 : 1);
-const nextOppTurnEnd = (ctx: Ctx) => (ctx.isMyTurn ? 1 : 0);
 const mainPhase = (ctx: Ctx) => ctx.phase === 'main1' || ctx.phase === 'main2';
 
 /** Tribute cards as a cost (not for a Tribute Summon). */
@@ -2595,17 +2594,17 @@ spell('Attack Pheromones', 'continuous', {
           raceIs(a, 'Reptile') &&
           ctx.game.battle?.calc?.targetPos === 'def' &&
           t.location === 'mzone' &&
-          t.pos === 'def'
+          t.pos === 'def' &&
+          ctx.canTarget(t)
         );
       },
+      // 2010 ruling: the effect targets the Defense Position monster. https://edisonrul.ing/cards/a/attack-pheromones.html
       activate: async (ctx) => {
-        const t = evo(ctx.event!)!;
-        ctx.data.t = t;
-        ctx.data.mid = t.moveId;
+        ctx.addTargets([evo(ctx.event!)!]);
       },
       resolve: async (ctx) => {
-        const t = ctx.data.t as C;
-        if (t && t.location === 'mzone' && t.moveId === ctx.data.mid && t.pos === 'def') await ctx.changePos(t, 'atk', true);
+        const [t] = ctx.validTargets((c) => c.location === 'mzone' && c.pos === 'def');
+        if (t) await ctx.changePos(t, 'atk', true);
       },
     },
   ],
@@ -3828,12 +3827,15 @@ trap('Seal of Wickedness', 'continuous', {
 });
 
 trap('Appointer of the Red Lotus', 'normal', {
-  text: 'Pay 2000 LP and reveal your entire hand; look at your opponent\'s hand and banish 1 card from their hand, until your opponent\'s next End Phase.',
+  text: 'Pay 2000 Life Points and reveal all cards in your hand. Look at your opponent\'s hand and select 1 card. Remove that card from play until the End Phase of your opponent\'s next turn.',
   effects: [
     {
+      // 2010 rulings: revealing your hand is part of the cost (minimum 1 card), and the card comes back during the End
+      // Phase of your opponent's NEXT turn, even if this card was activated during their turn.
+      // https://edisonrul.ing/cards/a/appointer-of-the-red-lotus.html
       kind: 'activate',
       categories: ['banish'],
-      canActivate: (ctx) => ctx.lp > 2000 && ctx.hand('opp').length > 0,
+      canActivate: (ctx) => ctx.lp > 2000 && ctx.hand('opp').length > 0 && ctx.hand('me', (c) => c !== ctx.self).length > 0,
       activate: async (ctx) => {
         await ctx.payLp(2000);
         for (const c of ctx.hand('me')) c.revealedUntil = ctx.turn;
@@ -3853,7 +3855,7 @@ trap('Appointer of the Red Lotus', 'normal', {
           async () => {
             if (c.location === 'banished' && c.moveId === mid) await ctx.game.toHand([c], 'effect', ctx.player, ctx.self);
           },
-          nextOppTurnEnd(ctx),
+          ctx.isMyTurn ? 1 : 2,
         );
       },
       ai: { score: (ctx) => (ctx.lp >= 5000 && ctx.hand('opp').length >= 2 && !ctx.isMyTurn && ctx.phase === 'standby' ? 35 : 0) },
