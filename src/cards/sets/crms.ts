@@ -647,19 +647,20 @@ monster('Assault Mercenary', {
       opt: true,
       label: 'Destroy 1 Spell/Trap',
       categories: ['destroy'],
-      canActivate: (ctx) => ctx.cards('me', ['hand', 'grave'], (c) => c.name === AMA).length > 0 && ctx.spellTraps('opp').length > 0,
+      // 2010 rulings: returning "Assault Mode Activate" is the cost, and the Spell/Trap is targeted.
+      // https://edisonrul.ing/cards/a/assault-mercenary.html
+      canActivate: (ctx) => ctx.cards('me', ['hand', 'grave'], (c) => c.name === AMA).length > 0 && ctx.spellTraps('opp', (c) => ctx.canTarget(c)).length > 0,
       activate: async (ctx) => {
         const sel = await ctx.select(ctx.cards('me', ['hand', 'grave'], (c) => c.name === AMA), 1, 1, 'Return 1 "Assault Mode Activate" to the Deck.', 'cost', {
           aiScore: (c) => (c.location === 'grave' ? 10 : 0),
         });
         if (!sel.length) return false;
         await ctx.toDeck(sel, 'shuffle', 'cost');
+        await ctx.selectTargets(ctx.spellTraps('opp'), 1, 1, 'Target 1 Spell or Trap Card your opponent controls.', 'destroy');
       },
       resolve: async (ctx) => {
-        const st = ctx.spellTraps('opp');
-        if (!st.length) return;
-        const sel = await ctx.select(st, 1, 1, 'Destroy 1 Spell or Trap Card your opponent controls.', 'destroy');
-        if (sel.length) await ctx.destroy(sel);
+        const t = ctx.validTargets((c) => c.onField);
+        if (t.length) await ctx.destroy(t);
       },
       ai: { score: (ctx) => (ctx.cards('me', ['grave'], (c) => c.name === AMA).length || !amaSources(ctx).length ? 50 : 20) },
     },
@@ -761,26 +762,35 @@ spell('Assault Teleport', 'normal', {
   ],
 });
 
+/** Assault Revival: an "/Assault Mode" monster in the GY that was properly Special Summoned before. */
+const revivable = (c: C) => isAssault(c) && c.properlySummoned;
 spell('Assault Revival', 'quickplay', {
   text: 'Remove from play 1 "Assault Mode Activate" from your Graveyard. Destroy all monsters you control and Special Summon 1 "/Assault Mode" monster from your Graveyard, ignoring its Summoning conditions. Its effect(s) is negated, and it cannot be Tributed. If it is removed from the field, remove it from play.',
   effects: [
     {
       kind: 'activate',
       categories: ['specialSummon'],
-      canActivate: (ctx) => ctx.grave('me', (c) => c.name === AMA).length > 0 && ctx.grave('me', isAssault).length > 0 && !ctx.game.queryPlayer(ctx.player, 'cannotSpecialSummon'),
+      // 2010 rulings: it targets an "/Assault Mode" monster in your GY that was properly Special Summoned before, and
+      // Summons it only if at least 1 monster you control was destroyed and none of them stayed on the field.
+      // https://edisonrul.ing/cards/a/assault-revival.html
+      canActivate: (ctx) =>
+        ctx.grave('me', (c) => c.name === AMA).length > 0 && ctx.grave('me', revivable).some((c) => ctx.canTarget(c)) && !ctx.game.queryPlayer(ctx.player, 'cannotSpecialSummon'),
       activate: async (ctx) => {
         const sel = await ctx.select(ctx.grave('me', (c) => c.name === AMA), 1, 1, 'Remove from play 1 "Assault Mode Activate" from your GY.', 'cost');
         if (!sel.length) return false;
         await ctx.banish(sel, 'cost');
+        await ctx.selectTargets(ctx.grave('me', revivable), 1, 1, 'Target 1 "/Assault Mode" monster in your GY.', 'specialSummon', {
+          aiScore: (c) => c.data.atk ?? 0,
+        });
       },
       resolve: async (ctx) => {
         const mine = ctx.monsters('me');
-        if (mine.length) await ctx.destroy(mine);
-        const cands = ctx.grave('me', isAssault);
-        if (!cands.length || !ctx.canSpecialSummon()) return;
-        const sel = await ctx.select(cands, 1, 1, 'Special Summon 1 "/Assault Mode" monster from your GY.', 'specialSummon');
-        if (!sel.length) return;
-        const r = await ctx.specialSummon(sel[0], { pos: 'choose', ignoreConditions: true });
+        if (!mine.length) return;
+        await ctx.destroy(mine);
+        if (mine.some((c) => c.onField)) return;
+        const t = ctx.validTargets((c) => c.location === 'grave')[0];
+        if (!t || !ctx.canSpecialSummon()) return;
+        const r = await ctx.specialSummon(t, { pos: 'choose', ignoreConditions: true });
         if (!r.length) return;
         ctx.negateEffects(r[0], 'field');
         ctx.addTempMod(r[0], 'cannotBeTributed', true, 'field');

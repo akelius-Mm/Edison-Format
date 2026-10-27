@@ -2930,7 +2930,11 @@ trap('Changing Destiny', 'normal', {
         const t = ctx.validTargets((c) => c.location === 'mzone')[0];
         if (!t || !ctx.battle || ctx.battle.attacker !== t) return;
         ctx.negateAttack();
-        if (t.faceUp && t.pos !== 'def') await ctx.changePos(t, 'def', true);
+        // 2010 rulings: if the monster cannot be changed to Defense Position (e.g. it already is), the rest of the
+        // effect is not applied. https://edisonrul.ing/cards/c/changing-destiny.html
+        if (!t.faceUp || t.pos === 'def') return;
+        await ctx.changePos(t, 'def', true);
+        if (t.location !== 'mzone' || (t.pos as string) !== 'def') return;
         ctx.addTempMod(t, 'cannotChangePos', true, 'field');
         const half = Math.floor(ctx.atk(t) / 2);
         if (half <= 0) return;

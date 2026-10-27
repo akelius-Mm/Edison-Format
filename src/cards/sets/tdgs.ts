@@ -2151,24 +2151,29 @@ S('Battle Tuned', 'quickplay', {
     {
       kind: 'activate',
       damageStep: true,
-      // Cost: removes a Tuner from play from the GY (not payable under Necrovalley).
-      gyBanishCost: true,
-      categories: ['atkChange'],
-      canActivate: (ctx) => ctx.grave('me', (c) => c.isMonster && c.isTuner).length > 0 && ctx.faceUpMonsters('me', (c) => ctx.canTarget(c)).length > 0,
+      // 2010 ruling: "Battle Tuned" targets 1 Tuner monster in your Graveyard (it is removed from play on resolution,
+      // not as a cost). https://edisonrul.ing/cards/b/battle-tuned.html
+      categories: ['atkChange', 'banish'],
+      canActivate: (ctx) => ctx.grave('me', (c) => c.isMonster && c.isTuner && ctx.canTarget(c)).length > 0 && ctx.faceUpMonsters('me', (c) => ctx.canTarget(c)).length > 0,
       activate: async (ctx) => {
-        const [cost] = await ctx.select(ctx.grave('me', (c) => c.isMonster && c.isTuner), 1, 1, 'Remove from play 1 Tuner monster from your Graveyard.', 'cost', {
+        const [tuner] = await ctx.selectTargets(ctx.grave('me', (c) => c.isMonster && c.isTuner), 1, 1, 'Target 1 Tuner monster in your Graveyard.', 'banish', {
           aiScore: (c) => c.data.atk ?? 0,
         });
-        if (!cost) return false;
-        ctx.data.atk = cost.data.atk ?? 0;
-        await ctx.banish(cost, 'cost');
-        await ctx.selectTargets(ctx.faceUpMonsters('me'), 1, 1, 'Target 1 face-up monster you control.', 'buff', {
+        if (!tuner) return false;
+        ctx.data.tuner = tuner;
+        const [mon] = await ctx.selectTargets(ctx.faceUpMonsters('me'), 1, 1, 'Target 1 face-up monster you control.', 'buff', {
           aiScore: (c) => (ctx.battle && (ctx.battle.attacker === c || ctx.battle.target === c) ? 5000 : 0) + ctx.atk(c),
         });
+        ctx.data.mon = mon;
       },
       resolve: async (ctx) => {
-        const t = ctx.validTargets(faceUpOn)[0];
-        if (t) ctx.addTempMod(t, 'atk', ctx.data.atk ?? 0, 'field');
+        const valid = ctx.validTargets();
+        const tuner = ctx.data.tuner as C | undefined;
+        const mon = ctx.data.mon as C | undefined;
+        if (!tuner || !valid.includes(tuner) || tuner.location !== 'grave') return;
+        await ctx.banish(tuner);
+        if ((tuner.location as string) !== 'banished') return;
+        if (mon && valid.includes(mon) && faceUpOn(mon)) ctx.addTempMod(mon, 'atk', tuner.data.atk ?? 0, 'field');
       },
       ai: {
         score: (ctx) => {
@@ -2842,7 +2847,9 @@ T('Broken Blocker', 'normal', {
       eventFilter: (ctx, ev) => {
         const c = evc(ev);
         const calc = ctx.battle?.calc;
-        return !!c && ev.fromController === ctx.player && !!calc && calc.targetPos === 'def' && ctx.battle?.target === c && calc.targetDef > g0(c.data.atk);
+        // 2010 ruling: compare the monster's ATK and DEF on the field (with gains/losses), not its printed ATK.
+        // https://edisonrul.ing/cards/b/broken-blocker.html
+        return !!c && ev.fromController === ctx.player && !!calc && calc.targetPos === 'def' && ctx.battle?.target === c && calc.targetDef > calc.targetAtk;
       },
       canActivate: (ctx) => {
         const c = evc(ctx.event!);

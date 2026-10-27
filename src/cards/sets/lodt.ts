@@ -661,38 +661,33 @@ const ARCANA_EFFECTS: EffectDef[] = [
     },
   },
   {
-    // APPROX (both Magician results): several Spells activated in the same Chain trigger it once.
+    // The Magician: 2010 rulings: both results are Continuous Effects applied right after the activated Spell Card
+    // resolves (no Chain); Heads makes its ATK twice its original ATK after that Spell's own ATK change.
+    // https://edisonrul.ing/cards/a/arcana-force-i-the-magician.html
     kind: 'trigger',
     event: 'chainActivated',
-    mandatory: true,
-    label: 'The Magician (Heads): ATK doubles',
-    categories: ['atkChange'],
+    label: '(The Magician: watch Spell Cards)',
     eventFilter: (ctx, ev) => {
       const l = ev.data?.link as ChainLink | undefined;
-      return !!l && l.isCardActivation && l.card.isSpell && arcSelf(ctx, AF1, 'H');
-    },
-    condition: (ctx) => arcSelf(ctx, AF1, 'H'),
-    resolve: async (ctx) => {
-      const s = ctx.self;
-      if (!faceUpOn(s)) return;
-      s.flags.setAtk = 2 * (s.data.atk ?? 0);
-      s.flags.setAtkTurn = ctx.turn;
-      ctx.log(`${s.name}'s ATK becomes ${s.flags.setAtk} until the end of the turn.`);
-    },
-  },
-  {
-    kind: 'trigger',
-    event: 'chainActivated',
-    mandatory: true,
-    label: 'The Magician (Tails): opponent gains 500 LP',
-    categories: ['recover'],
-    eventFilter: (ctx, ev) => {
-      const l = ev.data?.link as ChainLink | undefined;
-      return !!l && l.isCardActivation && l.card.isSpell && arcSelf(ctx, AF1, 'T');
-    },
-    condition: (ctx) => arcSelf(ctx, AF1, 'T'),
-    resolve: async (ctx) => {
-      await ctx.recover(ctx.opp, 500);
+      const me = ctx.self;
+      if (!l || !l.isCardActivation || !l.card.isSpell || !faceUpOn(me) || !arcState(me) || arcName(ctx.game, me, arcState(me)!) !== AF1) return false;
+      const g = ctx.game;
+      const mid = me.moveId;
+      const orig = l.effect;
+      l.effect = {
+        ...orig,
+        resolve: async (c) => {
+          if (orig.resolve) await orig.resolve(c);
+          if (!faceUpOn(me) || me.moveId !== mid) return;
+          if (arcIs(g, me, AF1, 'H')) {
+            me.flags.setAtk = 2 * (me.data.atk ?? 0);
+            me.flags.setAtkTurn = g.turn;
+            g.log(`${me.name}'s ATK becomes ${me.flags.setAtk} until the end of the turn.`, 'action', me.controller);
+            g.update();
+          } else if (arcIs(g, me, AF1, 'T')) await g.recover(g.opp(me.controller), 500, me);
+        },
+      };
+      return false;
     },
   },
   {
@@ -866,6 +861,9 @@ const ARCANA_EFFECTS: EffectDef[] = [
   },
 ];
 
+/** Arcana Force EX - The Dark Ruler's Summon cost: monsters that can be sent to the GY (no Tokens, no "banish it instead"). */
+const exFodder = (c: C) => !c.isToken && !c.banishOnLeave;
+
 const MOON_TOKEN = token('Moon Token', 'LIGHT', 'Fairy', 1, 0, 0);
 
 const ARCANA_TOSS_TEXT = 'If this card is Summoned: Toss a coin.';
@@ -901,7 +899,7 @@ arcana(
   4,
   1100,
   1100,
-  `${ARCANA_TOSS_TEXT}\n● Heads: If a Spell Card is activated, this card's ATK becomes double its original ATK until the end of that turn.\n● Tails: If a Spell Card is activated, your opponent gains 500 LP.`,
+  'When this card is Summoned, toss a coin:\n● Heads: When a Spell Card is activated, this card\'s ATK becomes double its original ATK until the End Phase of that turn.\n● Tails: When a Spell Card is activated, your opponent gains 500 Life Points.',
 );
 
 arcana(
@@ -992,15 +990,17 @@ arcana(
   10,
   4000,
   4000,
-  'Cannot be Normal Summoned/Set. Must be Special Summoned (from your hand) by sending 3 monsters you control to the Graveyard, and cannot be Special Summoned by other ways. When this card is Special Summoned: Toss a coin and gain the appropriate effect.\n● Heads: This card can make a second attack during each Battle Phase, but if it does so using this effect, change it to Defense Position at the end of the Battle Phase. Its battle position cannot be changed until the end of your next turn.\n● Tails: If this card is destroyed, destroy all cards on the field.',
+  "This card cannot be Normal Summoned or Set. This card cannot be Special Summoned except by sending 3 monsters you control to the Graveyard. When this card is Special Summoned, toss a coin:\n● Heads: This card can attack twice during the same Battle Phase. If this card battles twice using this effect, it is changed to Defense Position at the end of the Battle Phase. This card's battle position cannot be changed until the end of your next turn, except with a card effect.\n● Tails: If this card is destroyed, destroy all cards on the field.",
   [
     {
       kind: 'proc',
       label: 'Special Summon (send 3 monsters)',
       categories: ['specialSummon'],
-      condition: (ctx) => ctx.monsters('me').length >= 3,
+      // 2010 ruling: Monster Tokens, and a face-up "Battle Fader" Special Summoned by its effect, cannot be sent.
+      // https://edisonrul.ing/cards/a/arcana-force-ex-the-dark-ruler.html
+      condition: (ctx) => ctx.monsters('me', exFodder).length >= 3,
       perform: async (ctx) => {
-        const sel = await ctx.select(ctx.monsters('me'), 3, 3, 'Send 3 monsters you control to the GY.', 'cost');
+        const sel = await ctx.select(ctx.monsters('me', exFodder), 3, 3, 'Send 3 monsters you control to the GY.', 'cost');
         if (sel.length < 3) return false;
         await ctx.sendToGrave(sel, 'cost');
         return true;
@@ -2379,13 +2379,16 @@ M(ANGEL_O7, {
   atk: 2500,
   def: 1500,
   aiValue: 800,
-  text: 'If this card is Tribute Summoned, it gains this effect:\n● Neither player can activate monster effects.',
+  text: 'When this card is Tribute Summoned, it gains the following effect:\n● The effects of Effect Monsters cannot be activated.',
   effects: [
     {
+      // 2010 rulings: the effect stays when this card is turned face-down and then flipped face-up by a card effect,
+      // but is lost if it is Flip Summoned. https://edisonrul.ing/cards/a/angel-o7.html
       kind: 'trigger',
-      event: 'tributeSummoned',
+      event: ['tributeSummoned', 'flipSummoned'],
       eventFilter: (ctx, ev) => {
-        if (ev.card === ctx.self && faceUpOn(ctx.self)) {
+        if (ev.card === ctx.self && ev.type === 'flipSummoned') delete ctx.self.flags.o7;
+        else if (ev.card === ctx.self && faceUpOn(ctx.self)) {
           ctx.self.flags.o7 = true;
           ctx.log(`${ctx.self.name}: neither player can activate monster effects.`);
         }

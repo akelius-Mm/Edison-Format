@@ -521,7 +521,7 @@ trap('Hero Barrier', 'normal', {
 });
 
 trap('A Hero Emerges', 'normal', {
-  text: 'When an opponent\'s monster declares an attack: Your opponent chooses 1 card from your hand at random. If it is a monster that can be Special Summoned, Special Summon it.',
+  text: 'You can only activate this card when your opponent declares an attack. Your opponent selects 1 random card from your hand. If it is a Monster Card, Special Summon it on your side of the field. If not, send it to the Graveyard.',
   effects: [
     {
       kind: 'activate',
@@ -536,7 +536,10 @@ trap('A Hero Emerges', 'normal', {
         const c = hand[ctx.game.rng.int(hand.length)];
         ctx.log(`${ctx.game.players[ctx.opp].name} picks ${c.name} at random.`);
         c.revealedUntil = ctx.turn;
-        if (c.isMonster && !c.data.cannotNormalSummon && ctx.canSummonCard(c)) await ctx.specialSummon(c);
+        // 2010 text/rulings: a card that is not Summoned (not a monster, a Special Summon-only or Spirit monster) is
+        // sent to the Graveyard. https://edisonrul.ing/cards/a/a-hero-emerges.html
+        if (c.isMonster && !c.data.cannotNormalSummon && !c.hasType('spirit') && ctx.canSummonCard(c)) await ctx.specialSummon(c);
+        if (c.location === 'hand') await ctx.sendToGrave(c);
       },
       ai: {
         score: (ctx) => {
