@@ -338,6 +338,29 @@ const valleyFor = (s: ReturnType<typeof setup>, p: PlayerId = 1) => s.live(s.pla
     eq(k.g.canGeminiSummon(0, gp2), false, 'Skill Drain: cannot Gemini Summon');
   });
 
+  // Fuzz regression (seed 5 game 10, seed 6 game 18): a Gemini Summon keeps the monster in its zone, so the fuzzer took
+  // a successful one for a fizzle. Whenever it is offered it must work: the monster stays put and becomes an Effect Monster.
+  await test('Gemini Summon: offered for a Gemini monster summoned this turn, and it works in place (Il Blud, Neos Alius)', async () => {
+    for (const name of ['Il Blud', 'Elemental Hero Neos Alius']) {
+      const s = setup();
+      const m = s.place(0, N(name), 'mzone');
+      m.summonTurn = s.g.turn; // Special / Flip Summoned earlier this turn
+      const act = s.g.legalMainActions(0).find((a) => a.type === 'proc' && a.card === m && a.act.effect.geminiSummon);
+      eq(!!act, true, `${name}: offered`);
+      const moveId = m.moveId;
+      await s.g.performAction(0, act!);
+      eq(m.location, 'mzone', `${name}: stays on the field`);
+      eq(m.moveId, moveId, `${name}: same card instance`);
+      eq(!!m.flags.geminiSummoned, true, `${name}: Gemini Summoned`);
+      eq(s.g.players[0].normalSummonsLeft, 0, `${name}: the Normal Summon is used`);
+      eq(
+        s.g.legalMainActions(0).some((a) => a.type === 'proc' && a.card === m && a.act.effect.geminiSummon),
+        false,
+        `${name}: not offered again`,
+      );
+    }
+  });
+
   await test('Gemini Summon: Solemn Judgment can negate it, destroying the Gemini monster', async () => {
     const s = setup();
     const gp = s.place(0, N('Gigaplant'), 'mzone');

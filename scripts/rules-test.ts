@@ -2618,7 +2618,7 @@ async function sidingTests() {
     ['Torrential Tribute', 1],
     ['Mirror Force', 1],
     ['Brain Control', 1],
-    ['Monster Reborn', 1],
+    ['Call of the Haunted', 1],
     ['Heavy Storm', 1],
     ['Book of Moon', 2],
     ['Dimensional Prison', 2],
