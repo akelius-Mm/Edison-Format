@@ -66,6 +66,13 @@ function reviveWhy(ctx: Ctx, pool: CardInstance[], where: string): string | null
   return 'nothing there can be Summoned now';
 }
 
+/** Why no face-up monster your opponent controls can be targeted (null when one can). */
+function faceUpTargetWhy(ctx: Ctx): string | null {
+  const faceUp = ctx.faceUpMonsters('opp');
+  if (!faceUp.length) return 'opponent has no face-up monster';
+  return faceUp.some((c) => ctx.canTarget(c)) ? null : 'no face-up monster to target';
+}
+
 const noOtherST = (ctx: Ctx) => (ctx.spellTraps('both', (c) => c !== ctx.self).length ? null : 'no other Spells/Traps on the field');
 const WHEN_ASKED = "\nYou'll be asked then";
 
@@ -127,7 +134,21 @@ export const WHY_NOT: [string, number, Why][] = [
   ['Lightning Vortex', 0, (ctx) => (ctx.faceUpMonsters('opp').length ? 'needs a card in hand to discard' : 'opponent has no face-up monster')],
   ['Mind Control', 0, (ctx) => (ctx.freeMZones() <= 0 ? ZONES_FULL : 'no monster you can target')],
   ['Soul Exchange', 0, (ctx) => (ctx.phase !== 'main1' ? 'only in Main Phase 1\nYou skip your Battle Phase' : 'no monster you can target')],
-  ['Enemy Controller', 1, (ctx) => (ctx.faceUpMonsters('opp').length ? 'needs a monster to Tribute' : 'opponent has no face-up monster')],
+  ['Enemy Controller', 0, (ctx) => faceUpTargetWhy(ctx)],
+  [
+    'Enemy Controller',
+    1,
+    (ctx) => {
+      // mirrors spells.ts tributable(): your monsters that aren't stopped from being Tributed
+      const mine = ctx.monsters('me');
+      if (!mine.length) return 'you control no monster to Tribute';
+      if (!mine.some((c) => !ctx.query(c, 'cannotBeTributed')))
+        return mine.length === 1
+          ? `your monster can't be Tributed\nA card effect stops ${mine[0].faceUp ? mine[0].name : 'it'}`
+          : "your monsters can't be Tributed\nA card effect stops them";
+      return faceUpTargetWhy(ctx);
+    },
+  ],
   [
     "Gottoms' Emergency Call",
     0,

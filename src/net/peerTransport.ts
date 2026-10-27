@@ -178,7 +178,8 @@ export class PeerTransport implements Transport {
       const conn = peer!.connect(id, { reliable: true, serialization: 'json' });
       const done = (e?: TransportError) => {
         clearTimeout(t);
-        this.dials.delete(id);
+        // only our own entry: a second dial of the same id may have replaced it
+        if (this.dials.get(id) === fail) this.dials.delete(id);
         if (e) {
           try {
             conn.close();
@@ -189,7 +190,8 @@ export class PeerTransport implements Transport {
         }
       };
       const t = setTimeout(() => done(new TransportError('timeout', 'Could not reach your friend’s phone.')), timeoutMs);
-      this.dials.set(id, (e) => done(e));
+      const fail = (e: TransportError) => done(e);
+      this.dials.set(id, fail);
       const ch = wrap(conn);
       conn.on('open', () => {
         done();

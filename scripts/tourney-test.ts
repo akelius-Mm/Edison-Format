@@ -12,7 +12,10 @@
 // final board; standings checked against the Swiss rules; and the whole event replayed with the
 // same seeds giving the identical result. Also: player names (cleaning, unique suffixes, renames by
 // the player and by the organiser, a re-join keeping an organiser rename), the version check at
-// join, and spectating failing with a clear reason instead of connecting forever.
+// join, and spectating failing with a clear reason instead of connecting forever. Tables: a table that
+// cannot connect (Wi-Fi isolation, the opponent not sitting down, a stale "ID taken" registration) is
+// reported as stuck after the timeout and Retry gets it going; the organiser restarting a match that
+// is under way moves both phones to the fresh room and closes the old one.
 //
 // Usage: npx tsx scripts/tourney-test.ts [--verbose] [--only <name>]
 import { AIController, type Difficulty } from '../src/ai/ai';
@@ -23,7 +26,9 @@ import { RecordingController } from '../src/engine/replay';
 import type { PlayerId } from '../src/engine/types';
 import { PREMADE_DECKS, aiSideDeck, buildDeckList, type DeckDef } from '../src/decks';
 import { MemoryHub, MemoryTransport } from '../src/net/memoryTransport';
-import { newRoomCode, type WireDeck } from '../src/net/protocol';
+import { newRoomCode, roomPeerId, type WireDeck } from '../src/net/protocol';
+import { TableLink, tableTroubleText, type TableTrouble } from '../src/net/tableLink';
+import { TransportError, type Channel } from '../src/net/transport';
 import { AsHuman, RemoteController } from '../src/net/remote';
 import { Room } from '../src/net/room';
 import { SpectateClient, SpectateError, SpectateServer } from '../src/net/spectate';
@@ -129,6 +134,8 @@ interface Scenario {
   dropAfterRound?: number;
   id?: boolean;
   spectate?: boolean;
+  /** The organiser restarts a round-1 match while both phones are in its room. */
+  restart?: boolean;
 }
 
 interface Outcome {
@@ -336,6 +343,7 @@ async function runScenario(sc: Scenario): Promise<Outcome> {
   let dropped = false;
   let tamperSeen = false;
   let dieHandled = false;
+  let restarted: { mid: string; rooms: Room[]; code: string } | null = null;
   const t0 = Date.now();
   // the organiser: pairs rounds, resolves disputes, reloads once
   for (;;) {
@@ -362,6 +370,27 @@ async function runScenario(sc: Scenario): Promise<Outcome> {
         H.dropPlayer(dead.id);
         dieHandled = true;
         check(m.result === (m.a === dead.id ? 'b' : 'a'), `${sc.name}: the claimed win counts for the phone that stayed`);
+      }
+    }
+    // the organiser restarts a match that is under way (a stuck table, say): both phones must leave
+    // the old room and meet again in the fresh one
+    if (sc.restart && !restarted && H.state.rounds.length === 1) {
+      const m = H.currentRound().find((x) => x.b != null && x.result == null && phones.filter((p) => p.run?.mid === x.id && p.run.room.match).length === 2);
+      if (m) {
+        const ps = phones.filter((p) => p.run?.mid === m.id);
+        restarted = { mid: m.id, rooms: ps.map((p) => p.run!.room), code: ps[0].client.roomFor(m).code };
+        H.replay(m.id);
+        check(m.attempt === 1 && m.reported.length === 0 && m.result == null, `${sc.name}: restart bumps the attempt and clears the reports`);
+        const fresh = ps[0].client.roomFor(m).code;
+        check(fresh !== restarted.code, `${sc.name}: the restarted match gets a new room code (${restarted.code} → ${fresh})`);
+        const rooms = restarted.rooms;
+        await waitFor(() => rooms.every((r) => r.status === 'closed') && !hub.listeners.has(roomPeerId(restarted!.code)), 3000, 'old room closed').catch(() => {});
+        check(rooms.every((r) => r.status === 'closed'), `${sc.name}: both phones left the old room (${rooms.map((r) => r.status).join(', ')})`);
+        check(!hub.listeners.has(roomPeerId(restarted.code)), `${sc.name}: the old room's id is released`);
+        // (a Bo1 between bots is over in moments: look at what each phone played, not at what it plays now)
+        const played = (p: Phone) => (p.boards.get(`${m.id}#1`)?.length ?? 0) > 0;
+        await waitFor(() => ps.every(played), 20000, 'restarted match played').catch(() => {});
+        check(ps.every(played), `${sc.name}: both phones played the restarted match in the fresh room`);
       }
     }
     // voluntary drop after a round
@@ -398,6 +427,11 @@ async function runScenario(sc: Scenario): Promise<Outcome> {
   if (sc.tamper) check(tamperSeen, `${sc.name}: the tampered report was caught as a dispute`);
   if (sc.die) check(dieHandled, `${sc.name}: the dead phone's match was claimed and the player dropped`);
   if (sc.hostReload) check(reloaded, `${sc.name}: organiser reloaded`);
+  if (sc.restart) {
+    check(!!restarted, `${sc.name}: a match was restarted`);
+    const m = restarted && H.match(restarted.mid);
+    check(m && m.attempt === 1 && m.result != null && m.how === 'verified', `${sc.name}: the restarted match was played again and verified (${m?.attempt} ${m?.result} ${m?.how})`);
+  }
 
   // every phone ends with the same final view
   await waitFor(() => phones.every((p) => p.dead || p.client.view?.phase === 'done'), 5000, 'final views').catch(() => fail(`${sc.name}: not every phone saw the final standings`));
@@ -648,13 +682,125 @@ async function namesCheck() {
   host.close();
 }
 
+// ------------------------------------------------------------------ a table that can't connect
+
+/** Hotel Wi-Fi: this phone's direct connections never get through (the signalling works). */
+class BlockedTransport extends MemoryTransport {
+  blocked = true;
+  dials = 0;
+  async dial(id: string): Promise<Channel> {
+    this.dials++;
+    if (this.blocked) {
+      await sleep(5);
+      throw new TransportError('timeout', 'Could not reach your friend’s phone.');
+    }
+    return super.dial(id);
+  }
+}
+
+async function tableCheck() {
+  const hub = new MemoryHub();
+  const ht = { heartbeatMs: 40, timeoutMs: 1500 };
+  const me = (id: string, name: string) => ({ name, avatar: 'a', sleeve: 's', clientId: id });
+  const fast = (i: number) => Math.min(60, 10 + i * 5);
+  const stuckMs = 250;
+  const mkRoom = (role: 'host' | 'guest', code: string, t = new MemoryTransport(hub)) => {
+    const r = new Room({ role, code, me: role === 'host' ? me('ta', 'Hana') : me('tb', 'Gus'), build: BUILD, transport: t, expectPeer: role === 'host' ? 'tb' : 'ta', ...ht });
+    return r;
+  };
+
+  // 1. the guest's phone can't reach the host's (Wi-Fi isolation): stuck after stuckMs, a clear
+  //    message, and Retry (on a network that works now) connects with a fresh room
+  {
+    const code = 'TBLA-2345';
+    const host = new TableLink({ makeRoom: () => mkRoom('host', code), stuckMs, backoff: fast });
+    const transports: BlockedTransport[] = [];
+    const seen: (TableTrouble | null)[] = [];
+    const guest = new TableLink({
+      makeRoom: () => {
+        const t = new BlockedTransport(hub);
+        t.blocked = transports.length === 0; // the first room's network blocks; after Retry it works
+        transports.push(t);
+        return mkRoom('guest', code, t);
+      },
+      stuckMs,
+      backoff: fast,
+      onStuck: (t) => seen.push(t),
+    });
+    const first = guest.room;
+    void host.start();
+    void guest.start();
+    await sleep(stuckMs / 2);
+    check(!guest.stuck && !host.stuck, 'table: no trouble shown before the timeout');
+    await waitFor(() => !!guest.stuck && !!host.stuck, 3000, 'stuck table').catch(() => {});
+    check(guest.stuck === 'unreachable', `table: the guest is told the opponent's phone can't be reached (${guest.stuck})`);
+    check(host.stuck === 'unreachable', `table: the host is told too (${host.stuck})`);
+    const text = tableTroubleText(guest.stuck ?? 'unreachable', 'Hana');
+    check(/Can’t reach Hana’s phone/.test(text) && /Personal Hotspot/.test(text) && /Retry/.test(text), `table: the message names the opponent and the fix (${text})`);
+    const before = transports[0].dials;
+    await sleep(150);
+    check(transports[0].dials > before, 'table: keeps retrying in the background while stuck');
+    check(guest.retry(), 'table: Retry re-opens the room');
+    check(guest.room !== first && first.status === 'closed', 'table: Retry replaces the old room and closes it');
+    check(seen.includes(null), 'table: the trouble clears while the retry runs');
+    await waitFor(() => guest.connected && host.connected, 3000, 'table connects after Retry').catch(() => {});
+    check(guest.connected && host.connected, 'table: the fresh room connects');
+    await sleep(50);
+    check(!guest.stuck && !host.stuck, 'table: no trouble once connected');
+    check(!guest.retry(), 'table: Retry does nothing once connected');
+    guest.room.leave();
+    host.room.leave();
+    guest.close();
+    host.close();
+  }
+
+  // 2. the opponent never sits down: the guest is told the table isn't open
+  {
+    const guest = new TableLink({ makeRoom: () => mkRoom('guest', 'TBLB-2345'), stuckMs, backoff: fast });
+    void guest.start();
+    await waitFor(() => !!guest.stuck, 3000, 'not open').catch(() => {});
+    check(guest.stuck === 'not-open', `table: no room yet is reported as not open (${guest.stuck})`);
+    check(/hasn’t opened the table/.test(tableTroubleText('not-open', 'Hana')), 'table: the not-open message asks the opponent to sit down');
+    guest.room.leave();
+    guest.close();
+  }
+
+  // 3. a stale registration of the room id ("ID taken", our previous session still on the server):
+  //    reported, retried with backoff, and the table connects once the server lets it go
+  {
+    const code = 'TBLC-2345';
+    const stale = new MemoryTransport(hub);
+    await stale.listen(roomPeerId(code), () => {});
+    let tries = 0;
+    const host = new TableLink({ makeRoom: () => mkRoom('host', code), stuckMs, backoff: (i, kind) => (tries++, kind === 'id-taken' ? Math.min(80, 10 * 2 ** i) : 10) });
+    const guest = new TableLink({ makeRoom: () => mkRoom('guest', code), stuckMs, backoff: fast });
+    void host.start();
+    void guest.start();
+    await waitFor(() => host.stuck === 'id-taken', 3000, 'id taken').catch(() => {});
+    check(host.stuck === 'id-taken' && host.lastError === 'id-taken', `table: a stale room id is reported (${host.stuck})`);
+    check(tries > 2, `table: the taken id is retried (${tries} tries)`);
+    check(host.retry(), 'table: Retry with the id still taken');
+    stale.destroy(); // the server drops the stale registration
+    await sleep(20);
+    // the guest's dial reached the stale registration (a dead phone): it taps Retry too
+    check(guest.retry(), 'table: the guest retries as well');
+    await waitFor(() => guest.connected && host.connected, 3000, 'connects after the stale id goes').catch(() => {});
+    check(guest.connected && host.connected, 'table: connects once the stale id is released');
+    guest.room.leave();
+    host.room.leave();
+    guest.close();
+    host.close();
+  }
+  await sleep(20);
+}
+
 // ------------------------------------------------------------------ the runs
 
 const SCENARIOS: Scenario[] = [
   { name: '4 players Bo1 + organiser reload + ID', players: 4, bestOf: 1, topCut: 0, seed: 4101, hostReload: true, id: true },
   { name: '5 players Bo3 siding + byes + tampered report + Top 4', players: 5, bestOf: 3, topCut: 4, seed: 5203, tamper: true, spectate: true },
   { name: '8 players Bo1 + dead phone + drop + Top 8', players: 8, bestOf: 1, topCut: 8, seed: 8307, die: true, dropAfterRound: 1 },
-  { name: '3 players Bo1', players: 3, bestOf: 1, topCut: 0, seed: 3409 },
+  { name: '3 players Bo1 + organiser restarts a match', players: 3, bestOf: 1, topCut: 0, seed: 3409, restart: true },
 ];
 
 (async () => {
@@ -679,6 +825,14 @@ const SCENARIOS: Scenario[] = [
       console.log('names, versions, spectate errors: checked');
     } catch (e) {
       fail(`names: ${(e as Error).stack}`);
+    }
+  }
+  if (!only || only === 'table') {
+    try {
+      await tableCheck();
+      console.log('table connect timeout, retry, stale id: checked');
+    } catch (e) {
+      fail(`table: ${(e as Error).stack}`);
     }
   }
   // determinism: the same event with the same seeds plays out identically

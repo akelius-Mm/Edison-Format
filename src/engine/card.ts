@@ -298,6 +298,26 @@ export interface TempMod {
 
 let NEXT_UID = 1;
 
+/**
+ * Per-instance `flags` that hold "while this card is face-up" state. A face-up monster turned face-down is a new card
+ * once it is flipped face-up again (Gemini status, "once while this card is face-up", effects applied to it), so
+ * CardInstance.resetOnFaceDown drops these keys. Card scripts add their own keys with faceUpFlag().
+ * Flags that are not listed survive a face-down turn (how it was Summoned, its materials, links, locks...).
+ */
+export const FACE_UP_FLAGS = new Set<string>([
+  'flipped',
+  // Gemini: "Gemini Summoned" status is lost when it is turned face-down (it is a Normal Monster again once flipped).
+  'geminiSummoned',
+  // effects applied to it by other cards end: "its ATK becomes X this turn", "negate its effects this turn"
+  'setAtk',
+  'setAtkTurn',
+  'negatedTurn',
+]);
+/** Register flag keys that reset when the card is turned face-down (see FACE_UP_FLAGS). */
+export function faceUpFlag(...keys: string[]) {
+  for (const k of keys) FACE_UP_FLAGS.add(k);
+}
+
 export class CardInstance {
   uid: number;
   /** Printed data; read through `data`, which applies data patches and the engine's rule view. */
@@ -317,6 +337,11 @@ export class CardInstance {
   pos: BattlePos = 'atk';
   /** Increments every time the card moves; used to validate targets. */
   moveId = 0;
+  /**
+   * Increments every time a monster on the field is turned face-down (it is a new card once flipped face-up again).
+   * Unlike moveId this does not break targeting, battle or "negate and destroy": the card is still on the field.
+   */
+  faceUpId = 0;
   summonTurn = -1;
   summonMethod: string | null = null;
   setTurn = -1;
@@ -406,6 +431,19 @@ export class CardInstance {
   }
   get isDefense() {
     return this.location === 'mzone' && this.pos === 'def';
+  }
+
+  /**
+   * A face-up monster on the field was turned face-down: drop everything that lasts only "while face-up" —
+   * effects applied to it (stat changes), counters and the FACE_UP_FLAGS. moveId is kept on purpose: it is still the
+   * same card for targets, an ongoing battle and "negate and destroy" (War Chariot). Equips are destroyed by
+   * Game.ruleCleanup (an equip needs a face-up host).
+   */
+  resetOnFaceDown() {
+    this.faceUpId++;
+    this.tempMods = [];
+    this.counters = {};
+    for (const k of Object.keys(this.flags)) if (FACE_UP_FLAGS.has(k)) delete this.flags[k];
   }
 
   resetOnMove() {

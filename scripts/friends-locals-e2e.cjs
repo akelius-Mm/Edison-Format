@@ -159,6 +159,32 @@ async function spectate(phones) {
   for (const p of slow) await L(p, () => delete window.__edisonPace);
 }
 
+async function restartTable(phones) {
+  const [hana] = phones;
+  const me = await L(hana, () => window.__edisonLocals.client.me.clientId);
+  const v = await L(hana, () => window.__edisonLocals.view);
+  const m = v.rounds[v.rounds.length - 1].find((x) => x.b != null && x.a !== me && x.b !== me);
+  const ids = [m.a, m.b];
+  const players = [];
+  for (const p of phones) if (ids.includes(await L(p, () => window.__edisonLocals.client.me.clientId))) players.push(p);
+  for (const p of players) await L(p, () => (window.__edisonPace = 300));
+  // both are at the table (the room connected) and the match is still open
+  for (const p of players) await p.page.waitForFunction(() => window.__edisonNet?.room?.status === 'connected' && !!window.__edisonNet.room.match, null, { timeout: 60000, polling: 100 });
+  const oldCode = await L(players[0], () => window.__edisonNet.room.code);
+  const open = await L(hana, (mid) => window.__edisonLocals.view.rounds.at(-1).find((x) => x.id === mid).result == null, m.id);
+  ok(open, 'the table to restart is still playing');
+  await L(hana, (mid) => window.__edisonLocals.host.replay(mid), m.id);
+  for (const p of players)
+    await p.page.waitForFunction((mid) => { const x = window.__edisonLocals.view.rounds.at(-1).find((y) => y.id === mid); return x.attempt === 1 && window.__edisonNet?.room?.code !== undefined; }, m.id, { timeout: 20000, polling: 100 });
+  for (const p of players) await p.page.waitForFunction((old) => window.__edisonNet?.room?.code !== old && window.__edisonNet.room.status === 'connected', oldCode, { timeout: 60000, polling: 100 });
+  const codes = await Promise.all(players.map((p) => L(p, () => window.__edisonNet.room.code)));
+  ok(codes.every((c) => c !== oldCode && c === codes[0] && /r1$/.test(c)), `restart: both phones moved to the fresh room (${oldCode} → ${codes.join(', ')})`);
+  for (const p of players) await L(p, () => delete window.__edisonPace);
+  await hana.page.waitForFunction((mid) => { const x = window.__edisonLocals.view.rounds.at(-1).find((y) => y.id === mid); return x.result != null; }, m.id, { timeout: 180000, polling: 300 });
+  const how = await L(hana, (mid) => { const x = window.__edisonLocals.view.rounds.at(-1).find((y) => y.id === mid); return `${x.attempt}:${x.how}`; }, m.id);
+  ok(how === '1:verified', `restart: the restarted match was played again and verified (${how})`);
+}
+
 (async () => {
   const app = staticServer();
   const peer = PeerServer({ port: PEER_PORT, host: '127.0.0.1', path: '/edison' });
@@ -297,6 +323,9 @@ async function spectate(phones) {
       // round 1: a player from one table watches the other, which is slowed down so it is
       // certainly still going (decided by the pairings, not by timing)
       if (round === 1) await spectate(phones);
+      // round 3: the organiser restarts the other table while it plays (a stuck table): both of its
+      // phones leave the old room, sit down at the fresh one by themselves and play it out
+      if (round === 3) await restartTable(phones);
       while (!(await roundDone(hana))) {
         if (Date.now() - tRound > 300000) throw new Error(`round ${round} timed out`);
         await sleep(400);

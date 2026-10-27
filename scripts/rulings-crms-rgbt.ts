@@ -35,7 +35,7 @@ class TestController implements PlayerController {
   async confirm() {
     return true;
   }
-  async confirmTrigger() {
+  async confirmTrigger(_g: Game, _p: PlayerId, _act: Activation) {
     return true;
   }
   async choosePosition(_g: Game, _p: PlayerId, _c: CardInstance, allowed: (BattlePos | 'set')[]) {
@@ -96,8 +96,15 @@ function eq(a: unknown, b: unknown, msg: string) {
 }
 
 /** End of the Battle Phase with a Gladiator Beast that battled; returns where it ended up. */
-async function tagOutBoard(withHunter: boolean) {
-  const { g, place } = setup();
+async function tagOutBoard(withHunter: boolean, asked?: string[]) {
+  const { g, c0, place } = setup();
+  if (asked) {
+    c0.isHuman = true;
+    c0.confirmTrigger = async (_g: Game, _p: PlayerId, act: Activation) => {
+      asked.push(act.card.name);
+      return true;
+    };
+  }
   ensureRgbtPatches(g);
   g.phase = 'battle';
   const laq = place(0, cardByName('Gladiator Beast Laquari'), 'mzone');
@@ -120,6 +127,17 @@ async function tagOutBoard(withHunter: boolean) {
     const r = await tagOutBoard(true);
     eq(r.laq.location, 'mzone', 'Laquari stays on the field');
     eq(r.inDeck.location, 'deck', 'no free Gladiator Beast Special Summon');
+  });
+
+  await test('G.B. Hunter: a human is not asked to tag out (the blocked trigger is not offered)', async () => {
+    const control: string[] = [];
+    await tagOutBoard(false, control);
+    eq(control.join(','), 'Gladiator Beast Laquari', 'control: asked about the tag-out without G.B. Hunter');
+    const asked: string[] = [];
+    const r = await tagOutBoard(true, asked);
+    eq(asked.length, 0, `never asked with G.B. Hunter (asked: ${asked.join(',')})`);
+    eq(r.laq.location, 'mzone', 'Laquari stays on the field');
+    eq(r.inDeck.location, 'deck', 'Darius stays in the Deck');
   });
 
   await test('G.B. Hunter: Contact Fusion (Gyzarus) cannot be performed', async () => {

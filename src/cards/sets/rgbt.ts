@@ -292,8 +292,8 @@ function earthboundRules(): EffectDef[] {
 //  * specialSummon, inherentSpecialSummon, canSynchro, canProc: Koa'ki Meiru Drago (no LIGHT/DARK Special Summons);
 //  * canNormalSummon: "There can only be 1 face-up King of the Beasts on the field";
 //  * legalMainActions: Calming Magic (no Flip Summons; Normal/Special Summons use the player queries);
-//  * canActivateEffect, activate: Grave of the Super Ancient Organism (no effect activations of Special Summoned
-//    Level 6+ monsters on the field);
+//  * canActivateEffect, canActivateTrigger, activate: Grave of the Super Ancient Organism (no effect activations of
+//    Special Summoned Level 6+ monsters on the field) and G.B. Hunter (no tag-outs: blocked triggers are not offered);
 //  * attackTargets: Miracle Locus (its second attack must be on a monster).
 
 const PATCHED = new WeakSet<Game>();
@@ -404,13 +404,26 @@ export function ensureRgbtPatches(g: Game) {
   const origCAE = g.canActivateEffect.bind(g);
   anyG.canActivateEffect = (player: PlayerId, card: C, ef: EffectDef, idx: number, mode: any) =>
     organismBlocks(g, card, ef) || gbHunterBlocks(g, card, ef) ? null : origCAE(player, card, ef, idx, mode);
+  // Triggers (tag-outs) do not go through canActivateEffect: drop them before the player is asked.
+  const origCAT = g.canActivateTrigger.bind(g);
+  anyG.canActivateTrigger = (player: PlayerId, card: C, ef: EffectDef, idx: number) => {
+    if (organismBlocks(g, card, ef)) {
+      g.log(`Grave of the Super Ancient Organism: ${card.name}'s effect cannot be activated.`, 'chain', player);
+      return false;
+    }
+    if (gbHunterBlocks(g, card, ef)) {
+      g.log(`G.B. Hunter: ${card.name}'s effect cannot be activated (cards on the field cannot be returned to the Deck).`, 'chain', player);
+      return false;
+    }
+    return origCAT(player, card, ef, idx);
+  };
   const origActivate = g.activate.bind(g);
   anyG.activate = async (player: PlayerId, act: Activation) => {
     if (organismBlocks(g, act.card, act.effect)) {
       g.log(`Grave of the Super Ancient Organism: ${act.card.name}'s effect cannot be activated.`, 'chain', player);
       return null;
     }
-    // Triggers (tag-outs) do not go through canActivateEffect: refuse them here.
+    // safety net (canActivateTrigger drops blocked triggers before they are offered)
     if (gbHunterBlocks(g, act.card, act.effect)) {
       g.log(`G.B. Hunter: ${act.card.name}'s effect cannot be activated (cards on the field cannot be returned to the Deck).`, 'chain', player);
       return null;
