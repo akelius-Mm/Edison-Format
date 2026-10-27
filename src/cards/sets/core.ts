@@ -14,6 +14,8 @@ import {
   levelMax,
   selfDestroysByBattle,
   selfFieldToGrave,
+  stLingers,
+  stRemovalScore,
 } from '../helpers';
 import type { CardInstance } from '../../engine/card';
 import type { Ctx } from '../../engine/ctx';
@@ -29,18 +31,27 @@ spell('Mystical Space Typhoon', 'quickplay', {
       categories: ['destroy'],
       canActivate: (ctx) => ctx.spellTraps('both', (c) => c !== ctx.self && ctx.canTarget(c)).length > 0,
       activate: async (ctx) => {
-        await ctx.selectTargets(ctx.spellTraps('both', (c) => c !== ctx.self), 1, 1, 'Target 1 Spell/Trap to destroy.', 'destroy');
+        await ctx.selectTargets(ctx.spellTraps('both', (c) => c !== ctx.self), 1, 1, 'Target 1 Spell/Trap to destroy.', 'destroy', {
+          aiScore: (c) => stRemovalScore(ctx, c),
+        });
       },
       resolve: destroyTargets,
       ai: {
         score: (ctx) => {
-          // Only fire at the opponent's cards. Prefer chaining to an opponent's activation or at end phase.
-          const opp = ctx.spellTraps('opp', (c) => c !== ctx.self);
-          if (!opp.length) return 0;
+          // Only the opponent's cards that are worth hitting: a Set card, or a face-up card that keeps applying. Never a
+          // Normal/Quick-Play Spell or Normal/Counter Trap that is already being activated: it resolves anyway.
+          const good = ctx.spellTraps('opp', (c) => c !== ctx.self && ctx.canTarget(c) && stRemovalScore(ctx, c) > 0);
+          if (!good.length) return 0;
           const top = ctx.chainTop();
-          if (top && top.player === ctx.opp && top.card.onField && top.card.isTrap === false && top.card.data.stype === 'quickplay') return 0;
-          if (top && top.player === ctx.opp && top.card.onField && (top.card.data.ttype === 'continuous' || top.card.data.stype === 'continuous' || top.card.data.stype === 'equip')) return 80;
-          return 40;
+          // in response to their Continuous / Equip / Field card: destroying it stops it
+          if (top && top.player === ctx.opp && top.isCardActivation && stLingers(top.card) && good.includes(top.card)) return 80;
+          // don't fire just because a window opened (their Normal Spell, an attack...)
+          if (top) return 0;
+          // clear their backrow before attacking, or hit a Set card in their End Phase
+          if (ctx.isMyTurn && ctx.phase === 'main1' && good.some((c) => !c.faceUp)) return 40;
+          if (!ctx.isMyTurn && ctx.phase === 'end' && good.some((c) => !c.faceUp)) return 35;
+          if (ctx.isMyTurn && (ctx.phase === 'main1' || ctx.phase === 'main2') && good.some((c) => c.faceUp)) return 30;
+          return 0;
         },
       },
     },

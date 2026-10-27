@@ -102,3 +102,16 @@ export function cardValue(game: Game, c: CardInstance): number {
 export function bestTarget(game: Game, cards: CardInstance[]) {
   return [...cards].sort((a, b) => cardValue(game, b) - cardValue(game, a))[0];
 }
+
+/** A face-up Spell/Trap that keeps applying while it stays (Continuous, Equip, Field). */
+export const stLingers = (c: CardInstance) => c.data.stype === 'continuous' || c.data.stype === 'equip' || c.data.stype === 'field' || c.data.ttype === 'continuous';
+
+/** AI: how much destroying this Spell/Trap is worth (0 or less = never). */
+export function stRemovalScore(ctx: Ctx, c: CardInstance): number {
+  if (c.controller === ctx.player) return -1000;
+  const activating = ctx.game.chain.some((l) => l.card === c && l.isCardActivation && !l.negated);
+  if (activating && !stLingers(c)) return -1000; // it resolves anyway
+  if (!c.faceUp) return 100; // a Set card: most likely a live Trap
+  // face-up and not being activated: it is staying on the field (Continuous, Equip, Field, Swords of Revealing Light...)
+  return 80 + (c.data.aiValue ?? 0) / 100;
+}

@@ -299,11 +299,11 @@ export function ensurePtdnPatches(g: Game) {
     return true;
   };
   const origNS = g.normalSummon.bind(g);
-  anyG.normalSummon = async (p: PlayerId, card: C, set: boolean) => {
+  anyG.normalSummon = async (p: PlayerId, card: C, set: boolean, opts?: { byEffect?: boolean }) => {
     const key = `ptdn:cryHavoc:${p}`;
     const pend = (g.turnData[key] as number | undefined) ?? 0;
     const before = g.players[p].normalSummonsLeft;
-    await origNS(p, card, set);
+    await origNS(p, card, set, opts);
     if (pend > 0 && card.hasType('normal') && g.players[p].normalSummonsLeft < before) g.turnData[key] = pend - 1;
   };
 

@@ -380,7 +380,7 @@ export function ensureGlasPatches(g: Game) {
     return forCard?.name === NIMBUSMAN && forCard.flags.glasNimbusWater ? r.filter((c) => c.data.attribute === 'WATER') : r;
   };
   const origNS = g.normalSummon.bind(g);
-  anyG.normalSummon = async (p: PlayerId, card: C, set: boolean) => {
+  anyG.normalSummon = async (p: PlayerId, card: C, set: boolean, opts?: { byEffect?: boolean }) => {
     try {
       if (card.name === NIMBUSMAN && !set) {
         const water = origCands(p, card).filter((c) => c.data.attribute === 'WATER');
@@ -397,7 +397,7 @@ export function ensureGlasPatches(g: Game) {
           }
         }
       }
-      return await origNS(p, card, set);
+      return await origNS(p, card, set, opts);
     } finally {
       if (card.location === 'hand') {
         delete card.flags.glasNimbus;

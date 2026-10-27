@@ -203,9 +203,9 @@ export function ensureAnprPatches(g: Game) {
 
   const origCanNS = g.canNormalSummon.bind(g);
   const origNormalSummon = g.normalSummon.bind(g);
-  anyG.normalSummon = async (p: PlayerId, card: C, set: boolean) => {
+  anyG.normalSummon = async (p: PlayerId, card: C, set: boolean, opts?: { byEffect?: boolean }) => {
     labGrant(g, p);
-    return origNormalSummon(p, card, set);
+    return origNormalSummon(p, card, set, opts);
   };
   anyG.canNormalSummon = (p: PlayerId, card: C, set = false) => {
     // Brain Research Lab: its extra Psychic Normal Summon is granted as soon as the turn player's Normal Summons are looked at.

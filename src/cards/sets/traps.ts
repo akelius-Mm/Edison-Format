@@ -1,6 +1,6 @@
 // Card definitions: generic Traps (see docs/CARD_ALLOCATION.md, "traps.ts").
 import { allCards, token, trap } from '../define';
-import { bestTarget, cardValue } from '../helpers';
+import { bestTarget, cardValue, stLingers, stRemovalScore } from '../helpers';
 import type { CardData, CardInstance, QueryKey } from '../../engine/card';
 import type { Ctx } from '../../engine/ctx';
 import type { ChainLink, Game } from '../../engine/game';
@@ -729,7 +729,9 @@ defTrap('Dust Tornado', 'normal', {
       categories: ['destroy'],
       canActivate: (ctx) => ctx.spellTraps('opp', (c) => ctx.canTarget(c)).length > 0,
       activate: async (ctx) => {
-        await ctx.selectTargets(ctx.spellTraps('opp'), 1, 1, 'Target 1 Spell/Trap your opponent controls to destroy.', 'destroy');
+        await ctx.selectTargets(ctx.spellTraps('opp'), 1, 1, 'Target 1 Spell/Trap your opponent controls to destroy.', 'destroy', {
+          aiScore: (c) => stRemovalScore(ctx, c),
+        });
       },
       resolve: async (ctx) => {
         const t = ctx.validTargets((c) => c.onField);
@@ -746,13 +748,13 @@ defTrap('Dust Tornado', 'normal', {
       ai: {
         score: (ctx) => {
           if (myLinkInChain(ctx)) return 0;
+          // never at a Normal/Quick-Play Spell or Normal/Counter Trap already being activated (it resolves anyway)
+          const good = ctx.spellTraps('opp', (c) => ctx.canTarget(c) && stRemovalScore(ctx, c) > 0);
+          if (!good.length) return 0;
           const top = oppTop(ctx);
-          if (top && top.card.onField && top.isCardActivation && ctx.canTarget(top.card)) {
-            const c = top.card;
-            if (c.data.ttype === 'continuous' || ['continuous', 'equip', 'field'].includes(c.data.stype ?? '')) return 70;
-          }
-          if (oppOpen(ctx, 'end') && ctx.spellTraps('opp').length) return 40;
-          if (myOpen(ctx, 'battle') && ctx.spellTraps('opp', (c) => !c.faceUp).length && ctx.monsters('me', (c) => ctx.game.canAttack(c)).length) return 32;
+          if (top && top.card.onField && top.isCardActivation && stLingers(top.card) && good.includes(top.card)) return 70;
+          if (oppOpen(ctx, 'end') && good.length) return 40;
+          if (myOpen(ctx, 'battle') && good.some((c) => !c.faceUp) && ctx.monsters('me', (c) => ctx.game.canAttack(c)).length) return 32;
           return 0;
         },
       },

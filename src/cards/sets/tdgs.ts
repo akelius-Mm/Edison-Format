@@ -282,10 +282,10 @@ export function ensureTdgsPatches(g: Game) {
     }
   };
   const origNS = g.normalSummon.bind(g);
-  anyG.normalSummon = async (p: PlayerId, card: C, set: boolean) => {
+  anyG.normalSummon = async (p: PlayerId, card: C, set: boolean, opts?: { byEffect?: boolean }) => {
     if (set) s.setting++;
     try {
-      return await origNS(p, card, set);
+      return await origNS(p, card, set, opts);
     } finally {
       if (set) s.setting--;
     }
