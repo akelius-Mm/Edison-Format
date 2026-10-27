@@ -152,4 +152,4 @@ export class UndoTracker {
   }
 }
 
-const OPP_METHODS = new Set(['chooseAction', 'chooseResponse', 'selectCards', 'chooseOption', 'confirm', 'choosePosition', 'chooseAttackTarget', 'confirmTrigger', 'declareCard']);
+const OPP_METHODS = new Set(['chooseAction', 'chooseResponse', 'selectCards', 'chooseOption', 'confirm', 'choosePosition', 'chooseAttackTarget', 'confirmTrigger', 'declareCard', 'chooseTriggerOrder']);

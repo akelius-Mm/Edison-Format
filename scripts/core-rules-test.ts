@@ -11,6 +11,8 @@ import type { Action, Activation, PlayerController, ResponseRequest, SelectReque
 import { Ctx } from '../src/engine/ctx';
 import { Game, GameOver, type ChainLink } from '../src/engine/game';
 import type { BattlePos, Location, PlayerId } from '../src/engine/types';
+import { AIController } from '../src/ai/ai';
+import { RecordingController, type Decision } from '../src/engine/replay';
 
 const T = {
   brute: findCard('Rules Test Brute') ?? normal('Rules Test Brute', 'EARTH', 'Warrior', 4, 1800, 1000),
@@ -52,6 +54,25 @@ const negateTrap =
   trap('Core Test Negate Trap', 'normal', { text: 'Negate an activation.', effects: [{ kind: 'activate', categories: ['negate'], canActivate: (ctx) => ctx.game.chain.length > 0, resolve: async () => {} }] });
 const counterTrap = findCard('Core Test Counter') ?? trap('Core Test Counter', 'counter', { text: 'Do nothing.', effects: [{ kind: 'activate', resolve: async () => {} }] });
 
+/** Simultaneous-trigger ordering (Rulebook p.43): each resolution appends the card's name. */
+const resolvedOrder: string[] = [];
+const orderTrigger = (name: string, mandatory: boolean, categories: ('destroy' | 'draw')[] = []) =>
+  findCard(name) ??
+  monster(name, {
+    attribute: 'DARK',
+    race: 'Fiend',
+    level: 3,
+    atk: 0,
+    def: 0,
+    text: mandatory ? 'When this card is discarded: do nothing.' : 'When this card is discarded: you can do nothing.',
+    effects: [{ kind: 'trigger', event: 'discarded', mandatory, when: !mandatory || undefined, categories, resolve: async () => void resolvedOrder.push(name) }],
+  });
+const ordA = orderTrigger('Core Test Order A', true);
+const ordB = orderTrigger('Core Test Order B', true, ['draw']);
+const ordC = orderTrigger('Core Test Order C', true, ['destroy']);
+const ordOptA = orderTrigger('Core Test Order Opt A', false);
+const ordOptB = orderTrigger('Core Test Order Opt B', false);
+
 type Responder = (g: Game, req: ResponseRequest) => Activation | null;
 
 class TestController implements PlayerController {
@@ -85,6 +106,16 @@ class TestController implements PlayerController {
   }
   async chooseAttackTarget(_g: Game, _p: PlayerId, _a: CardInstance, targets: CardInstance[], canDirect: boolean) {
     return targets[0] ?? (canDirect ? null : 'cancel');
+  }
+}
+
+/** A TestController that orders simultaneous triggers (reverse of the offered order unless `order` says otherwise). */
+class OrderingController extends TestController {
+  orderAsked: string[][] = [];
+  order: (acts: Activation[]) => Activation[] = (acts) => [...acts].reverse();
+  async chooseTriggerOrder(_g: Game, _p: PlayerId, acts: Activation[]) {
+    this.orderAsked.push(acts.map((a) => a.card.name));
+    return this.order(acts);
   }
 }
 
@@ -480,6 +511,154 @@ async function gameOver(fn: () => Promise<unknown> | unknown): Promise<GameOver>
       const e = await gameOver(() => g.checkLp());
       eq(e.winner, null, 'simultaneous 0 LP');
     }
+  });
+
+  // ---- Rulebook p.43: the player chooses the Chain order of their own simultaneous triggers -------------------------
+  // "If there are 2 or more effects, the turn player builds the Chain with their card effects, selecting the order in
+  // which they go on the Chain. Then the opponent continues the Chain with their effects." (Official Rulebook v7.0 p.43,
+  // https://www.edisonformat.com/rulebook.html). Effects of one step that triggered at different times keep that order
+  // (Edison Format rule #7, https://www.edisonformat.com/edison-rule-differences.html).
+  const orderSetup = () => {
+    const s = setup();
+    const c0 = new OrderingController();
+    const c1 = new OrderingController();
+    s.g.controllers = [c0, c1];
+    resolvedOrder.length = 0;
+    return { ...s, c0, c1 };
+  };
+  await test('Rulebook p.43: a controller without chooseTriggerOrder keeps the trigger order', async () => {
+    const { g, place } = setup();
+    resolvedOrder.length = 0;
+    const a = place(0, ordA, 'hand');
+    const b = place(0, ordB, 'hand');
+    await g.discard([a, b]);
+    await g.processTriggers(false);
+    eq(resolvedOrder.join(','), 'Core Test Order B,Core Test Order A', 'Chain Link 1 = A, resolves last');
+  });
+  await test('Rulebook p.43: the turn player chooses the order of their simultaneous mandatory triggers (reverse)', async () => {
+    const { g, c0, place } = orderSetup();
+    const a = place(0, ordA, 'hand');
+    const b = place(0, ordB, 'hand');
+    const c = place(0, ordC, 'hand');
+    await g.discard([a, b, c]);
+    await g.processTriggers(false);
+    eq(c0.orderAsked.length, 1, 'asked once');
+    eq(c0.orderAsked[0].join(','), 'Core Test Order A,Core Test Order B,Core Test Order C', 'offered in trigger order');
+    // chain C, B, A (Chain Link 1 = C): resolves A, B, C
+    eq(resolvedOrder.join(','), 'Core Test Order A,Core Test Order B,Core Test Order C', 'reverse order on the Chain');
+  });
+  await test('Rulebook p.43: chosen order shows on the Chain (Chain Link 1 is the first picked)', async () => {
+    const { g, c0, c1, place } = orderSetup();
+    const a = place(0, ordA, 'hand');
+    const b = place(0, ordB, 'hand');
+    place(1, counterTrap, 'szone'); // the opponent gets a chain window to look at the Chain
+    let seen = '';
+    c1.respond = (gg, req) => {
+      if (req.kind === 'chain' && !seen) seen = gg.chain.map((l) => l.card.name).join(',');
+      return null;
+    };
+    c0.order = (acts) => [acts[1], acts[0]];
+    await g.discard([a, b]);
+    await g.processTriggers(false);
+    eq(seen, 'Core Test Order B,Core Test Order A', 'Chain Link 1 = B');
+  });
+  await test('Rulebook p.43: no prompt for one effect or for copies of the same effect', async () => {
+    const { g, c0, place } = orderSetup();
+    const a1 = place(0, ordA, 'hand');
+    const a2 = place(0, ordA, 'hand');
+    await g.discard([a1, a2]);
+    await g.processTriggers(false);
+    eq(c0.orderAsked.length, 0, 'not asked for identical copies');
+    eq(resolvedOrder.length, 2, 'both resolved');
+    const b = place(0, ordB, 'hand');
+    await g.discard([b]);
+    await g.processTriggers(false);
+    eq(c0.orderAsked.length, 0, 'not asked for one effect');
+  });
+  await test('Rule #7: triggers of one step that happened at different times keep that order (no prompt)', async () => {
+    const { g, c0, place } = orderSetup();
+    const a = place(0, ordA, 'hand');
+    const b = place(0, ordB, 'hand');
+    await g.discard([a]);
+    await g.discard([b]);
+    await g.processTriggers(false);
+    eq(c0.orderAsked.length, 0, 'not asked');
+    eq(resolvedOrder.join(','), 'Core Test Order B,Core Test Order A', 'earlier trigger is Chain Link 1');
+  });
+  await test('Rulebook p.43: each player orders only their own group; SEGOC steps between players stay fixed', async () => {
+    const { g, c0, c1, place } = orderSetup();
+    const a = place(0, ordA, 'hand');
+    const b = place(0, ordB, 'hand');
+    const oa = place(1, ordOptA, 'hand');
+    const ob = place(1, ordOptB, 'hand');
+    await g.moveCards([a, b, oa, ob], 'grave', { reason: 'discard', reasons: ['discard', 'effect'] });
+    await g.processTriggers(false);
+    eq(c0.orderAsked.map((x) => x.join('+')).join(' | '), 'Core Test Order A+Core Test Order B', 'turn player asked for their mandatory ones');
+    eq(c1.orderAsked.map((x) => x.join('+')).join(' | '), 'Core Test Order Opt A+Core Test Order Opt B', 'opponent asked for their optional ones');
+    // Chain: B, A (turn player's mandatory, reversed), Opt B, Opt A (opponent's optional, reversed)
+    eq(resolvedOrder.join(','), 'Core Test Order Opt A,Core Test Order Opt B,Core Test Order A,Core Test Order B', 'resolution order');
+  });
+  await test('Rulebook p.43: optional triggers: only the ones the player activates are ordered', async () => {
+    const { g, c0, place } = orderSetup();
+    const oa = place(0, ordOptA, 'hand');
+    const ob = place(0, ordOptB, 'hand');
+    const a = place(0, ordA, 'hand');
+    (c0 as any).confirmTrigger = async (_g: Game, _p: PlayerId, act: Activation) => act.card !== ob;
+    await g.discard([oa, ob, a]);
+    await g.processTriggers(false);
+    eq(c0.orderAsked.length, 0, 'one optional left: nothing to order (and the mandatory one is a different step)');
+    eq(resolvedOrder.join(','), 'Core Test Order Opt A,Core Test Order A', 'mandatory is Chain Link 1');
+  });
+  await test('AI: trigger order is deterministic; removal resolves first, then resources, then the rest', async () => {
+    const { g, place } = setup();
+    const cards = [place(0, ordC, 'grave'), place(0, ordA, 'grave'), place(0, ordB, 'grave')];
+    const acts: Activation[] = cards.map((c) => ({ card: c, effect: c.data.effects![0], effectIndex: 0, label: 'Trigger' }));
+    const names = async (ai: AIController) => (await ai.chooseTriggerOrder(g, 0, acts.slice())).map((a) => a.card.name).join(',');
+    const first = await names(new AIController('hard', 1));
+    eq(first, 'Core Test Order A,Core Test Order B,Core Test Order C', 'plain, draw, destroy (destroy resolves first)');
+    for (const [lvl, seed] of [['easy', 7], ['normal', 99], ['hard', 12345]] as const) eq(await names(new AIController(lvl, seed)), first, `same order (${lvl})`);
+    eq(acts.map((a) => a.card.name).join(','), 'Core Test Order C,Core Test Order A,Core Test Order B', 'input not mutated');
+  });
+  await test('Replay: a recorded trigger order is replayed and reproduces the same state', async () => {
+    const run = async (rec: (inner: PlayerController) => RecordingController) => {
+      const { g, c0, place } = orderSetup();
+      const r = rec(c0);
+      g.controllers = [r, g.controllers[1]];
+      const a = place(0, ordA, 'hand');
+      const b = place(0, ordB, 'hand');
+      const c = place(0, ordC, 'hand');
+      c0.order = (acts) => [acts[1], acts[2], acts[0]];
+      await g.discard([a, b, c]);
+      await g.processTriggers(false);
+      const state = JSON.stringify(g.players.map((p) => p.grave.map((x) => g.allCards.indexOf(x))));
+      return { r, c0, order: resolvedOrder.join(','), state };
+    };
+    const live = await run((inner) => new RecordingController(inner));
+    const ord = live.r.log.filter((d) => d.k === 'ord');
+    eq(ord.length, 1, 'one ord decision recorded');
+    eq(JSON.stringify((ord[0] as Extract<Decision, { k: 'ord' }>).o), '[1,2,0]', 'recorded permutation');
+    eq(live.order, 'Core Test Order A,Core Test Order C,Core Test Order B', 'live order (Chain B, C, A)');
+    const log = JSON.parse(JSON.stringify(live.r.log)) as Decision[];
+    const noLive: PlayerController = new Proxy({ isHuman: true } as PlayerController, {
+      get: (_t, k) => (k === 'isHuman' ? true : k === 'then' ? undefined : () => Promise.reject(new Error(`live ${String(k)} during replay`))),
+    });
+    const re = await run(() => new RecordingController(noLive, { replay: log }));
+    eq(re.c0.orderAsked.length, 0, 'replay asks nobody');
+    eq(re.r.mismatch, null, 'no mismatch');
+    eq(re.order, live.order, 'same resolution order');
+    eq(re.state, live.state, 'same state');
+    // A log from before trigger ordering existed (no 'ord' entry) still replays, in the default order.
+    const old = log.filter((d) => d.k !== 'ord');
+    const legacy = await run(() => new RecordingController(noLive, { replay: [...old, { k: 'yes', v: true, h: 'end' }] }));
+    eq(legacy.order, 'Core Test Order C,Core Test Order B,Core Test Order A', 'legacy log: default order');
+    // The friend's seat (lenientOrder: false) must not skip a missing entry.
+    let mismatch = '';
+    try {
+      await run(() => new RecordingController(noLive, { replay: [{ k: 'yes', v: true, h: 'x' }], lenientOrder: false, onMismatch: (d) => (mismatch = d) }));
+    } catch (e) {
+      if (!(e instanceof GameOver)) throw e;
+    }
+    eq(mismatch.includes('expected a ord decision'), true, `strict mismatch (${mismatch})`);
   });
 
   console.log(`\n${pass} passed, ${fail} failed`);

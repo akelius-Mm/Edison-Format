@@ -1860,19 +1860,64 @@ export class Game {
       if (!(t.effect.noChain || t.effect.maintenance)) continue;
       if (await this.applyNoChain(t)) any = true;
     }
-    for (const t of order) {
-      if (t.effect.noChain || t.effect.maintenance) continue;
-      const act: Activation = { card: t.card, effect: t.effect, effectIndex: t.effectIndex, label: t.effect.label ?? 'Trigger', event: t.event };
-      if (!t.effect.mandatory) {
-        // re-check cost availability now (things may have changed while building)
-        if (t.effect.canActivate && !t.effect.canActivate(t.ctx)) continue;
-        const yes = await this.controllers[t.player].confirmTrigger(this, t.player, act);
-        if (!yes) continue;
+    for (const run of this.segocRuns(order.filter((t) => !(t.effect.noChain || t.effect.maintenance)))) {
+      const player = run[0].player;
+      const mandatory = !!run[0].effect.mandatory;
+      const toAct = (t: PendingTrigger): Activation => ({ card: t.card, effect: t.effect, effectIndex: t.effectIndex, label: t.effect.label ?? 'Trigger', event: t.event });
+      const chosen: { t: PendingTrigger & { ctx: Ctx }; act: Activation }[] = [];
+      for (const t of run) {
+        const act = toAct(t);
+        if (!mandatory) {
+          // re-check cost availability now (things may have changed while building)
+          if (t.effect.canActivate && !t.effect.canActivate(t.ctx)) continue;
+          const yes = await this.controllers[player].confirmTrigger(this, player, act);
+          if (!yes) continue;
+        }
+        chosen.push({ t, act });
       }
-      const link = await this.activate(t.player, act);
-      if (link) any = true;
+      for (const { t, act } of await this.orderTriggers(player, chosen)) {
+        // an optional one whose cost an earlier link of this run used up can no longer be activated
+        if (!mandatory && chosen.length > 1 && t.effect.canActivate && !t.effect.canActivate(t.ctx)) continue;
+        const link = await this.activate(t.player, act);
+        if (link) any = true;
+      }
     }
     return any;
+  }
+
+  /**
+   * Split SEGOC-ordered triggers into runs the same player may order freely: one player, one SEGOC step (mandatory /
+   * optional) and one moment (event batch). Within a step, effects that triggered at different times keep that order
+   * (earlier ones first: Edison Format rule #7, https://www.edisonformat.com/edison-rule-differences.html); effects
+   * that triggered at the same time are put on the Chain "selecting the order" by their controller (Rulebook v7.0 p.43,
+   * https://www.edisonformat.com/rulebook.html).
+   */
+  private segocRuns<T extends PendingTrigger>(order: T[]): T[][] {
+    const runs: T[][] = [];
+    const mand = (t: T) => !!t.effect.mandatory;
+    for (const t of order) {
+      const last = runs[runs.length - 1]?.[0];
+      if (last && last.player === t.player && mand(last) === mand(t) && last.event.batch === t.event.batch) runs[runs.length - 1].push(t);
+      else runs.push([t]);
+    }
+    return runs;
+  }
+
+  /**
+   * The Chain order of one run of simultaneous triggers, chosen by their controller when there are 2+ that are not all
+   * copies of the same effect (PlayerController.chooseTriggerOrder; the given order otherwise or on a bad answer).
+   */
+  private async orderTriggers<T extends { act: Activation }>(player: PlayerId, items: T[]): Promise<T[]> {
+    if (items.length < 2) return items;
+    const key = (a: Activation) => `${a.card.data.name}#${a.effectIndex}`;
+    if (items.every((x) => key(x.act) === key(items[0].act))) return items;
+    const c = this.controllers[player];
+    if (!c.chooseTriggerOrder) return items;
+    const acts = items.map((x) => x.act);
+    const got = await c.chooseTriggerOrder(this, player, acts.slice());
+    const out = got.map((a) => items.find((x) => x.act === a));
+    if (out.length !== items.length || out.some((x) => !x) || new Set(out).size !== items.length) return items;
+    return out as T[];
   }
 
   // -------------------------------------------------------------------------

@@ -634,6 +634,73 @@ export function responseDialog(
   });
 }
 
+/**
+ * Order simultaneous triggers on the Chain: tap them in Chain order (the last one picked resolves first), tap a picked
+ * one to take it and the ones after it back. "Default order" keeps the order shown.
+ */
+export function triggerOrderDialog(d: Dialogs, ctx: PromptCtx, acts: Activation[]): Promise<Activation[]> {
+  return new Promise((resolve) => {
+    let m: ModalHandle;
+    const picked: number[] = [];
+    const body = h('div', 'resp-list trg-order');
+    const rows = acts.map((o, i) => {
+      const row = h('button', 'resp-opt trg-row') as HTMLButtonElement;
+      row.type = 'button';
+      const label = o.label && o.label !== 'Trigger' ? o.label : describeLoc(o.card);
+      row.innerHTML = `<div class="resp-txt"><b>${esc(o.card.name)}</b><small>${esc(label)}</small></div><span class="trg-badge"></span>`;
+      row.prepend(artThumb(o.card.data));
+      row.insertBefore(readButton(() => zoomCard(o.card.data, { instance: o.card, game: ctx.game }), 'resp-read'), row.querySelector('.trg-badge'));
+      onLongPress(row, () => zoomCard(o.card.data, { instance: o.card, game: ctx.game }));
+      row.addEventListener('pointerenter', () => ctx.preview(o.card));
+      row.onclick = () => {
+        ctx.sfx.play('click');
+        haptic('selection');
+        const at = picked.indexOf(i);
+        if (at >= 0) picked.splice(at);
+        else {
+          picked.push(i);
+          // the last one left has only one place: fill it in
+          if (picked.length === acts.length - 1) picked.push(acts.findIndex((_, j) => !picked.includes(j)));
+        }
+        refresh();
+      };
+      body.appendChild(row);
+      return row;
+    });
+    const finish = (order: number[]) => {
+      m.close();
+      ctx.clearHighlight('is-response');
+      resolve(order.map((i) => acts[i]));
+    };
+    const refresh = () => {
+      rows.forEach((row, i) => {
+        const at = picked.indexOf(i);
+        const done = picked.length === acts.length;
+        row.classList.toggle('is-picked', at >= 0);
+        row.querySelector('.trg-badge')!.innerHTML = at < 0 ? '' : `Link ${at + 1}${done && at === acts.length - 1 ? '<small>resolves first</small>' : ''}`;
+      });
+      m?.setDisabled(1, picked.length !== acts.length);
+    };
+    ctx.highlight(
+      acts.map((o) => o.card.uid),
+      'is-response',
+    );
+    m = d.modal({
+      title: 'Choose the order',
+      subtitle: 'Tap them in Chain order: the last one you pick resolves first.',
+      body,
+      docked: true,
+      peek: true,
+      className: 'dlg--response dlg--trg-order',
+      actions: [
+        { label: 'Default order', kind: 'secondary', onClick: () => finish(acts.map((_, i) => i)) },
+        { label: 'Confirm', kind: 'primary', hotkey: 'Enter', disabled: true, onClick: () => finish(picked) },
+      ],
+    });
+    refresh();
+  });
+}
+
 function describeLoc(c: CardInstance) {
   if (c.location === 'hand') return 'From hand';
   if (c.location === 'szone' || c.location === 'fzone') return c.faceUp ? 'Face-up card' : 'Set card';

@@ -188,6 +188,9 @@ class ChaosHuman implements PlayerController {
   async confirmTrigger() {
     return this.rng.next() < (this.eager ? 0.95 : 0.6);
   }
+  async chooseTriggerOrder(_g: Game, _p: PlayerId, acts: Activation[]) {
+    return this.rng.shuffle([...acts]);
+  }
   async declareCard(_g: Game, _p: PlayerId, _prompt: string, names: string[]) {
     return this.rng.pick(names);
   }
@@ -222,6 +225,9 @@ class NoLive implements PlayerController {
   }
   confirmTrigger() {
     return this.no<boolean>();
+  }
+  chooseTriggerOrder() {
+    return this.no<Activation[]>();
   }
   declareCard() {
     return this.no<string>();
@@ -452,6 +458,14 @@ class Guard implements PlayerController {
     covBump(covKey(act.card, act.effectIndex), 0);
     // (a confirmed optional trigger counts as chosen when it activates)
     return this.inner.confirmTrigger(g, p, act);
+  }
+  async chooseTriggerOrder(g: Game, p: PlayerId, acts: Activation[]) {
+    this.pre(g, 'trigger-order');
+    if (acts.length < 2) this.ck().fail('empty-prompt', `trigger order asked for ${acts.length} effect(s)`);
+    if (acts.some((a) => a.card.controller !== p && a.card.onField)) this.ck().fail('controller', `trigger order offered another player's effect`);
+    const v = this.inner.chooseTriggerOrder ? await this.inner.chooseTriggerOrder(g, p, acts.slice()) : acts;
+    if (v.length !== acts.length || v.some((a) => !acts.includes(a))) this.ck().fail('controller', 'trigger order is not a permutation');
+    return v;
   }
   async declareCard(g: Game, p: PlayerId, prompt: string, names: string[]) {
     this.pre(g, 'declare');

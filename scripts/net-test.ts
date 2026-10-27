@@ -89,7 +89,7 @@ class Yielding {
     if (++this.n % 8 === 0) await sleep(0);
   }
 }
-for (const k of ['chooseAction', 'chooseResponse', 'selectCards', 'chooseOption', 'confirm', 'choosePosition', 'chooseAttackTarget', 'confirmTrigger', 'declareCard'] as const) {
+for (const k of ['chooseAction', 'chooseResponse', 'selectCards', 'chooseOption', 'confirm', 'choosePosition', 'chooseAttackTarget', 'confirmTrigger', 'declareCard', 'chooseTriggerOrder'] as const) {
   (Yielding.prototype as any)[k] = async function (this: any, ...a: unknown[]) {
     await this.y();
     return this.inner[k](...a);

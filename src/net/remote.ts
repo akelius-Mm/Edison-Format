@@ -74,7 +74,7 @@ export class RemoteController implements PlayerController {
 
   private async answer<T>(game: Game, run: (rc: RecordingController) => Promise<T>): Promise<T> {
     const { d, n } = await this.take();
-    const rc = new RecordingController(NO_LIVE, { replay: [d] });
+    const rc = new RecordingController(NO_LIVE, { replay: [d], lenientOrder: false });
     try {
       return await run(rc);
     } catch (e) {
@@ -112,6 +112,9 @@ export class RemoteController implements PlayerController {
   confirmTrigger(g: Game, p: PlayerId, act: Activation) {
     return this.answer(g, (rc) => rc.confirmTrigger(g, p, act));
   }
+  chooseTriggerOrder(g: Game, p: PlayerId, acts: Activation[]) {
+    return this.answer(g, (rc) => rc.chooseTriggerOrder(g, p, acts));
+  }
   declareCard(g: Game, p: PlayerId, prompt: string, names: string[]) {
     return this.answer(g, (rc) => rc.declareCard(g, p, prompt, names));
   }
@@ -144,6 +147,9 @@ export class AsHuman implements PlayerController {
   }
   confirmTrigger(g: Game, p: PlayerId, act: Activation) {
     return this.ai.confirmTrigger(g, p, act);
+  }
+  async chooseTriggerOrder(g: Game, p: PlayerId, acts: Activation[]) {
+    return this.ai.chooseTriggerOrder ? this.ai.chooseTriggerOrder(g, p, acts) : acts;
   }
   async declareCard(g: Game, p: PlayerId, prompt: string, names: string[]) {
     return this.ai.declareCard ? this.ai.declareCard(g, p, prompt, names) : names[0];

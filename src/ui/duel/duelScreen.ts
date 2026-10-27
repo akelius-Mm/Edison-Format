@@ -30,6 +30,7 @@ import {
   positionDialog,
   responseDialog,
   selectDialog,
+  triggerOrderDialog,
 } from './dialogs';
 import { HandFidget } from './fidget';
 import { FxDirector, sleep } from './fx';
@@ -1542,6 +1543,11 @@ class DuelScreen implements HumanUI {
     );
   }
 
+  requestTriggerOrder(_p: PlayerId, acts: Activation[]): Promise<Activation[]> {
+    this.flush();
+    return this.guard(triggerOrderDialog(this.dialogs, this.promptCtx(), acts));
+  }
+
   requestDeclare(_p: PlayerId, prompt: string, names: string[]): Promise<string> {
     this.flush();
     return this.guard(declareDialog(this.dialogs, prompt, names));
@@ -1551,7 +1557,7 @@ class DuelScreen implements HumanUI {
 /** PlayerController's request methods (the friend's seat is wrapped per request). */
 const UNDO_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14 4 9l5-5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>';
 
-const CONTROLLER_METHODS = new Set(['chooseAction', 'chooseResponse', 'selectCards', 'chooseOption', 'confirm', 'choosePosition', 'chooseAttackTarget', 'confirmTrigger', 'declareCard']);
+const CONTROLLER_METHODS = new Set(['chooseAction', 'chooseResponse', 'selectCards', 'chooseOption', 'confirm', 'choosePosition', 'chooseAttackTarget', 'confirmTrigger', 'declareCard', 'chooseTriggerOrder']);
 
 /** A full-screen cover with no progress for this long offers a way out. */
 const STALL_MS = 10000;
