@@ -1301,6 +1301,15 @@ export class Game {
   }
 
   /**
+   * Whether a rule lets `player` activate trigger effect `ef` of `card` at all. Triggers do not go through
+   * canActivateEffect; card patches (rgbt.ts: G.B. Hunter, Grave of the Super Ancient Organism) wrap this so a
+   * blocked trigger is neither offered nor asked about.
+   */
+  canActivateTrigger(_player: PlayerId, _card: CardInstance, _ef: EffectDef, _idx: number): boolean {
+    return true;
+  }
+
+  /**
    * Check whether `player` can activate effect `ef` of `card` right now.
    * Returns the context if possible.
    */
@@ -1700,6 +1709,8 @@ export class Game {
       // monster on field must still be face-up and not negated
       if (card.location === 'mzone' && !card.faceUp && t.event.type !== 'flipped') continue;
       if (card.location === 'mzone' && this.isNegated(card)) continue;
+      // a rule forbids activating it (G.B. Hunter: tag-outs): never offered, never asked
+      if (!this.canActivateTrigger(player, card, ef, idx)) continue;
       const ctx = new Ctx(this, card, ef, player);
       ctx.event = t.event;
       ctx.effectIndex = idx;

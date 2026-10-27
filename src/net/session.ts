@@ -85,7 +85,7 @@ export class NetSession {
         } catch (e) {
           // a reload: the server may still hold our previous registration for a little while
           if (this.closed) return;
-          if (!(e instanceof TransportError) || e.kind === 'unsupported' || Date.now() > until) throw e;
+          if (!(e instanceof TransportError) || e.kind === 'unsupported' || Date.now() >= until) throw e;
           await sleep(e.kind === 'id-taken' ? 2500 : 1500);
         }
       }
@@ -94,6 +94,8 @@ export class NetSession {
       const ch = await this.transport.dial(this.o.roomId);
       this.adopt(ch);
     }
+    if (this.closed) return;
+    if (this.timer) clearInterval(this.timer); // a second start() (an earlier one raced it): one heartbeat
     this.timer = setInterval(() => this.tick(), this.heartbeatMs);
   }
 
@@ -232,7 +234,9 @@ export class NetSession {
   /** The app came back to the foreground: check the connection straight away. */
   wake() {
     this.transport.revive();
-    this.tick();
+    // not started yet (the first start() is still trying): its own loop dials, a second one here
+    // would race it with a parallel dial loop that never stops
+    if (this.timer) this.tick();
   }
 }
 
