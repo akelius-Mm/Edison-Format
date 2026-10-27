@@ -38,25 +38,23 @@ const ANCIENT_GEAR: DeckDef = {
     ['Cyber Dragon', 2],
     ['Card Trooper', 1],
     ['Sangan', 1],
-    // Spells (17)
+    // Spells (16)
     ['Geartown', 3],
     ['Ancient Gear Castle', 1],
     ['Machine Duplication', 2],
     ['Polymerization', 1],
     ['Trade-In', 2],
     ['Pot of Avarice', 1],
-    ['Monster Reborn', 1],
-    ['Dark Hole', 1],
     ['Heavy Storm', 1],
     ['Mystical Space Typhoon', 1],
     ['Brain Control', 1],
     ['Limiter Removal', 1],
-    ['Book of Moon', 1],
-    // Traps (5)
+    ['Book of Moon', 2],
+    // Traps (6)
     ['Solemn Judgment', 1],
     ['Mirror Force', 1],
     ['Torrential Tribute', 1],
-    ['Bottomless Trap Hole', 1],
+    ['Bottomless Trap Hole', 2],
     ['Dimensional Prison', 1],
   ],
   // No Tuners of its own: Ultimate Ancient Gear Golem, Chimeratech Fortress Dragon and the toolbox for stolen Tuners.
@@ -88,7 +86,7 @@ const GADJILTRON_GADGETS: DeckDef = {
   description:
     'Gadgets as Tribute fodder instead of a toolbox. Every Gadget still searches the next one, but here they feed the two Ancient Gear Gadjiltrons, which gain an effect for each Gadget Tributed: Green makes Gadjiltron Chimera 2600 ATK and gives Gadjiltron Dragon piercing damage, Red burns after battle damage and Yellow burns for every monster destroyed. Geartown makes the Chimera a free Summon and the Dragon a one-Tribute 3000-ATK attacker that shuts off Spells and Traps, Machine Duplication turns a Machina Peacekeeper into three, and Machina Gearframe and Machina Fortress keep the hand full.',
   main: [
-    // Monsters (20)
+    // Monsters (21)
     ['Green Gadget', 3],
     ['Red Gadget', 3],
     ['Yellow Gadget', 3],
@@ -96,16 +94,15 @@ const GADJILTRON_GADGETS: DeckDef = {
     ['Ancient Gear Gadjiltron Dragon', 2],
     ['Machina Gearframe', 2],
     ['Machina Peacekeeper', 2],
-    ['Machina Fortress', 1],
+    ['Machina Fortress', 2],
     ['Card Trooper', 1],
-    // Spells (12)
+    // Spells (11)
     ['Geartown', 2],
     ['Machine Duplication', 2],
     ['Pot of Avarice', 1],
-    ['Monster Reborn', 1],
-    ['Dark Hole', 1],
     ['Heavy Storm', 1],
     ['Mystical Space Typhoon', 1],
+    ['Book of Moon', 1],
     ['Limiter Removal', 1],
     ['Brain Control', 1],
     ['Solidarity', 1],
@@ -144,23 +141,22 @@ const ZOMBIE_RECURSION: DeckDef = {
     ['Vampire Lord', 3],
     ['Red-Eyes Zombie Dragon', 2],
     ['Ryu Kokki', 2],
-    ['Il Blud', 2],
+    ['Il Blud', 3],
     ['Despair from the Dark', 1],
     ['Zombie Master', 3],
-    ['Mezuki', 2],
+    ['Mezuki', 1],
     ['Goblin Zombie', 2],
     ['Pyramid Turtle', 3],
     ['Spirit Reaper', 1],
     // Spells (12)
     ['Zombie World', 2],
     ['Call of the Mummy', 2],
-    ['Book of Life', 2],
+    ['Book of Life', 3],
     ['Foolish Burial', 1],
     ['Allure of Darkness', 1],
-    ['Monster Reborn', 1],
-    ['Dark Hole', 1],
     ['Heavy Storm', 1],
     ['Mystical Space Typhoon', 1],
+    ['Book of Moon', 1],
     // Traps (7)
     ['Solemn Judgment', 1],
     ['Mirror Force', 1],
@@ -169,7 +165,7 @@ const ZOMBIE_RECURSION: DeckDef = {
     ['Call of the Haunted', 1],
     ['Sakuretsu Armor', 1],
   ],
-  // No Plaguespreader: Synchros come from stolen Tuners (Book of Life, Monster Reborn, Zombie World on Brain Control targets).
+  // No Plaguespreader: Synchros come from stolen Tuners (Book of Life, Call of the Haunted, Zombie World on Brain Control targets).
   extra: [['Revived King Ha Des', 1], ['Thought Ruler Archfiend', 1], ...TOOLBOX],
   side: [
     // Graveyard hate for Lightsworn and DAD; the deck's own Graveyard is its resource, so no Macro Cosmos.

@@ -10,15 +10,15 @@ const FROG_MONARCHS: DeckDef = {
   description:
     'Swap Frog sends Treeborn Frog to the GY, where it keeps coming back as Tribute fodder, while Flip Flop Frog bounces the opponent\'s monsters and Dupe Frog fetches more Frogs. Each Tribute Summon of Caius, Raiza, Mobius, Thestalos or Zaborg takes a card from the opponent. Enemy Controller and Soul Exchange let you tribute away the opponent\'s monsters. The deck runs very few Spells/Traps to keep Treeborn Frog live, so plan around a mostly empty backrow.',
   main: [
-    // Monarchs (8)
+    // Monarchs (9)
     ['Caius the Shadow Monarch', 3],
-    ['Raiza the Storm Monarch', 2],
+    ['Raiza the Storm Monarch', 3],
     ['Mobius the Frost Monarch', 1],
     ['Thestalos the Firestorm Monarch', 1],
     ['Zaborg the Thunder Monarch', 1],
-    // Frogs (9)
+    // Frogs (10)
     ['Swap Frog', 3],
-    ['Treeborn Frog', 1],
+    ['Treeborn Frog', 2],
     ['Flip Flop Frog', 2],
     ['Dupe Frog', 2],
     ['Substitoad', 1],
@@ -28,7 +28,7 @@ const FROG_MONARCHS: DeckDef = {
     ['Card Trooper', 1],
     ['Spirit Reaper', 1],
     ['Tragoedia', 1],
-    // Spells (17)
+    // Spells (15)
     ['Enemy Controller', 3],
     ['Soul Exchange', 2],
     ['Cold Wave', 1],
@@ -37,8 +37,6 @@ const FROG_MONARCHS: DeckDef = {
     ['Book of Moon', 1],
     ['Mystical Space Typhoon', 1],
     ['Heavy Storm', 1],
-    ['Dark Hole', 1],
-    ['Monster Reborn', 1],
     ['Pot of Avarice', 1],
     ['Foolish Burial', 1],
     ['Smashing Ground', 1],
@@ -78,9 +76,8 @@ const FROG_MONARCHS: DeckDef = {
     // Another Tribute steal for the mirror and big synchros.
     ['Soul Exchange', 1],
     // Flip removal that also works as Tribute fodder.
-    ['Tsukuyomi', 1],
     // Stalls Blackwing and X-Saber beatdown.
-    ['Legendary Jujitsu Master', 1],
+    ['Legendary Jujitsu Master', 2],
   ],
 };
 
@@ -113,13 +110,11 @@ const TELE_DAD: DeckDef = {
     ['Gold Sarcophagus', 1],
     ['Mystical Space Typhoon', 1],
     ['Heavy Storm', 1],
-    ['Dark Hole', 1],
-    ['Monster Reborn', 1],
     ['Brain Control', 1],
-    ['Book of Moon', 1],
+    ['Book of Moon', 2],
     ['Pot of Avarice', 1],
     ['Foolish Burial', 1],
-    ['Smashing Ground', 1],
+    ['Smashing Ground', 2],
     // Traps (9)
     ['Solemn Judgment', 1],
     ['Mirror Force', 1],
@@ -195,12 +190,10 @@ const HERO_BEAT: DeckDef = {
     ['Gold Sarcophagus', 1],
     ['Mystical Space Typhoon', 1],
     ['Heavy Storm', 1],
-    ['Dark Hole', 1],
-    ['Monster Reborn', 1],
     ['Brain Control', 1],
-    ['Book of Moon', 1],
+    ['Book of Moon', 2],
     ['Pot of Avarice', 1],
-    ['Smashing Ground', 1],
+    ['Smashing Ground', 2],
     ['Lightning Vortex', 1],
     // Traps (9)
     ['Hero Signal', 2],
