@@ -8,7 +8,9 @@
 //  3. A Bo3 where the guest sides on the siding screen (one swap) and the sided list reaches the host.
 //  4. The guest, then the host, reloads mid-duel, resumes from Home's "Duel in progress" card and
 //     finishes in step.
-//  5. Screenshots of the landing, lobby and "Opponent is thinking…" chip, portrait and landscape.
+//  5. Three matches in one room via Rematch (one "Rematch" lost in a dropped channel): nobody is
+//     ever thrown out of the room and every rematch is a new match on both phones.
+//  6. Screenshots of the landing, lobby and "Opponent is thinking…" chip, portrait and landscape.
 //  No console errors anywhere (blocked card-art requests excepted).
 //
 // Usage (after `npm run build`; Playwright is not a project dependency):
@@ -169,6 +171,62 @@ async function match(browser, label, deckA, deckB, opts = {}) {
   await guest.ctx.close();
 }
 
+// Rematches in one room: three Bo1 matches back to back with the same code. Neither phone may
+// ever leave the room on its own (landing, Home, an error), the second and third matches must be
+// new matches (not the finished one again), and both phones must agree on every result.
+async function rematches(browser) {
+  if (ONLY && !'rematch in one room'.includes(ONLY)) return;
+  const host = await phone(browser, 'Hana', 'blackwings');
+  const guest = await phone(browser, 'Gus', 'lightsworn');
+  const code = await createAndJoin(host, guest);
+  // a kick is any screen outside the room: the landing (Create room), Home, or a connection error
+  const kicked = (p) => p.page.evaluate(() => !!document.querySelector('[data-test=create-room], .fr-error, .home-resume') || !location.hash.startsWith('#/friend'));
+  const watch = setInterval(async () => {
+    for (const p of [host, guest]) if (await kicked(p).catch(() => false)) watch.kicked = watch.kicked || `${p.name} left the room at ${await p.page.evaluate(() => location.hash).catch(() => '?')}`;
+  }, 150);
+  const ids = [];
+  try {
+    for (let round = 1; round <= 3; round++) {
+      // like people: one phone keeps the result screen up for a while
+      await (round % 2 ? guest : host).page.evaluate(() => (window.__edisonHoldResult = 2500));
+      await (round % 2 ? host : guest).page.evaluate(() => (window.__edisonHoldResult = 300));
+      await readyBoth(host, guest);
+      const id = await net(host, () => window.__edisonNet.room.match.start.id);
+      ok(!ids.includes(id) && id === (await net(guest, () => window.__edisonNet.room.match?.start.id)), `rematch round ${round}: a new match ${id} on both phones`);
+      ids.push(id);
+      await waitMatchOver(host, 120000, guest);
+      await waitMatchOver(guest, 120000, host);
+      await compareGames(`rematch round ${round}`, host, guest);
+      if (round === 3) break;
+      // both tap Rematch on the after-match screen (the first one asks, the second accepts)
+      const [first, second] = round === 1 ? [guest, host] : [host, guest];
+      await first.page.locator('[data-test=rematch]').click();
+      await second.page.waitForFunction(() => window.__edisonNet.room.rematch[1], null, { timeout: 10000 });
+      // round 2: the phone that accepts drops just then (screen locked, app switched): its
+      // "Rematch" never reaches the friend, who still sees "Waiting for …" until it is back
+      if (round === 2) await second.page.evaluate(() => window.__edisonNet.drop(3000));
+      await second.page.locator('[data-test=rematch]').click();
+      for (const p of [host, guest]) await p.page.waitForSelector('[data-test=ready]', { timeout: 15000 });
+      ok(!watch.kicked, `rematch round ${round}: both phones back in the lobby of ${code}${watch.kicked ? ` (${watch.kicked})` : ''}`);
+      // the lobby stays up (a late message from the finished match must not take a phone away)
+      await sleep(2500);
+      ok(!watch.kicked && !(await net(host, () => window.__edisonNet.room.match)) && !(await net(guest, () => window.__edisonNet.room.match)), `rematch round ${round}: both phones still in the lobby 2.5 s later${watch.kicked ? ` (${watch.kicked})` : ''}`);
+    }
+    await sleep(2000);
+    ok(!watch.kicked, `rematch: nobody left the room over three matches${watch.kicked ? ` (${watch.kicked})` : ''}`);
+  } catch (e) {
+    for (const p of [host, guest]) {
+      console.log(p.name, JSON.stringify(await p.page.evaluate(() => ({ hash: location.hash, inMatch: window.__edisonNet?.inMatch, status: window.__edisonNet?.status, match: window.__edisonNet?.room.match?.start.id ?? null, ends: window.__edisonNet?.room.match?.games.map((g) => g.end && g.end.reason), rematch: window.__edisonNet?.room.rematch, text: document.body.innerText.slice(0, 200) }))));
+      await p.page.screenshot({ path: path.join(OUT, `debug-rematch-${p.name}.png`) });
+    }
+    throw e;
+  } finally {
+    clearInterval(watch);
+    await host.ctx.close();
+    await guest.ctx.close();
+  }
+}
+
 async function screenshots(browser) {
   // the host plays by hand (no bot), so the guest's phone waits and shows the chip
   const host = await phone(browser, 'Hana', 'blackwings', { bot: false });
@@ -240,6 +298,7 @@ async function screenshots(browser) {
   const t0 = Date.now();
   try {
     if (!ONLY || ONLY === 'shots') await screenshots(browser);
+    await rematches(browser);
     const matchups = [
       ['blackwings', 'lightsworn', 1],
       ['zombies', 'gladiator-beasts', 3],

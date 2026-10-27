@@ -369,6 +369,10 @@ export class FriendSession {
   private uiDone: (() => void) | null = null;
   /** Friends Locals: the loop that gets both phones of the table into the room. */
   private table: TableLink | null = null;
+  /** The friend left the room after the match (the after-match screen says so). */
+  private peerGone = false;
+  /** Redraws the Rematch button on the duel's result screen. */
+  private resultRematch: (() => void) | null = null;
 
   constructor(
     body: HTMLElement,
@@ -400,6 +404,7 @@ export class FriendSession {
       transport: new PeerTransport(serverConfig()),
       snapshot: snap,
       expectPeer: hooks?.expectPeer,
+      noRematch: !!hooks,
     });
     if (hooks && !snap) room.mine = { deckKey: 'registered', deck: hooks.deck, ready: true, bestOf: hooks.bestOf };
     else if (!snap) {
@@ -409,11 +414,16 @@ export class FriendSession {
     room.ev = {
       status: (s) => {
         this.lobbyRefresh?.();
+        this.matchEndRefresh?.();
+        this.resultRematch?.();
         this.onStatus(s);
       },
       peer: (p) => {
         if (!this.inMatch) haptic('light');
+        this.peerGone = false;
         this.lobbyRefresh?.();
+        this.matchEndRefresh?.();
+        this.resultRematch?.();
         void p;
       },
       lobby: () => {
@@ -432,11 +442,14 @@ export class FriendSession {
       waiting: (on) => this.waiting(on),
       rematch: () => {
         this.matchEndRefresh = null;
+        this.peerGone = false;
+        // still on the duel's result screen: the lobby follows its Continue (playMatch)
         if (!this.inMatch) this.lobby();
       },
       rematchAsked: () => {
         haptic('light');
         this.matchEndRefresh?.();
+        this.resultRematch?.();
       },
       left: () => (hooks ? undefined : this.peerLeft()),
       refused: (r) => this.refused(r),
@@ -578,6 +591,15 @@ export class FriendSession {
 
   private peerLeft() {
     const name = this.room.peer?.name ?? 'Your friend';
+    // After the match (on the result screen or the after-match screen): stay there and say so.
+    // Only the player's own Leave takes them out of the room.
+    if (this.room.matchDone) {
+      this.peerGone = true;
+      this.room.rematch[1] = false;
+      this.matchEndRefresh?.();
+      this.resultRematch?.();
+      return;
+    }
     if (this.inMatch) return; // only sent from the lobby or after the match
     toast(`${name} left the room.`, 'info', 3200);
     if (this.role === 'guest') {
@@ -585,9 +607,16 @@ export class FriendSession {
       landing(this.view);
       return;
     }
+    this.reopenLobby();
+  }
+
+  /** Host: the friend left; open the lobby again so they (or someone else) can join with the code. */
+  private reopenLobby() {
     this.room.peer = null;
     this.room.theirs = null;
     this.room.match = null;
+    this.room.rematch = [false, false];
+    this.peerGone = false;
     this.matchEndRefresh = null;
     this.lobby();
   }
@@ -754,7 +783,10 @@ export class FriendSession {
   private async playMatch() {
     if (this.inMatch || !this.room.match) return;
     this.inMatch = true;
+    this.leftSaved = false;
+    this.peerGone = false;
     this.lobbyRefresh = null;
+    this.matchEndRefresh = null;
     const host = h('div', { class: 'duel-host fr-duel-host' });
     document.body.appendChild(host);
     document.body.classList.add('in-duel');
@@ -869,20 +901,55 @@ export class FriendSession {
       onGameOver: (r) => {
         if (r.seen) st.seen = r.seen;
         if (!r.restoreFailed && !r.left) room.gameOver(g, { winner: r.winner, reason: r.reason, turns: r.turns });
+        // the game is decided: a dropped connection no longer offers "Leave (duel stays saved)"
+        this.hideOffline();
         this.persist();
         // tests can keep the result screen up for a while (window.__edisonHoldResult, ms)
         if (bot) setTimeout(() => (document.querySelector('.result-continue') as HTMLButtonElement | null)?.click(), Number((globalThis as { __edisonHoldResult?: number }).__edisonHoldResult ?? 400));
       },
       resultTitle: (r) => (r.reason === 'Out of sync' ? 'Out of sync' : undefined),
+      // the match is over: ask for the rematch straight from the result screen
+      resultExtra: (close) => (this.hooks || !room.matchDone ? null : this.resultRematchButton(close)),
     })
       .catch((e) => console.error('online duel failed', e))
       .then((r) => {
-        // "Leave (duel stays saved)", from the Reconnecting banner or a stalled restore
-        if (r && r.left) this.leftSaved = true;
+        // "Leave (duel stays saved)", from the Reconnecting banner or a stalled restore (never once the game is decided)
+        if (r && r.left && !room.match?.games[g]?.end) this.leftSaved = true;
+        if (room.match?.games[g]?.end) this.leftSaved = false;
+        this.resultRematch = null;
         this.duel = null;
         this.netChip = null;
         window.clearTimeout(this.waitTimer);
       });
+  }
+
+  /** Rematch on the duel's result screen (the last game of the match): asks and moves on. */
+  private resultRematchButton(close: () => void): HTMLElement {
+    const room = this.room;
+    const friend = room.match!.start.players[room.peerSeat].name;
+    const b = ctaButton('Rematch', () => {
+      if (this.peerGone) return;
+      haptic('selection');
+      room.askRematch();
+      close();
+    }, 'refresh', 'fr-rematch result-rematch');
+    b.dataset.test = 'result-rematch';
+    const label = b.querySelector(':scope > span:last-child') as HTMLElement | null;
+    const draw = () => {
+      const text = this.peerGone ? `${friend} left the room` : room.rematch[1] ? 'Accept rematch' : 'Rematch';
+      if (label) label.textContent = text;
+      else b.textContent = text;
+      b.toggleAttribute('disabled', this.peerGone);
+    };
+    this.resultRematch = draw;
+    draw();
+    return b;
+  }
+
+  /** The duel on screen is decided (its result is showing): no more "Reconnecting" banner over it. */
+  private duelDecided() {
+    const d = this.duel;
+    return !!d && (!this.room.match || !!this.room.match.games[d.g]?.end);
   }
 
   /** The friend's phone ended the game (concede, claim, desync): end it here too. */
@@ -918,7 +985,7 @@ export class FriendSession {
       return;
     }
     if (s !== 'reconnecting' && s !== 'connecting') return;
-    if (this.offline) return;
+    if (this.offline || this.duelDecided()) return;
     this.offline = { since: Date.now(), timer: 0, el: null };
     // a short blip goes unnoticed
     this.offline.timer = window.setTimeout(() => this.showOffline(), 1200);
@@ -932,6 +999,7 @@ export class FriendSession {
     let stage = '';
     const draw = () => {
       if (!this.offline) return;
+      if (this.duelDecided()) return this.hideOffline();
       const waited = Date.now() - off.since;
       const canClaim = waited >= (this.hooks?.claimAfterMs ?? CLAIM_AFTER_MS) && !!this.duel?.ctl;
       // after a while, never just a spinner: say what helps, and offer a way out
@@ -980,6 +1048,7 @@ export class FriendSession {
 
   /** Leave the duel without deciding it: it stays saved and resumes from Home (or the event). */
   private leaveSaved() {
+    if (this.duelDecided()) return this.hideOffline();
     this.leftSaved = true;
     this.hideOffline();
     this.duel?.ctl?.leave();
@@ -1157,14 +1226,32 @@ export class FriendSession {
     const meKey = room.mySeat === 0 ? 'a' : 'b';
     const title = desync ? 'Out of sync' : out === 'draw' ? 'Draw' : out === meKey ? 'You win' : `${friend} wins`;
     const pane = h('div', { class: 'fr-pane fr-over' });
+    const leave = () => (this.close(), landing(this.view));
     const draw = () => {
       if (!pane.isConnected && pane.parentElement) return;
+      if (room.match !== m) return;
       const asked = room.rematch[0];
       const theyAsked = room.rematch[1];
+      const gone = this.peerGone;
+      // the friend's phone dropped (screen locked, hotspot, app in the background): it comes back on its own
+      const away = !gone && room.status !== 'connected';
       const rec = loadH2H()[friend.trim().toLowerCase()];
-      const rematch = ctaButton(asked ? `Waiting for ${friend}…` : theyAsked ? 'Accept rematch' : 'Rematch', () => (room.askRematch(), draw()), 'refresh', 'fr-rematch');
-      rematch.dataset.test = 'rematch';
-      if (asked) rematch.setAttribute('disabled', '');
+      const rematch = gone
+        ? this.role === 'host'
+          ? ctaButton('Open the lobby', () => this.reopenLobby(), 'door', 'fr-rematch')
+          : null
+        : ctaButton(asked ? `Waiting for ${friend}…` : theyAsked ? 'Accept rematch' : 'Rematch', () => (room.askRematch(), draw()), 'refresh', 'fr-rematch');
+      if (rematch && !gone) rematch.dataset.test = 'rematch';
+      if (rematch && asked && !gone) rematch.setAttribute('disabled', '');
+      const conn = gone
+        ? h(
+            'p',
+            { class: 'fr-gone', role: 'status', 'data-test': 'friend-left' },
+            this.role === 'host' ? `${friend} left the room. Open the lobby so they can join again with code ${this.code}, or leave.` : `${friend} left the room. To play again, one of you creates a new room.`,
+          )
+        : away
+          ? h('p', { class: 'fr-status is-reconnecting', role: 'status', 'data-test': 'friend-away' }, `${friend} lost connection — waiting for them to come back`)
+          : h('p', { class: 'fr-status is-connected', role: 'status' }, `${friend} is in the room`);
       pane.replaceChildren(
         h(
           'section',
@@ -1175,9 +1262,11 @@ export class FriendSession {
             ? h('p', null, 'The two phones stopped agreeing on the game, so it was stopped. Nothing counts. Start a rematch to play again.')
             : h('div', { class: 'fr-score' }, h('b', null, String(wMe)), h('span', null, '–'), h('b', null, String(wThem))),
           !desync && rec ? h('p', { class: 'fr-hint' }, `Head to head vs ${friend}: ${rec.w}–${rec.l}${rec.d ? `–${rec.d}` : ''}`) : null,
-          theyAsked && !asked ? h('p', { class: 'fr-ask' }, `${friend} wants a rematch.`) : null,
+          theyAsked && !asked && !gone ? h('p', { class: 'fr-ask' }, `${friend} wants a rematch.`) : null,
+          asked && away ? h('p', { class: 'fr-hint' }, 'Your rematch request goes through when they are back.') : null,
         ),
-        h('div', { class: 'fr-actions' }, rematch, h('button', { type: 'button', class: 'fr-leave', onclick: () => (this.close(), landing(this.view)) }, 'Leave room')),
+        conn,
+        h('div', { class: 'fr-actions' }, rematch, h('button', { type: 'button', class: 'fr-leave', 'data-test': 'leave-room', onclick: leave }, 'Leave room')),
       );
     };
     this.matchEndRefresh = draw;
@@ -1196,6 +1285,7 @@ export class FriendSession {
     const ended = !!room.outcome() || m.games.some((g) => g.end?.kind === 'desync');
     const tag: ResumeTag = this.hooks ? this.hooks.tag(room.snapshot()) : { kind: 'friend', key: `friend:${m.start.id}`, route: 'friend', meta: { room: room.snapshot() as unknown as Record<string, unknown> } };
     if (ended) {
+      this.recordMatch();
       this.hooks?.onDecided(room);
       const d = loadActiveDuel();
       if (d?.tag.key === tag.key) clearActiveDuel();

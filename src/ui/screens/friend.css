@@ -522,3 +522,27 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* ---------------------------------------------------------------- after the match */
+.fr-over > .fr-status {
+  margin: 0 2px;
+}
+.fr-gone {
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: var(--grp, #17181b);
+  color: var(--text-2);
+  font-size: 14px;
+  line-height: 1.4;
+}
+/* Rematch on the duel's result screen, above Continue */
+.result-box .result-rematch {
+  width: 100%;
+  min-height: 48px;
+  border-radius: 14px;
+  justify-content: center;
+}
+.result-box .result-rematch[disabled] {
+  opacity: 0.55;
+}
