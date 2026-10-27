@@ -14,6 +14,9 @@ import {
   levelMax,
   selfDestroysByBattle,
   selfFieldToGrave,
+  interruptTarget,
+  monsterInterruptScore,
+  pendingHits,
   stLingers,
   stRemovalScore,
 } from '../helpers';
@@ -41,7 +44,8 @@ spell('Mystical Space Typhoon', 'quickplay', {
           // Only the opponent's cards that are worth hitting: a Set card, or a face-up card that keeps applying. Never a
           // Normal/Quick-Play Spell or Normal/Counter Trap that is already being activated: it resolves anyway.
           const good = ctx.spellTraps('opp', (c) => c !== ctx.self && ctx.canTarget(c) && stRemovalScore(ctx, c) > 0);
-          if (!good.length) return 0;
+          // -1, not 0: not even to "save" this Set card from being destroyed (it would hit our own card or a wasted one)
+          if (!good.length) return -1;
           const top = ctx.chainTop();
           // in response to their Continuous / Equip / Field card: destroying it stops it
           if (top && top.player === ctx.opp && top.isCardActivation && stLingers(top.card) && good.includes(top.card)) return 80;
@@ -164,7 +168,10 @@ spell('Book of Moon', 'quickplay', {
       categories: ['position'],
       canActivate: (ctx) => ctx.faceUpMonsters('both', (c) => ctx.canTarget(c)).length > 0,
       activate: async (ctx) => {
-        await ctx.selectTargets(ctx.faceUpMonsters('both'), 1, 1, 'Target 1 face-up monster to flip face-down.', 'position');
+        // AI: the attacker / the monster whose effect is on the chain, never our own monster (the attack or effect goes on).
+        await ctx.selectTargets(ctx.faceUpMonsters('both'), 1, 1, 'Target 1 face-up monster to flip face-down.', 'position', {
+          aiScore: (c) => monsterInterruptScore(ctx, c),
+        });
       },
       resolve: async (ctx) => {
         const t = ctx.validTargets((c) => c.location === 'mzone' && c.faceUp);
@@ -172,13 +179,23 @@ spell('Book of Moon', 'quickplay', {
       },
       ai: {
         score: (ctx) => {
+          // Only the opponent's face-up monsters are worth flipping; with none, never (not even to "save" a Set Book of
+          // Moon that is about to be destroyed: it would flip our own monster).
+          const theirs = ctx.faceUpMonsters('opp', (c) => ctx.canTarget(c) && !pendingHits(ctx.game, ctx.player).has(c));
+          if (!theirs.length) return -1;
+          const t = interruptTarget(ctx);
+          // our own chain already removes / flips that monster
+          if (t && !theirs.includes(t)) return 0;
           const b = ctx.battle;
-          // Stop an attack on your turn's defence: flip the attacker.
+          // Stop an attack on your turn's defence: flip the attacker (a big one, or a direct attack that hurts).
           if (b && b.attacker.controller === ctx.opp && !b.inDamageStep) {
-            return ctx.atk(b.attacker) >= 1500 || !b.target ? 70 : 0;
+            // the attack is already stopped (or the attacker gone): wait for the next attack declaration
+            if (b.negated || b.attacker.location !== 'mzone') return 0;
+            const atk = ctx.atk(b.attacker);
+            return atk >= 1500 || (!b.target && atk >= Math.min(1000, ctx.lp)) ? 70 : 0;
           }
-          const top = ctx.chainTop();
-          if (top && top.player === ctx.opp && top.card.location === 'mzone' && top.card.faceUp && top.card.isMonster) return 75;
+          // in response to a monster effect: only a monster worth a card (not Card Trooper milling, Deep Sea Diva...)
+          if (t) return cardValue(ctx.game, t) >= 1700 ? 75 : 0;
           return 0;
         },
       },
@@ -207,6 +224,10 @@ spell('Brain Control', 'normal', {
       ai: {
         score: (ctx) => {
           const best = bestTarget(ctx.game, ctx.faceUpMonsters('opp', brainControllable));
+          // Paying 800 to borrow a monster is for attacking with it (or using it as material): not in Main Phase 2 / the
+          // first turn without a Synchro Monster to make.
+          const canBattle = ctx.phase === 'main1' && ctx.turn > 1;
+          if (!canBattle && !ctx.extra('me', (c) => c.hasType('synchro')).length) return 0;
           return best && ctx.atk(best) >= 1800 ? 40 + ctx.atk(best) / 100 : 0;
         },
       },
@@ -318,7 +339,11 @@ trap('Mirror Force', 'normal', {
         score: (ctx) => {
           const atks = ctx.monsters('opp', (c) => c.pos === 'atk' && c.faceUp);
           const total = atks.reduce((a, c) => a + cardValue(ctx.game, c), 0);
-          return atks.length >= 2 || total >= 2000 ? 70 + total / 200 : 30;
+          if (atks.length >= 2 || total >= 2000) return 70 + total / 200;
+          // a lone small attacker: only if it would hurt (lethal, or a big chunk of LP); not on a 500-ATK Viper
+          const b = ctx.battle;
+          const dmg = b && !b.target ? ctx.atk(b.attacker) : 0;
+          return total >= 1500 || dmg >= ctx.lp || dmg >= 1500 ? 30 : 0;
         },
       },
     },

@@ -205,6 +205,14 @@ function oppAttack(ctx: Ctx): AttackInfo | null {
   return { attacker: a, target: t, damage, loss, danger: damage + loss, lethal: damage >= ctx.lp, others };
 }
 
+/**
+ * Is this attack worth spending a removal card on? Not a 300-ATK Dandylion poking for chip damage: it must be lethal, cost
+ * 1000+ (LP plus the value of the monster it would destroy), or come from a monster worth a card.
+ */
+function attackWorthAnswering(ctx: Ctx, at: AttackInfo) {
+  return at.lethal || at.danger >= 1000 || cardValue(ctx.game, at.attacker) >= 1600;
+}
+
 /** Opponent monsters summoned since the last action that are still on the field. */
 function recentOppSummons(ctx: Ctx) {
   return ctx.game.recentEvents
@@ -225,7 +233,7 @@ function removalScore(ctx: Ctx, cands: CardInstance[], base: number) {
   const g = ctx.game;
   const at = oppAttack(ctx);
   if (at && cands.includes(at.attacker)) {
-    if (at.danger <= 0) return 0;
+    if (at.danger <= 0 || !attackWorthAnswering(ctx, at)) return 0;
     return (at.lethal ? 120 : base) + cardValue(g, at.attacker) / 100;
   }
   const top = oppTop(ctx);
@@ -266,7 +274,8 @@ defTrap('Torrential Tribute', 'normal', {
           const mine = ctx.monsters('me').reduce((a, c) => a + cardValue(g, c), 0);
           const theirs = ctx.monsters('opp').reduce((a, c) => a + cardValue(g, c), 0);
           const diff = theirs - mine;
-          return diff >= 1500 ? 45 + diff / 150 : 0;
+          // -1 when it costs us more than them: not even to "save" a Set Torrential from MST (2 of our monsters for 2 Tokens)
+          return diff >= 1500 ? 45 + diff / 150 : diff < 0 ? -1 : 0;
         },
       },
     },
@@ -337,7 +346,7 @@ defTrap('Dimensional Prison', 'normal', {
       ai: {
         score: (ctx) => {
           const at = oppAttack(ctx);
-          if (!at || myLinkInChain(ctx) || at.danger <= 0) return 0;
+          if (!at || myLinkInChain(ctx) || at.danger <= 0 || !attackWorthAnswering(ctx, at)) return 0;
           return (at.lethal ? 130 : 52) + cardValue(ctx.game, at.attacker) / 100;
         },
       },
@@ -427,7 +436,7 @@ defTrap('Sakuretsu Armor', 'normal', {
       ai: {
         score: (ctx) => {
           const at = oppAttack(ctx);
-          if (!at || myLinkInChain(ctx) || at.danger <= 0 || ctx.query(at.attacker, 'indestructibleEffect')) return 0;
+          if (!at || myLinkInChain(ctx) || at.danger <= 0 || !attackWorthAnswering(ctx, at) || ctx.query(at.attacker, 'indestructibleEffect')) return 0;
           return (at.lethal ? 125 : 48) + cardValue(ctx.game, at.attacker) / 100;
         },
       },
@@ -750,7 +759,8 @@ defTrap('Dust Tornado', 'normal', {
           if (myLinkInChain(ctx)) return 0;
           // never at a Normal/Quick-Play Spell or Normal/Counter Trap already being activated (it resolves anyway)
           const good = ctx.spellTraps('opp', (c) => ctx.canTarget(c) && stRemovalScore(ctx, c) > 0);
-          if (!good.length) return 0;
+          // -1, not 0: not even to "save" this Set card from being destroyed (it would hit our own card or a wasted one)
+          if (!good.length) return -1;
           const top = oppTop(ctx);
           if (top && top.card.onField && top.isCardActivation && stLingers(top.card) && good.includes(top.card)) return 70;
           if (oppOpen(ctx, 'end') && good.length) return 40;
@@ -1343,6 +1353,7 @@ defTrap('Widespread Ruin', 'normal', {
           const at = oppAttack(ctx);
           if (!at || myLinkInChain(ctx) || at.danger <= 0) return 0;
           const atkPos = ctx.monsters('opp', (c) => c.faceUp && c.pos === 'atk');
+          if (!attackWorthAnswering(ctx, at) && Math.max(0, ...atkPos.map((c) => cardValue(ctx.game, c))) < 1600) return 0;
           const top = Math.max(0, ...atkPos.map((c) => ctx.atk(c)));
           const victim = atkPos.find((c) => ctx.atk(c) === top);
           if (!victim) return 0;

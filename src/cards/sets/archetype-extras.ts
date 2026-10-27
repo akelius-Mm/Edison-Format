@@ -46,6 +46,8 @@ const isSixSamurai = (c: C) => c.isMonster && (c.inSet('six-samurai') || c.name.
 const isHero = (c: C) => c.isMonster && (c.inSet('hero') || /\bHERO\b|\bHero\b/.test(c.name));
 const isDragon = (c: C) => c.isMonster && c.data.race === 'Dragon';
 const isRedEyes = (c: C) => c.isMonster && c.name.startsWith('Red-Eyes');
+/** AI: Red-Eyes monsters our own Red-Eyes Wyvern links on the chain already target. */
+const wyvernTargeted = (ctx: Ctx) => new Set(ctx.game.chain.filter((l) => l.player === ctx.player && l.card.name === WYVERN && l.card !== ctx.self).flatMap((l) => l.ctx.targets));
 
 /** Events since the start of the current turn's Draw Phase. */
 function turnEvents(g: Game): GameEvent[] {
@@ -550,14 +552,26 @@ M(WYVERN, {
       activate: async (ctx) => {
         await ctx.banish(ctx.self, 'cost');
         await ctx.selectTargets(ctx.grave('me', (c) => isRedEyes(c) && c.name !== CHICK && ctx.canSummonCard(c)), 1, 1, 'Select 1 "Red-Eyes" monster in your GY.', 'specialSummon', {
-          aiScore: (c) => (c.data.atk ?? 0) + (c.data.aiValue ?? 0),
+          // AI: not a monster another of our Wyverns already targets on this chain
+          aiScore: (c) => (c.data.atk ?? 0) + (c.data.aiValue ?? 0) - (wyvernTargeted(ctx).has(c) ? 10000 : 0),
         });
       },
       resolve: async (ctx) => {
         const t = ctx.validTargets((c) => c.location === 'grave');
         if (t.length) await ctx.specialSummon(t[0], { pos: 'choose' });
       },
-      ai: { score: () => 60 },
+      ai: {
+        // Several Wyverns trigger together: only as many as there are monsters to revive (the triggers are all confirmed
+        // before any goes on the chain, so rank this Wyvern among them), never a second one at the same monster.
+        score: (ctx) => {
+          const taken = wyvernTargeted(ctx);
+          const wyverns = ctx.grave('me', (c) => c.name === WYVERN && c !== ctx.self);
+          const targets = ctx.grave('me', (c) => c !== ctx.self && isRedEyes(c) && c.name !== CHICK && c.name !== WYVERN && !taken.has(c) && ctx.canSummonCard(c));
+          if (!targets.length && (taken.size || !wyverns.length)) return 0;
+          const rank = wyverns.filter((c) => c.uid < ctx.self.uid).length;
+          return rank < Math.max(1, targets.length) ? 60 : 0;
+        },
+      },
     },
   ],
 });

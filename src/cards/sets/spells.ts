@@ -735,7 +735,8 @@ spell('Smashing Ground', 'normal', {
           if (!mons.length) return 0;
           const hi = Math.max(...mons.map((c) => ctx.def(c)));
           const v = Math.max(...mons.filter((c) => ctx.def(c) === hi).map((c) => cardValue(ctx.game, c)));
-          return v >= 1000 ? 42 + v / 150 : 0;
+          // not on a 950-value Ryko or Dandylion (a card for less than a card)
+          return v >= 1200 ? 42 + v / 150 : 0;
         },
       },
     },
@@ -762,7 +763,8 @@ spell('Fissure', 'normal', {
           if (!mons.length) return 0;
           const lo = Math.min(...mons.map((c) => ctx.atk(c)));
           const v = Math.max(...mons.filter((c) => ctx.atk(c) === lo).map((c) => cardValue(ctx.game, c)));
-          return v >= 900 ? 40 + v / 150 : 0;
+          // not on a 950-value Ryko or Dandylion (a card for less than a card)
+          return v >= 1200 ? 40 + v / 150 : 0;
         },
       },
     },

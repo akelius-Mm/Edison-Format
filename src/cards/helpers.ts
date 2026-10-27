@@ -2,7 +2,7 @@
 import type { CardInstance, EffectDef } from '../engine/card';
 import type { Ctx } from '../engine/ctx';
 import type { Game } from '../engine/game';
-import type { Attribute, GameEvent, Location, Race } from '../engine/types';
+import type { Attribute, GameEvent, Location, PlayerId, Race } from '../engine/types';
 
 export type F = (c: CardInstance) => boolean;
 
@@ -108,10 +108,67 @@ export const stLingers = (c: CardInstance) => c.data.stype === 'continuous' || c
 
 /** AI: how much destroying this Spell/Trap is worth (0 or less = never). */
 export function stRemovalScore(ctx: Ctx, c: CardInstance): number {
-  if (c.controller === ctx.player) return -1000;
+  // Own cards rank below everything, even an opponent's card that resolves anyway: when the AI must pick (it chained a
+  // Set MST that was about to be destroyed), a wasted target beats destroying its own card.
+  if (c.controller === ctx.player) return -2000;
   const activating = ctx.game.chain.some((l) => l.card === c && l.isCardActivation && !l.negated);
   if (activating && !stLingers(c)) return -1000; // it resolves anyway
   if (!c.faceUp) return 100; // a Set card: most likely a live Trap
   // face-up and not being activated: it is staying on the field (Continuous, Equip, Field, Swords of Revealing Light...)
   return 80 + (c.data.aiValue ?? 0) / 100;
+}
+
+const HITS: string[] = ['destroy', 'destroyMulti', 'banish', 'toDeck', 'toHand', 'position', 'control', 'negateAttack'];
+
+/**
+ * AI: the opponent's cards that `p`'s own pending (not negated) chain links will already destroy, banish, bounce, flip or
+ * take: their targets, or for an untargeted "When ..." card (Bottomless Trap Hole, Torrential Tribute, Mirror Force) the
+ * monster that triggered it. A second answer to the same card on the same chain is wasted.
+ */
+export function pendingHits(game: Game, p: PlayerId): Set<CardInstance> {
+  const out = new Set<CardInstance>();
+  for (const l of game.chain) {
+    if (l.player !== p || l.negated) continue;
+    const cats = l.effect.categories ?? [];
+    if (!cats.some((c) => HITS.includes(c))) continue;
+    const ts = l.ctx.targets.filter((t) => t.onField && t.controller !== p);
+    for (const t of ts) out.add(t);
+    const ev = l.ctx.event?.card as CardInstance | undefined;
+    if (!l.ctx.targets.length && ev && ev.onField && ev.controller !== p) out.add(ev);
+  }
+  return out;
+}
+
+/**
+ * AI: the opponent's monster an "interrupt" (Book of Moon, Enemy Controller...) should hit right now: the monster
+ * attacking us, or the face-up monster whose effect the opponent just activated (Chain Link on top).
+ */
+export function interruptTarget(ctx: Ctx): CardInstance | undefined {
+  const b = ctx.battle;
+  if (b && !b.negated && b.attacker.controller === ctx.opp && b.attacker.location === 'mzone') return b.attacker;
+  // prevLink: the link below this effect's own one while it is being activated (the top one when only scoring it)
+  const top = ctx.prevLink();
+  if (top && top.player === ctx.opp && !top.negated && top.card.isMonster && top.card.location === 'mzone' && top.card.faceUp) return top.card;
+  return undefined;
+}
+
+/**
+ * AI target preference for an effect that flips / takes / neutralises 1 monster: the monster to interrupt first, then the
+ * opponent's monsters by value (one our own chain already removes ranks low); our own monsters last.
+ */
+export function monsterInterruptScore(ctx: Ctx, c: CardInstance): number {
+  if (c.controller === ctx.player) return -5000 - cardValue(ctx.game, c);
+  if (pendingHits(ctx.game, ctx.player).has(c)) return -1000;
+  if (c === interruptTarget(ctx)) return 10000;
+  return cardValue(ctx.game, c);
+}
+
+/**
+ * Special Summon locks implemented outside the query system (Koa'ki Meiru Drago patches Game.specialSummon): each set
+ * file registers a check here so the AI can tell that a Special Summon would be skipped. AI use only, no rules effect.
+ */
+export const specialSummonBlockers: ((game: Game, c: CardInstance) => boolean)[] = [];
+/** AI: would Special Summoning `c` by an effect actually put it on the field? */
+export function aiCanSpecialSummon(ctx: Ctx, c: CardInstance): boolean {
+  return ctx.canSummonCard(c) && !specialSummonBlockers.some((f) => f(ctx.game, c));
 }
