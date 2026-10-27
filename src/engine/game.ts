@@ -257,9 +257,9 @@ export class Game {
 
   /**
    * The data of `c` as changed by 'continuous' dataMod effects that apply right now (Zombie World: monsters on the field
-   * and in the GYs are Zombie-Type; Proto-Cyber Dragon: named "Cyber Dragon" while face-up on the field). A change to a
-   * card in the GY does not apply while the GY is locked (Necrovalley: "negate any card effect that changes Types or
-   * Attributes in the GY"). APPROX: a Spell/Trap source is not checked for negation (only monsters are).
+   * and in the GYs are Zombie-Type; Proto-Cyber Dragon: named "Cyber Dragon" while face-up on the field). It also applies
+   * in the GY under "Necrovalley" (2010 ruling: non-targeting Type/Attribute changes apply,
+   * https://edisonrul.ing/cards/n/necrovalley.html). APPROX: a Spell/Trap source is not checked for negation (only monsters are).
    */
   private cardView = (c: CardInstance, d: CardData): CardData => {
     if (!this.dataModSources.length || this.viewing) return d;
@@ -280,7 +280,6 @@ export class Game {
           if (m.to === 'cards' && m.filter && !m.filter(c)) continue;
           if (src.isMonster && this.isNegated(src)) continue;
           if (ef.active && !ef.active(this.effectCtx(src, ef))) continue;
-          if (c.location === 'grave' && this.gyLocked()) continue;
           out = m.apply(out, c);
         }
       }
@@ -468,18 +467,9 @@ export class Game {
     return this.queryPlayer(0, 'cannotBanishFromGY') || this.queryPlayer(1, 'cannotBanishFromGY');
   }
 
-  /** Necrovalley's GY lock applies (query 'gyLock'): effects that move cards in the GY, or change their Types, are negated. */
+  /** Necrovalley's ① applies (query 'gyLock'): effects that TARGET a card in a GY are negated (src/cards/necrovalley.ts). */
   gyLocked(): boolean {
     return this.queryPlayer(0, 'gyLock') || this.queryPlayer(1, 'gyLock');
-  }
-
-  /** Necrovalley: a card effect of `reasonCard` that would move `cards` out of the GY does not move them. Returns the rest. */
-  private dropGyLocked(cards: CardInstance[], reason: Reason, reasonCard?: CardInstance): CardInstance[] {
-    if (reason !== 'effect' || !reasonCard || reasonCard.data.ignoresGyLock || !cards.some((c) => c.location === 'grave')) return cards;
-    if (!this.gyLocked()) return cards;
-    const kept = cards.filter((c) => c.location === 'grave');
-    this.log(`Necrovalley: ${kept.map((c) => c.name).join(', ')} cannot leave the GY.`, 'info');
-    return cards.filter((c) => c.location !== 'grave');
   }
 
   isNegated(card: CardInstance): boolean {
@@ -741,7 +731,6 @@ export class Game {
       noAnim?: boolean;
     },
   ): Promise<CardInstance[]> {
-    cards = this.dropGyLocked(cards, opts.reason, opts.reasonCard);
     if (!cards.length) return [];
     this.beginBatch();
     const moved: { card: CardInstance; from: Location; to: Location; fromFaceUp: boolean; fromCtrl: PlayerId; wasMonster: boolean }[] = [];
@@ -1092,7 +1081,7 @@ export class Game {
     const ctrl = opts.controller ?? player;
     if (this.queryPlayer(player, 'cannotSpecialSummon')) return [];
     const list: CardInstance[] = [];
-    for (const c of this.dropGyLocked(cards, 'effect', opts.reasonCard)) {
+    for (const c of cards) {
       if (this.freeMZones(ctrl) - list.length <= 0) break;
       if (!opts.ignoreConditions && c.data.nomi && !c.properlySummoned && (c.location === 'grave' || c.location === 'banished')) continue;
       if (!opts.faceDown && this.queryCard(c, 'cannotBeSummoned')) continue;

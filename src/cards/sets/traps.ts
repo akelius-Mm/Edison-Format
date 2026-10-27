@@ -1799,6 +1799,12 @@ defTrap('Exchange of the Spirit', 'normal', {
       condition: (ctx) => ctx.grave('me').length >= 15 && ctx.grave('opp').length >= 15,
       resolve: async (ctx) => {
         const g = ctx.game;
+        // https://edisonrul.ing/cards/e/exchange-of-the-spirit.html — "Necrovalley" negates its effect (card ruling,
+        // although it does not target).
+        if (g.gyLocked()) {
+          g.log('Necrovalley negates Exchange of the Spirit.', 'chain');
+          return;
+        }
         for (const p of [ctx.player, ctx.opp] as PlayerId[]) {
           const deck = [...g.players[p].deck];
           const grave = [...g.players[p].grave];

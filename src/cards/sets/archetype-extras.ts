@@ -486,8 +486,7 @@ M(REDMD, {
   aiValue: 900,
   text: 'You can remove from play 1 face-up Dragon-Type monster you control to Special Summon this card from your hand. Once per turn, during your Main Phase, you can Special Summon 1 Dragon-Type monster from your hand or Graveyard, except "Red-Eyes Darkness Metal Dragon".',
   // https://edisonrul.ing/cards/r/red-eyes-darkness-metal-dragon.html — its effect does not target a card in the GY
-  // and is not negated by "Necrovalley".
-  ignoresGyLock: true,
+  // and is not negated by "Necrovalley" (the general 2010 rule in src/cards/necrovalley.ts).
   effects: [
     {
       kind: 'proc',

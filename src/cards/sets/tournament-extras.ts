@@ -1150,8 +1150,8 @@ spell('Soul Taker', 'normal', {
 const rekindlable = (ctx: Ctx) => ctx.grave('me', (c) => c.isMonster && !c.isExtra && c.data.attribute === 'FIRE' && c.data.def === 200 && ctx.canSummonCard(c));
 spell('Rekindling', 'normal', {
   text: 'Special Summon from your Graveyard as many FIRE monsters as possible with 200 DEF. During the End Phase, remove from play all monsters that were Special Summoned by this effect.',
-  // https://edisonrul.ing/cards/r/rekindling.html — it does not target and is not negated by "Necrovalley".
-  ignoresGyLock: true,
+  // https://edisonrul.ing/cards/r/rekindling.html — it does not target and is not negated by "Necrovalley" (the
+  // general 2010 rule in src/cards/necrovalley.ts).
   effects: [
     {
       kind: 'activate',

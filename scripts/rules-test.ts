@@ -4597,14 +4597,16 @@ async function locationRulesTests() {
     eq(theirs.location, 'banished', 'and banished the other target');
   });
 
-  await test('Zombie World + Necrovalley: the Type change does not apply in the GY, still on the field', async () => {
+  // Updated (Necrovalley 2010 text): a Type change that does not target still applies in the GY
+  // (https://edisonrul.ing/cards/n/necrovalley.html, historical rulings).
+  await test('Zombie World + Necrovalley: the Type change applies on the field and in the GY', async () => {
     const { place } = setup();
     const onField = place(0, T.brute, 'mzone');
     const inGy = place(0, T.brute, 'grave');
     live(place(0, cardByName('Zombie World'), 'fzone'));
     live(place(1, cardByName('Necrovalley'), 'fzone'));
     eq(onField.data.race, 'Zombie', 'field');
-    eq(inGy.data.race, 'Warrior', 'GY: negated by Necrovalley');
+    eq(inGy.data.race, 'Zombie', 'GY: not negated by Necrovalley (does not target)');
   });
 
   // 2. "name becomes" cards
@@ -5156,7 +5158,7 @@ async function extraDeckTests() {
   });
 
   // Costs that move cards out of a GY under Necrovalley
-  await test('Necrovalley: GY-banish costs cannot be paid (Chaos Sorcerer, DAD effect); DAD itself and hand costs still work; a cost move out of the GY is not dropped like an effect', async () => {
+  await test('Necrovalley: GY-banish costs cannot be paid (Chaos Sorcerer, DAD effect); DAD itself and hand costs still work; a non-targeting move out of the GY is not stopped', async () => {
     const { g, place } = setup();
     live(place(1, cardByName('Necrovalley'), 'fzone'));
     for (let i = 0; i < 3; i++) place(0, T.dark, 'grave');
@@ -5176,7 +5178,9 @@ async function extraDeckTests() {
     eq(inGy.location, 'deck', 'a cost that returns a GY card to the Deck is paid');
     const inGy2 = place(0, T.brute, 'grave');
     await g.moveCards([inGy2], 'deck', { reason: 'effect', reasonPlayer: 0, reasonCard: qd });
-    eq(inGy2.location, 'grave', 'the same move by an effect is negated');
+    // Updated (Necrovalley 2010 text, https://edisonrul.ing/cards/n/necrovalley.html): only effects that target a GY
+    // card are negated, so a non-targeting effect move out of the GY happens.
+    eq(inGy2.location, 'deck', 'the same move by a non-targeting effect also happens');
   });
 }
 

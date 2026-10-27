@@ -709,10 +709,9 @@ once('Tempest Magician', () =>
 
 once('Necrovalley', () =>
   spell('Necrovalley', 'field', {
-    // The GY lock (src/cards/necrovalley.ts): GY-banish costs are not offered and GY cards cannot be banished; card
-    // effects do not move cards out of the GY (an effect that targets a GY card, or that a GY card activates to move
-    // itself, is negated on activation); Zombie World's Type change does not apply in the GY.
-    text: 'All "Gravekeeper\'s" monsters on the field gain 500 ATK/DEF. Cards in the GY cannot be banished. Negate any card effect that would move a card in the GY to a different place. Negate any card effect that changes Types or Attributes in the GY.',
+    // 2010 text (https://edisonrul.ing/cards/n/necrovalley.html): only effects that TARGET a card in a GY are negated
+    // (on activation), and GY cards cannot be removed from play; see src/cards/necrovalley.ts.
+    text: 'Negate the effects of Spells, Traps, and Effect Monsters that target a card(s) in either player\'s Graveyard. Cards in either player\'s Graveyard cannot be removed from play. All "Gravekeeper\'s" monsters gain 500 ATK and DEF.',
     aiValue: 600,
     effects: [
       {

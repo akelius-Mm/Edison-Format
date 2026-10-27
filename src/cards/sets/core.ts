@@ -651,8 +651,8 @@ monster('Treeborn Frog', {
   sets: ['frog'],
   text: 'If this card is in your Graveyard during your Standby Phase and you control no Spell or Trap Cards, you can Special Summon it. This effect cannot be activated if you control a face-up "Treeborn Frog".',
   aiValue: 200,
-  // https://edisonrul.ing/cards/t/treeborn-frog.html — it does not target and is not negated by "Necrovalley".
-  ignoresGyLock: true,
+  // https://edisonrul.ing/cards/t/treeborn-frog.html — it does not target and is not negated by "Necrovalley" (the
+  // general 2010 rule in src/cards/necrovalley.ts).
   effects: [
     {
       // Same source: no once-per-turn (it can activate several times in the same Standby Phase), but two copies

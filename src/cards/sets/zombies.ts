@@ -386,7 +386,6 @@ monster('Vampire Lord', {
   def: 1500,
   text: 'If this card inflicts battle damage to your opponent: Declare 1 card type (Monster, Spell or Trap); your opponent sends 1 card of that type from their Deck to the GY. If this card is destroyed by your opponent\'s card effect and sent to your GY: Special Summon it during your next Standby Phase.',
   aiValue: 300,
-  ignoresGyLock: true,
   effects: [
     {
       kind: 'trigger',
@@ -414,7 +413,7 @@ monster('Vampire Lord', {
       label: 'Return next Standby Phase',
       categories: ['specialSummon'],
       // https://edisonrul.ing/cards/v/vampire-lord.html — also when destroyed in the hand or Deck by the opponent's card
-      // effect; it is Special Summoned even under "Necrovalley" (ignoresGyLock).
+      // effect; it is Special Summoned even under "Necrovalley" (it does not target).
       eventFilter: (ctx, ev) =>
         ev.card === ctx.self &&
         (ev.from === 'mzone' || ev.from === 'hand' || ev.from === 'deck') &&

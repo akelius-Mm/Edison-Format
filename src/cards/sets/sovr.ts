@@ -341,7 +341,9 @@ function ritualPool(ctx: Ctx, ritual: C): C[] {
   return [
     ...ctx.hand('me', (c) => c.isMonster && c !== ritual),
     ...ctx.monsters('me', (c) => !ctx.query(c, 'cannotBeTributed')),
-    ...ctx.grave('me', isDjinn),
+    // https://edisonrul.ing/cards/d/djinn-releaser-of-rituals.html — not while "Necrovalley" is active (GY cards cannot
+    // be removed from play).
+    ...(ctx.game.gyBanishLocked(ctx.player) ? [] : ctx.grave('me', isDjinn)),
   ];
 }
 const levelSum = (cs: C[], ctx: Ctx) => cs.reduce((a, c) => a + (c.location === 'mzone' ? ctx.level(c) : lvl(c)), 0);
