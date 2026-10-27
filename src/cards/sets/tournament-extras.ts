@@ -696,7 +696,7 @@ monster('Drill Warrior', {
   effects: [
     {
       kind: 'ignition',
-      opt: 'drill-warrior-direct',
+      opt: true, // "Once per turn" per copy (Edison and modern text alike), not by name
       label: 'Halve ATK: attack directly',
       categories: ['atkChange'],
       condition: (ctx) => ctx.phase === 'main1' && ctx.self.faceUp,
@@ -717,7 +717,7 @@ monster('Drill Warrior', {
     },
     {
       kind: 'ignition',
-      opt: 'drill-warrior-banish',
+      opt: true,
       label: 'Discard: banish until next Standby Phase',
       categories: ['banish', 'toHand'],
       canActivate: (ctx) => ctx.hand().length > 0,
