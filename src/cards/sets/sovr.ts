@@ -703,7 +703,9 @@ monster('Fortune Lady Wind', {
       when: true,
       label: 'Destroy Spells/Traps',
       categories: ['destroy'],
-      canActivate: (ctx) => ctx.spellTraps('opp').length > 0,
+      // 2010 ruling: it cannot be activated if your opponent controls fewer Spell/Trap Cards than the "Fortune Lady"
+      // monsters you control (counted again when it resolves). https://edisonrul.ing/cards/f/fortune-lady-wind.html
+      canActivate: (ctx) => ctx.spellTraps('opp').length > 0 && ctx.spellTraps('opp').length >= ctx.faceUpMonsters('me', isFortuneLady).length,
       resolve: async (ctx) => {
         const n = ctx.faceUpMonsters('me', isFortuneLady).length;
         const st = ctx.spellTraps('opp');

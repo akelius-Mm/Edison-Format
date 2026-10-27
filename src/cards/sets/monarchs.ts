@@ -69,7 +69,7 @@ monster('Caius the Shadow Monarch', {
   def: 1000,
   sets: ['monarch'],
   aiValue: 500,
-  text: 'When this card is Tribute Summoned: Target 1 card on the field; banish it, and if it was a DARK monster, inflict 1000 damage to its controller.',
+  text: 'When this card is Tribute Summoned, remove from play 1 card on the field. If it was a DARK Monster Card, inflict 1000 damage to your opponent.',
   effects: [
     monarchTrigger({
       mandatory: true,
@@ -90,9 +90,10 @@ monster('Caius the Shadow Monarch', {
         const t = ctx.validTargets((c) => c.onField);
         if (!t.length) return;
         const c = t[0];
-        const ctrl = c.controller;
         const r = await ctx.banish(c);
-        if (r.length && c.location === 'banished' && c.isMonster && c.data.attribute === 'DARK') await ctx.damage(ctrl, 1000);
+        // 2010 text: "If it was a DARK Monster Card, inflict 1000 damage to your opponent" (whoever controlled it).
+        // https://edisonrul.ing/cards/c/caius-the-shadow-monarch.html
+        if (r.length && c.location === 'banished' && c.isMonster && c.data.attribute === 'DARK') await ctx.damage(ctx.opp, 1000);
       },
     }),
   ],

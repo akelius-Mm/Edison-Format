@@ -292,13 +292,15 @@ M('Ancient Gear Engineer', {
     {
       // APPROX: the target is chosen and destroyed at the end of the Damage Step (one chain link instead of a target
       // at the attack and a delayed destruction); the opponent cannot respond with Spells/Traps either way.
+      // 2010 ruling: it activates in the End of the Damage Step only while this card is face-up on the field (not if
+      // it was destroyed by battle, flipped face-down or left the field). https://edisonrul.ing/cards/a/ancient-gear-engineer.html
       kind: 'trigger',
       event: 'damageStepEnd',
-      range: ['mzone', 'grave'],
+      range: ['mzone'],
       mandatory: true,
       label: 'Destroy 1 Spell/Trap',
       categories: ['destroy'],
-      eventFilter: (ctx, ev) => ev.card === ctx.self && ctx.spellTraps('opp').some((c) => ctx.canTarget(c)),
+      eventFilter: (ctx, ev) => ev.card === ctx.self && faceUpOn(ctx.self) && ctx.spellTraps('opp').some((c) => ctx.canTarget(c)),
       activate: async (ctx) => {
         await ctx.selectTargets(ctx.spellTraps('opp'), 1, 1, 'Select 1 Spell or Trap Card your opponent controls.', 'destroy', {
           aiScore: (c) => cardValue(ctx.game, c) + (c.faceUp ? 0 : 300),
@@ -356,7 +358,7 @@ M(AG, {
 // ============================================================ Spells
 
 S(CASTLE, 'field', {
-  text: 'Increase the ATK of all "Ancient Gear" monsters by 300 points. Each time a monster is Normal Summoned, place 1 counter on this card. When Tribute Summoning an "Ancient Gear" monster, you can send this card to the Graveyard instead of Tributing monsters, if the number of counters on this card is equal to or greater than the number of required Tributes.',
+  text: 'Face-up "Ancient Gear" monsters gain 300 ATK. Each time a monster(s) is Normal Summoned or Set, put 1 counter on this card. When Tribute Summoning an "Ancient Gear" monster, you can send this card to the Graveyard instead of Tributing monsters, if the number of counters on this card is equal to or greater than the number of required Tributes.',
   effects: [
     {
       kind: 'activate',
@@ -365,10 +367,11 @@ S(CASTLE, 'field', {
     },
     { kind: 'continuous', mods: [{ q: 'atk', to: 'cards', filter: (_ctx, c: C) => faceUpOn(c) && isAncientGear(c), value: 300 }] },
     {
-      // Counters are placed by the card's continuous effect (no chain).
-      // APPROX: Normal Summons only (the Edison text); Tribute Summons count, Sets do not.
+      // Counters are placed by the card's continuous effect (no chain). 2010 ruling: Normal Summons (Tribute Summons
+      // included) and Sets from the hand count; a Set by a card effect (Book of Moon) does not.
+      // https://edisonrul.ing/cards/a/ancient-gear-castle.html
       kind: 'trigger',
-      event: 'normalSummoned',
+      event: ['normalSummoned', 'monsterSet'],
       range: ['fzone'],
       eventFilter: (ctx, ev) => {
         const me = ctx.self;

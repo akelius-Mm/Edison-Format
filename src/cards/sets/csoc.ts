@@ -1776,7 +1776,10 @@ M('Cactus Fighter', {
       mandatory: true,
       label: 'Needle Token',
       categories: ['specialSummon'],
-      eventFilter: (ctx, ev) => ev.other === ctx.self && ctx.self.location === 'mzone' && ev.fromController === ctx.opp,
+      // No historical ruling; edisonformat.net (revised): it triggers as long as it destroyed a monster by battle, even
+      // if it was destroyed too. https://edisonrul.ing/cards/c/cactus-fighter.html
+      range: ['mzone', 'grave', 'banished'],
+      eventFilter: (ctx, ev) => ev.other === ctx.self && ev.fromController === ctx.opp,
       resolve: async (ctx) => {
         if (ctx.freeMZones('opp') > 0) await tokensTo(ctx, NEEDLE_TOKEN, 1, 'def', ctx.opp);
       },
@@ -2354,16 +2357,20 @@ S(GARDEN, 'field', {
       mandatory: true,
       label: 'Halve ATK and Summon a Rose Token',
       categories: ['atkChange', 'specialSummon'],
+      // 2010 rulings: it also activates for a monster Special Summoned face-down (its ATK is not halved, but the Rose
+      // Token is still Summoned), and once for monsters Summoned at the same time: a single Rose Token (one for each
+      // player whose monsters were Summoned, e.g. "The Shallow Grave"). No token if the monster left the field.
+      // https://edisonrul.ing/cards/b/black-garden.html
       eventFilter: (ctx, ev) => {
         const c = evc(ev);
-        return !!c && ev.method !== 'flip' && faceUpOn(c) && !gs(ctx.game).gardenBusy && stActive(ctx);
+        return !!c && ev.method !== 'flip' && c.location === 'mzone' && !gs(ctx.game).gardenBusy && stActive(ctx);
       },
       condition: (ctx) => stActive(ctx),
       resolve: async (ctx) => {
         const g = ctx.game;
         const ev = ctx.event!;
         const mons = [...new Set(g.eventLog.filter((e) => e.batch === ev.batch && e.type === 'summoned' && e.method !== 'flip').map((e) => evc(e)!))].filter(
-          (c) => !!c && faceUpOn(c),
+          (c) => !!c && c.location === 'mzone',
         );
         for (const m of mons) {
           if (!faceUpOn(m)) continue;
@@ -2374,8 +2381,7 @@ S(GARDEN, 'field', {
         const s = gs(g);
         s.gardenBusy++;
         try {
-          for (const m of mons) {
-            const ctrl = m.controller;
+          for (const ctrl of [...new Set(mons.map((m) => m.controller))]) {
             if (g.freeMZones(g.opp(ctrl)) <= 0 || g.queryPlayer(ctrl, 'cannotSpecialSummon')) continue;
             await g.createTokens(ctrl, ROSE_TOKEN, 1, 'atk', g.opp(ctrl));
           }
@@ -2389,7 +2395,11 @@ S(GARDEN, 'field', {
       label: 'Destroy this card and all Plants: Special Summon',
       categories: ['destroy', 'specialSummon'],
       range: ['fzone'],
+      // 2010 rulings: it cannot be activated without a Plant-Type monster on the field. At resolution, Black Garden
+      // and the Plants must be destroyed, and the target is Summoned only if its ATK still equals the Plants' total
+      // ATK; if Black Garden already left the field, nothing is destroyed. https://edisonrul.ing/cards/b/black-garden.html
       canActivate: (ctx) => {
+        if (!ctx.faceUpMonsters('both', isPlant).length) return false;
         const total = ctx.faceUpMonsters('both', isPlant).reduce((a, c) => a + ctx.atk(c), 0);
         return ctx.grave('me', (c) => c.isMonster && (c.data.atk ?? 0) === total && ctx.canSummonCard(c)).length > 0;
       },
@@ -2400,11 +2410,13 @@ S(GARDEN, 'field', {
         });
       },
       resolve: async (ctx) => {
+        if (!ctx.self.onField) return;
         const plants = ctx.monsters('both', (c) => c.faceUp && isPlant(c));
+        const total = plants.reduce((a, c) => a + ctx.atk(c), 0);
         const all = [ctx.self, ...plants].filter((c) => c.onField);
         await ctx.destroy(all);
-        if (plants.some((c) => c.onField) || ctx.self.onField) return;
-        const [t] = ctx.validTargets((c) => c.location === 'grave');
+        if (!plants.length || plants.some((c) => c.onField) || ctx.self.onField) return;
+        const [t] = ctx.validTargets((c) => c.location === 'grave' && (c.data.atk ?? 0) === total);
         if (t && ctx.canSummonCard(t)) await ctx.specialSummon(t, { pos: 'choose' });
       },
       ai: {

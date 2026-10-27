@@ -1066,12 +1066,15 @@ spell('Overload Fusion', 'normal', {
 });
 
 spell('Future Fusion', 'continuous', {
-  text: 'Reveal 1 Fusion Monster in your Extra Deck and send the Fusion Materials listed on it from your Deck to the GY. During your 2nd Standby Phase after this card\'s activation, Special Summon that Fusion Monster (treated as a Fusion Summon). When this card is destroyed, destroy that monster.',
+  text: 'Reveal 1 Fusion Monster in your Extra Deck and send the Fusion Materials listed on it from your Deck to the GY. During your 2nd Standby Phase after this card\'s activation, Special Summon that Fusion Monster (treated as a Fusion Summon). When this card is removed from the field, destroy that monster. When the monster is destroyed, destroy this card.',
   effects: [
     {
       kind: 'activate',
       categories: ['mill', 'specialSummon'],
+      // SJC Edison (May 2010) ruling: it performs a Special Summon (in the future) when activated, so it cannot be
+      // activated while you cannot Special Summon. https://edisonrul.ing/cards/f/future-fusion.html
       canActivate: (ctx) => {
+        if (!ctx.canSpecialSummon()) return false;
         const deckMons = ctx.deck('me', isMonster);
         return ctx.extra('me', (c) => c.hasType('fusion') && !!c.data.fusion && ctx.game.fusionMaterialSets(c, deckMons).length > 0).length > 0;
       },
@@ -1122,8 +1125,10 @@ spell('Future Fusion', 'continuous', {
         ctx.self.flags.ffFusion = null;
         if (!f || f.location !== 'extra') return;
         const r = await ctx.specialSummon(f, { method: 'fusion', proper: true, pos: 'choose' });
-        // "When this card is destroyed, destroy that monster" (not when it leaves the field another way).
-        if (r.length && ctx.self.onField) ctx.game.link(r[0], ctx.self, false, { cardOnlyIfDestroyed: true });
+        // 2010 text: "When this card is removed from the field, destroy that monster. When the monster is destroyed,
+        // destroy this card" (no Chain; a bounced monster leaves this card on the field).
+        // https://edisonrul.ing/cards/f/future-fusion.html
+        if (r.length && ctx.self.onField) ctx.game.link(ctx.self, r[0], true, { cardOnlyIfDestroyed: true });
       },
     },
   ],
