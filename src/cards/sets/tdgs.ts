@@ -28,6 +28,7 @@ import type { ChainLink, Game } from '../../engine/game';
 import type { Attribute, BattlePos, GameEvent, Location, PlayerId, Race, Reason } from '../../engine/types';
 import { patchData, variant } from './abpf';
 import { tributable, tributeCost } from './plants';
+import { QUESTION_ATK } from './sovr';
 
 type C = CardInstance;
 
@@ -185,7 +186,8 @@ function noTributeOk(g: Game, card: C) {
 const geartownOn = (g: Game) => liveCards(g, GEARTOWN).length > 0;
 const powerFilterOn = (g: Game) => liveCards(g, POWER_FILTER).length > 0;
 /** Power Filter: original ATK of 1000 or less (a "?" ATK counts as 0). */
-const lowAtk = (c: C) => c.isMonster && (c.data.atk ?? 0) <= 1000;
+// https://edisonrul.ing/cards/p/power-filter.html — monsters with "?" ATK can be Special Summoned.
+const lowAtk = (c: C) => c.isMonster && (c.data.atk ?? 0) <= 1000 && !QUESTION_ATK.has(c.data.name);
 
 /** Telekinetic Charging Cell equipped to this (Psychic) monster. */
 function chargingCellOn(g: Game, m: C) {
@@ -604,7 +606,8 @@ M('Shield Warrior', {
       categories: ['protect'],
       condition: (ctx) => {
         const b = ctx.battle;
-        return !!b && b.inDamageStep && !b.calc && !b.negated && !!b.target && (b.attacker.controller === ctx.player || b.target.controller === ctx.player);
+        // https://edisonrul.ing/cards/s/shield-warrior.html — cannot be activated if your monster would not be destroyed by the battle.
+        return !!b && b.inDamageStep && !b.calc && !b.negated && !!b.target && (b.attacker.controller === ctx.player || b.target.controller === ctx.player) && !!myBattleMonsterLoses(ctx);
       },
       activate: async (ctx) => {
         await ctx.banish(ctx.self, 'cost');
@@ -644,7 +647,8 @@ function pieceGolem(name: string, other: string, atk: number, level: number) {
         condition: (ctx) => ctx.faceUpMonsters('me', (c) => c.name === BIG_PIECE).length > 0,
         canActivate: (ctx) => ctx.canSpecialSummon() && ctx.deck('me', (c) => c.name === other && ctx.canSummonCard(c)).length > 0,
         resolve: async (ctx) => {
-          if (!ctx.faceUpMonsters('me', (c) => c.name === BIG_PIECE).length) return;
+          // https://edisonrul.ing/cards/s/small-piece-golem.html — still Special Summons if the only "Big Piece Golem"
+          // left the field in the chain.
           const r = await summonFromDeck(ctx, (c) => c.name === other, `Special Summon 1 "${other}" from your Deck.`);
           if (r.length) ctx.negateEffects(r[0], 'field');
         },
@@ -2277,7 +2281,9 @@ S('Psi-Impulse', 'normal', {
     {
       kind: 'activate',
       categories: ['toDeck'],
-      canActivate: (ctx) => tributable(ctx, isPsychic).length > 0,
+      // https://edisonrul.ing/cards/p/psi-impulse.html — cannot be activated if the opponent has fewer than 3 cards in the
+      // Deck or no cards in the hand; if their hand is empty when it resolves, the effect disappears.
+      canActivate: (ctx) => tributable(ctx, isPsychic).length > 0 && ctx.hand('opp').length > 0 && ctx.deck('opp').length >= 3,
       activate: async (ctx) => {
         const sel = await ctx.select(tributable(ctx, isPsychic), 1, 1, 'Tribute 1 Psychic-Type monster.', 'tribute', { aiScore: (c) => -cardValue(ctx.game, c) });
         if (!sel.length) return false;
@@ -2285,7 +2291,8 @@ S('Psi-Impulse', 'normal', {
       },
       resolve: async (ctx) => {
         const hand = ctx.hand('opp');
-        if (hand.length) await ctx.toDeck(hand, 'shuffle');
+        if (!hand.length) return;
+        await ctx.toDeck(hand, 'shuffle');
         await ctx.draw(3, ctx.opp);
       },
       ai: { score: (ctx) => (myOpenMain(ctx) && ctx.hand('opp').length >= 5 && tributable(ctx, (c) => isPsychic(c) && cardValue(ctx.game, c) < 1200).length ? 30 : 0) },

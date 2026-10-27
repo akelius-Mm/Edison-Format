@@ -2387,14 +2387,16 @@ function starBlastAiValue(ctx: Ctx, c: C) {
 }
 
 spell('Raptor Wing Strike', 'normal', {
-  text: 'Shuffle 1 "Blackwing" monster you control into the Main Deck; add 1 "Blackwing" monster from your Deck to your hand.',
+  text: 'Return 1 "Blackwing" monster you control to the Deck; add 1 "Blackwing" monster from your Deck to your hand.',
   effects: [
     {
       kind: 'activate',
       categories: ['search', 'toDeck'],
-      canActivate: (ctx) => ctx.faceUpMonsters('me', (c) => isBW(c) && !c.isExtra && !c.isToken).length > 0 && ctx.deck('me', isBW).length > 0,
+      // https://edisonrul.ing/cards/r/raptor-wing-strike.html — a "Blackwing" Synchro Monster can pay the cost (it returns to
+      // the Extra Deck).
+      canActivate: (ctx) => ctx.faceUpMonsters('me', (c) => isBW(c) && !c.isToken).length > 0 && ctx.deck('me', isBW).length > 0,
       activate: async (ctx) => {
-        const sel = await ctx.select(ctx.faceUpMonsters('me', (c) => isBW(c) && !c.isExtra && !c.isToken), 1, 1, 'Shuffle 1 "Blackwing" monster you control into the Deck.', 'cost');
+        const sel = await ctx.select(ctx.faceUpMonsters('me', (c) => isBW(c) && !c.isToken), 1, 1, 'Shuffle 1 "Blackwing" monster you control into the Deck.', 'cost');
         if (!sel.length) return false;
         await ctx.toDeck(sel, 'shuffle', 'cost');
       },
@@ -3118,15 +3120,15 @@ trap('Nightmare Archfiends', 'normal', {
       mandatory: true,
       label: 'Nightmare Archfiend Token: 800 damage',
       categories: ['damage'],
+      // https://edisonrul.ing/cards/n/nightmare-archfiends.html — the damage when a Token is destroyed does not start a
+      // chain (Barrel Behind the Door cannot be activated against it).
+      noChain: true,
       eventFilter: (ctx, ev) => {
         const c = evc(ev);
         return !!c && c.isToken && !!nightmareTokens.get(ctx.self)?.has(c.uid);
       },
-      activate: async (ctx) => {
-        ctx.data.p = ctx.event!.fromController ?? ctx.opp;
-      },
       resolve: async (ctx) => {
-        await ctx.game.damage(ctx.data.p as PlayerId, 800, 'effect', ctx.self, ctx.player);
+        await ctx.game.damage(ctx.event!.fromController ?? ctx.opp, 800, 'effect', ctx.self, ctx.player);
       },
     },
   ],

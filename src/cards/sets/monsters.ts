@@ -1777,42 +1777,68 @@ monster('Magical Scientist', {
   ],
 });
 
+/** Sacred Phoenix of Nephthys cards being Special Summoned by their own effect (card flags reset when a card moves). */
+const nephthysSummoning = new WeakSet<CardInstance>();
 monster('Sacred Phoenix of Nephthys', {
   attribute: 'FIRE',
   race: 'Winged Beast',
   level: 6,
   atk: 2400,
   def: 1600,
-  text: 'When this card is destroyed by a card effect and sent to the GY: During the next Standby Phase, Special Summon this card from the GY. When it is Special Summoned this way: Destroy all Spells and Traps on the field.',
+  text: 'When this card is destroyed by a card effect and sent to the Graveyard, during your next Standby Phase, Special Summon this card from your Graveyard. When this card is Special Summoned by this effect, destroy all Spell and Trap Cards on the field.',
   aiValue: 900,
+  // https://edisonrul.ing/cards/s/sacred-phoenix-of-nephthys.html — the Special Summon is a Trigger Effect that activates in
+  // the GY during its owner's next Standby Phase (the same turn if it was destroyed in the Draw Phase); it also applies if
+  // it was destroyed in the hand or Deck, not while it was an Equip Card. The Spell/Trap destruction is a separate Trigger
+  // Effect that activates on the field (it can be chained to, and is negated by Skill Drain).
   effects: [
     {
+      // Bookkeeping (never activates): destroyed by a card effect and sent to the GY.
       kind: 'trigger',
       event: 'sentToGrave',
-      mandatory: true,
-      label: 'Rebirth next Standby Phase',
-      categories: ['specialSummon'],
+      label: '(destroyed by a card effect)',
       eventFilter: (ctx, ev) => {
         const r = reasonsOf(ev);
-        return ev.card === ctx.self && ev.from === 'mzone' && r.includes('destroy') && !r.includes('battle');
+        if (ev.card === ctx.self && ev.from !== 'szone' && r.includes('destroy') && !r.includes('battle')) {
+          ctx.self.flags.nephthys = { turn: ctx.game.turn, phase: ctx.game.phase, mid: ctx.self.moveId };
+        }
+        return false;
+      },
+    },
+    {
+      kind: 'trigger',
+      event: 'phaseStart',
+      range: ['grave'],
+      mandatory: true,
+      label: 'Special Summon this card',
+      categories: ['specialSummon'],
+      eventFilter: (ctx, ev) => {
+        const f = ctx.self.flags.nephthys as { turn: number; phase: string; mid: number } | undefined;
+        return ev.phase === 'standby' && ctx.isMyTurn && !!f && f.mid === ctx.self.moveId && (f.turn < ctx.turn || f.phase === 'draw');
       },
       resolve: async (ctx) => {
-        const me = ctx.self;
-        if (me.location !== 'grave') return;
-        const id = me.moveId;
-        const game = ctx.game;
-        ctx.later(
-          'standby',
-          async () => {
-            if (me.location !== 'grave' || me.moveId !== id) return;
-            const r = await game.specialSummon([me], me.owner, { pos: 'atk', reasonCard: me });
-            if (!r.length) return;
-            // Every card in the Spell & Trap Zones (an equipped Union monster is an Equip Spell there).
-            const st = game.allFieldCards().filter((c) => c.location === 'szone' || c.location === 'fzone');
-            if (st.length) await game.destroy(st, 'effect', me.controller, me);
-          },
-          1,
-        );
+        const f = ctx.self.flags.nephthys as { mid: number } | undefined;
+        ctx.self.flags.nephthys = undefined;
+        if (!f || ctx.self.location !== 'grave' || ctx.self.moveId !== f.mid) return;
+        nephthysSummoning.add(ctx.self);
+        try {
+          await ctx.specialSummon(ctx.self, { pos: 'atk' });
+        } finally {
+          nephthysSummoning.delete(ctx.self);
+        }
+      },
+    },
+    {
+      kind: 'trigger',
+      event: 'specialSummoned',
+      mandatory: true,
+      label: 'Destroy all Spells and Traps',
+      categories: ['destroy', 'destroyMulti'],
+      eventFilter: (ctx, ev) => ev.card === ctx.self && nephthysSummoning.has(ctx.self),
+      resolve: async (ctx) => {
+        // Every card in the Spell & Trap Zones (an equipped Union monster is an Equip Spell there).
+        const st = ctx.game.allFieldCards().filter((c) => c.location === 'szone' || c.location === 'fzone');
+        if (st.length) await ctx.destroy(st);
       },
     },
   ],

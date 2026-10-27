@@ -146,15 +146,15 @@ function destroyedByEffectThisTurn(g: Game): Set<C> {
   return out;
 }
 
-/** Scary Moth: did player p Special Summon this turn? Cached per game. */
-const ssCache = new WeakMap<Game, { turn: number; last: number; res: [boolean, boolean] }>();
-function specialSummonedThisTurn(g: Game, p: PlayerId) {
+/** Scary Moth: did player p Special Summon this turn after event `since` (another monster than `except`)? Cached per game. */
+const ssCache = new WeakMap<Game, { turn: number; last: number; since: number; res: [boolean, boolean] }>();
+function specialSummonedThisTurn(g: Game, p: PlayerId, since = -1, except?: CardInstance) {
   const lastSeq = g.eventLog.length ? g.eventLog[g.eventLog.length - 1].seq : 0;
   let e = ssCache.get(g);
-  if (!e || e.turn !== g.turn || e.last !== lastSeq) {
+  if (!e || e.turn !== g.turn || e.last !== lastSeq || e.since !== since) {
     const res: [boolean, boolean] = [false, false];
-    for (const ev of turnEvents(g)) if (ev.type === 'specialSummoned' && ev.player !== undefined) res[ev.player] = true;
-    e = { turn: g.turn, last: lastSeq, res };
+    for (const ev of turnEvents(g)) if (ev.type === 'specialSummoned' && ev.player !== undefined && ev.seq > since && ev.card !== except) res[ev.player] = true;
+    e = { turn: g.turn, last: lastSeq, since, res };
     ssCache.set(g, e);
   }
   return e.res[p];
@@ -1149,7 +1149,18 @@ monster('Scary Moth', {
   effects: [
     {
       kind: 'continuous',
-      mods: [{ q: 'cannotSpecialSummon', to: 'players', filter: (ctx, p) => specialSummonedThisTurn(ctx.game, p) }],
+      // https://edisonrul.ing/cards/s/scary-moth.html — monsters Special Summoned before Scary Moth was Summoned (and Scary
+      // Moth's own Special Summon) do not count.
+      mods: [{ q: 'cannotSpecialSummon', to: 'players', filter: (ctx, p) => specialSummonedThisTurn(ctx.game, p, ctx.self.flags.mothSeq ?? -1, ctx.self) }],
+    },
+    {
+      // Bookkeeping (never activates): when this card arrived face-up.
+      kind: 'trigger',
+      event: ['summoned', 'specialSummoned', 'flipped'],
+      eventFilter: (ctx, ev) => {
+        if (ev.card === ctx.self) ctx.self.flags.mothSeq = Math.max(ev.seq, ctx.self.flags.mothSeq ?? -1);
+        return false;
+      },
     },
   ],
 });
@@ -2351,7 +2362,9 @@ spell('Release Restraint Wave', 'normal', {
     {
       kind: 'activate',
       categories: ['destroy', 'destroyMulti'],
-      canActivate: (ctx) => ctx.spellTraps('me', (c) => c.faceUp && c.data.stype === 'equip' && c !== ctx.self && ctx.canTarget(c)).length > 0,
+      // https://edisonrul.ing/cards/r/release-restraint-wave.html — cannot be activated if the opponent has no Set Spell/Trap Cards.
+      canActivate: (ctx) =>
+        ctx.spellTraps('opp', (c) => !c.faceUp).length > 0 && ctx.spellTraps('me', (c) => c.faceUp && c.data.stype === 'equip' && c !== ctx.self && ctx.canTarget(c)).length > 0,
       activate: async (ctx) => {
         await ctx.selectTargets(ctx.spellTraps('me', (c) => c.faceUp && c.data.stype === 'equip' && c !== ctx.self), 1, 1, 'Target 1 face-up Equip Spell you control.', 'cost');
       },
@@ -2374,8 +2387,11 @@ spell('Silver Wing', 'equip', {
       replaceDestroy: async (ctx, cards, reason) => {
         const eq = ctx.equipTarget;
         if (!eq || !cards.includes(eq)) return [];
+        // https://edisonrul.ing/cards/s/silver-wing.html — copies are not cumulative (2 battles per turn per monster, not per
+        // copy), and it cannot replace when it is destroyed by the same effect as the monster.
+        if (reason !== 'battle' && cards.includes(ctx.self)) return [];
         if (reason === 'battle') {
-          const k = `anpr:silverwing:${ctx.self.uid}`;
+          const k = `anpr:silverwing:${eq.uid}:${eq.moveId}`;
           const used = ctx.game.turnData[k] ?? 0;
           if (used >= 2) return [];
           ctx.game.turnData[k] = used + 1;
@@ -3019,6 +3035,15 @@ trap('Reinforce Truth', 'normal', {
       canActivate: (ctx) => ctx.canSpecialSummon() && ctx.deck('me', (c) => truthFilter(c) && ctx.canSummonCard(c)).length > 0,
       activate: async (ctx) => {
         ctx.addPlayerMod(ctx.player, 'cannotDeclareAttack');
+        ctx.data.lock = ctx.game.playerMods.slice(-1);
+      },
+      // https://edisonrul.ing/cards/r/reinforce-truth.html — if its activation is negated (Seven Tools, Solemn Judgment) you
+      // can still conduct your Battle Phase; if only its effect is negated (Royal Decree) you cannot.
+      onActivationNegated: (ctx) => {
+        const g = ctx.game;
+        const lock = (ctx.data.lock ?? []) as typeof g.playerMods;
+        g.playerMods = g.playerMods.filter((m) => !lock.includes(m));
+        g.update();
       },
       resolve: async (ctx) => {
         const cands = ctx.deck('me', (c) => truthFilter(c) && ctx.canSummonCard(c));
@@ -3052,10 +3077,10 @@ trap('Pixie Ring', 'continuous', {
           q: 'cannotBeAttacked',
           to: 'cards',
           filter: (ctx, c) => {
-            if (!faceUpOn(c) || c.controller !== ctx.player || c.pos !== 'atk') return false;
-            const atkPos = ctx.faceUpMonsters('me', (m) => m.pos === 'atk');
-            if (atkPos.length < 2) return false;
-            const min = Math.min(...atkPos.map((m) => ctx.atk(m)));
+            // https://edisonrul.ing/cards/p/pixie-ring.html — your lowest-ATK monster cannot be attacked even in Defense Position.
+            if (!faceUpOn(c) || c.controller !== ctx.player) return false;
+            if (ctx.faceUpMonsters('me', (m) => m.pos === 'atk').length < 2) return false;
+            const min = Math.min(...ctx.faceUpMonsters('me').map((m) => ctx.atk(m)));
             return ctx.atk(c) === min;
           },
         },

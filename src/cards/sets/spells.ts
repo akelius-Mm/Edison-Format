@@ -1020,7 +1020,9 @@ spell('Reasoning', 'normal', {
     {
       kind: 'activate',
       categories: ['specialSummon', 'mill'],
-      canActivate: (ctx) => ctx.deck().length > 0,
+      // https://edisonrul.ing/cards/r/reasoning.html — cannot be activated after "Scapegoat" this turn (no Special Summons);
+      // if no monster is picked up, the Deck is shuffled and put back and the effect disappears.
+      canActivate: (ctx) => ctx.deck().length > 0 && !ctx.game.queryPlayer(ctx.player, 'cannotSpecialSummon'),
       resolve: async (ctx) => {
         const levels = Array.from({ length: 12 }, (_, i) => `Level ${i + 1}`);
         const lvIdx = await ctx.game.option(ctx.opp, 'Declare a monster Level for Reasoning.', levels, ctx.self, (i) => (i === 3 ? 10 : i === 2 ? 6 : i === 1 ? 4 : i === 0 ? 3 : 1));
@@ -1028,6 +1030,10 @@ spell('Reasoning', 'normal', {
         ctx.log(`${ctx.game.players[ctx.opp].name} declares Level ${declared}.`);
         const { found, others } = excavateForMonster(ctx);
         await ctx.game.anim({ type: 'reveal', cards: [...others, ...(found ? [found] : [])].map((c) => c.uid), player: ctx.player });
+        if (!found) {
+          ctx.game.shuffleDeck(ctx.player);
+          return;
+        }
         if (found && (found.data.level ?? 0) !== declared && ctx.canSummonCard(found)) {
           const r = await ctx.specialSummon(found);
           await excavatedToGrave(ctx, r.length ? others : [...others, found]);

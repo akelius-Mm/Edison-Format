@@ -1747,6 +1747,12 @@ export class Game {
     let any = false;
     for (const t of order) {
       const act: Activation = { card: t.card, effect: t.effect, effectIndex: t.effectIndex, label: t.effect.label ?? 'Trigger', event: t.event };
+      if (t.effect.noChain) {
+        // Applied at once, without a chain link (EffectDef.noChain).
+        await t.effect.resolve?.(t.ctx);
+        any = true;
+        continue;
+      }
       if (!t.effect.mandatory) {
         // re-check cost availability now (things may have changed while building)
         if (t.effect.canActivate && !t.effect.canActivate(t.ctx)) continue;

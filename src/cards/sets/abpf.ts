@@ -532,6 +532,7 @@ monster('Ogre of the Scarlet Sorrow', {
   ],
 });
 
+const suppliedAlready = (ctx: Ctx, c: C) => ((ctx.self.flags.supplied ?? []) as { uid: number; moveId: number }[]).some((s) => s.uid === c.uid && s.moveId === c.moveId);
 monster('Power Supplier', {
   attribute: 'EARTH',
   race: 'Spellcaster',
@@ -546,11 +547,11 @@ monster('Power Supplier', {
       opt: true,
       label: '+400 ATK',
       categories: ['atkChange'],
-      canActivate: (ctx) => ctx.faceUpMonsters('me', (c) => ctx.canTarget(c)).length > 0,
+      // https://edisonrul.ing/cards/p/power-supplier.html — it cannot be applied again to a monster it already targets.
+      canActivate: (ctx) => ctx.faceUpMonsters('me', (c) => ctx.canTarget(c) && !suppliedAlready(ctx, c)).length > 0,
       activate: async (ctx) => {
-        const supplied = (ctx.self.flags.supplied ?? []) as { uid: number; moveId: number }[];
-        await ctx.selectTargets(ctx.faceUpMonsters('me'), 1, 1, 'Target 1 face-up monster you control.', 'buff', {
-          aiScore: (c) => (supplied.some((s) => s.uid === c.uid && s.moveId === c.moveId) ? -5000 : ctx.atk(c)),
+        await ctx.selectTargets(ctx.faceUpMonsters('me', (c) => !suppliedAlready(ctx, c)), 1, 1, 'Target 1 face-up monster you control.', 'buff', {
+          aiScore: (c) => ctx.atk(c),
         });
       },
       resolve: async (ctx) => {
@@ -2522,12 +2523,28 @@ spell('Power Pickaxe', 'equip', {
       },
       resolve: async (ctx) => {
         const t = ctx.validTargets((c) => c.location === 'grave')[0];
-        if (!t) return;
-        const r = await ctx.banish(t);
         const e = ctx.equipTarget;
-        if (r.length && e && e.location === 'mzone' && e.faceUp) ctx.addTempMod(e, 'atk', 500, 'turn');
+        // https://edisonrul.ing/cards/p/power-pickaxe.html — not removed if its Level is now higher than the equipped
+        // monster's; no ATK gain if it was not removed; the gain is lost if Power Pickaxe is destroyed or negated.
+        if (!t || !e || (t.data.level ?? 0) > ctx.level(e)) return;
+        const r = await ctx.banish(t);
+        if (r.length && e.location === 'mzone' && e.faceUp) ctx.self.flags.pickaxe = { turn: ctx.turn, uid: e.uid, mid: e.moveId };
       },
       ai: { score: () => 40 },
+    },
+    {
+      kind: 'continuous',
+      mods: [
+        {
+          q: 'atk',
+          to: 'cards',
+          filter: (ctx, c: C) => {
+            const f = ctx.self.flags.pickaxe as { turn: number; uid: number; mid: number } | undefined;
+            return !!f && f.turn === ctx.turn && c === ctx.equipTarget && c.uid === f.uid && c.moveId === f.mid;
+          },
+          value: 500,
+        },
+      ],
     },
   ],
 });
