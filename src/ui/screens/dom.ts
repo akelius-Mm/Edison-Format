@@ -342,13 +342,13 @@ export function confirmDialog(title: string, message: string, okLabel = 'Confirm
   });
 }
 
-export function promptDialog(title: string, label: string, initial = '', okLabel = 'OK'): Promise<string | null> {
+export function promptDialog(title: string, label: string, initial = '', okLabel = 'OK', opts: { maxLength?: number; hint?: string; test?: string } = {}): Promise<string | null> {
   return new Promise((res) => {
     let done = false;
-    const input = h('input', { class: 'input', type: 'text', value: initial, maxlength: 48, 'aria-label': label });
+    const input = h('input', { class: 'input', type: 'text', value: initial, maxlength: opts.maxLength ?? 48, 'aria-label': label, 'data-test': opts.test });
     const m = modal(
       title,
-      field(label, input),
+      field(label, input, opts.hint),
       [
         { label: 'Cancel', onClick: () => void ((done = true), res(null)) },
         { label: okLabel, variant: 'primary', onClick: () => void ((done = true), res(input.value.trim() || null)) },

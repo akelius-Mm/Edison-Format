@@ -90,6 +90,10 @@ export interface GameEnd {
   kind?: 'concede' | 'claim' | 'desync';
 }
 
+/** Quick reactions in a Friends Locals match (room.ts `react`); the text is chosen by each phone. */
+export const REACTIONS = ['gg', 'nice', 'think', 'sec', 'gl'] as const;
+export type Reaction = (typeof REACTIONS)[number];
+
 export type Msg =
   | { t: 'hello'; proto: number; build: string; sid: string; role: 'host' | 'guest'; player: NetPlayer; match: string | null; game: number | null; have: number }
   | { t: 'lobby'; state: LobbyState }
@@ -109,6 +113,8 @@ export type Msg =
   | { t: 'leave'; reason?: 'left' | 'busy' | 'version' }
   | { t: 'ping'; at: number }
   | { t: 'pong'; at: number }
+  /** A quick reaction to the friend (never part of the match state or its logs). */
+  | { t: 'rx'; r: Reaction }
   /** Friends Locals and spectating (tourneyProtocol.ts). */
   | TourneyMsg;
 

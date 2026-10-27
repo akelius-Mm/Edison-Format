@@ -119,6 +119,13 @@ export interface WatchGame {
   end: GameEnd | null;
 }
 
+/** Why watching could not start: the players run another app build, or neither feed answered. */
+export class SpectateError extends Error {
+  constructor(readonly reason: 'version' | 'unreachable') {
+    super(reason === 'version' ? 'The players are on a different app version' : 'Could not reach the table');
+  }
+}
+
 /** The spectator's side: mirrors the match and plays both seats from the logs. */
 export class SpectateClient {
   start: MatchStart | null = null;
@@ -137,11 +144,19 @@ export class SpectateClient {
     return this.session?.status ?? 'idle';
   }
 
-  /** Dial the match host's feed, then the other player's. Rejects when neither answers. */
-  async begin(seats: PlayerId[] = [0, 1]) {
-    let err: unknown = null;
+  /**
+   * Dial the match host's feed, then the other player's, and wait for the handshake. Rejects with a
+   * SpectateError when neither feed lets us in within `timeoutMs` (all seats together): 'version'
+   * when a feed refused our build, 'unreachable' otherwise. Without the handshake wait a refused
+   * spectator would sit on "Connecting…" forever while its session redialled.
+   */
+  async begin(seats: PlayerId[] = [0, 1], timeoutMs = 8000) {
+    const until = Date.now() + timeoutMs;
+    let reason: SpectateError['reason'] = 'unreachable';
     for (const seat of seats) {
       if (this.closed) return;
+      const left = until - Date.now();
+      if (left <= 0) break;
       const s = new NetSession(this.o.transport(), {
         role: 'guest',
         roomId: spectatePeerId(this.o.roomCode, seat),
@@ -151,18 +166,31 @@ export class SpectateClient {
         accept: (h) => (h.proto !== PROTOCOL_VERSION || h.build !== this.o.build ? 'version' : true),
       });
       s.onStatus = (st) => this.onStatus(st);
-      s.onConnect = () => s.send({ t: 'wh', have: this.have() });
       s.onMessage = (m) => this.receive(m);
-      try {
-        await s.start();
+      const out = await new Promise<'ok' | 'version' | 'fail'>((res) => {
+        const timer = setTimeout(() => res('fail'), left);
+        const done = (r: 'ok' | 'version' | 'fail') => {
+          clearTimeout(timer);
+          res(r);
+        };
+        s.onConnect = () => {
+          s.send({ t: 'wh', have: this.have() });
+          done('ok');
+        };
+        s.onRefused = (r) => done(r === 'version' ? 'version' : 'fail');
+        s.start().catch(() => done('fail'));
+      });
+      if (out === 'ok' && !this.closed) {
+        s.onConnect = () => s.send({ t: 'wh', have: this.have() });
+        s.onRefused = () => {};
         this.session = s;
         return;
-      } catch (e) {
-        err = e;
-        s.close();
       }
+      s.close();
+      if (out === 'version') reason = 'version';
     }
-    throw err;
+    if (this.closed) return;
+    throw new SpectateError(reason);
   }
 
   /** The seat `seat` of game `g`, fed from the stream. */

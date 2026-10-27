@@ -19,7 +19,7 @@ import type { Decision } from '../engine/replay';
 import type { PlayerId } from '../engine/types';
 import { matchOutcome } from '../tournament/simulate';
 import type { GameResult } from '../tournament/types';
-import { PROTOCOL_VERSION, gameSeed, roomPeerId, type GameEnd, type LobbyState, type MatchStart, type Msg, type NetPlayer, type WireDeck } from './protocol';
+import { PROTOCOL_VERSION, REACTIONS, gameSeed, roomPeerId, type GameEnd, type LobbyState, type MatchStart, type Msg, type NetPlayer, type Reaction, type WireDeck } from './protocol';
 import { RemoteController } from './remote';
 import { NetSession, type NetStatus } from './session';
 import type { Transport } from './transport';
@@ -84,6 +84,8 @@ export interface RoomEvents {
   changed?(): void;
   /** Our desync report (details for the console). */
   desync?(g: number, detail: string): void;
+  /** The friend sent a quick reaction (Friends Locals). */
+  reaction?(r: Reaction): void;
 }
 
 export interface RoomOptions {
@@ -371,6 +373,16 @@ export class Room {
     this.ev.rematch?.();
   }
 
+  /**
+   * A quick reaction ("GG", "Nice!"…) to the friend. Fire and forget over the room's own link: it is
+   * not part of the match state, the decision logs or the save, so it can never change a game or
+   * its replay; one sent while the link is down is simply lost.
+   */
+  react(r: Reaction) {
+    if (this.closed || !REACTIONS.includes(r)) return;
+    this.session.send({ t: 'rx', r });
+  }
+
   leave() {
     if (this.closed) return;
     this.closed = true;
@@ -411,6 +423,9 @@ export class Room {
       case 'start':
         if (this.role !== 'guest' || m?.start.id === msg.match.id) return;
         this.beginMatch(msg.match);
+        return;
+      case 'rx':
+        if (REACTIONS.includes(msg.r)) this.ev.reaction?.(msg.r);
         return;
       case 'leave':
         this.ev.left?.();
