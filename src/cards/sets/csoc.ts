@@ -933,8 +933,10 @@ M('Morphtronic Clocken', {
     },
     {
       kind: 'ignition',
-      label: 'Tribute: 1000 damage per Morph Counter',
+      label: '(Defense) Tribute: 1000 damage per Morph Counter',
       categories: ['damage'],
+      // 2010 ruling: the damage effect is one of its Defense Position effects. https://edisonrul.ing/cards/m/morphtronic-clocken.html
+      condition: (ctx) => ctx.self.pos === 'def',
       canActivate: (ctx) => (ctx.self.counters.morph ?? 0) > 0 && !ctx.query(ctx.self, 'cannotBeTributed'),
       activate: async (ctx) => {
         ctx.data.n = ctx.self.counters.morph ?? 0;
@@ -1118,9 +1120,12 @@ M('Iron Chain Repairman', {
       opt: true,
       label: 'Special Summon an Iron Chain monster from the GY',
       categories: ['specialSummon'],
+      // 2010 ruling: it targets 1 Level 4 or lower "Iron Chain" monster in your GY, and cannot be activated in Main
+      // Phase 2 if this card already attacked (even if the attack was negated). https://edisonrul.ing/cards/i/iron-chain-repairman.html
       canActivate: (ctx) =>
-        ctx.canSpecialSummon() && ctx.grave('me', (c) => isIronChain(c) && lvl(c) <= 4 && c.name !== 'Iron Chain Repairman' && ctx.canSummonCard(c) && ctx.canTarget(c)).length > 0,
-      // OCG text "選択して特殊召喚" / current text "target 1 ... in your GY": the GY monster is targeted at activation.
+        ctx.self.attacksThisTurn === 0 &&
+        ctx.canSpecialSummon() &&
+        ctx.grave('me', (c) => isIronChain(c) && lvl(c) <= 4 && c.name !== 'Iron Chain Repairman' && ctx.canSummonCard(c) && ctx.canTarget(c)).length > 0,
       activate: async (ctx) => {
         ctx.self.flags.cannotAttackTurn = ctx.turn;
         const cands = ctx.grave('me', (c) => isIronChain(c) && lvl(c) <= 4 && c.name !== 'Iron Chain Repairman' && ctx.canSummonCard(c));
@@ -1671,7 +1676,10 @@ M('Jade Knight', {
       when: true,
       label: 'Add a Level 4 LIGHT Machine-Type monster',
       categories: ['search'],
-      eventFilter: (ctx, ev) => ev.card === ctx.self && ctx.self.location === 'grave',
+      // 2010 ruling: it cannot activate if this card was face-down when it was attacked and destroyed by battle.
+      // https://edisonrul.ing/cards/j/jade-knight.html
+      eventFilter: (ctx, ev) =>
+        ev.card === ctx.self && ctx.self.location === 'grave' && !(ctx.battle?.target === ctx.self && ctx.battle.targetFaceDownAtStart),
       canActivate: (ctx) => !cantAdd(ctx) && ctx.deck('me', (c) => lvl(c) === 4 && attrIs(c, 'LIGHT') && raceIs(c, 'Machine')).length > 0,
       resolve: async (ctx) => {
         await ctx.search((c) => lvl(c) === 4 && attrIs(c, 'LIGHT') && raceIs(c, 'Machine'), 1, 'Add 1 Level 4 LIGHT Machine-Type monster from your Deck to your hand.');
@@ -2003,12 +2011,24 @@ M('Mosaic Manticore', {
       mandatory: true,
       label: 'Special Summon the Tributed monsters',
       categories: ['specialSummon'],
-      eventFilter: (ctx, ev) => ev.phase === 'standby' && ctx.isMyTurn && faceUpOn(ctx.self) && ctx.self.summonMethod === 'tribute' && ctx.turn === ctx.self.summonTurn + 2,
+      // 2010 rulings: also after a Tribute Set that is flipped face-up; a Tributed monster of the opponent is Special
+      // Summoned to your side; a Tributed monster that left the GY and came back is not Summoned; with too few zones you
+      // choose. https://edisonrul.ing/cards/m/mosaic-manticore.html
+      eventFilter: (ctx, ev) =>
+        ev.phase === 'standby' &&
+        ctx.isMyTurn &&
+        faceUpOn(ctx.self) &&
+        (ctx.self.summonMethod === 'tribute' || ctx.self.summonMethod === 'set') &&
+        ((ctx.self.flags.tributedMonsters ?? []) as unknown[]).length > 0 &&
+        ctx.turn === ctx.self.summonTurn + 2,
       resolve: async (ctx) => {
-        const uids = ((ctx.self.flags.tributedMonsters ?? []) as { uid: number }[]).map((t) => t.uid);
-        const cands = ctx.grave('me', (c) => uids.includes(c.uid) && ctx.canSummonCard(c)).slice(0, ctx.freeMZones());
+        const recs = (ctx.self.flags.tributedMonsters ?? []) as { uid: number; moveId?: number }[];
+        const all = ctx.grave('both', (c) => recs.some((t) => t.uid === c.uid && (t.moveId === undefined || t.moveId === c.moveId)) && ctx.canSummonCard(c));
+        const n = Math.min(all.length, ctx.freeMZones());
+        if (n <= 0 || !ctx.canSpecialSummon()) return;
+        const cands = all.length > n ? await ctx.select(all, n, n, `Special Summon ${n} of the Tributed monsters.`, 'specialSummon') : all;
         if (!cands.length) return;
-        const r = await ctx.specialSummon(cands, { pos: 'choose' });
+        const r = await ctx.specialSummon(cands, { pos: 'choose', controller: ctx.player });
         for (const c of r) {
           ctx.addTempMod(c, 'cannotAttack', true, 'field');
           ctx.negateEffects(c, 'field');
@@ -2537,12 +2557,15 @@ S('Morphtronic Cord', 'equip', {
       categories: ['destroy'],
       eventFilter: (ctx, ev) => !!ctx.equipTarget && ev.card === ctx.equipTarget && stActive(ctx) && evc(ev)!.faceUp,
       condition: (ctx) => ctx.spellTraps('both').length > 0,
-      resolve: async (ctx) => {
-        const st = ctx.spellTraps('both');
-        if (!st.length) return;
-        const [c] = await ctx.select(st, 1, 1, 'Destroy 1 Spell or Trap Card on the field.', 'destroy', {
+      // 2010 ruling: mandatory and targets 1 Spell or Trap Card (itself if it is the only one).
+      // https://edisonrul.ing/cards/m/morphtronic-cord.html
+      activate: async (ctx) => {
+        await ctx.selectTargets(ctx.spellTraps('both'), 1, 1, 'Target 1 Spell or Trap Card on the field to destroy.', 'destroy', {
           aiScore: (x) => (x.controller === ctx.opp ? cardValue(ctx.game, x) : x === ctx.self ? -9000 : -5000),
         });
+      },
+      resolve: async (ctx) => {
+        const [c] = ctx.validTargets((x) => x.onField);
         if (c) await ctx.destroy(c);
       },
     },
@@ -2568,7 +2591,20 @@ S('Morphtronic Engine', 'equip', {
         });
       },
     ),
-    { kind: 'continuous', mods: [{ q: 'atk', to: 'cards', filter: equippedTo, value: (ctx, c: C) => ctx.game.baseAtk(c) }] },
+    // 2010 ruling: extra copies on the same monster are redundant (only the first one doubles its original ATK).
+    // https://edisonrul.ing/cards/m/morphtronic-engine.html
+    {
+      kind: 'continuous',
+      mods: [
+        {
+          q: 'atk',
+          to: 'cards',
+          filter: (ctx, c: C) =>
+            equippedTo(ctx, c) && ctx.game.equipsOf(c).find((e) => e.name === 'Morphtronic Engine' && e.faceUp && !ctx.game.isNegated(e)) === ctx.self,
+          value: (ctx, c: C) => ctx.game.baseAtk(c),
+        },
+      ],
+    },
   ],
 });
 
@@ -2678,8 +2714,6 @@ S('Miracle Fertilizer', 'continuous', {
       condition: (ctx) => !turnEvents(ctx.game).some((e) => (e.type === 'normalSummoned' || e.type === 'monsterSet') && e.player === ctx.player),
       canActivate: (ctx) => ctx.canSpecialSummon() && ctx.grave('me', (c) => isPlant(c) && ctx.canSummonCard(c)).length > 0,
       activate: async (ctx) => {
-        ctx.addPlayerMod(ctx.player, 'cannotNormalSummon');
-        ctx.addPlayerMod(ctx.player, 'cannotSet');
         await ctx.selectTargets(ctx.grave('me', (c) => isPlant(c) && ctx.canSummonCard(c)), 1, 1, 'Select 1 Plant-Type monster in your Graveyard.', 'specialSummon', {
           aiScore: (c) => (c.data.atk ?? 0) + (c.data.aiValue ?? 0),
         });
@@ -2688,6 +2722,13 @@ S('Miracle Fertilizer', 'continuous', {
         const [t] = ctx.validTargets((c) => c.location === 'grave');
         if (!t || !ctx.self.onField) return;
         const r = await ctx.specialSummon(t, { pos: 'choose' });
+        // 2010 ruling: if the targeted Plant is removed in response, you can still Normal Summon or Set that turn;
+        // once a monster is Special Summoned, the restriction stays even if this card leaves the field.
+        // https://edisonrul.ing/cards/m/miracle-fertilizer.html
+        if (r.length) {
+          ctx.addPlayerMod(ctx.player, 'cannotNormalSummon');
+          ctx.addPlayerMod(ctx.player, 'cannotSet');
+        }
         if (r.length && ctx.self.onField) ctx.game.link(ctx.self, r[0], false);
       },
       ai: { score: (ctx) => (ctx.game.players[ctx.player].normalSummonsLeft <= 0 || ctx.grave('me', (c) => isPlant(c) && (c.data.atk ?? 0) >= 1500).length ? 55 : 20) },
@@ -3100,9 +3141,11 @@ T('Lineage of Destruction', 'normal', {
       kind: 'activate',
       categories: ['atkChange'],
       condition: (ctx) => ((ctx.game.turnData['csoc:defKills'] ?? []) as { by?: PlayerId; ctrl?: PlayerId }[]).some((k) => k.by === ctx.player && k.ctrl === ctx.opp),
-      canActivate: (ctx) => ctx.faceUpMonsters('me', (c) => ctx.level(c) === 8 && ctx.canTarget(c)).length > 0,
+      // 2010 ruling: cannot target a monster that can already attack twice in the same Battle Phase.
+      // https://edisonrul.ing/cards/l/lineage-of-destruction.html
+      canActivate: (ctx) => ctx.faceUpMonsters('me', (c) => ctx.level(c) === 8 && ctx.game.queryCardNum(c, 'extraAttacks') <= 0 && ctx.canTarget(c)).length > 0,
       activate: async (ctx) => {
-        await ctx.selectTargets(ctx.faceUpMonsters('me', (c) => ctx.level(c) === 8), 1, 1, 'Select 1 Level 8 monster you control.', 'buff');
+        await ctx.selectTargets(ctx.faceUpMonsters('me', (c) => ctx.level(c) === 8 && ctx.game.queryCardNum(c, 'extraAttacks') <= 0), 1, 1, 'Select 1 Level 8 monster you control.', 'buff');
       },
       resolve: async (ctx) => {
         const [t] = ctx.validTargets((c) => faceUpOn(c));
@@ -3146,10 +3189,22 @@ T('Morphtransition', 'normal', {
         return !!t && t.controller === ctx.player && faceUpOn(t) && isMorphMon(t);
       },
       condition: (ctx) => !!ctx.battle && !ctx.battle.inDamageStep && !ctx.battle.negated,
+      // 2010 rulings: targets both the attacking monster and the attack target; if the attacking monster is no longer
+      // on the field, the "Morphtronic" monster's battle position cannot be changed. https://edisonrul.ing/cards/m/morphtransition.html
+      canActivate: (ctx) => !!ctx.battle?.target && ctx.canTarget(ctx.battle.attacker) && ctx.canTarget(ctx.battle.target),
+      activate: async (ctx) => {
+        const b = ctx.battle!;
+        ctx.data.attacker = b.attacker;
+        ctx.data.target = b.target;
+        ctx.addTargets([b.attacker, b.target!]);
+      },
       resolve: async (ctx) => {
-        const t = ctx.battle?.target;
+        const a = ctx.data.attacker as C;
+        const t = ctx.data.target as C;
+        const ok = ctx.validTargets();
+        if (!ok.includes(a) || a.location !== 'mzone') return;
         ctx.negateAttack();
-        if (t && faceUpOn(t) && t.controller === ctx.player) await ctx.changePos(t, t.pos === 'atk' ? 'def' : 'atk');
+        if (ok.includes(t) && faceUpOn(t) && t.controller === ctx.player) await ctx.changePos(t, t.pos === 'atk' ? 'def' : 'atk');
       },
       ai: { score: (ctx) => (expectedBattleDamage(ctx.game, ctx.player) > 0 || (ctx.battle?.target && ctx.atk(ctx.battle.attacker) > (ctx.battle.target.pos === 'atk' ? ctx.atk(ctx.battle.target) : ctx.def(ctx.battle.target))) ? 55 : 0) },
     },

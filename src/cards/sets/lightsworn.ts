@@ -516,7 +516,8 @@ spell('Lightsworn Sabre', 'equip', {
       event: 'milled',
       label: 'Equip from the GY',
       categories: ['atkChange'],
-      eventFilter: (ctx, ev) => ev.card === ctx.self && ctx.self.location === 'grave',
+      // 2010 ruling: not when it is sent from the Deck to the GY to pay a cost. https://edisonrul.ing/cards/l/lightsworn-sabre.html
+      eventFilter: (ctx, ev) => ev.card === ctx.self && ctx.self.location === 'grave' && !(ev.reasons ?? (ev.reason ? [ev.reason] : [])).includes('cost'),
       condition: (ctx) => ctx.freeSZones() > 0 && ctx.faceUpMonsters('me', (c) => isLS(c) && ctx.canTarget(c)).length > 0,
       activate: async (ctx) => {
         await ctx.selectTargets(ctx.faceUpMonsters('me', isLS), 1, 1, 'Target 1 "Lightsworn" monster you control.', 'equip');

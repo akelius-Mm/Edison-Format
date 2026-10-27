@@ -1318,17 +1318,19 @@ monster("Koa'ki Meiru Sea Panther", {
       opt: true,
       label: 'Send Iron Core: Spell to the top of the Deck',
       categories: ['toDeck'],
-      canActivate: (ctx) => ctx.hand('me', (c) => c.name === IRON_CORE).length > 0 && ctx.grave('me', (c) => c.isSpell).length > 0,
+      canActivate: (ctx) => ctx.hand('me', (c) => c.name === IRON_CORE).length > 0 && ctx.grave('me', (c) => c.isSpell && ctx.canTarget(c)).length > 0,
       activate: async (ctx) => {
         const [core] = await ctx.select(ctx.hand('me', (c) => c.name === IRON_CORE), 1, 1, `Send 1 "${IRON_CORE}" to the GY.`, 'cost');
         if (!core) return false;
         await ctx.sendToGrave(core, 'cost');
-      },
-      resolve: async (ctx) => {
-        const sp = ctx.grave('me', (c) => c.isSpell);
-        const [s] = await ctx.select(sp, 1, 1, 'Return 1 Spell Card from your GY to the top of your Deck.', 'toHand', {
+        // 2010 ruling: an Ignition Effect that targets 1 Spell Card in your GY. https://edisonrul.ing/cards/k/koaki-meiru-sea-panther.html
+        const t = await ctx.selectTargets(ctx.grave('me', (c) => c.isSpell), 1, 1, 'Target 1 Spell Card in your GY to return to the top of your Deck.', 'toDeck', {
           aiScore: (c) => (c.name === IRON_CORE ? 0 : 1000 + (c.data.aiValue ?? 0)),
         });
+        if (!t.length) return false;
+      },
+      resolve: async (ctx) => {
+        const [s] = ctx.validTargets((c) => c.location === 'grave');
         if (s) await ctx.toDeck(s, 'top');
       },
       ai: { score: (ctx) => (ctx.hand('me', (c) => c.name === IRON_CORE).length >= 2 ? 30 : 0) },
@@ -1609,11 +1611,20 @@ monster('Lord British Space Fighter', {
       mandatory: true,
       label: 'Choose 1 effect',
       categories: ['destroy', 'specialSummon'],
-      eventFilter: selfDestroysByBattle,
+      // 2010 ruling: if both monsters destroy each other by battle, the 2nd or 3rd effect can still be activated.
+      // https://edisonrul.ing/cards/l/lord-british-space-fighter.html
+      range: ['mzone', 'grave'],
+      eventFilter: (ctx, ev) =>
+        selfDestroysByBattle(ctx, ev) ||
+        (ev.type === 'battleDestroyed' && ev.other === ctx.self && ctx.self.location === 'grave' && (ev.fromController ?? (ev.card as C).owner) !== ctx.player),
       activate: async (ctx) => {
         const sets = ctx.field('both', (c) => !c.faceUp && ctx.canTarget(c));
-        const opts = ['Make a second attack in a row'];
-        const kinds = ['attack'];
+        const opts: string[] = [];
+        const kinds: string[] = [];
+        if (ctx.self.location === 'mzone') {
+          opts.push('Make a second attack in a row');
+          kinds.push('attack');
+        }
         if (sets.length) {
           opts.push('Destroy 1 Set card');
           kinds.push('destroy');
@@ -1622,6 +1633,7 @@ monster('Lord British Space Fighter', {
           opts.push('Special Summon 1 "Multi Token"');
           kinds.push('token');
         }
+        if (!opts.length) return;
         const oppSets = ctx.field('opp', (c) => !c.faceUp).length;
         const i = await ctx.option('Lord British Space Fighter: choose 1 effect', opts, (k) => {
           if (kinds[k] === 'destroy') return oppSets ? 3 : -1;
@@ -1838,9 +1850,11 @@ monster('Majestic Star Dragon', {
       opt: true,
       label: 'Negate a monster and copy its effect',
       categories: ['negate'],
-      canActivate: (ctx) => ctx.faceUpMonsters('opp', (c) => ctx.canTarget(c)).length > 0,
+      // 2010 ruling: cannot negate the effect of a monster whose effect is already being negated.
+      // https://edisonrul.ing/cards/m/majestic-star-dragon.html
+      canActivate: (ctx) => ctx.faceUpMonsters('opp', (c) => ctx.canTarget(c) && !ctx.isNegated(c)).length > 0,
       activate: async (ctx) => {
-        await ctx.selectTargets(ctx.faceUpMonsters('opp'), 1, 1, 'Target 1 face-up monster your opponent controls.', 'negate', {
+        await ctx.selectTargets(ctx.faceUpMonsters('opp', (c) => !ctx.isNegated(c)), 1, 1, 'Target 1 face-up monster your opponent controls.', 'negate', {
           aiScore: (c) => (c.hasType('effect') ? 1000 : 0) + cardValue(ctx.game, c),
         });
       },
@@ -1884,9 +1898,11 @@ monster('Majestic Star Dragon', {
       label: 'Return to the Extra Deck, revive Stardust Dragon',
       categories: ['toDeck', 'specialSummon'],
       eventFilter: (ctx, ev) => ev.phase === 'end' && ctx.self.faceUp,
-      canActivate: (ctx) => ctx.grave('me', (c) => c.name === 'Stardust Dragon' && ctx.canTarget(c)).length > 0,
+      // 2010 ruling: mandatory; it activates (and this card returns) even with no "Stardust Dragon" in the GY or while
+      // Special Summons are prohibited. https://edisonrul.ing/cards/m/majestic-star-dragon.html
       activate: async (ctx) => {
-        await ctx.selectTargets(ctx.grave('me', (c) => c.name === 'Stardust Dragon'), 1, 1, 'Target 1 "Stardust Dragon" in your GY.', 'specialSummon');
+        const sd = ctx.grave('me', (c) => c.name === 'Stardust Dragon' && ctx.canTarget(c));
+        if (sd.length) await ctx.selectTargets(sd, 1, 1, 'Target 1 "Stardust Dragon" in your GY.', 'specialSummon');
       },
       resolve: async (ctx) => {
         if (ctx.self.location !== 'mzone') return;
@@ -3636,13 +3652,21 @@ trap('Infernity Force', 'normal', {
         return !!t && t.controller === ctx.player && t.faceUp && isInfernity(t);
       },
       condition: (ctx) => ctx.hand('me').length === 0 && !!ctx.battle && !ctx.battle.inDamageStep,
+      // 2010 ruling: targets the attacking monster and the "Infernity" monster in the GY; the attacker is still
+      // destroyed if the GY target is gone. https://edisonrul.ing/cards/i/infernity-force.html
+      canActivate: (ctx) => !!ctx.battle && ctx.canTarget(ctx.battle.attacker) && ctx.grave('me', (c) => isInfernity(c) && ctx.canTarget(c)).length > 0,
+      activate: async (ctx) => {
+        const a = ctx.battle!.attacker;
+        ctx.addTargets([a]);
+        ctx.data.attacker = a;
+        await ctx.selectTargets(ctx.grave('me', isInfernity), 1, 1, 'Target 1 "Infernity" monster in your GY.', 'specialSummon', { aiScore: reviveScore });
+      },
       resolve: async (ctx) => {
-        const a = ctx.battle?.attacker;
-        if (a && a.location === 'mzone') await ctx.destroy(a);
-        const cands = ctx.grave('me', (c) => isInfernity(c) && ctx.canSummonCard(c));
-        if (!cands.length || !ctx.canSpecialSummon()) return;
-        const [c] = await ctx.select(cands, 1, 1, 'Special Summon 1 "Infernity" monster from your GY.', 'specialSummon', { aiScore: reviveScore });
-        if (c) await ctx.specialSummon(c, { pos: aiPos(ctx, c) });
+        const a = ctx.data.attacker as C | undefined;
+        if (a && ctx.validTargets((c) => c === a && c.location === 'mzone').length) await ctx.destroy(a);
+        const [c] = ctx.validTargets((x) => x.location === 'grave');
+        if (!c || !ctx.canSpecialSummon() || !ctx.canSummonCard(c)) return;
+        await ctx.specialSummon(c, { pos: aiPos(ctx, c) });
       },
       ai: { score: () => 75 },
     },

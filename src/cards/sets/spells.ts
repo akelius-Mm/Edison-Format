@@ -1001,6 +1001,12 @@ spell('Monster Gate', 'normal', {
       resolve: async (ctx) => {
         const { found, others } = excavateForMonster(ctx);
         await ctx.game.anim({ type: 'reveal', cards: [...others, ...(found ? [found] : [])].map((c) => c.uid), player: ctx.player });
+        // 2010 ruling: if the whole Deck is picked up without finding a monster, the effect is negated and the cards
+        // are shuffled back into the Deck. https://edisonrul.ing/cards/m/monster-gate.html
+        if (!found) {
+          ctx.game.shuffleDeck(ctx.player);
+          return;
+        }
         let summoned = false;
         if (found && ctx.canSummonCard(found)) summoned = (await ctx.specialSummon(found)).length > 0;
         await excavatedToGrave(ctx, summoned || !found ? others : [...others, found]);
@@ -1144,17 +1150,18 @@ spell('Future Fusion', 'continuous', {
 });
 
 spell('Metamorphosis', 'normal', {
-  text: 'Tribute 1 face-up monster; Special Summon from your Extra Deck 1 Fusion Monster with the same Level as the Tributed monster.',
+  // 2010 ruling: a face-down monster can be Tributed. https://edisonrul.ing/cards/m/metamorphosis.html
+  text: 'Tribute 1 monster; Special Summon from your Extra Deck 1 Fusion Monster with the same Level as the Tributed monster.',
   effects: [
     {
       kind: 'activate',
       categories: ['specialSummon'],
       canActivate: (ctx) =>
         !ctx.game.queryPlayer(ctx.player, 'cannotSpecialSummon') &&
-        tributable(ctx, (c) => c.faceUp).some((m) => ctx.extra('me', (f) => f.hasType('fusion') && f.data.level === ctx.level(m)).length > 0),
+        tributable(ctx).some((m) => ctx.extra('me', (f) => f.hasType('fusion') && f.data.level === ctx.level(m)).length > 0),
       activate: async (ctx) => {
-        const cands = tributable(ctx, (c) => c.faceUp && ctx.extra('me', (f) => f.hasType('fusion') && f.data.level === ctx.level(c)).length > 0);
-        const sel = await ctx.select(cands, 1, 1, 'Tribute 1 face-up monster.', 'tribute');
+        const cands = tributable(ctx, (c) => ctx.extra('me', (f) => f.hasType('fusion') && f.data.level === ctx.level(c)).length > 0);
+        const sel = await ctx.select(cands, 1, 1, 'Tribute 1 monster.', 'tribute');
         if (!sel.length) return false;
         ctx.data.level = ctx.level(sel[0]);
         await ctx.game.moveCards(sel, 'grave', { reason: 'tribute', reasons: ['tribute', 'cost'], reasonPlayer: ctx.player, reasonCard: ctx.self });
@@ -1662,7 +1669,9 @@ spell('Megamorph', 'equip', {
         {
           q: 'atk',
           to: 'cards',
-          filter: equipped,
+          // 2010 ruling: several "Megamorph" on one monster are the same as one (only the first one applies).
+          // https://edisonrul.ing/cards/m/megamorph.html
+          filter: (ctx, c) => equipped(ctx, c) && ctx.game.equipsOf(c).find((e) => e.name === 'Megamorph' && e.faceUp && !ctx.game.isNegated(e)) === ctx.self,
           value: (ctx, c) => {
             const base = ctx.game.baseAtk(c);
             if (ctx.lp < ctx.oppLp) return base;

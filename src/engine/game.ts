@@ -1861,7 +1861,7 @@ export class Game {
     card.setTurn = set ? this.turn : -1;
     card.summonMethod = set ? 'set' : need ? 'tribute' : 'normal';
     card.flags.tributeCount = tributes.length;
-    card.flags.tributedMonsters = tributes.map((t) => ({ uid: t.uid, attribute: t.data.attribute, name: t.name, race: t.data.race }));
+    card.flags.tributedMonsters = tributes.map((t) => ({ uid: t.uid, moveId: t.moveId, attribute: t.data.attribute, name: t.name, race: t.data.race }));
     if (set) {
       this.log(`${this.players[p].name} Sets a monster.`, 'action', p);
       await this.anim({ type: 'summon', cards: [card.uid], method: 'set', from: ['hand'] });
@@ -2427,7 +2427,7 @@ export class Game {
     let targets = mons.filter((m) => !this.queryCard(m, 'cannotBeAttacked'));
     const must = targets.filter((m) => m.faceUp && this.queryCard(m, 'mustBeAttacked'));
     if (must.length) targets = must;
-    const direct = mons.length === 0 || this.queryCard(attacker, 'directAttack') || (targets.length === 0 && mons.length > 0 && false);
+    const direct = (mons.length === 0 || this.queryCard(attacker, 'directAttack')) && !this.queryCard(attacker, 'cannotDirectAttack');
     return { targets, direct };
   }
 

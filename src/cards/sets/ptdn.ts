@@ -2260,12 +2260,18 @@ monster('Legendary Fiend', {
   effects: [
     {
       kind: 'trigger',
-      event: 'phaseStart',
+      // 2010 ruling: Special Summoned during your Standby Phase, it activates in that same Standby Phase.
+      // https://edisonrul.ing/cards/l/legendary-fiend.html
+      event: ['phaseStart', 'summoned'],
       mandatory: true,
       opt: true,
       label: '+700 ATK',
       categories: ['atkChange'],
-      eventFilter: (ctx, ev) => ev.phase === 'standby' && ctx.isMyTurn && ctx.self.location === 'mzone' && ctx.self.faceUp,
+      eventFilter: (ctx, ev) =>
+        (ev.type === 'phaseStart' ? ev.phase === 'standby' : ev.card === ctx.self && ctx.phase === 'standby') &&
+        ctx.isMyTurn &&
+        ctx.self.location === 'mzone' &&
+        ctx.self.faceUp,
       resolve: async (ctx) => {
         if (monActive(ctx)) ctx.addTempMod(ctx.self, 'atk', 700, 'field');
       },

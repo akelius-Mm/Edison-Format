@@ -1244,17 +1244,20 @@ monster("Koa'ki Meiru Ice", {
       kind: 'ignition',
       label: 'Discard: destroy a Special Summoned monster',
       categories: ['destroy'],
-      canActivate: (ctx) => ctx.hand().length > 0 && ctx.monsters('both', isSpecialSummoned).length > 0,
+      canActivate: (ctx) => ctx.hand().length > 0 && ctx.monsters('both', (c) => isSpecialSummoned(c) && ctx.canTarget(c)).length > 0,
       activate: async (ctx) => {
         const [d] = await ctx.select(ctx.hand(), 1, 1, 'Send 1 card from your hand to the GY.', 'cost', {
           aiScore: (c) => -cardValue(ctx.game, c) + (isIronCore(c) ? -3000 : 0),
         });
         if (!d) return false;
         await ctx.sendToGrave(d, 'cost');
+        // 2010 ruling: this effect targets 1 Special Summoned monster. https://edisonrul.ing/cards/k/koaki-meiru-ice.html
+        await ctx.selectTargets(ctx.monsters('both', isSpecialSummoned), 1, 1, 'Target 1 Special Summoned monster on the field.', 'destroy', {
+          aiScore: (c) => (c.controller === ctx.opp ? cardValue(ctx.game, c) : -cardValue(ctx.game, c)),
+        });
       },
       resolve: async (ctx) => {
-        const cands = ctx.monsters('both', isSpecialSummoned);
-        const [t] = await ctx.select(cands, 1, 1, 'Destroy 1 Special Summoned monster on the field.', 'destroy');
+        const [t] = ctx.validTargets((c) => c.location === 'mzone');
         if (t) await ctx.destroy(t);
       },
       ai: {
@@ -1407,15 +1410,21 @@ monster('Master Gig', {
       opt: true,
       label: 'Pay 1000 LP: destroy monsters',
       categories: ['destroy', 'destroyMulti'],
-      canActivate: (ctx) => ctx.lp > 1000 && ctx.monsters('opp').length > 0,
+      // 2010 rulings: cannot be activated if your opponent controls fewer monsters than your face-up Psychic-Type
+      // monsters; the number is counted at resolution, and if it is then larger, nothing is destroyed.
+      // https://edisonrul.ing/cards/m/master-gig.html
+      canActivate: (ctx) => {
+        const n = ctx.faceUpMonsters('me', (c) => isRace(c, 'Psychic')).length;
+        return ctx.lp > 1000 && n > 0 && ctx.monsters('opp').length >= n;
+      },
       activate: async (ctx) => {
         await ctx.payLp(1000);
       },
       resolve: async (ctx) => {
         const n = ctx.faceUpMonsters('me', (c) => isRace(c, 'Psychic')).length;
         const opp = ctx.monsters('opp');
-        if (!n || !opp.length) return;
-        const sel = await ctx.select(opp, Math.min(n, opp.length), Math.min(n, opp.length), `Destroy ${n} monster(s) your opponent controls.`, 'destroy');
+        if (!n || opp.length < n) return;
+        const sel = await ctx.select(opp, n, n, `Destroy ${n} monster(s) your opponent controls.`, 'destroy');
         if (sel.length) await ctx.destroy(sel);
       },
       ai: { score: (ctx) => (ctx.lp > 2500 && ctx.monsters('opp').length ? 55 : 0) },
@@ -1844,6 +1853,14 @@ monster('Light End Dragon', {
         const a = evc(ev);
         const t = evo(ev);
         return faceUpOn(ctx.self) && !!a && !!t && (a === ctx.self || t === ctx.self);
+      },
+      // 2010 rulings: cannot be activated if this card's ATK and DEF are less than 500, or if the other monster has
+      // 0 ATK and 0 DEF. https://edisonrul.ing/cards/l/light-end-dragon.html
+      canActivate: (ctx) => {
+        const ev = ctx.event;
+        const o = ev ? (evc(ev) === ctx.self ? evo(ev) : evc(ev)) : undefined;
+        if (ctx.atk(ctx.self) < 500 && ctx.def(ctx.self) < 500) return false;
+        return !!o && !(ctx.atk(o) <= 0 && ctx.def(o) <= 0);
       },
       activate: async (ctx) => {
         const ev = ctx.event!;
@@ -2366,7 +2383,7 @@ spell('One for One', 'normal', {
 });
 
 const mindTrustTributes = (ctx: Ctx) =>
-  ctx.monsters('me', (c) => tributable(ctx, c) && ctx.level(c) >= 2 && ctx.grave('me', (t) => t.isMonster && t.isTuner && lvl(t) <= Math.floor(ctx.level(c) / 2)).length > 0);
+  ctx.monsters('me', (c) => tributable(ctx, c) && ctx.level(c) >= 2 && ctx.grave('me', (t) => t.isMonster && t.isTuner && lvl(t) <= Math.floor(ctx.level(c) / 2) && ctx.canTarget(t)).length > 0);
 spell('Mind Trust', 'normal', {
   text: "Tribute 1 Level 2 or higher monster. Add 1 Tuner Monster from your Graveyard to your hand whose Level is less than or equal to half of the Tributed monster's.",
   effects: [
@@ -2379,11 +2396,13 @@ spell('Mind Trust', 'normal', {
         if (!t) return false;
         ctx.data.level = ctx.level(t);
         await tributeCost(ctx, [t]);
+        // 2010 ruling: this effect targets 1 Tuner in your GY (Level as the Tributed monster had on the field).
+        // https://edisonrul.ing/cards/m/mind-trust.html
+        const max = Math.floor((ctx.data.level ?? 0) / 2);
+        await ctx.selectTargets(ctx.grave('me', (c) => c.isMonster && c.isTuner && lvl(c) <= max), 1, 1, `Target 1 Tuner (Level ${max} or lower) in your GY.`, 'toHand');
       },
       resolve: async (ctx) => {
-        const max = Math.floor((ctx.data.level ?? 0) / 2);
-        const cands = ctx.grave('me', (c) => c.isMonster && c.isTuner && lvl(c) <= max);
-        const [c] = await ctx.select(cands, 1, 1, `Add 1 Tuner (Level ${max} or lower) from your GY to your hand.`, 'toHand');
+        const [c] = ctx.validTargets((x) => x.location === 'grave');
         if (c) await ctx.toHand(c);
       },
       ai: {
@@ -2530,8 +2549,10 @@ spell('Junk Box', 'normal', {
         const [m] = await ctx.specialSummon(t, { pos: aiPos(ctx, t) });
         if (!m) return;
         const mid = m.moveId;
+        const fid = m.faceUpId;
+        // 2010 ruling: not destroyed if it was flipped face-down (or left the field). https://edisonrul.ing/cards/j/junk-box.html
         ctx.later('end', async () => {
-          if (m.location === 'mzone' && m.moveId === mid) await ctx.game.destroy([m], 'effect', ctx.player, ctx.self);
+          if (m.location === 'mzone' && m.moveId === mid && m.faceUpId === fid && m.faceUp) await ctx.game.destroy([m], 'effect', ctx.player, ctx.self);
         });
       },
       ai: { score: (ctx) => (ctx.phase === 'main1' ? 40 : 15) },
@@ -2610,8 +2631,10 @@ spell('Morphtronic Repair Unit', 'equip', {
     {
       kind: 'activate',
       categories: ['specialSummon'],
+      // 2010 ruling: there must already be an eligible "Morphtronic" target in your GY to activate it (you may then
+      // target the monster you sent as the cost). https://edisonrul.ing/cards/m/morphtronic-repair-unit.html
       canActivate: (ctx) =>
-        ctx.canSpecialSummon() && ctx.hand('me', isMorphMonster).length > 0 && ctx.cards('me', ['grave', 'hand'], (c) => isMorphMonster(c) && ctx.canSummonCard(c)).length > 0,
+        ctx.canSpecialSummon() && ctx.hand('me', isMorphMonster).length > 0 && ctx.grave('me', (c) => isMorphMonster(c) && ctx.canSummonCard(c) && ctx.canTarget(c)).length > 0,
       activate: async (ctx) => {
         const [s] = await ctx.select(ctx.hand('me', isMorphMonster), 1, 1, 'Send 1 "Morphtronic" monster from your hand to the GY.', 'cost');
         if (!s) return false;
@@ -3032,6 +3055,9 @@ trap('Miracle Locus', 'normal', {
     {
       kind: 'activate',
       categories: ['atkChange'],
+      // 2010 ruling: it modifies ATK, so it can be activated in the Damage Step (not during or after damage
+      // calculation). https://edisonrul.ing/cards/m/miracle-locus.html
+      damageStep: true,
       canActivate: (ctx) => ctx.faceUpMonsters('me', (c) => c.pos === 'atk' && ctx.canTarget(c)).length > 0,
       activate: async (ctx) => {
         await ctx.selectTargets(ctx.faceUpMonsters('me', (c) => c.pos === 'atk'), 1, 1, 'Target 1 face-up Attack Position monster you control.', 'buff', { aiScore: (c) => ctx.atk(c) });
@@ -3215,14 +3241,18 @@ trap('Level Retuner', 'normal', {
     {
       kind: 'activate',
       categories: [],
-      canActivate: (ctx) => ctx.faceUpMonsters('me', (c) => ctx.level(c) >= 2).length > 0,
-      resolve: async (ctx) => {
-        const cands = ctx.faceUpMonsters('me', (c) => ctx.level(c) >= 2);
+      // 2010 rulings: a targeted effect; you choose 1 or 2 when it resolves. https://edisonrul.ing/cards/l/level-retuner.html
+      canActivate: (ctx) => ctx.faceUpMonsters('me', (c) => ctx.level(c) >= 2 && ctx.canTarget(c)).length > 0,
+      activate: async (ctx) => {
         const before = synchroOptions(ctx).length;
-        const [t] = await ctx.select(cands, 1, 1, 'Select 1 face-up monster you control.', 'buff', {
+        await ctx.selectTargets(ctx.faceUpMonsters('me', (c) => ctx.level(c) >= 2), 1, 1, 'Target 1 face-up monster you control.', 'buff', {
           aiScore: (c) => (synchroWithLevelDelta(ctx, c, -1) > before || synchroWithLevelDelta(ctx, c, -2) > before ? 1000 : 0) + ctx.level(c),
         });
-        if (!t) return;
+      },
+      resolve: async (ctx) => {
+        const before = synchroOptions(ctx).length;
+        const [t] = ctx.validTargets((c) => c.location === 'mzone' && c.faceUp);
+        if (!t || ctx.level(t) < 2) return;
         const max = Math.min(2, ctx.level(t) - 1);
         const n = (await ctx.option(`Reduce ${t.name}'s Level by:`, Array.from({ length: max }, (_, i) => `${i + 1}`), (i) => (synchroWithLevelDelta(ctx, t, -(i + 1)) > before ? 10 - i : i))) + 1;
         ctx.addTempMod(t, 'level', -n, 'field');

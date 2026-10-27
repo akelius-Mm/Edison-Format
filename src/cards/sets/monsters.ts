@@ -1774,10 +1774,14 @@ monster('Magical Scientist', {
         const sel = await ctx.select(fusionFromExtra(ctx, 6), 1, 1, 'Special Summon 1 Level 6 or lower Fusion Monster.', 'specialSummon');
         if (!sel.length) return;
         const r = await ctx.specialSummon(sel[0], { pos: 'choose' });
+        // 2010 rulings: it cannot attack directly and returns at the end of the turn; flipped face-down (or removed and
+        // returned) the effect is reset. https://edisonrul.ing/cards/m/magical-scientist.html
         for (const m of r) {
           const id = m.moveId;
+          const fid = m.faceUpId;
+          ctx.addTempMod(m, 'cannotDirectAttack', true, 'field');
           ctx.later('end', async () => {
-            if (m.location === 'mzone' && m.moveId === id) await ctx.toDeck(m, 'shuffle');
+            if (m.location === 'mzone' && m.moveId === id && m.faceUpId === fid && m.faceUp) await ctx.toDeck(m, 'shuffle');
           });
         }
       },
@@ -1942,15 +1946,18 @@ monster('Makyura the Destructor', {
     {
       // Engine does not yet support Trap activation from the hand; this records the permission
       // in turnData so an engine hook can honour it (see docs/engine-requests/monsters.md).
+      // 2010 ruling: a Continuous Effect (no Chain). https://edisonrul.ing/cards/m/makyura-the-destructor.html
       kind: 'trigger',
       event: 'sentToGrave',
-      mandatory: true,
+      range: ['grave'],
       label: 'Traps from hand this turn',
       categories: [],
-      eventFilter: (ctx, ev) => ev.card === ctx.self && reasonsOf(ev).includes('destroy'),
-      resolve: async (ctx) => {
-        ctx.game.turnData[`trapsFromHand:${ctx.player}`] = true;
-        ctx.log('Trap Cards can be activated from the hand this turn.');
+      eventFilter: (ctx, ev) => {
+        if (ev.card === ctx.self && reasonsOf(ev).includes('destroy')) {
+          ctx.game.turnData[`trapsFromHand:${ctx.player}`] = true;
+          ctx.log('Trap Cards can be activated from the hand this turn.');
+        }
+        return false;
       },
     },
   ],
