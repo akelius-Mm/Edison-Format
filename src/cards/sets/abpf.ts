@@ -799,11 +799,11 @@ monster('Dragon Queen of Tragic Endings', {
       categories: ['discard', 'draw'],
       eventFilter: (ctx, ev) => ev.reasonCard === ctx.self && ev.player === ctx.opp && ctx.battle?.attacker === ctx.self,
       resolve: async (ctx) => {
+        // No draw if your opponent has no card in hand to send: https://edisonrul.ing/cards/d/dragon-queen-of-tragic-endings.html
         const hand = ctx.hand('opp');
-        if (hand.length) {
-          const s = await ctx.select(hand, 1, 1, 'Send 1 card from your hand to the GY.', 'toGrave', { player: ctx.opp });
-          await ctx.sendToGrave(s);
-        }
+        if (!hand.length) return;
+        const s = await ctx.select(hand, 1, 1, 'Send 1 card from your hand to the GY.', 'toGrave', { player: ctx.opp });
+        await ctx.sendToGrave(s);
         await ctx.draw(1);
       },
     },
@@ -1411,7 +1411,8 @@ monster('Codarus', {
         await ctx.selectTargets(ctx.field('opp'), 1, 2, 'Target up to 2 cards your opponent controls.', 'destroy');
       },
       resolve: async (ctx) => {
-        const t = ctx.validTargets((c) => c.onField);
+        // A target you gained control of in the meantime is not sent: https://edisonrul.ing/cards/c/codarus.html
+        const t = ctx.validTargets((c) => c.onField && c.controller === ctx.opp);
         if (t.length) await ctx.sendToGrave(t);
       },
       ai: { score: (ctx) => (ctx.field('opp').reduce((a, c) => a + cardValue(ctx.game, c), 0) >= 2500 ? 50 : 0) },
@@ -3149,7 +3150,8 @@ trap('Destruct Potion', 'normal', {
       resolve: async (ctx) => {
         const t = ctx.validTargets((c) => c.location === 'mzone')[0];
         if (!t) return;
-        const a = ctx.atk(t);
+        // A face-down target gives no LP: https://edisonrul.ing/cards/d/destruct-potion.html
+        const a = t.faceUp ? ctx.atk(t) : 0;
         const d = await ctx.destroy(t);
         if (d.length && a > 0) await ctx.recover(ctx.player, a);
       },

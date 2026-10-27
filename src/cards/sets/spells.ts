@@ -1931,6 +1931,11 @@ spell('Double Summon', 'normal', {
       kind: 'activate',
       categories: [],
       resolve: async (ctx) => {
+        // Several copies can be activated, but only 1 extra Normal Summon per turn comes from this card:
+        // https://edisonrul.ing/cards/d/double-summon.html
+        const key = `doubleSummon:${ctx.player}`;
+        if (ctx.game.turnData[key]) return;
+        ctx.game.turnData[key] = true;
         ctx.gainNormalSummon(1);
       },
       ai: {

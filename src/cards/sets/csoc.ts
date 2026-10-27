@@ -2859,7 +2859,10 @@ T('Confusion Chaff', 'normal', {
   text: 'Activate only when your opponent declares a second direct attack during the same Battle Phase. Conduct battle between the attacking monster and the first monster that attacked directly (other effects cannot be activated during this battle).',
   effects: [
     {
-      // APPROX: the battle is resolved at once by comparing ATK (the loser is destroyed by battle); no Battle Damage is applied.
+      // APPROX: the battle is resolved at once by comparing ATK/DEF (the loser is destroyed by battle); the Battle Damage
+      // goes to the attacking player (who controls both monsters), without damage-reflection effects (Amazoness Swords Woman).
+      // A face-down first attacker is flipped face-up and the battle is conducted normally:
+      // https://edisonrul.ing/cards/c/confusion-chaff.html
       kind: 'activate',
       event: 'attackDeclared',
       categories: ['negateAttack', 'destroy'],
@@ -2875,7 +2878,9 @@ T('Confusion Chaff', 'normal', {
         const a = b.attacker;
         const first = firstDirectAttacker(ctx, a);
         ctx.negateAttack();
-        if (!first || !faceUpOn(a) || !faceUpOn(first)) return;
+        if (!first || !faceUpOn(a) || first.location !== 'mzone') return;
+        if (!first.faceUp) await ctx.changePos(first, first.pos, true);
+        if (!faceUpOn(first)) return;
         ctx.log(`Confusion Chaff: ${a.name} battles ${first.name}.`);
         const atkA = ctx.atk(a);
         const vs = first.pos === 'atk' ? ctx.atk(first) : ctx.def(first);
@@ -2884,6 +2889,8 @@ T('Confusion Chaff', 'normal', {
           if (atkA >= vs && atkA > 0) losers.push(first);
           if (vs >= atkA && vs > 0) losers.push(a);
         } else if (atkA > vs) losers.push(first);
+        const dmg = first.pos === 'atk' ? Math.abs(atkA - vs) : Math.max(0, vs - atkA);
+        if (dmg > 0 && !ctx.game.queryPlayer(ctx.opp, 'noBattleDamage')) await ctx.game.damage(ctx.opp, dmg, 'battle', atkA >= vs ? a : first, ctx.opp);
         const dead = losers.filter((c) => ctx.game.canDestroy(c, 'battle'));
         if (dead.length) await ctx.game.destroy(dead, 'battle', ctx.opp, a);
       },
@@ -2897,7 +2904,7 @@ function firstDirectAttacker(ctx: Ctx, attacker: C): C | undefined {
   const direct = list.filter((d) => d.card.controller === ctx.opp);
   if (direct.length < 2) return undefined;
   const first = direct[0];
-  if (first.card === attacker || first.card.moveId !== first.moveId || !faceUpOn(first.card)) return undefined;
+  if (first.card === attacker || first.card.moveId !== first.moveId || first.card.location !== 'mzone') return undefined;
   return first.card;
 }
 
@@ -3299,7 +3306,8 @@ T('DNA Checkup', 'normal', {
     {
       kind: 'activate',
       categories: ['draw'],
-      canActivate: (ctx) => ctx.monsters('me', (c) => !c.faceUp && ctx.canTarget(c)).length > 0,
+      // Not while either player has fewer than 2 cards in the Deck: https://edisonrul.ing/cards/d/dna-checkup.html
+      canActivate: (ctx) => ctx.deck('me').length >= 2 && ctx.deck('opp').length >= 2 && ctx.monsters('me', (c) => !c.faceUp && ctx.canTarget(c)).length > 0,
       activate: async (ctx) => {
         await ctx.selectTargets(ctx.monsters('me', (c) => !c.faceUp), 1, 1, 'Select 1 face-down monster you control.', 'target');
       },

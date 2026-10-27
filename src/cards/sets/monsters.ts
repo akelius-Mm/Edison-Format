@@ -1357,7 +1357,7 @@ monster('Cyber Phoenix', {
   level: 4,
   atk: 1200,
   def: 1600,
-  text: 'While this card is in face-up Attack Position, negate the effects of Spell/Trap Cards that target exactly 1 Machine monster you control. When this card is destroyed by battle and sent to the GY: Draw 1 card.',
+  text: 'While this card is in face-up Attack Position, negate the effects of any Spell or Trap Card that targets 1 Machine-Type monster you control. When this face-up card attacks or is attacked, and it is destroyed by battle and sent to the Graveyard, you can draw 1 card.',
   aiValue: 400,
   effects: [
     {
@@ -1381,12 +1381,17 @@ monster('Cyber Phoenix', {
       },
     },
     {
+      // Optional ("you can draw 1 card"), and only if it was face-up before the attack (not when attacked face-down):
+      // https://edisonrul.ing/cards/c/cyber-phoenix.html
       kind: 'trigger',
       event: 'sentToGrave',
-      mandatory: true,
       label: 'Draw 1',
       categories: ['draw'],
-      eventFilter: (ctx, ev) => ev.card === ctx.self && ev.from === 'mzone' && reasonsOf(ev).includes('battle'),
+      eventFilter: (ctx, ev) => {
+        if (ev.card !== ctx.self || ev.from !== 'mzone' || !reasonsOf(ev).includes('battle')) return false;
+        const b = ctx.battle;
+        return !(b && b.target === ctx.self && b.targetFaceDownAtStart);
+      },
       resolve: async (ctx) => {
         await ctx.draw(1);
       },
@@ -1693,7 +1698,9 @@ monster('Cyber Jar', {
       categories: ['destroy', 'destroyMulti', 'specialSummon', 'draw'],
       resolve: async (ctx) => {
         await ctx.destroy(ctx.monsters('both'));
-        for (const p of [ctx.player, ctx.opp] as PlayerId[]) {
+        // The turn player Special Summons first, then the opponent: https://edisonrul.ing/cards/c/cyber-jar.html
+        const tp = ctx.game.turnPlayer;
+        for (const p of [tp, ctx.game.opp(tp)] as PlayerId[]) {
           const deck = ctx.game.players[p].deck;
           const top = deck.slice(Math.max(0, deck.length - 5)).reverse();
           if (!top.length) continue;

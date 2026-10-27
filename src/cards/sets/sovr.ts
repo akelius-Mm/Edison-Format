@@ -895,12 +895,16 @@ monster('Dark Spider', {
       opt: true,
       label: 'Insect Level +2',
       categories: [],
-      canActivate: (ctx) => ctx.faceUpMonsters('me', (c) => raceIs(c, 'Insect')).length > 0,
-      resolve: async (ctx) => {
+      // This effect targets: https://edisonrul.ing/cards/d/dark-spider.html
+      canActivate: (ctx) => ctx.faceUpMonsters('me', (c) => raceIs(c, 'Insect') && ctx.canTarget(c)).length > 0,
+      activate: async (ctx) => {
         const cands = ctx.faceUpMonsters('me', (c) => raceIs(c, 'Insect'));
-        const [c] = await ctx.select(cands, 1, 1, 'Increase the Level of 1 face-up Insect-Type monster by 2.', 'buff', {
+        await ctx.selectTargets(cands, 1, 1, 'Target 1 face-up Insect-Type monster you control (Level +2).', 'buff', {
           aiScore: (c) => (c === ctx.self ? 0 : 10),
         });
+      },
+      resolve: async (ctx) => {
+        const [c] = ctx.validTargets((x) => x.location === 'mzone' && x.faceUp && raceIs(x, 'Insect'));
         if (c) await raiseLevel(ctx, c, 2, 'turn');
       },
       ai: {
@@ -1204,7 +1208,8 @@ monster('Earthbound Immortal Ccarayhua', {
       mandatory: true,
       label: 'Destroy all cards on the field',
       categories: ['destroy', 'destroyMulti'],
-      eventFilter: (ctx, ev) => ev.card === ctx.self && ev.from === 'mzone' && (ev.reasons ?? []).includes('effect') && ev.reasonCard !== ctx.self,
+      // Also when it is destroyed in the hand or Deck: https://edisonrul.ing/cards/e/earthbound-immortal-ccarayhua.html
+      eventFilter: (ctx, ev) => ev.card === ctx.self && (ev.reasons ?? []).includes('effect') && ev.reasonCard !== ctx.self,
       resolve: async (ctx) => {
         const all = ctx.field('both');
         if (all.length) await ctx.destroy(all);
@@ -2523,8 +2528,9 @@ spell('Earthbound Whirlwind', 'normal', {
       categories: ['destroy', 'destroyMulti'],
       condition: (ctx) => ctx.faceUpMonsters('me', isEI).length > 0,
       canActivate: (ctx) => ctx.spellTraps('opp').length > 0,
+      // Still applied if you no longer control an "Earthbound Immortal" on resolution:
+      // https://edisonrul.ing/cards/e/earthbound-whirlwind.html
       resolve: async (ctx) => {
-        if (!ctx.faceUpMonsters('me', isEI).length) return;
         const st = ctx.spellTraps('opp');
         if (st.length) await ctx.destroy(st);
       },
