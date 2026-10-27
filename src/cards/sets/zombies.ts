@@ -346,7 +346,7 @@ monster('Doomkaiser Dragon', {
   atk: 2400,
   def: 1500,
   types: ['synchro'],
-  text: '"Plaguespreader Zombie" + 1 or more non-Tuner Zombie-Type monsters\nWhen this card is Synchro Summoned: You can target 1 Zombie-Type monster in your opponent\'s GY; Special Summon it to your side of the field.',
+  text: '"Plaguespreader Zombie" + 1 or more non-Tuner Zombie-Type monsters\nWhen this card is Special Summoned, you can select 1 Zombie-Type monster in your opponent\'s Graveyard and Special Summon it to your side of the field in Attack Position. Destroy it when this card is removed from the field.',
   synchro: {
     tuner: (c) => c.name === 'Plaguespreader Zombie',
     nonTuner: (c) => c.data.race === 'Zombie',
@@ -355,8 +355,10 @@ monster('Doomkaiser Dragon', {
   aiValue: 700,
   effects: [
     {
+      // 2010 text: on any Special Summon (not only a Synchro Summon), in Attack Position, and that monster is destroyed
+      // (no Chain) when this card leaves the field. https://edisonrul.ing/cards/d/doomkaiser-dragon.html
       kind: 'trigger',
-      event: 'synchroSummoned',
+      event: 'specialSummoned',
       label: 'Steal a Zombie from the opponent\'s GY',
       categories: ['specialSummon'],
       eventFilter: (ctx, ev) => ev.card === ctx.self,
@@ -368,7 +370,9 @@ monster('Doomkaiser Dragon', {
       },
       resolve: async (ctx) => {
         const t = ctx.validTargets((c) => c.location === 'grave');
-        if (t.length) await ctx.specialSummon(t[0]);
+        if (!t.length) return;
+        const r = await ctx.specialSummon(t[0], { pos: 'atk' });
+        if (r.length && ctx.self.location === 'mzone' && ctx.self.faceUp) ctx.game.link(r[0], ctx.self, false);
       },
     },
   ],

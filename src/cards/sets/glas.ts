@@ -2101,20 +2101,26 @@ M('Alien Hypno', {
       ai: { score: (ctx) => (ctx.monsters('opp', (c) => aCount(c) > 0 && ctx.canTarget(c)).length ? 70 : 0) },
     },
     {
+      // 2010 ruling: removing the A-Counters, and destroying a monster that has none left, do not start a Chain
+      // (run in the End Phase, outside the Chain). https://edisonrul.ing/cards/a/alien-hypno.html
       kind: 'trigger',
       event: 'phaseStart',
-      mandatory: true,
       label: 'Remove A-Counters',
-      eventFilter: (ctx, ev) => ev.phase === 'end' && ev.player === ctx.player && faceUpOn(ctx.self),
-      condition: (ctx) => hypnoControlled(ctx).length > 0,
-      resolve: async (ctx) => {
-        const kill: C[] = [];
-        for (const m of hypnoControlled(ctx)) {
-          m.counters.A = Math.max(0, aCount(m) - 1);
-          if (aCount(m) === 0) kill.push(m);
-        }
-        ctx.game.update();
-        if (kill.length) await ctx.destroy(kill);
+      eventFilter: (ctx, ev) => {
+        if (ev.phase !== 'end' || ev.player !== ctx.player || !faceUpOn(ctx.self) || ctx.isNegated(ctx.self) || !hypnoControlled(ctx).length) return false;
+        const self = ctx.self;
+        const mid = self.moveId;
+        ctx.later('end', async () => {
+          if (!faceUpOn(self) || self.moveId !== mid || ctx.isNegated(self)) return;
+          const kill: C[] = [];
+          for (const m of hypnoControlled(ctx)) {
+            m.counters.A = Math.max(0, aCount(m) - 1);
+            if (aCount(m) === 0) kill.push(m);
+          }
+          ctx.game.update();
+          if (kill.length) await ctx.destroy(kill);
+        });
+        return false;
       },
     },
     {
@@ -2308,7 +2314,9 @@ S('Cunning of the Six Samurai', 'quickplay', {
     {
       kind: 'activate',
       categories: ['specialSummon'],
-      canActivate: (ctx) => ctx.faceUpMonsters('me', isSixSamurai).length > 0 && ctx.grave('both', isSixSamurai).length + ctx.faceUpMonsters('me', isSixSamurai).length >= 2,
+      // 2010 ruling: it cannot be activated with no "Six Samurai" monster in the GY (the one sent as the cost can then
+      // be the one Summoned). https://edisonrul.ing/cards/c/cunning-of-the-six-samurai.html
+      canActivate: (ctx) => ctx.faceUpMonsters('me', isSixSamurai).length > 0 && ctx.grave('both', isSixSamurai).length > 0,
       activate: async (ctx) => {
         const [c] = await ctx.select(ctx.faceUpMonsters('me', isSixSamurai), 1, 1, 'Send 1 face-up "Six Samurai" monster you control to the GY.', 'cost');
         if (!c) return false;
@@ -2399,18 +2407,21 @@ M('Alien Telepath', {
       opt: true,
       label: 'Remove 1 A-Counter: destroy 1 Spell/Trap',
       categories: ['destroy'],
-      canActivate: (ctx) => ctx.monsters('opp', (c) => aCount(c) > 0).length > 0 && ctx.spellTraps('both').length > 0,
+      // The historical page has no Telepath entry; edisonformat.net (revised): the Spell/Trap is targeted at activation.
+      // https://edisonrul.ing/cards/a/alien-telepath.html
+      canActivate: (ctx) => ctx.monsters('opp', (c) => aCount(c) > 0).length > 0 && ctx.spellTraps('both', (c) => ctx.canTarget(c)).length > 0,
       activate: async (ctx) => {
         const [h] = await ctx.select(ctx.monsters('opp', (c) => aCount(c) > 0), 1, 1, "Remove 1 A-Counter from an opponent's monster.", 'cost');
         if (!h) return false;
         h.counters.A = aCount(h) - 1;
         ctx.game.update();
+        await ctx.selectTargets(ctx.spellTraps('both'), 1, 1, 'Target 1 Spell or Trap Card to destroy.', 'destroy', {
+          aiScore: (c) => (c.controller === ctx.opp ? 1000 : -1000),
+        });
       },
       resolve: async (ctx) => {
-        const st = ctx.spellTraps('both');
-        if (!st.length) return;
-        const sel = await ctx.select(st, 1, 1, 'Destroy 1 Spell or Trap Card.', 'destroy');
-        if (sel.length) await ctx.destroy(sel);
+        const t = ctx.validTargets((c) => c.onField);
+        if (t.length) await ctx.destroy(t);
       },
       ai: { score: (ctx) => (ctx.spellTraps('opp').length ? 55 : 0) },
     },

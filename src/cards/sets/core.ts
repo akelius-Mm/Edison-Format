@@ -493,7 +493,7 @@ monster('Card Trooper', {
   level: 3,
   atk: 400,
   def: 400,
-  text: 'Once per turn: You can send up to 3 cards from the top of your Deck to the GY; this card gains 500 ATK for each card sent, until the end of this turn. When this card is destroyed and sent to the GY: Draw 1 card.',
+  text: 'Once per turn, you can send up to 3 cards from the top of your Deck to the Graveyard. This card gains 500 ATK for each card sent to the Graveyard until the End Phase. When this card you control is destroyed and sent to the Graveyard, draw 1 card.',
   aiValue: 400,
   effects: [
     {
@@ -505,11 +505,12 @@ monster('Card Trooper', {
       activate: async (ctx) => {
         const max = Math.min(3, ctx.deck().length - 1);
         const opts = Array.from({ length: max }, (_, i) => `${i + 1} card(s)`);
-        ctx.data.n = (await ctx.option('Send how many cards?', opts, (i) => i)) + 1;
+        const n = (await ctx.option('Send how many cards?', opts, (i) => i)) + 1;
+        // 2010 ruling: sending the cards is the cost. https://edisonrul.ing/cards/c/card-trooper.html
+        ctx.data.n = (await ctx.game.mill(ctx.player, n, 'cost', ctx.self)).length;
       },
       resolve: async (ctx) => {
-        const milled = await ctx.mill(ctx.data.n);
-        if (ctx.self.location === 'mzone' && ctx.self.faceUp) ctx.addTempMod(ctx.self, 'atk', 500 * milled.length, 'turn');
+        if (ctx.self.location === 'mzone' && ctx.self.faceUp) ctx.addTempMod(ctx.self, 'atk', 500 * (ctx.data.n as number), 'turn');
       },
       ai: { score: () => 55 },
     },
@@ -519,7 +520,9 @@ monster('Card Trooper', {
       mandatory: true,
       label: 'Draw 1',
       categories: ['draw'],
-      eventFilter: (ctx, ev) => ev.card === ctx.self && (ev.reasons ?? []).includes('destroy') && ev.from === 'mzone',
+      // 2010 ruling: only if destroyed while you control it (not under the opponent's control); also as an Equip Card.
+      eventFilter: (ctx, ev) =>
+        ev.card === ctx.self && (ev.reasons ?? []).includes('destroy') && (ev.from === 'mzone' || ev.from === 'szone') && (ev.fromController ?? ctx.self.owner) === ctx.self.owner,
       resolve: async (ctx) => {
         await ctx.draw(1);
       },

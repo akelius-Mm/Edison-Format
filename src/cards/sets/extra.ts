@@ -20,6 +20,9 @@ const anySynchron = (c: C) => c.inSet('synchron') || c.name.includes('Synchron')
 const total = (ctx: Ctx, cards: C[]) => cards.reduce((a, c) => a + cardValue(ctx.game, c), 0);
 
 /** The monster this card is battling (if any). */
+/** Ally of Justice Catastor: a non-DARK monster, or one with an extra non-DARK Attribute ("Dark Simorgh" is also WIND). */
+const catastorHits = (o: C) => o.data.attribute !== 'DARK' || o.name === 'Dark Simorgh';
+
 function battleOpponent(ctx: Ctx): C | null {
   const b = ctx.battle;
   if (!b || !b.target) return null;
@@ -394,7 +397,7 @@ monster('Arcanite Magician', {
   atk: 400,
   def: 1800,
   types: ['synchro'],
-  text: '1 Tuner + 1 or more non-Tuner Spellcaster-Type monsters\nWhen this card is Synchro Summoned: place 2 Spell Counters on it. Gains 1000 ATK for each Spell Counter on it. You can remove 1 Spell Counter from your side of the field to target 1 card on the field; destroy it.',
+  text: '1 Tuner + 1 or more non-Tuner Spellcaster-Type monsters\nWhen this card is Synchro Summoned, place 2 Spell Counters on it. This card gains 1000 ATK for each Spell Counter on it. You can remove 1 Spell Counter from a card you control to destroy 1 card your opponent controls.',
   synchro: { nonTuner: race('Spellcaster'), desc: '1 Tuner + 1+ non-Tuner Spellcaster-Type monsters' },
   aiValue: 2200,
   effects: [
@@ -419,10 +422,12 @@ monster('Arcanite Magician', {
       kind: 'ignition',
       label: 'Remove Spell Counter: destroy 1 card',
       categories: ['destroy'],
-      canActivate: (ctx) => spellCounters(ctx) > 0 && ctx.field('both', (c) => c !== ctx.self && ctx.canTarget(c)).length > 0,
+      // 2010 text: it destroys 1 card your opponent controls (targeted); removing the counter is the cost.
+      // https://edisonrul.ing/cards/a/arcanite-magician.html
+      canActivate: (ctx) => spellCounters(ctx) > 0 && ctx.field('opp', (c) => ctx.canTarget(c)).length > 0,
       activate: async (ctx) => {
         if (!(await removeSpellCounters(ctx, 1))) return false;
-        await ctx.selectTargets(ctx.field('both', (c) => c !== ctx.self), 1, 1, 'Target 1 card to destroy.', 'destroy');
+        await ctx.selectTargets(ctx.field('opp'), 1, 1, 'Target 1 card your opponent controls to destroy.', 'destroy');
       },
       resolve: async (ctx) => {
         const t = ctx.validTargets((c) => c.onField);
@@ -621,7 +626,7 @@ monster('Armory Arm', {
   atk: 1800,
   def: 1200,
   types: ['synchro'],
-  text: '1 Tuner + 1 or more non-Tuner monsters\nOnce per turn, you can either: Target 1 monster on the field; equip this card to it, OR: Unequip this card and Special Summon it in face-up Attack Position. While equipped by this effect, the equipped monster gains 1000 ATK. When the equipped monster destroys a monster by battle and sends it to the GY: inflict damage to your opponent equal to that monster\'s original ATK.',
+  text: '1 Tuner + 1 or more non-Tuner monsters\nOnce per turn, you can either: Target 1 monster on the field; equip this card to it, OR: Unequip this card and Special Summon it in face-up Attack Position. While equipped by this effect, the equipped monster gains 1000 ATK. When the equipped monster destroys a monster by battle and sends it to the Graveyard, inflict damage to your opponent equal to the destroyed monster\'s ATK.',
   synchro: { desc: '1 Tuner + 1+ non-Tuner monsters' },
   aiValue: 500,
   effects: [
@@ -673,13 +678,21 @@ monster('Armory Arm', {
       mandatory: true,
       label: 'Burn',
       categories: ['damage'],
+      // 2010 ruling (changed in January 2011 to the original ATK): the damage equals the destroyed monster's ATK on
+      // the field at damage calculation. https://edisonrul.ing/cards/a/armory-arm.html
       eventFilter: (ctx, ev) => {
         const host = ctx.equipTarget;
-        return !!host && ev.other === host && (ev.card as C).location === 'grave' && host.location === 'mzone';
+        const ok = !!host && ev.other === host && (ev.card as C).location === 'grave' && host.location === 'mzone';
+        if (ok) {
+          const dead = ev.card as C;
+          const calc = ctx.game.battle?.calc;
+          ctx.self.flags.armoryDmg = calc ? (dead === ctx.game.battle!.target ? calc.targetAtk : calc.attackerAtk) : dead.data.atk ?? 0;
+        }
+        return ok;
       },
       resolve: async (ctx) => {
         const c = ctx.event!.card as C;
-        await ctx.damage(ctx.opp, c.data.atk ?? 0);
+        await ctx.damage(ctx.opp, (ctx.self.flags.armoryDmg as number | undefined) ?? c.data.atk ?? 0);
       },
     },
     {
@@ -715,23 +728,26 @@ monster('Ally of Justice Catastor', {
   def: 1200,
   types: ['synchro'],
   sets: ['ally-of-justice'],
-  text: '1 Tuner + 1 or more non-Tuner monsters\nAt the start of the Damage Step, if this card battles a face-up non-DARK monster: destroy that monster.',
+  text: '1 Tuner + 1 or more non-Tuner monsters\nIf this card attacks or is attacked by a non-DARK monster, destroy that monster at the start of the Damage Step (without damage calculation).',
   synchro: { desc: '1 Tuner + 1+ non-Tuner monsters' },
   aiValue: 900,
   effects: [
     {
       // Engine has no "start of the Damage Step" event: used in the Damage Step window before damage calculation.
+      // 2010 ruling: it activates at the start of the Damage Step, before a face-down monster is flipped, so it does
+      // not activate when it attacks a face-down monster, or when this card is attacked while face-down. "Dark
+      // Simorgh" is also WIND while face-up, so it is destroyed. https://edisonrul.ing/cards/a/ally-of-justice-catastor.html
       kind: 'quick',
       damageStep: true,
       label: 'Destroy non-DARK opponent',
       categories: ['destroy'],
       condition: (ctx) => {
         const o = battleOpponent(ctx);
-        return !!ctx.battle?.inDamageStep && !!o && o.location === 'mzone' && o.faceUp && o.data.attribute !== 'DARK';
+        return !!ctx.battle?.inDamageStep && !ctx.battle.calc && !ctx.battle.targetFaceDownAtStart && !!o && o.location === 'mzone' && o.faceUp && catastorHits(o);
       },
       resolve: async (ctx) => {
         const o = battleOpponent(ctx);
-        if (o && o.location === 'mzone' && o.faceUp && o.data.attribute !== 'DARK' && ctx.self.location === 'mzone') await ctx.destroy(o);
+        if (o && o.location === 'mzone' && o.faceUp && catastorHits(o) && ctx.self.location === 'mzone') await ctx.destroy(o);
       },
       ai: { score: (ctx) => (battleOpponent(ctx)?.controller === ctx.opp ? 100 : 0) },
     },
