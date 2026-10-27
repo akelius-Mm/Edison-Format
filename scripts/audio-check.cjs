@@ -2,6 +2,7 @@
 // dev server:
 //   - every recorded sample and music loop loads (HTTP 200) and decodes;
 //   - music starts after the first tap (built-in recording, audible on the music bus);
+//   - leaving the app silences and pauses the sound at once (no fade), and it comes back on return;
 //   - every slot is a playlist: Skip moves to another track, Now playing shows it, built-in tracks
 //     can be switched off;
 //   - "Your music": files picked in Settings are stored, play as the slot's playlist instead of
@@ -112,6 +113,19 @@ async function waitFor(page, fn, arg, ms = 15000) {
       return peak;
     });
     ok(level > 0.01, `menu music is audible on the music bus (peak ${level.toFixed(3)})`);
+
+    // leaving the app: silent at once (no fade: iOS cut a fade-out off into an "eep"), paused, and back on return
+    const leave = await page.evaluate(async () => {
+      const core = await import('/src/ui/audio/core.ts');
+      const ac = core.audioContext();
+      window.dispatchEvent(new Event('blur'));
+      await new Promise((r) => setTimeout(r, 120));
+      const away = ac.state;
+      window.dispatchEvent(new Event('focus'));
+      await new Promise((r) => setTimeout(r, 400));
+      return { away, back: ac.state };
+    });
+    ok(leave.away === 'suspended' && leave.back === 'running', `leaving the app pauses the sound at once and returning resumes it (${JSON.stringify(leave)})`);
 
     // skip: another menu track, never the same one
     const skips = [playing.playing];
