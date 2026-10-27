@@ -286,7 +286,7 @@ monster('X-Saber Uruz', {
 
 spell("Gottoms' Emergency Call", 'normal', {
   // Printed card: needs a face-up "X-Saber" on the field and targets 2 "X-Saber" monsters in either GY.
-  text: 'Activate only while there is a face-up "X-Saber" monster on the field. Target 2 "X-Saber" monsters in any Graveyard; Special Summon them to your side of the field.',
+  text: 'Activate only if there is a face-up "X-Saber" monster(s) on the field. Select 2 "X-Saber" monsters in either player\'s Graveyard(s). Special Summon those monsters to your side of the field.',
   effects: [
     {
       kind: 'activate',
@@ -302,8 +302,10 @@ spell("Gottoms' Emergency Call", 'normal', {
         });
       },
       resolve: async (ctx) => {
+        // https://edisonrul.ing/cards/g/gottoms-emergency-call.html — if either target is no longer in the GY when this
+        // resolves, the other target is not Summoned either.
         const t = ctx.validTargets((c) => c.location === 'grave');
-        if (t.length) await ctx.specialSummon(t);
+        if (t.length === 2) await ctx.specialSummon(t);
       },
       ai: {
         score: (ctx) => {

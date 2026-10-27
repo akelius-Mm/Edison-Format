@@ -180,7 +180,7 @@ M(GRANDMASTER, {
   def: 800,
   sets: ['six-samurai'],
   aiValue: 600,
-  text: 'If you control a face-up "Six Samurai" monster, you can Special Summon this card from your hand. You can only control 1 face-up "Grandmaster of the Six Samurai". When this face-up card on the field is destroyed by your opponent\'s card effect and sent to the Graveyard, you can select 1 "Six Samurai" monster in your Graveyard and add it to your hand.',
+  text: 'You can only control 1 "Grandmaster of the Six Samurai". While you control a face-up "Six Samurai" monster, you can Special Summon this card from your hand. When this card is destroyed by your opponent\'s card effect, add 1 "Six Samurai" monster from your Graveyard to your hand.',
   effects: [
     {
       kind: 'proc',
@@ -194,16 +194,17 @@ M(GRANDMASTER, {
     {
       kind: 'trigger',
       event: 'destroyed',
-      range: ['grave'],
+      range: ['grave', 'banished'],
       label: 'Add a Six Samurai from the GY',
       categories: ['toHand'],
-      // Rulings audit: "When ... you can" (Edison text): misses the timing if it is not the last thing to happen.
-      when: true,
-      eventFilter: (ctx, ev) =>
-        ev.card === ctx.self && ev.from === 'mzone' && !!ev.fromFaceUp && ev.to === 'grave' && ev.reason === 'effect' && ev.reasonPlayer !== undefined && ev.reasonPlayer !== ctx.player,
-      canActivate: (ctx) => ctx.grave('me', (c) => c !== ctx.self && isSixSamurai(c)).length > 0,
+      // https://edisonrul.ing/cards/g/grandmaster-of-the-six-samurai.html — a mandatory Trigger Effect that cannot miss
+      // the timing; it targets 1 "Six Samurai" monster in your GY (itself included) and activates & resolves in the GY /
+      // removed-from-play area, wherever the opponent's card effect destroyed it.
+      mandatory: true,
+      eventFilter: (ctx, ev) => ev.card === ctx.self && ev.reason === 'effect' && ev.reasonPlayer !== undefined && ev.reasonPlayer !== ctx.player,
+      canActivate: (ctx) => ctx.grave('me', (c) => isSixSamurai(c) && ctx.canTarget(c)).length > 0,
       activate: async (ctx) => {
-        await ctx.selectTargets(ctx.grave('me', (c) => c !== ctx.self && isSixSamurai(c)), 1, 1, 'Select 1 "Six Samurai" monster in your GY.', 'toHand', {
+        await ctx.selectTargets(ctx.grave('me', (c) => isSixSamurai(c)), 1, 1, 'Select 1 "Six Samurai" monster in your GY.', 'toHand', {
           aiScore: (c) => (c.data.atk ?? 0) + (c.data.aiValue ?? 0),
         });
       },

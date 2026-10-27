@@ -836,6 +836,8 @@ monster('Turbo Warrior', {
   targetImmunity: (_self, source, ctx) => source.isMonster && (source.onField ? ctx.level(source) : source.data.level ?? 0) <= 6,
 });
 
+/** An "Iron Chain" monster (Iron Chain Dragon's effect). */
+const isIronChainMon = (c: CardInstance) => c.isMonster && (c.inSet('iron-chain') || c.name.includes('Iron Chain'));
 monster('Iron Chain Dragon', {
   attribute: 'EARTH',
   race: 'Dragon',
@@ -844,28 +846,30 @@ monster('Iron Chain Dragon', {
   def: 1300,
   types: ['synchro'],
   sets: ['iron-chain'],
-  text: '1 Tuner + 1 or more non-Tuner monsters\nYou can banish 1 "Iron Chain" monster from your GY; this card gains 200 ATK until the end of this turn. When this card inflicts battle damage to your opponent: send the top 3 cards of their Deck to the GY.',
+  text: '1 Tuner + 1 or more non-Tuner monsters\nYou can remove from play all "Iron Chain" monsters from your Graveyard to have this card gain 200 ATK for each card removed, until the End Phase. When this card inflicts Battle Damage to your opponent, send the top 3 cards of your opponent\'s Deck to the Graveyard.',
   synchro: { desc: '1 Tuner + 1+ non-Tuner monsters' },
   aiValue: 200,
   effects: [
     {
       kind: 'ignition',
-      label: 'Banish "Iron Chain": +200 ATK',
+      label: 'Banish all "Iron Chain": +200 ATK each',
       categories: ['atkChange'],
-      canActivate: (ctx) => ctx.grave('me', (c) => c.isMonster && (c.inSet('iron-chain') || c.name.includes('Iron Chain'))).length > 0,
-      activate: async (ctx) => {
-        const cost = await ctx.select(ctx.grave('me', (c) => c.isMonster && (c.inSet('iron-chain') || c.name.includes('Iron Chain'))), 1, 1, 'Banish 1 "Iron Chain" monster from your GY.', 'cost');
-        if (!cost.length) return false;
-        await ctx.banish(cost, 'cost');
-      },
+      // https://edisonrul.ing/cards/i/iron-chain-dragon.html — no cost and no target: when it resolves, remove from play
+      // ALL "Iron Chain" monsters in your GY; this card gains 200 ATK for each card removed, until the End Phase.
+      canActivate: (ctx) => ctx.grave('me', isIronChainMon).length > 0,
       resolve: async (ctx) => {
-        if (ctx.self.location === 'mzone' && ctx.self.faceUp) ctx.addTempMod(ctx.self, 'atk', 200, 'turn');
+        const all = ctx.grave('me', isIronChainMon);
+        if (!all.length) return;
+        const r = await ctx.banish(all);
+        const n = r.filter((c) => c.location === 'banished').length;
+        if (n && ctx.self.location === 'mzone' && ctx.self.faceUp) ctx.addTempMod(ctx.self, 'atk', 200 * n, 'turn');
       },
       ai: {
         score: (ctx) => {
           if (ctx.phase !== 'main1' || ctx.turn <= 1 || ctx.self.pos !== 'atk') return 0;
           const a = ctx.atk(ctx.self);
-          return ctx.faceUpMonsters('opp', (c) => c.pos === 'atk' && ctx.atk(c) >= a && ctx.atk(c) < a + 200).length ? 35 : 0;
+          const gain = 200 * ctx.grave('me', isIronChainMon).length;
+          return ctx.faceUpMonsters('opp', (c) => c.pos === 'atk' && ctx.atk(c) >= a && ctx.atk(c) < a + gain).length ? 35 : 0;
         },
       },
     },

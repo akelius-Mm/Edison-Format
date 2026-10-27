@@ -436,19 +436,20 @@ spell('Black Whirlwind', 'continuous', {
 });
 
 trap('Icarus Attack', 'normal', {
-  text: 'Tribute 1 Winged Beast monster, then target 2 cards on the field; destroy them.',
+  text: 'Tribute 1 Winged Beast-Type monster. Destroy 2 cards on the field.',
   effects: [
     {
       kind: 'activate',
       categories: ['destroy'],
+      // https://edisonrul.ing/cards/i/icarus-attack.html — "Tributing a (face-up / face-down) Winged-Beast is a cost."
       canActivate: (ctx) => {
-        const wbs = ctx.monsters('me', (c) => c.faceUp && c.data.race === 'Winged Beast' && !ctx.query(c, 'cannotBeTributed'));
+        const wbs = ctx.monsters('me', (c) => c.data.race === 'Winged Beast' && !ctx.query(c, 'cannotBeTributed'));
         if (!wbs.length) return false;
         const others = ctx.field('both', (c) => c !== ctx.self && ctx.canTarget(c));
         return wbs.some((w) => others.filter((o) => o !== w).length >= 2);
       },
       activate: async (ctx) => {
-        const wbs = ctx.monsters('me', (c) => c.faceUp && c.data.race === 'Winged Beast' && !ctx.query(c, 'cannotBeTributed'));
+        const wbs = ctx.monsters('me', (c) => c.data.race === 'Winged Beast' && !ctx.query(c, 'cannotBeTributed'));
         const top = ctx.prevLink();
         const threatened = top && top.player === ctx.opp ? top.ctx.targets : [];
         const b = ctx.battle;

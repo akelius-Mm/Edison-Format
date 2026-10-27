@@ -1397,15 +1397,18 @@ monster("Koa'ki Meiru Rooklord", {
       when: true,
       label: "Banish a Koa'ki Meiru: destroy up to 2",
       categories: ['destroy'],
-      canActivate: (ctx) => ctx.grave('me', isKoaki).length > 0 && ctx.field('opp').length > 0,
+      // https://edisonrul.ing/cards/k/koaki-meiru-rooklord.html — banishing the "Koa'ki Meiru" card is a cost, and the
+      // effect targets 1 or 2 cards your opponent controls.
+      canActivate: (ctx) => ctx.grave('me', isKoaki).length > 0 && ctx.field('opp', (c) => ctx.canTarget(c)).length > 0,
       activate: async (ctx) => {
         const cost = await ctx.select(ctx.grave('me', isKoaki), 1, 1, '"Koa\'ki Meiru" card to banish.', 'cost');
         if (!cost.length) return false;
         await ctx.banish(cost, 'cost');
+        await ctx.selectTargets(ctx.field('opp'), 1, 2, 'Target up to 2 cards your opponent controls to destroy.', 'destroy');
       },
       resolve: async (ctx) => {
-        const sel = await ctx.select(ctx.field('opp'), 1, 2, 'Destroy up to 2 cards your opponent controls.', 'destroy');
-        if (sel.length) await ctx.destroy(sel);
+        const t = ctx.validTargets((c) => c.onField);
+        if (t.length) await ctx.destroy(t);
       },
     },
   ],
@@ -2759,12 +2762,16 @@ spell('Herculean Power', 'continuous', {
 });
 
 spell('Gemini Spark', 'quickplay', {
-  text: 'Tribute 1 face-up Level 4 Gemini monster, then target 1 card on the field; destroy it, and if you do, draw 1 card.',
+  text: 'Tribute 1 face-up Level 4 Gemini Monster you control and select 1 card on the field. Destroy the selected card and draw 1 card.',
   effects: [
     {
       kind: 'activate',
       categories: ['destroy', 'draw'],
-      canActivate: (ctx) => tributable(ctx, (c) => c.faceUp && isGemini(c) && ctx.level(c) === 4).length > 0 && ctx.field('both', (c) => c !== ctx.self && ctx.canTarget(c)).length > 0,
+      // https://edisonrul.ing/cards/g/gemini-spark.html — "Gemini Spark" cannot be activated if you have no cards in the Deck.
+      canActivate: (ctx) =>
+        ctx.deck().length > 0 &&
+        tributable(ctx, (c) => c.faceUp && isGemini(c) && ctx.level(c) === 4).length > 0 &&
+        ctx.field('both', (c) => c !== ctx.self && ctx.canTarget(c)).length > 0,
       activate: async (ctx) => {
         const cost = await ctx.select(tributable(ctx, (c) => c.faceUp && isGemini(c) && ctx.level(c) === 4), 1, 1, 'Tribute 1 face-up Level 4 Gemini monster.', 'tribute');
         if (!cost.length) return false;
@@ -3132,7 +3139,12 @@ function gatewayEffect(
       ctx.game.update();
       await target(ctx);
     },
-    resolve,
+    // https://edisonrul.ing/cards/g/gateway-of-the-six.html — "Gateway of the Six" must remain face-up on the field in
+    // order to resolve this effect.
+    resolve: async (ctx) => {
+      if (!ctx.self.onField || !ctx.self.faceUp) return;
+      await resolve(ctx);
+    },
     ai: { score },
   };
 }

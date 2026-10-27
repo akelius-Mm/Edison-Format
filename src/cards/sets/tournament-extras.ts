@@ -173,7 +173,9 @@ monster('Light and Darkness Dragon', {
       mandatory: true,
       label: 'Destroy your field, revive 1 monster',
       categories: ['destroy', 'destroyMulti', 'specialSummon'],
-      eventFilter: (ctx, ev) => ev.card === ctx.self && ev.from === 'mzone' && (ev.reasons ?? []).includes('destroy'),
+      // https://edisonrul.ing/cards/l/light-and-darkness-dragon.html — it activates whenever it is destroyed and sent to
+      // the GY: from the hand, the Deck, the field, or while equipped to "Relinquished" (a Spell & Trap Zone).
+      eventFilter: (ctx, ev) => ev.card === ctx.self && ev.to === 'grave' && (ev.reasons ?? []).includes('destroy'),
       activate: async (ctx) => {
         const cands = ctx.grave('me', (c) => c.isMonster && c !== ctx.self && ctx.canTarget(c));
         if (!cands.length) return;
@@ -640,7 +642,7 @@ monster('Legendary Jujitsu Master', {
   atk: 1300,
   def: 1800,
   aiValue: 400,
-  text: 'If this Defense Position card is attacked: return the attacking monster to the top of the Deck after damage calculation.',
+  text: "A monster that battles with this Defense Position card is returned to the top of its owner's Deck at the end of the Damage Step.",
   effects: [
     {
       kind: 'trigger',
@@ -652,11 +654,12 @@ monster('Legendary Jujitsu Master', {
       },
     },
     {
-      // "After damage calculation" (damageCalculated): resolves before battle-destroyed monsters leave the field, so
-      // it works even when this card is destroyed by the battle, and the attacker goes to the Deck before it could
-      // be destroyed (no GY effects). Index 1 kept for saved duel logs.
+      // https://edisonrul.ing/cards/l/legendary-jujitsu-master.html — a mandatory Trigger Effect in Substep 7 (End of the
+      // Damage Step), even if this card is no longer face-up on the field (destroyed by that battle); it chains with
+      // other triggers of that substep (Goyo Guardian, Mystic Tomato...). It needs this card in Defense Position at damage
+      // calculation. Index 1 kept for saved duel logs.
       kind: 'trigger',
-      event: 'damageCalculated',
+      event: 'damageStepEnd',
       mandatory: true,
       label: 'Return attacker to the Deck',
       categories: ['toDeck'],
@@ -667,10 +670,8 @@ monster('Legendary Jujitsu Master', {
           !!a &&
           ev.other === ctx.self &&
           a.location === 'mzone' &&
-          ctx.self.location === 'mzone' &&
-          ctx.self.faceUp &&
           ctx.game.battle?.calc?.targetPos === 'def' &&
-          !ctx.game.isNegated(ctx.self)
+          (ctx.self.location === 'grave' || ctx.self.location === 'banished' || (ctx.self.location === 'mzone' && !ctx.game.isNegated(ctx.self)))
         );
       },
       resolve: async (ctx) => {
@@ -768,7 +769,7 @@ monster('Junk Archer', {
   def: 2000,
   types: ['synchro'],
   aiValue: 700,
-  text: '"Junk Synchron" + 1 or more non-Tuner monsters\nOnce per turn: You can target 1 monster your opponent controls; banish that target. During the End Phase of this turn, return that monster to the field in the same battle position.',
+  text: '"Junk Synchron" + 1 or more non-Tuner monsters\nOnce per turn, you can select 1 monster your opponent controls. Remove that monster from play. During the End Phase of this turn, it returns to your opponent\'s side of the field, in the same Battle Position.',
   synchro: { tuner: synchronNamed('Junk Synchron'), desc: '"Junk Synchron" + 1+ non-Tuner monsters' },
   effects: [
     {
@@ -787,13 +788,23 @@ monster('Junk Archer', {
         const pos = m.pos;
         const faceDown = !m.faceUp;
         const owner = m.owner;
-        const r = await ctx.banish(m);
+        // https://edisonrul.ing/cards/j/junk-archer.html — a face-down target is banished face-down and returns face-down;
+        // it returns without starting a Chain and this is not treated as a Special Summon (a Token does not return).
+        const r = await ctx.banish(m, 'effect', faceDown);
         if (!r.length || m.location !== 'banished' || m.isToken) return;
         const mid = m.moveId;
         const game = ctx.game;
         ctx.later('end', async () => {
           if (m.location !== 'banished' || m.moveId !== mid) return;
-          await game.specialSummon([m], owner, { pos, faceDown, ignoreConditions: true, reasonCard: ctx.self });
+          if (game.freeMZones(owner) <= 0) {
+            await game.sendToGrave([m], 'rule');
+            return;
+          }
+          game.beginBatch();
+          game.rawMove(m, 'mzone', { controller: owner, faceUp: !faceDown, pos });
+          game.log(`${m.name} returns to the field.`, 'action', owner);
+          await game.anim({ type: 'move', cards: [{ uid: m.uid, from: 'banished', to: 'mzone', ctrl: owner }] });
+          game.update();
         });
       },
       ai: {

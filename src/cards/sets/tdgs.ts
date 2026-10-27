@@ -1606,7 +1606,12 @@ M('Herald of Orange Light', {
         const l = ctx.prevLink();
         return !!l && !l.negated && l.player === ctx.opp && l.card.isMonster && !l.isCardActivation;
       },
-      canActivate: (ctx) => ctx.hand('me', (c) => c !== ctx.self && raceIs(c, 'Fairy')).length > 0,
+      // https://edisonrul.ing/cards/h/herald-of-orange-light.html — sending the cards to the GY is the cost, so "this
+      // effect cannot activate while "Macro Cosmos" is active".
+      canActivate: (ctx) =>
+        !ctx.game.queryPlayer(ctx.player, 'banishInsteadOfGrave') &&
+        !ctx.game.queryCard(ctx.self, 'banishInsteadOfGrave') &&
+        ctx.hand('me', (c) => c !== ctx.self && raceIs(c, 'Fairy')).length > 0,
       activate: async (ctx) => {
         const sel = await ctx.select(ctx.hand('me', (c) => c !== ctx.self && raceIs(c, 'Fairy')), 1, 1, 'Send 1 other Fairy-Type monster from your hand to the Graveyard.', 'cost', {
           aiScore: (c) => -cardValue(ctx.game, c),
@@ -2365,7 +2370,7 @@ function spiritEquipReturn(): EffectDef[] {
 const spiritHostBack = new WeakMap<C, number>();
 
 S(GEARTOWN, 'field', {
-  text: 'Both players can Normal Summon "Ancient Gear" monsters for 1 less Tribute. When this card is destroyed and sent to the Graveyard, the controller of this card can Special Summon 1 "Ancient Gear" monster from their hand, Deck, or Graveyard.',
+  text: 'Both players can Tribute Summon "Ancient Gear" monsters with 1 less Tribute than required. When this card is destroyed and sent to the Graveyard, you can Special Summon 1 "Ancient Gear" monster from your hand, Deck, or Graveyard.',
   effects: [
     { kind: 'activate', categories: [], ai: { score: (ctx) => (ctx.cards('me', ['hand', 'deck'], isAncientGear).length >= 2 ? 30 : 5) } },
     {
@@ -2374,7 +2379,13 @@ S(GEARTOWN, 'field', {
       when: true,
       label: 'Special Summon an "Ancient Gear" monster',
       categories: ['specialSummon'],
-      eventFilter: (ctx, ev) => ev.card === ctx.self && ev.from === 'fzone' && ev.fromFaceUp === true && ctx.self.location === 'grave',
+      // https://edisonrul.ing/cards/g/geartown.html — it activates when this card is destroyed and sent to the GY face-up
+      // or face-down, or from the hand; not when its controller replaced it by activating a new Field Spell.
+      eventFilter: (ctx, ev) =>
+        ev.card === ctx.self &&
+        (ev.from === 'fzone' || ev.from === 'hand') &&
+        ctx.self.location === 'grave' &&
+        !(ev.reason === 'rule' && ev.reasonPlayer === ctx.player),
       canActivate: (ctx) => ctx.canSpecialSummon() && ctx.cards('me', ['hand', 'deck', 'grave'], (c) => isAncientGear(c) && ctx.canSummonCard(c)).length > 0,
       resolve: async (ctx) => {
         const cands = ctx.cards('me', ['hand', 'deck', 'grave'], (c) => isAncientGear(c) && ctx.canSummonCard(c));
