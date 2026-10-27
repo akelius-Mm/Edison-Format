@@ -56,6 +56,8 @@ export interface RoomSnapshot {
   theirs: LobbyState | null;
   match: MatchState | null;
   rematch: [boolean, boolean];
+  /** Ids of matches this room already left for a rematch (never started again). */
+  past?: string[];
 }
 
 export interface RoomEvents {
@@ -99,6 +101,8 @@ export interface RoomOptions {
   timeoutMs?: number;
   /** Only this clientId may join (Friends Locals: the paired opponent). */
   expectPeer?: string;
+  /** A finished match can be followed by a rematch in this room (Play a friend; not Friends Locals). */
+  noRematch?: boolean;
 }
 
 const sid = () => Math.random().toString(36).slice(2, 10);
@@ -121,6 +125,8 @@ export class Room {
   private remotes = new Map<number, RemoteController>();
   private announced = new Set<number>();
   private closed = false;
+  /** Matches this room is done with (rematched away from): a late `start` for one is ignored. */
+  private past = new Set<string>();
 
   constructor(private o: RoomOptions) {
     this.role = o.role;
@@ -136,6 +142,7 @@ export class Room {
       this.theirs = s.theirs;
       this.match = s.match;
       this.rematch = s.rematch ?? [false, false];
+      for (const id of s.past ?? []) this.past.add(id);
       // games already over were announced before the reload
       for (const g of this.match?.games ?? []) if (g.decks[0] && g.decks[1] && g.first != null) this.announced.add(g.index);
     }
@@ -185,7 +192,7 @@ export class Room {
   }
 
   snapshot(): RoomSnapshot {
-    return { v: 1, role: this.role, code: this.code, me: this.me, peer: this.peer, mine: this.mine, theirs: this.theirs, match: this.match, rematch: this.rematch };
+    return { v: 1, role: this.role, code: this.code, me: this.me, peer: this.peer, mine: this.mine, theirs: this.theirs, match: this.match, rematch: this.rematch, past: [...this.past].slice(-10) };
   }
 
   // ------------------------------------------------------------------ lobby
@@ -358,8 +365,20 @@ export class Room {
     this.maybeRematch();
   }
 
+  /** The match is over (decided, or stopped out of sync): only a rematch can follow. */
+  get matchDone() {
+    const m = this.match;
+    return !!m && (!!this.outcome() || m.games.some((g) => g.end?.kind === 'desync'));
+  }
+
   private maybeRematch() {
     if (!this.rematch[0] || !this.rematch[1]) return;
+    this.toLobby();
+  }
+
+  /** Leave the finished match for a fresh lobby (both asked for a rematch, or the friend is already there). */
+  private toLobby() {
+    if (this.match) this.past.add(this.match.start.id);
     this.match = null;
     this.remotes.clear();
     this.announced.clear();
@@ -388,9 +407,17 @@ export class Room {
     send({ t: 'lobby', state: this.mine });
     const m = this.match;
     // they are still in a match we already left for the lobby (they missed the rematch)
-    if (theirMatch && (!m || m.start.id !== theirMatch) && this.role === 'host') send({ t: 'rematch', m: theirMatch });
+    // (either side: a rematch message lost in a dropped connection must not leave one phone behind)
+    if (theirMatch && (!m || m.start.id !== theirMatch) && (this.role === 'host' || this.past.has(theirMatch))) send({ t: 'rematch', m: theirMatch });
     if (!m) return;
     const id = m.start.id;
+    // Host: the friend is not in our finished match (they went on to the lobby when our rematch
+    // message was lost, or reopened the app). Never send it to them again (they would start the
+    // finished match over): follow them to the lobby.
+    if (this.role === 'host' && !this.o.noRematch && theirMatch !== id && this.matchDone) {
+      this.toLobby();
+      return;
+    }
     if (this.role === 'host') send({ t: 'start', match: m.start });
     for (const g of m.games) {
       if (g.index > 0 && g.decks[this.mySeat]) send({ t: 'deck', m: id, g: g.index, deck: g.decks[this.mySeat]! });
@@ -410,7 +437,7 @@ export class Room {
         this.ev.lobby?.();
         return;
       case 'start':
-        if (this.role !== 'guest' || m?.start.id === msg.match.id) return;
+        if (this.role !== 'guest' || m?.start.id === msg.match.id || this.past.has(msg.match.id)) return;
         this.beginMatch(msg.match);
         return;
       case 'leave':

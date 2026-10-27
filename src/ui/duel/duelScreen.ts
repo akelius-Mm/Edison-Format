@@ -766,11 +766,22 @@ class DuelScreen implements HumanUI {
       this.root.appendChild(o);
       requestAnimationFrame(() => o.classList.add('is-open'));
       const btn = o.querySelector('.result-continue') as HTMLButtonElement;
-      btn.onclick = () => {
+      let closed = false;
+      const close = () => {
+        if (closed) return;
+        closed = true;
         this.sfx.play('click');
         haptic('selection');
         resolve();
       };
+      btn.onclick = close;
+      let extra: HTMLElement | null = null;
+      try {
+        extra = this.opts.resultExtra?.(close) ?? null;
+      } catch (e) {
+        console.error(e);
+      }
+      if (extra) btn.before(extra);
       window.setTimeout(() => btn.focus(), 300);
     });
   }

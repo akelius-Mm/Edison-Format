@@ -6,7 +6,8 @@
 // Also covered: Bo3 matches (loser chooses who goes first, decks re-submitted between games),
 // channels cut at random moments (re-sync from the log), a "reload" of one side mid-game
 // (restore from the saved snapshot, replay the local log, continue), a concede, and a corrupted
-// entry, which must stop both sides with "Out of sync" instead of diverging.
+// entry, which must stop both sides with "Out of sync" instead of diverging. Rematches in one room
+// with a rematch message lost in a dropped channel (both phones must end up in the same lobby).
 //
 // Usage: npx tsx scripts/net-test.ts [--games N] [--seed S] [--verbose]
 import { AIController, type Difficulty } from '../src/ai/ai';
@@ -312,6 +313,91 @@ async function runCase(c: Case, label: string) {
   return decisions;
 }
 
+/**
+ * Rematch handoff over a flaky connection (a real report: two rematches in one room, then one phone
+ * was thrown out). The guest's "Rematch" is lost in a dropped channel after the host already asked:
+ * the guest is in the lobby, the host still on the after-match screen. After the reconnect the host
+ * must follow to the lobby and must never send the finished match again (the guest would start it
+ * over). Then a second and third match in the same room, each with a blip during the handoff.
+ */
+async function rematchCase() {
+  const hub = new MemoryHub();
+  const code = newRoomCode(mulberry(99));
+  const host = { saved: '' } as Phone;
+  const guest = { saved: '' } as Phone;
+  host.room = makeRoom(hub, 'host', code, host);
+  guest.room = makeRoom(hub, 'guest', code, guest);
+  const starts: string[] = [];
+  guest.room.ev.matchStart = (m) => starts.push(m.start.id);
+  let hostLobby = 0;
+  host.room.ev.rematch = () => hostLobby++;
+  await host.room.start();
+  await guest.room.start();
+  await waitFor(() => host.room.session.connected && guest.room.session.connected, 2000, 'connect');
+  const [da, db] = [PREMADE_DECKS[0], PREMADE_DECKS[1]];
+  const ids: string[] = [];
+  for (let round = 0; round < 3; round++) {
+    host.room.setLobby({ deckKey: da.id, deck: wireDeck(da), ready: true, bestOf: 1 });
+    guest.room.setLobby({ deckKey: db.id, deck: wireDeck(db), ready: true });
+    await waitFor(() => host.room.canStart, 4000, `round ${round + 1}: both ready`);
+    host.room.startMatch({ seed: 500 + round, skipFirstDraw: false });
+    await waitFor(() => guest.room.match?.start.id === host.room.match?.start.id, 2000, `round ${round + 1}: match start`);
+    const id = host.room.match!.start.id;
+    if (ids.includes(id)) fail(`rematch round ${round + 1}: match id ${id} reused`);
+    ids.push(id);
+    // the game ends (a concede keeps it short): both phones agree on the result
+    guest.room.endGame(0, { winner: 0, reason: 'Conceded', turns: 3, kind: 'concede' });
+    await waitFor(() => !!host.room.outcome() && !!guest.room.outcome(), 2000, `round ${round + 1}: outcome`);
+    if (round === 1) {
+      // the other order: the guest asks first; the host's "Rematch" is lost
+      guest.room.askRematch();
+      await waitFor(() => host.room.rematch[1], 2000, 'host hears the guest ask');
+      hub.down = true;
+      hub.cut();
+      host.room.askRematch();
+    } else {
+      host.room.askRematch();
+      await waitFor(() => guest.room.rematch[1], 2000, 'guest hears the host ask');
+      hub.down = true;
+      hub.cut();
+      guest.room.askRematch();
+    }
+    if (round === 0 && !host.room.match) fail('rematch: the host left the match without hearing the guest');
+    await sleep(80);
+    hub.down = false;
+    await waitFor(() => host.room.session.connected && guest.room.session.connected, 8000, `round ${round + 1}: reconnect`);
+    await waitFor(() => !host.room.match && !guest.room.match, 8000, `round ${round + 1}: both phones in the lobby after a lost rematch message`);
+    await sleep(150);
+    if (guest.room.match) fail(`rematch round ${round + 1}: the guest restarted the finished match ${guest.room.match.start.id}`);
+    if (starts.length !== round + 1) fail(`rematch round ${round + 1}: the guest started ${starts.length} matches (${starts.join(', ')})`);
+    if (host.room.mine.ready || guest.room.mine.ready) fail(`rematch round ${round + 1}: ready carried over to the new lobby`);
+  }
+  if (hostLobby !== 3) fail(`rematch: host went to the lobby ${hostLobby} times, expected 3`);
+  // a guest that reopens the app after the match (its save is gone) joins afresh: the host follows to the lobby
+  host.room.setLobby({ deckKey: da.id, deck: wireDeck(da), ready: true, bestOf: 1 });
+  guest.room.setLobby({ deckKey: db.id, deck: wireDeck(db), ready: true });
+  await waitFor(() => host.room.canStart, 4000, 'fresh rejoin: both ready');
+  host.room.startMatch({ seed: 900, skipFirstDraw: false });
+  await waitFor(() => !!guest.room.match, 2000, 'fresh rejoin: match start');
+  guest.room.endGame(0, { winner: 1, reason: 'Conceded', turns: 2, kind: 'concede' });
+  await waitFor(() => !!host.room.outcome(), 2000, 'fresh rejoin: outcome');
+  const me = guest.room.me;
+  guest.room.ev = {};
+  guest.room.session.close();
+  await sleep(20);
+  const fresh = { saved: '' } as Phone;
+  fresh.room = makeRoom(hub, 'guest', code, fresh, undefined, me.clientId);
+  let freshStarts = 0;
+  fresh.room.ev.matchStart = () => freshStarts++;
+  await fresh.room.start();
+  await waitFor(() => !host.room.match, 4000, 'fresh rejoin: host back in the lobby');
+  await sleep(100);
+  if (freshStarts || fresh.room.match) fail('fresh rejoin: the finished match was sent to the rejoining guest');
+  host.room.leave();
+  fresh.room.leave();
+  await sleep(10);
+}
+
 function mulberry(a: number) {
   return () => {
     a |= 0;
@@ -330,6 +416,12 @@ function mulberry(a: number) {
   if (normalizeRoomCode('IIII-0000') !== null) fail('ambiguous code accepted');
   const srv = parseServer('localhost:9000/edison');
   if (!srv || srv.secure || srv.port !== 9000 || srv.path !== '/edison') fail(`parseServer: ${JSON.stringify(srv)}`);
+
+  try {
+    await rematchCase();
+  } catch (e) {
+    fail(`rematch over a flaky connection: ${(e as Error).stack}`);
+  }
 
   const decks = PREMADE_DECKS;
   let total = 0;

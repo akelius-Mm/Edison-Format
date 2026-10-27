@@ -68,6 +68,11 @@ export interface DuelOptions {
   spectate?: { controllers: [PlayerController, PlayerController]; catchUp?: boolean };
   /** Overrides the result screen title (e.g. "Out of sync"). */
   resultTitle?: (res: { winner: PlayerId | null; reason: string }) => string | undefined;
+  /**
+   * An extra button on the result screen, above Continue (Play a friend: Rematch). `close` closes
+   * the result screen as Continue does.
+   */
+  resultExtra?: (close: () => void) => HTMLElement | null;
 }
 
 export interface DuelControl {
