@@ -488,13 +488,17 @@ class EventSession {
     const m = this.findMatch(mm.mid);
     if (m && m.attempt === mm.attempt && m.result == null) return;
     const room = mm.session.room;
-    if (!room.outcome() || !m || m.attempt !== mm.attempt) {
+    const restarted = !!m && m.attempt !== mm.attempt;
+    if (!room.outcome() || !m || restarted) {
       // settled some other way while we play it: stop here
-      const why = !m || m.attempt !== mm.attempt ? 'The organiser restarted this match' : m.how === 'id' ? 'Intentional draw' : m.how === 'time' ? 'Time was called' : m.how === 'drop' ? 'A player dropped' : 'The organiser decided this match';
-      if (mm.session.inDuel) toast(why, 'info', 4000);
+      const why = !m || restarted ? 'The organiser restarted this match' : m.how === 'id' ? 'Intentional draw' : m.how === 'time' ? 'Time was called' : m.how === 'drop' ? 'A player dropped' : 'The organiser decided this match';
+      if (mm.session.inDuel || restarted) toast(why, 'info', 4000);
       this.match = null;
+      // leaves the old room (its signalling id is freed, the opponent's phone sees us go)
       mm.session.abandon(why);
-      this.render();
+      // restarted: sit straight down at the fresh room (a new code), as we were at the old one
+      if (restarted && m && this.myPending()?.id === m.id) this.playMatch(m);
+      else this.render();
     } else if (!mm.session.inDuel) {
       // played out and confirmed: close the room (the opponent has had our last entries)
       this.match = null;
@@ -1107,6 +1111,29 @@ class EventSession {
 
   // ---------------------------------------------------------------- organiser tools
 
+  /** Organiser: play an open match again from scratch in a fresh room (a stuck table, a dispute). */
+  private restartButton(m: TMatch, name: (id: string | null) => string) {
+    const b = button(
+      'Restart match',
+      async () => {
+        const ok = await confirmDialog(
+          'Restart this match?',
+          `${name(m.a)} and ${name(m.b)} start over from game 1 at a fresh table (a new room). Any games played or reported so far are discarded. Use it when a table can’t connect or a result is disputed.`,
+          'Restart',
+          true,
+        );
+        if (ok && this.host) {
+          haptic('success');
+          this.host.replay(m.id);
+        }
+        this.render();
+      },
+      { icon: 'refresh', variant: 'ghost', small: true },
+    );
+    b.dataset.test = 'fl-restart';
+    return b;
+  }
+
   private organiserView(v: TView): HTMLElement {
     const host = this.host!;
     const round = this.currentRound(v);
@@ -1136,7 +1163,7 @@ class EventSession {
                 button(`${name(m.a)} wins`, decide('a'), { variant: 'ghost', small: true }),
                 button(`${name(m.b)} wins`, decide('b'), { variant: 'ghost', small: true }),
                 m.stage === 'swiss' ? button('Draw', decide('draw'), { variant: 'ghost', small: true }) : null,
-                m.dispute ? button('Replay match', () => (host.replay(m.id), this.render()), { variant: 'ghost', small: true }) : null,
+                this.restartButton(m, name),
                 timeUp ? button('Call time', () => (host.callTime(m.id), this.render()), { variant: 'ghost', small: true }) : null,
               )
             : null,

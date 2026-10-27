@@ -27,6 +27,7 @@ import { PeerTransport } from '../../net/peerTransport';
 import { AsHuman } from '../../net/remote';
 import { Room, type GameState, type RoomSnapshot } from '../../net/room';
 import { SpectateServer } from '../../net/spectate';
+import { TableLink, tableTroubleText } from '../../net/tableLink';
 import { TransportError, describeServer, parseServer, type PeerServerConfig, type Transport } from '../../net/transport';
 import type { DuelControl, DuelSide } from '../duel/api';
 import { startDuel } from '../duel/duelScreen';
@@ -366,6 +367,8 @@ export class FriendSession {
   private siding: { index: number; deck: DeckIds; done?: boolean } | null = null;
   private feed: SpectateServer | null = null;
   private uiDone: (() => void) | null = null;
+  /** Friends Locals: the loop that gets both phones of the table into the room. */
+  private table: TableLink | null = null;
 
   constructor(
     body: HTMLElement,
@@ -380,8 +383,16 @@ export class FriendSession {
       const sd = saved?.tag.kind === 'friend' ? saved.siding : null;
       if (sd && sd.player === (role === 'host' ? 0 : 1)) this.siding = { index: sd.index, deck: sd.deck, done: sd.done };
     }
+    this.room = this.makeRoom();
+    document.addEventListener('visibilitychange', this.onWake);
+    if (botLevel()) this.exposeTestHooks();
+  }
+
+  /** A room for this session (Friends Locals makes a fresh one on Retry). */
+  private makeRoom(): Room {
+    const { role, code, snap, hooks } = this;
     const prefs = loadJSON<{ deck?: string; bestOf?: 1 | 3 }>(PREFS_KEY, {});
-    this.room = new Room({
+    const room = new Room({
       role,
       code,
       me: { ...(snap?.me ?? mePlayer()), name: hooks?.myName || mePlayer().name },
@@ -390,12 +401,12 @@ export class FriendSession {
       snapshot: snap,
       expectPeer: hooks?.expectPeer,
     });
-    if (hooks && !snap) this.room.mine = { deckKey: 'registered', deck: hooks.deck, ready: true, bestOf: hooks.bestOf };
+    if (hooks && !snap) room.mine = { deckKey: 'registered', deck: hooks.deck, ready: true, bestOf: hooks.bestOf };
     else if (!snap) {
       const d = prefs.deck ? allDeckInfos().find((x) => x.key === prefs.deck) : undefined;
-      this.room.mine = { deckKey: d?.key ?? null, deck: d && !d.problems.length ? wireDeck(d) : null, ready: false, bestOf: prefs.bestOf === 3 ? 3 : 1 };
+      room.mine = { deckKey: d?.key ?? null, deck: d && !d.problems.length ? wireDeck(d) : null, ready: false, bestOf: prefs.bestOf === 3 ? 3 : 1 };
     }
-    this.room.ev = {
+    room.ev = {
       status: (s) => {
         this.lobbyRefresh?.();
         this.onStatus(s);
@@ -410,7 +421,7 @@ export class FriendSession {
         this.maybeStart();
       },
       matchStart: () => {
-        if (!this.inMatch) void this.playMatch();
+        if (!this.inMatch) void this.playMatchWhenFree();
       },
       gameReady: (g) => {
         this.readyWaiters.get(g)?.();
@@ -432,8 +443,7 @@ export class FriendSession {
       changed: () => this.persist(),
       desync: (g, detail) => console.warn(`[online] game ${g + 1} out of sync: ${detail}`),
     };
-    document.addEventListener('visibilitychange', this.onWake);
-    if (botLevel()) this.exposeTestHooks();
+    return room;
   }
 
   attach(body: HTMLElement) {
@@ -451,6 +461,7 @@ export class FriendSession {
     if (this.closed) return;
     this.closed = true;
     document.removeEventListener('visibilitychange', this.onWake);
+    this.table?.close();
     this.room.leave();
     this.feed?.close();
     if (active === this) active = null;
@@ -479,10 +490,25 @@ export class FriendSession {
 
   async open(): Promise<void> {
     if (this.hooks) {
-      // both phones open the match room on their own: keep trying until the opponent's is there
+      // both phones open the match room on their own: keep trying until the opponent's is there,
+      // and say so (with Retry) when it does not happen
+      const table = new TableLink({
+        makeRoom: () => (this.table ? this.makeRoom() : this.room),
+        stuckMs: Number(query().get('netstuck')) || 20000,
+        onRoom: (room) => {
+          this.room = room;
+          // the spectator feed belongs to the room: a fresh one for the fresh room
+          this.feed?.close();
+          this.feed = null;
+          this.startFeed();
+        },
+        onStuck: () => this.lobbyRefresh?.(),
+        onFatal: (e) => this.fail(errorText(e)),
+      });
+      this.table = table;
       this.lobby();
       this.startFeed();
-      await this.connectLoop(true);
+      await table.start();
       return;
     }
     this.busy(this.role === 'host' ? 'Opening a room…' : `Joining ${this.code}…`);
@@ -674,11 +700,24 @@ export class FriendSession {
   /** Friends Locals: before the match starts, a small pane in the tournament screen. */
   private waitingPane() {
     const hk = this.hooks!;
-    const room = this.room;
     const text = h('span', null);
-    const pane = h('div', { class: 'fl-wait', role: 'status' }, h('span', { class: 'spinner' }), text);
+    const wait = h('div', { class: 'fl-wait', role: 'status' }, h('span', { class: 'spinner' }), text);
+    const msg = h('span', null);
+    const retry = button('Retry', () => {
+      haptic('light');
+      this.table?.retry();
+      refresh();
+    }, { icon: 'refresh', variant: 'ghost', small: true, cls: 'fl-retry' });
+    retry.dataset.test = 'fl-table-retry';
+    const trouble = h('div', { class: 'fr-error fl-table-stuck', role: 'alert', 'data-test': 'fl-table-stuck' }, icon('warn'), msg);
+    const pane = h('div', { class: 'fl-table-wait' }, wait, trouble, retry);
     const refresh = () => {
-      text.textContent = room.status === 'connected' ? `${hk.opponentName} is here · starting…` : `Waiting for ${hk.opponentName} to sit down…`;
+      const room = this.room;
+      const stuck = room.status === 'connected' ? null : this.table?.stuck ?? null;
+      text.textContent = room.status === 'connected' ? `${hk.opponentName} is here · starting…` : stuck ? `Still trying to reach ${hk.opponentName}…` : `Waiting for ${hk.opponentName} to sit down…`;
+      trouble.hidden = !stuck;
+      retry.hidden = !stuck;
+      if (stuck) msg.textContent = tableTroubleText(stuck, hk.opponentName);
     };
     this.view.replaceChildren(pane);
     this.lobbyRefresh = refresh;
@@ -698,6 +737,19 @@ export class FriendSession {
   }
 
   // ---------------------------------------------------------------- match
+
+  /**
+   * Friends Locals: the table can connect long after the player sat down (it keeps trying in the
+   * background). If another duel is on screen by then (a friend duel started meanwhile), wait for it
+   * to close instead of opening this one on top of it.
+   */
+  private async playMatchWhenFree() {
+    if (this.hooks) {
+      while (!this.closed && !this.inMatch && document.body.classList.contains('in-duel')) await new Promise((r) => setTimeout(r, 1000));
+      if (this.closed || this.inMatch) return;
+    }
+    return this.playMatch();
+  }
 
   private async playMatch() {
     if (this.inMatch || !this.room.match) return;
@@ -1186,6 +1238,11 @@ export class FriendSession {
       get inMatch() {
         return self.inMatch;
       },
+      /** Friends Locals: the table's connect loop (stuck state, retries). */
+      get table() {
+        return self.table && { stuck: self.table.stuck, lastError: self.table.lastError, retries: self.table.retries };
+      },
+      retryTable: () => self.table?.retry() ?? false,
       /** Drop the connection now and refuse to reconnect for `holdMs`. */
       drop: (holdMs = 0) => self.room.session.drop(holdMs),
       /** Final state of game `g` as both phones should see it. */

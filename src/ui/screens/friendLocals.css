@@ -578,6 +578,21 @@
   border-radius: 12px;
   background: var(--fill);
 }
+/* a table that has not connected for a while: why, and Retry */
+.fl-table-wait {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.fl-table-wait [hidden] {
+  display: none !important;
+}
+.fl-table-wait .fl-table-stuck {
+  margin: 0;
+}
+.fl-table-wait .fl-retry {
+  align-self: flex-start;
+}
 
 @media (max-width: 380px) {
   .fl-set-row .seg-btn {
