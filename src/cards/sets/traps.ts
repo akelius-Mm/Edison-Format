@@ -832,8 +832,22 @@ defTrap('Negate Attack', 'counter', {
   ],
 });
 
+// Edison text and functional errata (https://www.edisonformat.com/functional-errata.html): a Quick Effect usable
+// during your Main Phase or your opponent's Battle Phase; the Normal Summon / Set happens when the effect resolves
+// (not "immediately after"), so "Solemn Judgment" cannot negate it (Game.normalSummon byEffect).
+/** Monsters in hand that could be Normal Summoned or Set with 1 extra Normal Summon. */
+function offeringCands(ctx: Ctx) {
+  const g = ctx.game;
+  const ps = g.players[ctx.player];
+  ps.normalSummonsLeft++;
+  try {
+    return ctx.hand('me', (c) => g.canNormalSummon(ctx.player, c, false) || g.canNormalSummon(ctx.player, c, true));
+  } finally {
+    ps.normalSummonsLeft--;
+  }
+}
 defTrap('Ultimate Offering', 'continuous', {
-  text: 'During your Main Phase or your opponent\'s Battle Phase: You can pay 500 LP; immediately after this effect resolves, Normal Summon/Set 1 monster.',
+  text: 'You can pay 500 Life Points to Normal Summon or Set 1 extra monster. You can only activate this effect during your Main Phase or your opponent\'s Battle Phase.',
   effects: [
     {
       kind: 'activate',
@@ -841,19 +855,37 @@ defTrap('Ultimate Offering', 'continuous', {
       ai: { score: (ctx) => (myOpen(ctx, 'main1', 'main2') && offeringUseful(ctx) ? 36 : 0) },
     },
     {
-      kind: 'ignition',
+      kind: 'quick',
       label: 'Pay 500: extra Normal Summon',
       categories: [],
-      canActivate: (ctx) => ctx.lp > 500,
+      condition: (ctx) => (ctx.isMyTurn ? ctx.phase === 'main1' || ctx.phase === 'main2' : ctx.phase === 'battle'),
+      canActivate: (ctx) => ctx.lp > 500 && offeringCands(ctx).length > 0,
       activate: async (ctx) => {
         await ctx.payLp(500);
       },
       resolve: async (ctx) => {
-        // Approximation: grants 1 additional Normal Summon/Set this turn (only usable in your Main Phase).
-        ctx.gainNormalSummon(1);
-        ctx.log('You can Normal Summon/Set 1 more monster this turn.');
+        const g = ctx.game;
+        const cands = offeringCands(ctx);
+        if (!cands.length) return;
+        const [c] = await ctx.select(cands, 1, 1, 'Normal Summon or Set 1 extra monster.', 'generic', {
+          aiScore: (x) => (ctx.isMyTurn ? x.data.atk ?? 0 : x.data.def ?? 0) + (x.data.aiValue ?? 0) / 4,
+        });
+        if (!c) return;
+        const ps = g.players[ctx.player];
+        ps.normalSummonsLeft++;
+        const summonOk = g.canNormalSummon(ctx.player, c, false);
+        const setOk = g.canNormalSummon(ctx.player, c, true);
+        const set = !summonOk || (setOk && (await ctx.option(`Ultimate Offering: ${c.name}`, ['Normal Summon', 'Set'], (i) => (i === 1 ? (ctx.isMyTurn ? 0 : 1) : ctx.isMyTurn ? 1 : 0))) === 1);
+        await g.normalSummon(ctx.player, c, set, { byEffect: true });
+        // The extra Summon is only for this monster: take it back if the Summon did not happen (no Tributes chosen).
+        if (c.location === 'hand') ps.normalSummonsLeft--;
       },
-      ai: { score: (ctx) => (offeringUseful(ctx) && ctx.lp > 1500 ? 45 : 0) },
+      ai: {
+        score: (ctx) => {
+          if (ctx.isMyTurn) return offeringUseful(ctx) && ctx.lp > 1500 ? 45 : 0;
+          return ctx.lp > 1500 && !ctx.game.chain.length && !!ctx.battle && ctx.monsters('me').length === 0 ? 40 : 0;
+        },
+      },
     },
   ],
 });
