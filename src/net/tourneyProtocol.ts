@@ -13,22 +13,18 @@
 // stream read-only (`ws` / `wg` / `wd`, see spectate.ts).
 //
 // Every message is idempotent and re-sent on reconnect: the player re-sends its registration, its
-// unacknowledged reports, its draw offers and its unconfirmed chat lines; the organiser re-sends
-// the current view and the chat history.
+// unacknowledged reports and its draw offers; the organiser re-sends the current view.
 //
-// Event chat relays through the organiser too (the star): a player sends a line (`tchat`), the
-// organiser numbers it, keeps the last CHAT_KEEP lines and sends it to everyone (`tmsg`); a phone
-// that (re)connects gets the whole history (`tchats`). Chat never touches matches, reports or
-// their verification.
+// Names: the organiser makes every name unique in the event ("Alex", "Alex 2"). A player renames
+// itself with `tname`; the organiser can rename anyone (TourneyHost.rename).
 //
-// Added after TOURNEY_PROTO 1 shipped, without a bump: `tname`, `tchat`, `tmsg`, `tchats` and the
-// optional `TView.muted` / `tj.build` fields. They are additive (an organiser that does not know
-// a message ignores it), and phones on different builds never talk anyway (the hello compares
+// Added after TOURNEY_PROTO 1 shipped, without a bump: `tname` and the optional `tj.build` field.
+// They are additive, and phones on different builds never talk anyway (the hello compares
 // builds), so the tournament id (tourneyPeerId) stays the same.
 import type { Decision } from '../engine/replay';
 import type { PlayerId } from '../engine/types';
 import type { GameResult } from '../tournament/types';
-import { PROTOCOL_VERSION, type GameEnd, type MatchStart, type NetPlayer, type WireDeck } from './protocol';
+import { NAME_MAX, PROTOCOL_VERSION, type GameEnd, type MatchStart, type NetPlayer, type WireDeck } from './protocol';
 
 /** Bump when the tournament messages change incompatibly. */
 export const TOURNEY_PROTO = 1;
@@ -36,22 +32,7 @@ export const TOURNEY_PROTO = 1;
 export const MIN_PLAYERS = 3;
 export const MAX_PLAYERS = 8;
 
-/** Longest player name (as in Play a friend). */
-export const NAME_MAX = 20;
-/** Longest chat line. */
-export const CHAT_MAX = 200;
-/** Chat lines the organiser keeps (and sends to a phone that joins late). */
-export const CHAT_KEEP = 100;
-
-/** A player name as typed: trimmed, inner whitespace collapsed, at most NAME_MAX characters. */
-export function cleanName(raw: unknown): string {
-  return String(raw ?? '')
-    .replace(/[\u0000-\u001f\u007f]/g, '')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .slice(0, NAME_MAX)
-    .trim();
-}
+export { NAME_MAX, cleanName } from './protocol';
 
 /** `name`, or `name 2`, `name 3`… so that it differs from every name in `taken` (case-insensitive). */
 export function uniqueName(name: string, taken: string[]): string {
@@ -59,23 +40,9 @@ export function uniqueName(name: string, taken: string[]): string {
   if (!used.has(name.toLowerCase())) return name;
   for (let n = 2; ; n++) {
     const tail = ` ${n}`;
-    const x = `${name.slice(0, NAME_MAX - tail.length).trim()}${tail}`;
+    const x = `${Array.from(name).slice(0, NAME_MAX - tail.length).join('').trim()}${tail}`;
     if (!used.has(x.toLowerCase())) return x;
   }
-}
-
-/** One line of the event chat, numbered by the organiser. */
-export interface ChatLine {
-  /** Sequence number (1, 2, 3…): the order everyone shows. */
-  n: number;
-  /** Sender's player id. */
-  from: string;
-  /** Sender's name when it was sent (the view's current name is shown when the player is known). */
-  name: string;
-  text: string;
-  at: number;
-  /** The sender's id for the line (re-sends are dropped). */
-  cid: string;
 }
 
 /** The signalling id the organiser registers for a tournament code. */
@@ -183,8 +150,6 @@ export interface TView {
   roundStartedAt: number;
   /** Final order once the event is done (index 0 = champion). */
   placements?: string[];
-  /** Players the organiser muted in the chat. */
-  muted?: string[];
 }
 
 /** One game of a match as a player's phone saw it: enough to replay it headlessly. */
@@ -221,12 +186,6 @@ export type TourneyMsg =
   | { t: 'tref'; tid: string; reason: 'started' | 'full' | 'version' | 'closed' }
   /** Player → organiser: call me this from now on (the organiser makes it unique and broadcasts the view). */
   | { t: 'tname'; tid: string; name: string }
-  /** Player → organiser: a chat line (`cid` lets the organiser drop a re-send). */
-  | { t: 'tchat'; tid: string; cid: string; text: string }
-  /** Organiser → player: a new chat line. */
-  | { t: 'tmsg'; tid: string; m: ChatLine }
-  /** Organiser → player: the chat history (on every (re)connect). */
-  | { t: 'tchats'; tid: string; lines: ChatLine[] }
   // ---- spectating (spectate.ts): player → spectator
   | { t: 'ws'; start: MatchStart }
   | { t: 'wg'; g: number; seed: number; first: PlayerId | 'coin' | null; decks: [WireDeck | null, WireDeck | null]; end: GameEnd | null }

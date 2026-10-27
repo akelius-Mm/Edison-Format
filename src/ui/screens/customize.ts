@@ -6,6 +6,8 @@ import { iosAction, iosGroup, iosRow } from './components';
 import { PLAYMATS, SLEEVES, applyPlaymat, sleevePreview } from './ext';
 import { frame, type Screen } from './nav';
 import { getProfile, ordinal, tournamentSummary, winRate } from './store';
+import { playerName, saveName } from './playerName';
+import { NAME_MAX } from '../../net/protocol';
 
 const SEARCH: Record<CustomKind, { label: string; url: string }[]> = {
   mat: [
@@ -34,10 +36,12 @@ export function customizeScreen(): Screen {
   const preview = h('div', { class: 'cz-preview' }, prevMat, h('div', { class: 'cz-preview-inner' }, prevSleeve));
 
   // ---- name
-  const nameIn = h('input', { id: 'cz-name', class: 'ios-input', type: 'text', value: s.playerName, maxlength: 20, 'aria-label': 'Duelist name', autocomplete: 'nickname', spellcheck: false });
+  const nameIn = h('input', { id: 'cz-name', class: 'ios-input', type: 'text', value: s.playerName, maxlength: NAME_MAX, 'aria-label': 'Duelist name', autocomplete: 'nickname', spellcheck: false });
   nameIn.addEventListener('input', () => {
-    const v = nameIn.value.trim();
-    if (v) updateSettings({ playerName: v });
+    saveName(nameIn.value);
+  });
+  nameIn.addEventListener('change', () => {
+    nameIn.value = playerName();
   });
 
   const sleeves = picker('sleeve', drawPreview);

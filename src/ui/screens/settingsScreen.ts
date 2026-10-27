@@ -14,6 +14,7 @@ import { loadActiveTournament, currentRoundLabel } from '../../tournament/tourna
 import { onlineSettingsGroup } from './friend';
 import { openReportSheet } from './report';
 import { openRulesNotes } from './rulesNotes';
+import { editName, playerName } from './playerName';
 
 export function settingsScreen(): Screen {
   const s = getSettings();
@@ -42,9 +43,14 @@ export function settingsScreen(): Screen {
   const active = loadActiveTournament();
   const games = p.games.w + p.games.l + p.games.d;
 
+  const nameDetail = h('span', null, playerName());
+  const nameNav = iosNav('Your name', () => void editName().then((n) => n && (nameDetail.textContent = n)), { icon: 'edit', detail: nameDetail });
+  nameNav.dataset.test = 'settings-name';
+
   const el = frame(
     'Settings',
     { cls: 'settings-screen' },
+    iosGroup('Profile', [nameNav], 'Friends see this name when you play online.'),
     iosGroup('More', [
       iosNav('Tournament', () => go('tournament'), { icon: 'trophy', detail: active ? currentRoundLabel(active) : undefined }),
       iosNav('Watch AI vs AI', () => go('exhibition'), { icon: 'eye' }),
@@ -131,7 +137,7 @@ export function settingsScreen(): Screen {
         iosAction('Restore default settings', async () => {
           if (!(await confirmDialog('Restore defaults', 'Reset all settings to their defaults? Your name, decks and stats are kept.', 'Restore'))) return;
           const keep = getSettings();
-          updateSettings({ ...DEFAULT_SETTINGS, playerName: keep.playerName, avatar: keep.avatar, sleeve: keep.sleeve, playmat: keep.playmat });
+          updateSettings({ ...DEFAULT_SETTINGS, playerName: keep.playerName, nameChosen: keep.nameChosen, avatar: keep.avatar, sleeve: keep.sleeve, playmat: keep.playmat });
           toast('Settings restored.', 'success');
           go('settings', { r: String(Date.now()) }, { replace: true });
         }),

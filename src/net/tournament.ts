@@ -16,11 +16,6 @@
 // with `tname` (or a re-join carrying a new name); the organiser can rename anyone. A re-join that
 // carries the name the player already asked for keeps an organiser rename.
 //
-// Chat: the organiser numbers each line (`tchat` in, `tmsg` out to everyone), keeps the last
-// CHAT_KEEP lines in its state and sends them to every phone that (re)connects (`tchats`). Muted
-// players' lines are dropped. Chat is kept apart from the event: it does not bump `rev` and never
-// reaches results, reports or verification.
-//
 // Every change bumps `rev`, is saved (`save`) and sent to every connected player as a `tview`.
 // DOM-free: scripts/tourney-test.ts runs it in Node.
 import { computeStandings, finalPlacements, nextTopRound, pairSwissRound, seedTopCut, topCutSeeds } from '../locals/swiss';
@@ -33,8 +28,6 @@ import { PROTOCOL_VERSION, type Msg, type NetPlayer, type WireDeck } from './pro
 import type { NetStatus } from './session';
 import type { Transport } from './transport';
 import {
-  CHAT_KEEP,
-  CHAT_MAX,
   DEFAULT_SETTINGS,
   MAX_PLAYERS,
   MIN_PLAYERS,
@@ -42,7 +35,6 @@ import {
   cleanName,
   tourneyPeerId,
   uniqueName,
-  type ChatLine,
   type MatchHow,
   type ReportGame,
   type TMatch,
@@ -99,12 +91,6 @@ export interface HostState {
   reports: Record<string, Record<string, StoredReport>>;
   /** The organiser closed the event. */
   closed?: boolean;
-  /** The last CHAT_KEEP chat lines, oldest first. */
-  chat?: ChatLine[];
-  /** Number of the last chat line. */
-  chatSeq?: number;
-  /** Players muted in the chat. */
-  muted?: string[];
 }
 
 /** The organiser's own player side, wired to the host without the network. */
@@ -326,22 +312,6 @@ export class TourneyHost {
     return true;
   }
 
-  /** Mute (or unmute) a player in the chat. The organiser cannot be muted. */
-  mute(id: string, on: boolean) {
-    const s = this.state;
-    if (id === s.organiser || !this.player(id)) return;
-    const m = new Set(s.muted ?? []);
-    if (on === m.has(id)) return;
-    if (on) m.add(id);
-    else m.delete(id);
-    s.muted = [...m];
-    this.changed();
-  }
-
-  muted(id: string) {
-    return !!this.state.muted?.includes(id);
-  }
-
   /** Lobby: remove a player (they can join again). */
   kick(id: string) {
     if (this.state.phase !== 'lobby' || id === this.state.organiser) return;
@@ -467,7 +437,6 @@ export class TourneyHost {
   private connected(id: string) {
     if (this.player(id)) {
       this.sendView(id);
-      this.sendChat(id);
       this.changed(false); // online flags
     }
   }
@@ -481,7 +450,6 @@ export class TourneyHost {
         if (msg.tid && msg.tid !== s.tid) return this.refuse(id, 'closed');
         if (s.closed) return this.refuse(id, 'closed');
         let p = this.player(id);
-        const fresh = !p;
         if (!p) {
           if (s.phase !== 'lobby') return this.refuse(id, 'started');
           if (s.players.length >= MAX_PLAYERS) return this.refuse(id, 'full');
@@ -503,31 +471,12 @@ export class TourneyHost {
           p.ready = msg.ready && !!msg.deck && !problems.length;
         }
         this.changed();
-        if (fresh) this.sendChat(id);
         return;
       }
       case 'tname':
         if (msg.tid !== s.tid) return;
         this.rename(id, msg.name, true);
         return;
-      case 'tchat': {
-        if (msg.tid !== s.tid) return;
-        const p = this.player(id);
-        const text = String(msg.text ?? '').replace(/\s+/g, ' ').trim().slice(0, CHAT_MAX);
-        const cid = String(msg.cid ?? '').slice(0, 24);
-        if (!p || !text || !cid) return;
-        const chat = (s.chat ??= []);
-        const had = chat.find((l) => l.from === id && l.cid === cid);
-        if (had) return this.sendTo(id, { t: 'tmsg', tid: s.tid, m: had }); // a re-send: confirm it
-        if (this.muted(id)) return;
-        const line: ChatLine = { n: (s.chatSeq = (s.chatSeq ?? 0) + 1), from: id, name: p.name, text, at: Date.now(), cid };
-        chat.push(line);
-        if (chat.length > CHAT_KEEP) chat.splice(0, chat.length - CHAT_KEEP);
-        this.save();
-        for (const x of s.players) this.sendTo(x.id, { t: 'tmsg', tid: s.tid, m: line });
-        this.onChange();
-        return;
-      }
       case 'tdrop':
         if (msg.tid !== s.tid) return;
         this.dropPlayer(id);
@@ -760,7 +709,6 @@ export class TourneyHost {
       topCut: s.phase === 'lobby' ? (s.settings.topCut && s.players.length >= s.settings.topCut ? s.settings.topCut : 0) : s.topCut,
       roundStartedAt: s.roundStartedAt,
       ...(s.placements ? { placements: s.placements } : {}),
-      ...(s.muted?.length ? { muted: s.muted } : {}),
     };
   }
 
@@ -773,10 +721,6 @@ export class TourneyHost {
     this.sendTo(id, { t: 'tview', tid: this.tid, view: this.viewFor(id) });
   }
 
-  /** The chat history, to a phone that (re)connected. */
-  private sendChat(id: string) {
-    this.sendTo(id, { t: 'tchats', tid: this.tid, lines: this.state.chat ?? [] });
-  }
 
   private save() {
     this.o.save?.(this.state);

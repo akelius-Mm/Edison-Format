@@ -22,10 +22,10 @@ import { matchOutcome } from '../../tournament/simulate';
 import { newRoomCode, normalizeRoomCode, type WireDeck } from '../../net/protocol';
 import { PeerTransport } from '../../net/peerTransport';
 import type { Room, RoomSnapshot } from '../../net/room';
-import { SpectateClient } from '../../net/spectate';
+import { SpectateClient, SpectateError } from '../../net/spectate';
 import { FRIENDS_PRIZES, TourneyHost, friendsPrizesFor, placeIn, viewStandings, type HostState } from '../../net/tournament';
 import { TourneyClient, reportFromRoom, type ClientSnapshot } from '../../net/tourneyClient';
-import { MAX_PLAYERS, MIN_PLAYERS, matchRoomCode, type TMatch, type TPlayerView, type TSettings, type TView } from '../../net/tourneyProtocol';
+import { MAX_PLAYERS, MIN_PLAYERS, NAME_MAX, matchRoomCode, type TMatch, type TPlayerView, type TSettings, type TView } from '../../net/tourneyProtocol';
 import { TransportError } from '../../net/transport';
 import { deckFromWire } from '../../net/verify';
 import type { DuelControl } from '../duel/api';
@@ -34,12 +34,13 @@ import { loadActiveDuel } from '../duel/resume';
 import { haptic } from '../haptics';
 import { getSettings, loadJSON, saveJSON } from '../settings';
 import { ctaButton, deckShelf, iosGroup, lobbySection, stickyBar } from './components';
-import { button, confirmDialog, h, icon, segmented, toast, toggle } from './dom';
+import { button, confirmDialog, h, icon, promptDialog, segmented, toast, toggle } from './dom';
 import { FriendSession, botLevel, clientId, errorText, mePlayer, query, serverConfig, wireDeck } from './friend';
 import { avatar, packIcon } from './locals';
 import { frame, go, lockNav, scrollToTop, type Screen } from './nav';
 import { allDeckInfos, ordinal, type DeckInfo } from './store';
 import { artInto } from './title';
+import { editName, ensureName, nameChip } from './playerName';
 
 declare const __BUILD_ID__: string;
 const BUILD = typeof __BUILD_ID__ === 'string' ? __BUILD_ID__ : 'dev';
@@ -219,6 +220,7 @@ function landing(body: HTMLElement, opts: { error?: string; joining?: boolean } 
       hero,
       opts.error ? h('div', { class: 'fr-error', role: 'alert' }, icon('warn'), h('span', null, opts.error)) : null,
       h('div', { class: 'fr-actions' }, create, joinToggle, joinBox),
+      nameChip(),
       h(
         'div',
         { class: 'fl-how' },
@@ -286,6 +288,8 @@ class EventSession {
 
   static async create(body: HTMLElement) {
     if (ev) return ev.attach(body);
+    if (!(await ensureName())) return;
+    if (ev) return (ev as EventSession).attach(body);
     busy(body, 'Opening your tournament…');
     const me = mePlayer();
     const prefs = loadJSON<Prefs>(PREFS_KEY, {});
@@ -317,6 +321,8 @@ class EventSession {
 
   static async join(body: HTMLElement, code: string) {
     if (ev) return ev.attach(body);
+    if (!(await ensureName())) return landing(body, { joining: true });
+    if (ev) return (ev as EventSession).attach(body);
     busy(body, `Joining ${code}…`);
     const me = mePlayer();
     const client = new TourneyClient({ code, me, build: BUILD, transport: new PeerTransport(serverConfig()) });
@@ -417,6 +423,22 @@ class EventSession {
     saveJSON(ACTIVE_KEY, saved);
   }
 
+  /** Change my own name: saved to the profile and sent to the organiser (who keeps it unique). */
+  private async renameMe() {
+    const n = await editName('Your name', `Up to ${NAME_MAX} characters. Everyone in the event sees the change; it is saved to your profile too.`);
+    if (n == null || this.closed) return;
+    this.client.rename(n);
+    this.render();
+  }
+
+  /** Organiser: rename another player (a duplicate gets a number). */
+  private async renamePlayer(p: TPlayerView) {
+    const raw = await promptDialog(`Rename ${p.name}`, 'Name', p.name, 'Rename', { maxLength: NAME_MAX, hint: 'A name already taken gets a number (“Alex 2”).', test: 'name-input' });
+    if (raw == null || this.closed || !this.host) return;
+    if (!this.host.rename(p.id, raw)) toast('A name needs at least one letter or number.', 'error');
+    this.render();
+  }
+
   private refused(r: string) {
     const msg =
       r === 'started'
@@ -424,7 +446,7 @@ class EventSession {
         : r === 'full'
           ? `This tournament is full (${MAX_PLAYERS} players).`
           : r === 'version'
-            ? 'The organiser is on a different version of the app. Everyone reopen the app to update.'
+            ? 'Your app and the organiser’s are different versions. Update: close and reopen the app (fully, not just switch away), then join again. Everyone in the event needs the same version.'
             : r === 'busy'
               ? 'That code belongs to someone else’s game.'
               : 'The organiser closed this tournament.';
@@ -510,6 +532,7 @@ class EventSession {
     const session = new FriendSession(this.matchPane, snap?.role ?? r.role, snap?.code ?? r.code, snap, {
       expectPeer: r.opponent,
       opponentName: opp.name,
+      myName: v.players.find((p) => p.id === this.client.me.clientId)?.name,
       deck,
       bestOf: v.settings.bestOf,
       seed: m.seed,
@@ -630,13 +653,15 @@ class EventSession {
     pane(`${table} · ${a.name} vs ${b.name}`, 'Connecting to the table…');
     try {
       await spec.begin([0, 1]);
-    } catch {
+    } catch (e) {
       if (!stopped) {
-        toast('Couldn’t reach that table. The players’ phones may be busy; try again in a moment.', 'error', 4000);
+        const version = e instanceof SpectateError && e.reason === 'version';
+        toast(version ? 'Those players are on a different app version. Update: close and reopen the app (everyone at the event needs the same version).' : 'Couldn’t reach that table. The players’ phones may be busy; try again in a moment.', 'error', 6000);
         stop();
       }
       return;
     }
+    if (stopped) return;
     for (let g = 0; !stopped; g++) {
       // wait for the game's setup (decks after siding, who goes first)
       pane(`${table} · ${a.name} vs ${b.name}`, g ? `Waiting for game ${g + 1}…` : 'Waiting for the duel to start…');
@@ -672,8 +697,8 @@ class EventSession {
       const P = st.players;
       await startDuel(host, {
         sides: [
-          { name: P[0].name, avatar: P[0].avatar, sleeve: P[0].sleeve, control: 'normal', title: v.settings.hideDecks ? undefined : wg.decks[0]!.name, deck: da },
-          { name: P[1].name, avatar: P[1].avatar, sleeve: P[1].sleeve, control: 'normal', title: v.settings.hideDecks ? undefined : wg.decks[1]!.name, deck: db },
+          { name: a.name || P[0].name, avatar: P[0].avatar, sleeve: P[0].sleeve, control: 'normal', title: v.settings.hideDecks ? undefined : wg.decks[0]!.name, deck: da },
+          { name: b.name || P[1].name, avatar: P[1].avatar, sleeve: P[1].sleeve, control: 'normal', title: v.settings.hideDecks ? undefined : wg.decks[1]!.name, deck: db },
         ],
         playmat: getSettings().playmat,
         seed: wg.seed,
@@ -806,6 +831,7 @@ class EventSession {
           avatar({ name: p.name, human: you }, 40),
           h('span', { class: 'fr-seat-text' }, h('b', null, `${p.name}${you ? ' (you)' : ''}`, p.organiser ? h('span', { class: 'fl-tag' }, 'Organiser') : null), h('span', null, p.online === false ? `${deckLine} · away` : deckLine)),
           h('span', { class: ['fr-badge', p.ready ? 'on' : ''] }, p.ready ? 'Ready' : 'Not ready'),
+          you || org ? h('button', { type: 'button', class: 'fl-kick fl-rename', 'data-test': you ? 'fl-rename-me' : 'fl-rename', 'aria-label': you ? 'Change your name' : `Rename ${p.name}`, onclick: () => void (you ? this.renameMe() : this.renamePlayer(p)) }, icon('edit')) : null,
           org && !you ? h('button', { type: 'button', class: 'fl-kick', 'aria-label': `Remove ${p.name}`, onclick: () => this.host!.kick(p.id) }, icon('x')) : null,
         );
       }),
@@ -976,6 +1002,7 @@ class EventSession {
         ),
       ),
       content,
+      done ? null : h('button', { type: 'button', class: 'fr-leave fl-rename-link', 'data-test': 'fl-rename-me', onclick: () => void this.renameMe() }, `Playing as ${v.players.find((p) => p.id === this.client.me.clientId)?.name ?? this.client.me.name} · Change name`),
       done
         ? h('div', { class: 'fr-actions' }, ctaButton('Done', () => this.leave(), 'check', 'fl-done'))
         : h('button', { type: 'button', class: 'fr-leave', 'data-test': 'fl-leave', onclick: () => void this.confirmLeave() }, org ? 'End tournament' : this.client.dropped ? 'Leave (you dropped)' : 'Drop from tournament'),
@@ -1121,6 +1148,7 @@ class EventSession {
         h('span', { class: ['fl-dot', p.online ? 'on' : ''] }),
         h('b', null, p.name),
         h('small', null, p.dropped != null ? `Dropped after round ${p.dropped}` : p.online ? 'Connected' : 'Away'),
+        v.phase !== 'done' ? button('Rename', () => void (p.id === this.client.me.clientId ? this.renameMe() : this.renamePlayer(p)), { variant: 'ghost', small: true }) : null,
         p.dropped == null && v.phase !== 'done' && p.id !== this.client.me.clientId
           ? button('Drop', async () => {
               if (await confirmDialog(`Drop ${p.name}?`, 'Their current match goes to the opponent and they are not paired again.', 'Drop', true)) host.dropPlayer(p.id);

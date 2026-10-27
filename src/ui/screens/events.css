@@ -781,3 +781,21 @@
   font-size: 11px;
 }
 
+.pf-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+.pf-name .icon {
+  width: 15px;
+  height: 15px;
+  opacity: 0.6;
+}

@@ -146,16 +146,17 @@ export class SpectateClient {
 
   /**
    * Dial the match host's feed, then the other player's, and wait for the handshake. Rejects with a
-   * SpectateError when neither feed lets us in within `timeoutMs` (all seats together): 'version'
+   * SpectateError when neither feed lets us in within `timeoutMs` (shared by the seats): 'version'
    * when a feed refused our build, 'unreachable' otherwise. Without the handshake wait a refused
    * spectator would sit on "Connecting…" forever while its session redialled.
    */
   async begin(seats: PlayerId[] = [0, 1], timeoutMs = 8000) {
     const until = Date.now() + timeoutMs;
     let reason: SpectateError['reason'] = 'unreachable';
-    for (const seat of seats) {
+    for (const [i, seat] of seats.entries()) {
       if (this.closed) return;
-      const left = until - Date.now();
+      // share what is left between the seats still to try (a hung first feed leaves time for the second)
+      const left = (until - Date.now()) / (seats.length - i);
       if (left <= 0) break;
       const s = new NetSession(this.o.transport(), {
         role: 'guest',

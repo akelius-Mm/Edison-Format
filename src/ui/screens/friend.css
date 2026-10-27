@@ -492,3 +492,33 @@
   font-size: 13px;
   line-height: 1.35;
 }
+
+/* ---- player name (playerName.ts) */
+.fr-name-chip {
+  justify-self: center;
+  min-height: 44px;
+  padding: 0 14px;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font: 400 14px var(--font);
+  cursor: pointer;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fr-name-chip b {
+  color: var(--text);
+  font-weight: 600;
+}
+.fr-name-edit {
+  color: var(--gold-hi);
+}
+.fl-rename-link {
+  color: var(--gold-hi);
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
