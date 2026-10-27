@@ -198,7 +198,27 @@ function eq(a: unknown, b: unknown, msg: string) {
       ['E - Emergency Call', 3],
       ['Mass Driver', 3],
       ['Messenger of Peace', 3],
+      // Official limits once held back for the bundled archetype decks, now applied in full.
+      ['Magician of Faith', 0],
+      ['Tsukuyomi', 0],
+      ['Dark Hole', 0],
+      ['Monster Reborn', 0],
+      ['Premature Burial', 0],
+      ['Blackwing - Gale the Whirlwind', 1],
+      ['Lumina, Lightsworn Summoner', 1],
+      ['Mezuki', 1],
+      ['Necro Gardna', 1],
+      ['Dandylion', 2],
+      ['Goblin Zombie', 2],
+      ['Judgment Dragon', 2],
+      ['Lonefire Blossom', 2],
+      ['Black Whirlwind', 2],
+      ['Bottomless Trap Hole', 2],
     ];
+    // applyBanlist() must give the card definitions the same limits as limitOf().
+    for (const name of ['Monster Reborn', 'Dark Hole', 'Necro Gardna', 'Bottomless Trap Hole']) {
+      eq(findCard(name)?.limit, limitOf(name), `${name} card limit`);
+    }
     for (const [name, lim] of expect) eq(limitOf(name), lim, name);
   });
 

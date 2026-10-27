@@ -5,12 +5,8 @@
 //   - https://yugipedia.com/wiki/March_2010_Lists_(TCG), citing Konami's list
 //     http://www.yugioh-card.com/en/limited/10_03_list.html (archived 2010-08-25)
 // Names on that list that have no card definition here are kept so the list stays complete.
-//
-// KNOWN DIFFERENCES, NOT YET APPLIED (marked "OFFICIAL:" below): the official list is stricter for these cards, but
-// applying it would make bundled non-tournament decks in src/decks/ illegal (scripts/side-deck-test.ts), so they keep
-// their old limit until those decks are updated: Magician of Faith, Tsukuyomi, Dark Hole, Monster Reborn and Premature
-// Burial (Forbidden); Blackwing - Gale the Whirlwind, Lumina, Lightsworn Summoner, Mezuki and Necro Gardna (Limited);
-// Dandylion, Goblin Zombie, Judgment Dragon, Lonefire Blossom, Black Whirlwind and Bottomless Trap Hole (Semi-Limited).
+// This is the official list, applied in full: every bundled deck (archetype and tournament) must be legal under it
+// (scripts/side-deck-test.ts counts Main + Extra + Side together).
 import { CARDS } from './define';
 
 export const FORBIDDEN = [
@@ -24,10 +20,12 @@ export const FORBIDDEN = [
   'Destiny Hero - Disk Commander',
   'Fiber Jar',
   'Magical Scientist',
+  'Magician of Faith',
   'Makyura the Destructor',
   'Sinister Serpent',
   'Thousand-Eyes Restrict',
   'Tribe-Infecting Virus',
+  'Tsukuyomi',
   'Victory Dragon',
   'Witch of the Black Forest',
   'Yata-Garasu',
@@ -36,6 +34,7 @@ export const FORBIDDEN = [
   'Card of Safe Return',
   'Change of Heart',
   'Confiscation',
+  'Dark Hole',
   'Delinquent Duo',
   'Dimension Fusion',
   'Graceful Charity',
@@ -43,8 +42,10 @@ export const FORBIDDEN = [
   'Last Will',
   'Metamorphosis',
   'Mirage of Nightmare',
+  'Monster Reborn',
   'Painful Choice',
   'Pot of Greed',
+  'Premature Burial',
   'Raigeki',
   'Snatch Steal',
   'The Forceful Sentry',
@@ -60,6 +61,7 @@ export const FORBIDDEN = [
 export const LIMITED = [
   // Monsters
   'Black Rose Dragon',
+  'Blackwing - Gale the Whirlwind',
   'Brionac, Dragon of the Ice Barrier',
   'Card Trooper',
   'Chaos Sorcerer',
@@ -71,10 +73,12 @@ export const LIMITED = [
   'Goyo Guardian',
   'Left Arm of the Forbidden One',
   'Left Leg of the Forbidden One',
-  'Magician of Faith', // OFFICIAL: Forbidden
+  'Lumina, Lightsworn Summoner',
   'Marshmallon',
+  'Mezuki',
   'Mind Master',
   'Morphing Jar',
+  'Necro Gardna',
   'Necroface',
   'Neo-Spacian Grand Mole',
   'Night Assailant',
@@ -87,7 +91,6 @@ export const LIMITED = [
   'Spirit Reaper',
   'Summoner Monk',
   'Tragoedia',
-  'Tsukuyomi', // OFFICIAL: Forbidden
   // Spells
   'Advanced Ritual Art',
   'Allure of Darkness',
@@ -96,7 +99,6 @@ export const LIMITED = [
   'Card Destruction',
   'Charge of the Light Brigade',
   'Cold Wave',
-  'Dark Hole', // OFFICIAL: Forbidden
   'Destiny Draw',
   'Emergency Teleport',
   'Foolish Burial',
@@ -110,11 +112,9 @@ export const LIMITED = [
   'Megamorph',
   'Mind Control',
   'Monster Gate',
-  'Monster Reborn', // OFFICIAL: Forbidden
   'Mystical Space Typhoon',
   'One for One',
   'Overload Fusion',
-  'Premature Burial', // OFFICIAL: Forbidden
   'Reasoning',
   'Reinforcement of the Army',
   'Scapegoat',
@@ -142,44 +142,28 @@ export const LIMITED = [
 export const SEMI_LIMITED = [
   // Monsters
   'Cyber Dragon',
+  'Dandylion',
   'Demise, King of Armageddon',
   'Destiny Hero - Malicious',
+  'Goblin Zombie',
   'Honest',
+  'Judgment Dragon',
+  'Lonefire Blossom',
   // The user's decision: Treeborn Frog stays Semi-Limited (it is Semi-Limited on the March 2010 list too).
   'Treeborn Frog',
   // Spells
+  'Black Whirlwind',
   'Chain Strike',
   'Gold Sarcophagus',
   'Magical Stone Excavation',
   'United We Stand',
   // Traps
+  'Bottomless Trap Hole',
   'Royal Decree',
   'Royal Oppression',
   'Skill Drain',
   'Ultimate Offering',
 ];
-
-/**
- * Official March 2010 limits NOT applied yet (see KNOWN DIFFERENCES above): name -> official limit. The cards keep
- * the limit given by the lists above (or Unlimited) until the bundled decks that exceed it are updated.
- */
-export const OFFICIAL_PENDING: Record<string, 0 | 1 | 2> = {
-  'Magician of Faith': 0,
-  Tsukuyomi: 0,
-  'Dark Hole': 0,
-  'Monster Reborn': 0,
-  'Premature Burial': 0,
-  'Blackwing - Gale the Whirlwind': 1,
-  'Lumina, Lightsworn Summoner': 1,
-  Mezuki: 1,
-  'Necro Gardna': 1,
-  Dandylion: 2,
-  'Goblin Zombie': 2,
-  'Judgment Dragon': 2,
-  'Lonefire Blossom': 2,
-  'Black Whirlwind': 2,
-  'Bottomless Trap Hole': 2,
-};
 
 // Cards scripted for the simulator (TSHD packs, Draft, Sealed, the collection) that had no English TCG
 // release on or before SJC Edison (2010-04-24). They stay defined, but validateDeck rejects them in

@@ -12,10 +12,10 @@ const quickdrawPlant: DeckDef = {
   description:
     'The Edison synchro toolbox. Quickdraw Synchron special summons itself by dumping Dandylion or Level Eater, Lonefire Blossom chains Plants out of the Deck, and Debris Dragon revives the discarded Plants for instant Drill Warrior, Black Rose Dragon or Stardust Dragon. Fluff Tokens, Level Eater and Plaguespreader keep feeding more synchros, with Dark Armed Dragon as the finisher.',
   main: [
-    // Monsters (19)
+    // Monsters (17)
     ['Quickdraw Synchron', 3],
-    ['Lonefire Blossom', 3],
-    ['Dandylion', 3],
+    ['Lonefire Blossom', 2],
+    ['Dandylion', 2],
     ['Debris Dragon', 2],
     ['Level Eater', 2],
     ['Plaguespreader Zombie', 1],
@@ -24,22 +24,20 @@ const quickdrawPlant: DeckDef = {
     ['Sangan', 1],
     ['Gorz the Emissary of Darkness', 1],
     ['Dark Armed Dragon', 1],
-    // Spells (12)
+    // Spells (13)
     ['Foolish Burial', 1],
     ['Allure of Darkness', 1],
     ['Gold Sarcophagus', 1],
-    ['Pot of Avarice', 1],
-    ['Monster Reborn', 1],
+    ['Pot of Avarice', 2],
     ['Brain Control', 1],
-    ['Dark Hole', 1],
-    ['Smashing Ground', 1],
+    ['Smashing Ground', 2],
     ['Heavy Storm', 1],
     ['Mystical Space Typhoon', 1],
-    ['Book of Moon', 1],
+    ['Book of Moon', 2],
     ['Scapegoat', 1],
-    // Traps (9)
+    // Traps (10)
     ['Solemn Judgment', 1],
-    ['Dimensional Prison', 2],
+    ['Dimensional Prison', 3],
     ['Bottomless Trap Hole', 2],
     ['Torrential Tribute', 1],
     ['Mirror Force', 1],
@@ -89,11 +87,11 @@ const zombies: DeckDef = {
   description:
     'Grind-heavy Zombie recursion. Zombie Master discards and revives, Goblin Zombie searches whenever it leaves the field, Mezuki and Book of Life bring the dead back, and Plaguespreader Zombie climbs back every Standby Phase to make Doomkaiser Dragon and other synchros. Pyramid Turtle pulls Vampire Lord or Red-Eyes Zombie Dragon from the Deck.',
   main: [
-    // Monsters (19)
+    // Monsters (17)
     ['Zombie Master', 3],
-    ['Goblin Zombie', 3],
-    ['Mezuki', 3],
-    ['Pyramid Turtle', 2],
+    ['Goblin Zombie', 2],
+    ['Mezuki', 1],
+    ['Pyramid Turtle', 3],
     ['Plaguespreader Zombie', 1],
     ['Vampire Lord', 1],
     ['Red-Eyes Zombie Dragon', 1],
@@ -102,18 +100,16 @@ const zombies: DeckDef = {
     ['Sangan', 1],
     ['Gorz the Emissary of Darkness', 1],
     ['Dark Armed Dragon', 1],
-    // Spells (13)
-    ['Book of Life', 2],
+    // Spells (15)
+    ['Book of Life', 3],
     ['Foolish Burial', 1],
     ['Allure of Darkness', 1],
-    ['Pot of Avarice', 1],
-    ['Monster Reborn', 1],
+    ['Pot of Avarice', 2],
     ['Brain Control', 1],
-    ['Dark Hole', 1],
-    ['Smashing Ground', 1],
+    ['Smashing Ground', 2],
     ['Heavy Storm', 1],
     ['Mystical Space Typhoon', 1],
-    ['Book of Moon', 1],
+    ['Book of Moon', 2],
     ['Gold Sarcophagus', 1],
     // Traps (8)
     ['Solemn Judgment', 1],
@@ -167,31 +163,30 @@ const lightsworn: DeckDef = {
   description:
     'Mill yourself into power. Solar Recharge, Charge of the Light Brigade, Ryko and the End Phase mills of Lumina and friends fill the Graveyard with different Lightsworn names, Wulf jumps out of the Deck, and Judgment Dragon arrives to wipe the field. Necro Gardna and Honest punish attacks, Plaguespreader adds synchro reach.',
   main: [
-    // Monsters (22)
-    ['Judgment Dragon', 3],
+    // Monsters (21)
+    ['Judgment Dragon', 2],
     ['Ryko, Lightsworn Hunter', 3],
-    ['Lumina, Lightsworn Summoner', 2],
+    ['Lumina, Lightsworn Summoner', 1],
     ['Wulf, Lightsworn Beast', 2],
-    ['Garoth, Lightsworn Warrior', 1],
-    ['Lyla, Lightsworn Sorceress', 1],
+    ['Garoth, Lightsworn Warrior', 2],
+    ['Lyla, Lightsworn Sorceress', 2],
     ['Jain, Lightsworn Paladin', 1],
     ['Celestia, Lightsworn Angel', 1],
-    ['Necro Gardna', 2],
+    ['Necro Gardna', 1],
     ['Honest', 2],
     ['Plaguespreader Zombie', 1],
     ['Card Trooper', 1],
     ['Gorz the Emissary of Darkness', 1],
     ['Ehren, Lightsworn Monk', 1],
-    // Spells (11)
+    // Spells (12)
     ['Charge of the Light Brigade', 1],
     ['Solar Recharge', 3],
-    ['Pot of Avarice', 1],
-    ['Monster Reborn', 1],
+    ['Pot of Avarice', 2],
     ['Brain Control', 1],
-    ['Dark Hole', 1],
     ['Heavy Storm', 1],
     ['Mystical Space Typhoon', 1],
-    ['Book of Moon', 1],
+    ['Book of Moon', 2],
+    ['Smashing Ground', 1],
     // Traps (7)
     ['Solemn Judgment', 1],
     ['Bottomless Trap Hole', 2],

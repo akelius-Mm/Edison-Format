@@ -113,7 +113,7 @@ function poolTab() {
       p('Cards released in the TCG up to the April 2010 Edison event — through ', h('b', null, 'The Shining Darkness'), ' and the products available alongside it (tins, starter and structure decks, Duel Terminal and Hidden Arsenal releases, promotional cards).'),
       p('No Xyz, Pendulum or Link monsters exist yet. Extra Decks are built from Synchro and Fusion monsters.'),
     ),
-    card('Defining cards of the era', ul('Synchros: Stardust Dragon, Brionac, Goyo Guardian, Black Rose Dragon, Thought Ruler Archfiend.', 'Power spells: Dark Hole, Monster Reborn, Heavy Storm, Brain Control — each Limited to one.', 'Defensive traps: Mirror Force, Solemn Judgment, Bottomless Trap Hole, Torrential Tribute.', 'Utility monsters: Sangan, Card Trooper, Gorz the Emissary of Darkness, Tragoedia.')),
+    card('Defining cards of the era', ul('Synchros: Stardust Dragon, Brionac, Goyo Guardian, Black Rose Dragon, Thought Ruler Archfiend.', 'Power spells: Heavy Storm, Brain Control, Giant Trunade, Mystical Space Typhoon — each Limited to one. Dark Hole and Monster Reborn are Forbidden.', 'Defensive traps: Mirror Force, Solemn Judgment, Bottomless Trap Hole, Torrential Tribute.', 'Utility monsters: Sangan, Card Trooper, Gorz the Emissary of Darkness, Tragoedia.')),
     h(
       'article',
       { class: 'rule-card wide' },
