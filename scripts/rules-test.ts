@@ -4076,6 +4076,37 @@ async function fuzzRegressionTests() {
     for (const r of [why(g, bc), why(g, dad), why(g, frog)]) eq((r ?? '').split('\n')[0].length <= 40, true, `short: ${r}`);
   });
 
+  await test('why-not: Enemy Controller says which part is missing (no monster / not Tributable / no face-up target)', async () => {
+    const why = (g: Game, c: CardInstance, i: number) => {
+      const ef = c.data.effects![i];
+      return ef.whyNot ? ef.whyNot(new Ctx(g, c, ef, c.controller)) : 'none';
+    };
+    const offered = (g: Game, c: CardInstance) =>
+      g
+        .getActivations(0, { open: true })
+        .filter((a) => a.card === c)
+        .map((a) => a.effectIndex)
+        .join(',');
+    const { g, place } = setup();
+    const ec = place(0, cardByName('Enemy Controller'), 'hand');
+    const opp = place(1, T.brute, 'mzone');
+    eq(offered(g, ec), '0', 'only Change battle position is offered (no monster to Tribute)');
+    eq(why(g, ec, 1), 'you control no monster to Tribute', 'no monster');
+    const monk = place(0, cardByName('Summoner Monk'), 'mzone', { pos: 'def' });
+    g.update();
+    eq(offered(g, ec), '0', 'Summoner Monk cannot be Tributed');
+    eq(why(g, ec, 1), "your monster can't be Tributed\nA card effect stops Summoner Monk", 'not Tributable');
+    place(0, T.brute, 'mzone');
+    eq(offered(g, ec), '0,1', 'with a Tributable monster both are offered');
+    eq(why(g, ec, 1), null, 'no reason');
+    g.rawMove(opp, 'grave', {});
+    place(1, T.brute, 'mzone', { faceUp: false, pos: 'def' });
+    eq(offered(g, ec), '', 'no face-up target: nothing offered');
+    eq(why(g, ec, 0), 'opponent has no face-up monster', 'effect 1: no face-up monster');
+    eq(why(g, ec, 1), 'opponent has no face-up monster', 'effect 2: no face-up monster');
+    void monk;
+  });
+
   await test('Gozen Match: no Synchro Summon that would leave monsters of another Attribute', async () => {
     const darkTuner = findCard('Rules Test Dark Tuner') ?? normal('Rules Test Dark Tuner', 'DARK', 'Fiend', 2, 800, 800);
     if (!darkTuner.mtypes!.includes('tuner')) darkTuner.mtypes!.push('tuner');

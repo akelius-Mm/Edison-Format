@@ -565,7 +565,16 @@ export function positionDialog(d: Dialogs, ctx: PromptCtx, card: CardInstance, a
   });
 }
 
-export function responseDialog(d: Dialogs, ctx: PromptCtx, req: ResponseRequest, title: string): Promise<Activation | null> {
+/**
+ * `notes`: disabled rows shown under a card's first option, e.g. its other effects that can't be used now and why.
+ */
+export function responseDialog(
+  d: Dialogs,
+  ctx: PromptCtx,
+  req: ResponseRequest,
+  title: string,
+  notes?: (c: CardInstance) => { label: string; sub?: string }[],
+): Promise<Activation | null> {
   return new Promise((resolve) => {
     let m: ModalHandle;
     const body = h('div', 'resp-list');
@@ -591,6 +600,13 @@ export function responseDialog(d: Dialogs, ctx: PromptCtx, req: ResponseRequest,
         resolve(o);
       };
       body.appendChild(row);
+      if (notes && req.options.find((x) => x.card === o.card) === o) {
+        for (const n of notes(o.card)) {
+          const r = h('div', 'resp-note', `<span>${esc(n.label)}</span>${n.sub ? `<small>${esc(n.sub)}</small>` : ''}`);
+          r.setAttribute('aria-disabled', 'true');
+          body.appendChild(r);
+        }
+      }
     }
     ctx.highlight(
       req.options.map((o) => o.card.uid),

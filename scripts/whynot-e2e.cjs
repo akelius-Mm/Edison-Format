@@ -91,6 +91,62 @@ async function duelCheck(browser) {
     const box = await page.locator('.ctx-menu').boundingBox();
     check(!!box && box.x >= 0 && box.x + box.width <= VIEW.width, 'the menu fits on the screen');
     await page.screenshot({ path: path.join(OUT, 'brain-control-reason.png') });
+
+    // Enemy Controller with only Summoner Monk (can't be Tributed): "Change battle position" is offered, and the
+    // missing "Tribute: take control" gets a disabled row saying why.
+    await page.keyboard.press('Escape');
+    await sleep(300);
+    const ecUid = await page.evaluate(() => {
+      const ctl = window.__duelCtl;
+      const g = ctl.game;
+      const me = ctl.me;
+      for (const c of [...g.zone(me, 'mzone')]) g.rawMove(c, 'grave', {});
+      const C = g.allCards[0].constructor;
+      const add = (name, p, loc, opts) => {
+        const c = g.registerCard(new C(window.__cardByName(name), p));
+        c.location = 'none';
+        g.rawMove(c, loc, { controller: p, ...opts });
+        return c;
+      };
+      add('Summoner Monk', me, 'mzone', { faceUp: true, pos: 'def' });
+      // a Spell/Trap that was already in hand when this prompt's actions were worked out (it can be Set)
+      const old = g.zone(me, 'hand').find((c) => (c.isSpell || c.isTrap) && c.data.stype !== 'field');
+      const ec = add('Enemy Controller', me, 'hand', { faceUp: true });
+      g.update();
+      return [ec.uid, old ? old.uid : -1];
+    });
+    const [ecUidN, stormUid] = ecUid;
+    check(stormUid >= 0, 'a Spell/Trap in the starting hand to Set');
+    await sleep(500);
+    // The offered actions were worked out before Enemy Controller arrived: Set that Spell/Trap so the next prompt
+    // is computed with Enemy Controller in hand.
+    await page.locator(`[data-uid="${stormUid}"]`).first().click();
+    await page.waitForSelector('.ctx-menu', { timeout: 5000 });
+    await page.locator('.ctx-menu .ctx-item:not(.is-disabled)', { hasText: /^Set$/ }).first().click();
+    await page.waitForFunction(
+      (uid) => {
+        const ctl = window.__duelCtl;
+        const c = ctl.game.card(uid);
+        return c && c.location === 'szone' && document.querySelector('.duel-root.awaiting-action');
+      },
+      stormUid,
+      { timeout: 20000 },
+    );
+    await sleep(800);
+    await page.locator(`[data-uid="${ecUidN}"]`).first().click();
+    await page.waitForSelector('.ctx-menu', { timeout: 5000 });
+    await sleep(300);
+    const ecEnabled = (await page.locator('.ctx-menu .ctx-item:not(.is-disabled)').allInnerTexts()).join(' | ');
+    const ecDisabled = (await page.locator('.ctx-menu .ctx-item.is-disabled').allInnerTexts()).join(' | ');
+    check(/Change battle position/.test(ecEnabled), `Change battle position is offered (${ecEnabled.replace(/\n/g, ' ')})`);
+    check(
+      /Tribute: take control: your monster can't be Tributed/.test(ecDisabled) && /Summoner Monk/.test(ecDisabled),
+      `a disabled row says why Tribute: take control is missing (${ecDisabled.replace(/\n/g, ' ')})`,
+    );
+    check(!/Tribute: take control/.test(ecEnabled), 'Tribute: take control is not offered');
+    const ecBox = await page.locator('.ctx-menu').boundingBox();
+    check(!!ecBox && ecBox.x >= 0 && ecBox.x + ecBox.width <= VIEW.width, 'the menu fits on the screen');
+    await page.screenshot({ path: path.join(OUT, 'enemy-controller-reason.png') });
     check(!errors.length, `no page errors${errors.length ? `: ${errors.join(' | ')}` : ''}`);
     await page.close();
   } finally {

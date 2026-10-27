@@ -1088,7 +1088,9 @@ class DuelScreen implements HumanUI {
     // Things the card could do but can't right now get a disabled row saying why (an LP cost, a used
     // Normal Summon, missing Tributes, a Trap Set this turn...).
     const blocked = st ? this.effectBlockedNote(c, acts) : null;
-    const notes = [...(st ? this.playBlockedNotes(c, acts) : []), ...(blocked ? [{ label: `Effect: ${blocked.label}`, sub: blocked.sub }] : [])];
+    let notes = [...(st ? this.playBlockedNotes(c, acts) : []), ...(blocked ? [{ label: `Effect: ${blocked.label}`, sub: blocked.sub }] : [])];
+    // A card with several effects: one row per effect it can't use right now, so a missing option has a reason.
+    if (st) notes = this.withEffectRows(c, notes, acts);
     const noteRows = notes.map((n) => ({ label: n.label, sub: n.sub, onClick: () => {}, kind: 'is-disabled', disabled: true }));
     if (!acts?.length && notes.length) {
       const r = el.getBoundingClientRect();
@@ -1233,6 +1235,72 @@ class DuelScreen implements HumanUI {
     if (!why) return { label: "can't be used right now", sub: 'Condition or timing not met' };
     const row = whyRow('', why);
     return { label: row.label.slice(2), sub: row.sub };
+  }
+
+  /**
+   * Add a disabled "<effect label>: <reason>" row for each effect of a multi-effect card that isn't offered now.
+   * With another effect offered, the rows are added; with none offered, they replace the single "Activate:" /
+   * "Effect:" reason row when that row is one of theirs and they don't all say the same thing.
+   */
+  private withEffectRows(c: CardInstance, notes: { label: string; sub?: string }[], acts: Action[] | undefined): { label: string; sub?: string }[] {
+    const offered = (acts ?? []).flatMap((a) => (a.type === 'activate' ? [a.act] : []));
+    const rows = this.effectRows(c, offered, false);
+    if (!rows.length) return notes;
+    if (offered.length) return [...notes, ...rows.map((r) => r.row)];
+    const heads = new Set(rows.map((r) => r.head));
+    const i = notes.findIndex((n) => {
+      const m = n.label.match(/^(?:Activate|Effect): (.*)$/);
+      return !!m && heads.has(m[1]);
+    });
+    if (i < 0 || heads.size < 2) return notes;
+    return [...notes.slice(0, i), ...rows.map((r) => r.row), ...notes.slice(i + 1)];
+  }
+
+  /**
+   * For your card with 2+ named effects that could be used from where it is now (same timing class: no triggers, no
+   * effects from another location), a disabled row per effect not among `offered`, with its reason.
+   * `response`: an opponent's-move window (only Quick effects / Spell Speed 2+ count).
+   */
+  effectRows(c: CardInstance, offered: Activation[], response: boolean, windowKind?: string): { row: { label: string; sub?: string }; head: string }[] {
+    if (this.spectator || c.controller !== this.me || windowKind === 'summonNegation') return [];
+    const g = this.game;
+    const effs = c.data.effects ?? [];
+    const open = !response && g.turnPlayer === this.me && (g.phase === 'main1' || g.phase === 'main2') && !g.chain.length;
+    const damageStep = !!g.battle?.inDamageStep;
+    const cands = effs
+      .map((ef, idx) => ({ ef, idx }))
+      .filter(({ ef }) => {
+        if (!ef.label || ef.event || ef.negateSummon) return false;
+        if (ef.kind !== 'activate' && ef.kind !== 'ignition' && ef.kind !== 'quick') return false;
+        if (!g.defaultRange(c, ef).includes(c.location)) return false;
+        if (c.onField && !c.isMonster && (ef.kind === 'activate') === c.faceUp) return false; // a card activation only while Set; its other effects once face-up
+        if (c.onField && !c.faceUp && c.isMonster) return false;
+        if (!open && g.effectSpeed(c, ef) < 2) return false;
+        if (damageStep && !ef.damageStep) return false;
+        return true;
+      });
+    if (cands.length < 2) return [];
+    const offeredIdx = new Set(offered.filter((a) => a.card === c).map((a) => a.effectIndex));
+    if (offeredIdx.size && !cands.some(({ idx }) => offeredIdx.has(idx))) return [];
+    const out: { row: { label: string; sub?: string }; head: string }[] = [];
+    for (const { ef, idx } of cands) {
+      if (offeredIdx.has(idx)) continue;
+      let why: string | null = null;
+      try {
+        const ctx = new Ctx(g, c, ef, this.me);
+        ctx.effectIndex = idx;
+        why = ef.whyNot?.(ctx) ?? genericWhyNot(ctx, ef);
+      } catch {
+        // a reason is only a hint: never let it break the menu
+      }
+      if (!why && ef.opt && g.isOptUsed(g.optKey(c, ef, idx, this.me))) why = 'already used this turn\nOnce per turn';
+      if (!why && c.onField && g.isNegated(c)) why = "can't be used right now\nIts effects are negated";
+      if (!why && g.chain.some((l) => l.card === c)) why = 'already in this chain';
+      why ??= "its condition isn't met";
+      const head = why.split('\n')[0];
+      out.push({ row: whyRow(ef.label!, why), head });
+    }
+    return out;
   }
 
   /**
@@ -1430,7 +1498,8 @@ class DuelScreen implements HumanUI {
       sub = '';
     }
     if (sub === title || sub === 'Respond?') sub = '';
-    return this.guard(responseDialog(this.dialogs, this.promptCtx(), { ...req, prompt: sub }, title));
+    const notes = (c: CardInstance) => this.effectRows(c, req.options, true, req.kind).map((r) => r.row);
+    return this.guard(responseDialog(this.dialogs, this.promptCtx(), { ...req, prompt: sub }, title, notes));
   }
 
   requestSelect(_p: PlayerId, req: SelectRequest): Promise<CardInstance[]> {
