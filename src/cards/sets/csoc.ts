@@ -1091,15 +1091,18 @@ M('Iron Chain Repairman', {
       opt: true,
       label: 'Special Summon an Iron Chain monster from the GY',
       categories: ['specialSummon'],
-      canActivate: (ctx) => ctx.canSpecialSummon() && ctx.grave('me', (c) => isIronChain(c) && lvl(c) <= 4 && c.name !== 'Iron Chain Repairman' && ctx.canSummonCard(c)).length > 0,
+      canActivate: (ctx) =>
+        ctx.canSpecialSummon() && ctx.grave('me', (c) => isIronChain(c) && lvl(c) <= 4 && c.name !== 'Iron Chain Repairman' && ctx.canSummonCard(c) && ctx.canTarget(c)).length > 0,
+      // OCG text "選択して特殊召喚" / current text "target 1 ... in your GY": the GY monster is targeted at activation.
       activate: async (ctx) => {
         ctx.self.flags.cannotAttackTurn = ctx.turn;
-      },
-      resolve: async (ctx) => {
         const cands = ctx.grave('me', (c) => isIronChain(c) && lvl(c) <= 4 && c.name !== 'Iron Chain Repairman' && ctx.canSummonCard(c));
-        const [c] = await ctx.select(cands, 1, 1, 'Special Summon 1 Level 4 or lower "Iron Chain" monster from your Graveyard.', 'specialSummon', {
+        await ctx.selectTargets(cands, 1, 1, 'Target 1 Level 4 or lower "Iron Chain" monster in your Graveyard.', 'specialSummon', {
           aiScore: (x) => (x.data.atk ?? 0) + (x.data.aiValue ?? 0),
         });
+      },
+      resolve: async (ctx) => {
+        const [c] = ctx.validTargets((x) => x.location === 'grave');
         if (c) await ctx.specialSummon(c, { pos: 'choose' });
       },
       ai: { score: (ctx) => (ctx.phase === 'main2' || !ctx.monsters('opp').length ? 50 : 30) },
@@ -1812,6 +1815,16 @@ M(OVERDRIVE, {
       },
       ai: { score: (ctx) => (ctx.lp >= 4000 ? 45 : 0) },
     },
+    {
+      // Bookkeeping only (never activates): "once while this card is face-up" — turned face-down (Book of Moon) and
+      // flipped face-up again, it can use the effect again (face-down monsters see no other events, so this is done on the flip).
+      kind: 'trigger',
+      event: 'flipped',
+      eventFilter: (ctx, ev) => {
+        if (ev.card === ctx.self) delete ctx.self.flags.overdriveUsed;
+        return false;
+      },
+    },
   ],
 });
 
@@ -2132,7 +2145,8 @@ M('Neos Wiseman', {
         const a = evc(ev);
         const t = evo(ev);
         const o = a === ctx.self ? t : t === ctx.self ? a : undefined;
-        return !!o && o.owner !== ctx.player;
+        // Any monster this card battled was controlled by the opponent (it may be owned by this card's controller).
+        return !!o;
       },
       resolve: async (ctx) => {
         const ev = ctx.event!;
@@ -2445,19 +2459,25 @@ S('Morphtronic Accelerator', 'normal', {
     {
       kind: 'activate',
       categories: ['destroy', 'draw'],
-      canActivate: (ctx) => ctx.hand('me', isMorphMon).length > 0 && ctx.field('both').length > 0 && ctx.deck().length > 0,
+      // Rulings (Yugipedia, Card Rulings:Morphtronic Accelerator): it targets 1 card on the field; returning the
+      // "Morphtronic" monster is part of the effect, not a cost; if the target is not destroyed, you do not draw.
+      canActivate: (ctx) => ctx.hand('me', isMorphMon).length > 0 && ctx.field('both', (c) => c !== ctx.self && ctx.canTarget(c)).length > 0 && ctx.deck().length > 0,
       activate: async (ctx) => {
-        const sel = await ctx.select(ctx.hand('me', isMorphMon), 1, 1, 'Return 1 "Morphtronic" monster from your hand to the Deck.', 'cost', { aiScore: (c) => -cardValue(ctx.game, c) });
-        if (!sel.length) return false;
-        await ctx.toDeck(sel, 'shuffle');
+        await ctx.selectTargets(ctx.field('both', (c) => c !== ctx.self), 1, 1, 'Target 1 card on the field to destroy.', 'destroy', {
+          aiScore: (x) => (x.controller === ctx.opp ? cardValue(ctx.game, x) : -5000),
+        });
       },
       resolve: async (ctx) => {
-        const f = ctx.field('both', (c) => c !== ctx.self);
-        if (f.length) {
-          const [c] = await ctx.select(f, 1, 1, 'Destroy 1 card on the field.', 'destroy', { aiScore: (x) => (x.controller === ctx.opp ? cardValue(ctx.game, x) : -5000) });
-          if (c) await ctx.destroy(c);
-        }
-        await ctx.draw(1);
+        const morphs = ctx.hand('me', isMorphMon);
+        if (!morphs.length) return;
+        const sel = await ctx.select(morphs, 1, 1, 'Return 1 "Morphtronic" monster from your hand to the Deck.', 'toDeck', { aiScore: (c) => -cardValue(ctx.game, c) });
+        if (!sel.length) return;
+        await ctx.toDeck(sel, 'shuffle');
+        if (sel[0].location !== 'deck') return;
+        const ts = ctx.validTargets((c) => c.onField);
+        if (!ts.length) return;
+        const d = await ctx.destroy(ts);
+        if (d.length) await ctx.draw(1);
       },
       ai: { score: (ctx) => (ctx.field('opp').length ? 50 : 0) },
     },
