@@ -391,7 +391,7 @@ monster("Gravekeeper's Priestess", {
   text: `While there is no face-up Field Spell, the field is treated as "Necrovalley". All "Gravekeeper's" monsters on the field gain 200 ATK/DEF.`,
   effects: [
     {
-      // Necrovalley's "+500 ATK/DEF to Gravekeeper's monsters" and its GY lock (src/cards/necrovalley.ts) apply while
+      // Necrovalley's "+500 ATK/DEF to Gravekeeper's monsters" and its 2010 effects (src/cards/necrovalley.ts) apply while
       // there is no face-up Field Spell.
       kind: 'continuous',
       mods: [
@@ -532,6 +532,7 @@ monster('Ogre of the Scarlet Sorrow', {
   ],
 });
 
+const suppliedAlready = (ctx: Ctx, c: C) => ((ctx.self.flags.supplied ?? []) as { uid: number; moveId: number }[]).some((s) => s.uid === c.uid && s.moveId === c.moveId);
 monster('Power Supplier', {
   attribute: 'EARTH',
   race: 'Spellcaster',
@@ -546,11 +547,11 @@ monster('Power Supplier', {
       opt: true,
       label: '+400 ATK',
       categories: ['atkChange'],
-      canActivate: (ctx) => ctx.faceUpMonsters('me', (c) => ctx.canTarget(c)).length > 0,
+      // https://edisonrul.ing/cards/p/power-supplier.html — it cannot be applied again to a monster it already targets.
+      canActivate: (ctx) => ctx.faceUpMonsters('me', (c) => ctx.canTarget(c) && !suppliedAlready(ctx, c)).length > 0,
       activate: async (ctx) => {
-        const supplied = (ctx.self.flags.supplied ?? []) as { uid: number; moveId: number }[];
-        await ctx.selectTargets(ctx.faceUpMonsters('me'), 1, 1, 'Target 1 face-up monster you control.', 'buff', {
-          aiScore: (c) => (supplied.some((s) => s.uid === c.uid && s.moveId === c.moveId) ? -5000 : ctx.atk(c)),
+        await ctx.selectTargets(ctx.faceUpMonsters('me', (c) => !suppliedAlready(ctx, c)), 1, 1, 'Target 1 face-up monster you control.', 'buff', {
+          aiScore: (c) => ctx.atk(c),
         });
       },
       resolve: async (ctx) => {
@@ -716,7 +717,11 @@ monster('Sword Master', {
         const a = evc(ev);
         const t = evo(ev);
         const b = ctx.battle;
-        return !!a && !!t && !!b && ev.player === ctx.player && isRace(a, 'Warrior') && t.location === 'mzone' && t.moveId === b.targetMoveId && t.controller === ctx.opp;
+        // 2010 ruling: a monster destroyed by a card effect during the battle was still "not destroyed by battle".
+        // https://edisonrul.ing/cards/s/sword-master.html
+        if (!a || !t || !b || ev.player !== ctx.player || !isRace(a, 'Warrior')) return false;
+        if (ctx.game.eventLog.some((e) => e.type === 'battleDestroyed' && e.card === t && e.dsId === ev.dsId)) return false;
+        return t.location !== 'mzone' || t.moveId !== b.targetMoveId || t.controller === ctx.opp;
       },
       condition: (ctx) => ctx.canSummonSelf() && ctx.canSummonCard(ctx.self),
       resolve: async (ctx) => {
@@ -803,11 +808,11 @@ monster('Dragon Queen of Tragic Endings', {
       categories: ['discard', 'draw'],
       eventFilter: (ctx, ev) => ev.reasonCard === ctx.self && ev.player === ctx.opp && ctx.battle?.attacker === ctx.self,
       resolve: async (ctx) => {
+        // No draw if your opponent has no card in hand to send: https://edisonrul.ing/cards/d/dragon-queen-of-tragic-endings.html
         const hand = ctx.hand('opp');
-        if (hand.length) {
-          const s = await ctx.select(hand, 1, 1, 'Send 1 card from your hand to the GY.', 'toGrave', { player: ctx.opp });
-          await ctx.sendToGrave(s);
-        }
+        if (!hand.length) return;
+        const s = await ctx.select(hand, 1, 1, 'Send 1 card from your hand to the GY.', 'toGrave', { player: ctx.opp });
+        await ctx.sendToGrave(s);
         await ctx.draw(1);
       },
     },
@@ -1421,7 +1426,8 @@ monster('Codarus', {
         await ctx.selectTargets(ctx.field('opp'), 1, 2, 'Target up to 2 cards your opponent controls.', 'destroy');
       },
       resolve: async (ctx) => {
-        const t = ctx.validTargets((c) => c.onField);
+        // A target you gained control of in the meantime is not sent: https://edisonrul.ing/cards/c/codarus.html
+        const t = ctx.validTargets((c) => c.onField && c.controller === ctx.opp);
         if (t.length) await ctx.sendToGrave(t);
       },
       ai: { score: (ctx) => (ctx.field('opp').reduce((a, c) => a + cardValue(ctx.game, c), 0) >= 2500 ? 50 : 0) },
@@ -1759,6 +1765,8 @@ monster('Majestic Red Dragon', {
   ],
 });
 
+/** Turn in which each Sun Dragon Inti on the field was destroyed (kept wherever the card goes next). */
+const intiDestroyedTurn = new WeakMap<C, number>();
 monster('Sun Dragon Inti', {
   attribute: 'LIGHT',
   race: 'Dragon',
@@ -1796,15 +1804,18 @@ monster('Sun Dragon Inti', {
       event: 'destroyed',
       label: '(destroyed)',
       eventFilter: (ctx, ev) => {
-        if (ev.card === ctx.self && ev.from === 'mzone') ctx.self.flags.intiDestroyedTurn = ctx.turn;
+        if (ev.card === ctx.self && ev.from === 'mzone') intiDestroyedTurn.set(ctx.self, ctx.turn);
         return false;
       },
     },
+    // 2010 rulings: this effect "does not activate in any specific place": it activates as long as a "Moon Dragon Quilla"
+    // is in the GY, even if Sun Dragon Inti is no longer in the GY (on the field, in the Extra Deck...).
+    // https://edisonrul.ing/cards/s/sun-dragon-inti.html
     reviveFromGrave('Revive Moon Dragon Quilla', named('Moon Dragon Quilla'), {
       event: 'phaseStart',
-      range: ['grave'],
+      range: ALL_LOCS,
       opt: true,
-      eventFilter: (ctx, ev) => ev.phase === 'standby' && ctx.self.flags.intiDestroyedTurn === ctx.turn - 1,
+      eventFilter: (ctx, ev) => ev.phase === 'standby' && intiDestroyedTurn.get(ctx.self) === ctx.turn - 1,
     }),
   ],
 });
@@ -2175,10 +2186,14 @@ monster('Viser Des', {
         const g = ctx.game;
         const p = ctx.player;
         const self = ctx.self;
+        const selfMid = self.moveId;
         ctx.log(`${t.name} will be destroyed during the third Standby Phase.`);
+        // 2010 rulings: nothing is destroyed if Viser Des left the field (even temporarily) or is controlled by the
+        // opponent before then. https://edisonrul.ing/cards/v/viser-des.html
         ctx.later(
           'standby',
           async () => {
+            if (self.location !== 'mzone' || self.moveId !== selfMid || self.controller !== p) return;
             if (t.location === 'mzone' && t.moveId === mid) await g.destroy([t], 'effect', p, self);
           },
           6,
@@ -2539,12 +2554,28 @@ spell('Power Pickaxe', 'equip', {
       },
       resolve: async (ctx) => {
         const t = ctx.validTargets((c) => c.location === 'grave')[0];
-        if (!t) return;
-        const r = await ctx.banish(t);
         const e = ctx.equipTarget;
-        if (r.length && e && e.location === 'mzone' && e.faceUp) ctx.addTempMod(e, 'atk', 500, 'turn');
+        // https://edisonrul.ing/cards/p/power-pickaxe.html — not removed if its Level is now higher than the equipped
+        // monster's; no ATK gain if it was not removed; the gain is lost if Power Pickaxe is destroyed or negated.
+        if (!t || !e || (t.data.level ?? 0) > ctx.level(e)) return;
+        const r = await ctx.banish(t);
+        if (r.length && e.location === 'mzone' && e.faceUp) ctx.self.flags.pickaxe = { turn: ctx.turn, uid: e.uid, mid: e.moveId };
       },
       ai: { score: () => 40 },
+    },
+    {
+      kind: 'continuous',
+      mods: [
+        {
+          q: 'atk',
+          to: 'cards',
+          filter: (ctx, c: C) => {
+            const f = ctx.self.flags.pickaxe as { turn: number; uid: number; mid: number } | undefined;
+            return !!f && f.turn === ctx.turn && c === ctx.equipTarget && c.uid === f.uid && c.moveId === f.mid;
+          },
+          value: 500,
+        },
+      ],
     },
   ],
 });
@@ -2603,7 +2634,8 @@ spell("Spiders' Lair", 'continuous', {
         }
       },
     },
-    { kind: 'continuous', mods: [{ q: 'cannotChangePos', to: 'cards', filter: (ctx, c: C) => marked(ctx.self.flags.lairLocked, c) }] },
+    // 2010 ruling: a monster flipped face-down (Book of Moon) is no longer affected. https://edisonrul.ing/cards/s/spiders-lair.html
+    { kind: 'continuous', mods: [{ q: 'cannotChangePos', to: 'cards', filter: (ctx, c: C) => c.faceUp && marked(ctx.self.flags.lairLocked, c) }] },
   ],
 });
 
@@ -2935,7 +2967,11 @@ trap('Changing Destiny', 'normal', {
         const t = ctx.validTargets((c) => c.location === 'mzone')[0];
         if (!t || !ctx.battle || ctx.battle.attacker !== t) return;
         ctx.negateAttack();
-        if (t.faceUp && t.pos !== 'def') await ctx.changePos(t, 'def', true);
+        // 2010 rulings: if the monster cannot be changed to Defense Position (e.g. it already is), the rest of the
+        // effect is not applied. https://edisonrul.ing/cards/c/changing-destiny.html
+        if (!t.faceUp || t.pos === 'def') return;
+        await ctx.changePos(t, 'def', true);
+        if (t.location !== 'mzone' || (t.pos as string) !== 'def') return;
         ctx.addTempMod(t, 'cannotChangePos', true, 'field');
         const half = Math.floor(ctx.atk(t) / 2);
         if (half <= 0) return;
@@ -3172,7 +3208,8 @@ trap('Destruct Potion', 'normal', {
       resolve: async (ctx) => {
         const t = ctx.validTargets((c) => c.location === 'mzone')[0];
         if (!t) return;
-        const a = ctx.atk(t);
+        // A face-down target gives no LP: https://edisonrul.ing/cards/d/destruct-potion.html
+        const a = t.faceUp ? ctx.atk(t) : 0;
         const d = await ctx.destroy(t);
         if (d.length && a > 0) await ctx.recover(ctx.player, a);
       },
@@ -3311,6 +3348,7 @@ trap('Machine King - 3000 B.C.', 'continuous', {
         if (r.length) {
           me.flags.staysOnField = true;
           me.flags.mkSummoned = true;
+          me.flags.trapMonster = true;
         }
         ctx.addPlayerMod(ctx.player, 'cannotNormalSummon');
         ctx.addPlayerMod(ctx.player, 'cannotSpecialSummon');

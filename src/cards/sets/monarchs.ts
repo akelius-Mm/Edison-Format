@@ -580,7 +580,8 @@ monster('T.A.D.P.O.L.E.', {
       eventFilter: (ctx, ev) => ev.card === ctx.self && ctx.self.location === 'grave',
       canActivate: (ctx) => ctx.deck('me', (c) => c.name === 'T.A.D.P.O.L.E.').length > 0,
       resolve: async (ctx) => {
-        await ctx.search((c) => c.name === 'T.A.D.P.O.L.E.', 3, 'Add any number of "T.A.D.P.O.L.E." to your hand.', 0);
+        // 2010 ruling: once activated, you must add at least 1. https://edisonrul.ing/cards/t/tadpole.html
+        await ctx.search((c) => c.name === 'T.A.D.P.O.L.E.', 3, 'Add any number of "T.A.D.P.O.L.E." to your hand.', 1);
       },
     },
   ],

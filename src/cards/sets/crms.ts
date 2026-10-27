@@ -448,14 +448,18 @@ monster('Doomkaiser Dragon/Assault Mode', {
       mandatory: true,
       label: 'Special Summon Zombies',
       categories: ['specialSummon'],
-      resolve: async (ctx) => {
+      // Targets the Zombies in the GY(s) when it activates: https://edisonrul.ing/cards/d/doomkaiser-dragonassault-mode.html
+      activate: async (ctx) => {
         const cands = ctx.grave('both', (c) => raceIs(c, 'Zombie') && ctx.canSummonCard(c));
         const room = ctx.freeMZones();
         if (!cands.length || !room || !ctx.canSpecialSummon()) return;
-        const sel = await ctx.select(cands, 0, room, 'Special Summon any number of Zombie-Type monsters from either GY.', 'specialSummon', {
+        await ctx.selectTargets(cands, 0, room, 'Target any number of Zombie-Type monsters in either GY to Special Summon.', 'specialSummon', {
           aiScore: (c) => (c.data.atk ?? 0) + (c.name === 'Bone Crusher' ? 2000 : 0),
         });
-        if (!sel.length) return;
+      },
+      resolve: async (ctx) => {
+        const sel = ctx.validTargets((c) => c.location === 'grave' && ctx.canSummonCard(c)).slice(0, ctx.freeMZones());
+        if (!sel.length || !ctx.canSpecialSummon()) return;
         const r = await ctx.specialSummon(sel, { pos: 'choose' });
         for (const m of r) {
           ctx.negateEffects(m, 'field');
@@ -643,19 +647,20 @@ monster('Assault Mercenary', {
       opt: true,
       label: 'Destroy 1 Spell/Trap',
       categories: ['destroy'],
-      canActivate: (ctx) => ctx.cards('me', ['hand', 'grave'], (c) => c.name === AMA).length > 0 && ctx.spellTraps('opp').length > 0,
+      // 2010 rulings: returning "Assault Mode Activate" is the cost, and the Spell/Trap is targeted.
+      // https://edisonrul.ing/cards/a/assault-mercenary.html
+      canActivate: (ctx) => ctx.cards('me', ['hand', 'grave'], (c) => c.name === AMA).length > 0 && ctx.spellTraps('opp', (c) => ctx.canTarget(c)).length > 0,
       activate: async (ctx) => {
         const sel = await ctx.select(ctx.cards('me', ['hand', 'grave'], (c) => c.name === AMA), 1, 1, 'Return 1 "Assault Mode Activate" to the Deck.', 'cost', {
           aiScore: (c) => (c.location === 'grave' ? 10 : 0),
         });
         if (!sel.length) return false;
         await ctx.toDeck(sel, 'shuffle', 'cost');
+        await ctx.selectTargets(ctx.spellTraps('opp'), 1, 1, 'Target 1 Spell or Trap Card your opponent controls.', 'destroy');
       },
       resolve: async (ctx) => {
-        const st = ctx.spellTraps('opp');
-        if (!st.length) return;
-        const sel = await ctx.select(st, 1, 1, 'Destroy 1 Spell or Trap Card your opponent controls.', 'destroy');
-        if (sel.length) await ctx.destroy(sel);
+        const t = ctx.validTargets((c) => c.onField);
+        if (t.length) await ctx.destroy(t);
       },
       ai: { score: (ctx) => (ctx.cards('me', ['grave'], (c) => c.name === AMA).length || !amaSources(ctx).length ? 50 : 20) },
     },
@@ -757,26 +762,35 @@ spell('Assault Teleport', 'normal', {
   ],
 });
 
+/** Assault Revival: an "/Assault Mode" monster in the GY that was properly Special Summoned before. */
+const revivable = (c: C) => isAssault(c) && c.properlySummoned;
 spell('Assault Revival', 'quickplay', {
   text: 'Remove from play 1 "Assault Mode Activate" from your Graveyard. Destroy all monsters you control and Special Summon 1 "/Assault Mode" monster from your Graveyard, ignoring its Summoning conditions. Its effect(s) is negated, and it cannot be Tributed. If it is removed from the field, remove it from play.',
   effects: [
     {
       kind: 'activate',
       categories: ['specialSummon'],
-      canActivate: (ctx) => ctx.grave('me', (c) => c.name === AMA).length > 0 && ctx.grave('me', isAssault).length > 0 && !ctx.game.queryPlayer(ctx.player, 'cannotSpecialSummon'),
+      // 2010 rulings: it targets an "/Assault Mode" monster in your GY that was properly Special Summoned before, and
+      // Summons it only if at least 1 monster you control was destroyed and none of them stayed on the field.
+      // https://edisonrul.ing/cards/a/assault-revival.html
+      canActivate: (ctx) =>
+        ctx.grave('me', (c) => c.name === AMA).length > 0 && ctx.grave('me', revivable).some((c) => ctx.canTarget(c)) && !ctx.game.queryPlayer(ctx.player, 'cannotSpecialSummon'),
       activate: async (ctx) => {
         const sel = await ctx.select(ctx.grave('me', (c) => c.name === AMA), 1, 1, 'Remove from play 1 "Assault Mode Activate" from your GY.', 'cost');
         if (!sel.length) return false;
         await ctx.banish(sel, 'cost');
+        await ctx.selectTargets(ctx.grave('me', revivable), 1, 1, 'Target 1 "/Assault Mode" monster in your GY.', 'specialSummon', {
+          aiScore: (c) => c.data.atk ?? 0,
+        });
       },
       resolve: async (ctx) => {
         const mine = ctx.monsters('me');
-        if (mine.length) await ctx.destroy(mine);
-        const cands = ctx.grave('me', isAssault);
-        if (!cands.length || !ctx.canSpecialSummon()) return;
-        const sel = await ctx.select(cands, 1, 1, 'Special Summon 1 "/Assault Mode" monster from your GY.', 'specialSummon');
-        if (!sel.length) return;
-        const r = await ctx.specialSummon(sel[0], { pos: 'choose', ignoreConditions: true });
+        if (!mine.length) return;
+        await ctx.destroy(mine);
+        if (mine.some((c) => c.onField)) return;
+        const t = ctx.validTargets((c) => c.location === 'grave')[0];
+        if (!t || !ctx.canSpecialSummon()) return;
+        const r = await ctx.specialSummon(t, { pos: 'choose', ignoreConditions: true });
         if (!r.length) return;
         ctx.negateEffects(r[0], 'field');
         ctx.addTempMod(r[0], 'cannotBeTributed', true, 'field');
@@ -928,15 +942,15 @@ monster("Cosmic Fortress Gol'gar", {
       opt: true,
       label: 'Remove 2 A-Counters: destroy 1 card',
       categories: ['destroy'],
-      canActivate: (ctx) => aOnField(ctx.game) >= 2 && ctx.field('opp').length > 0,
+      // Targets 1 card your opponent controls (removing the A-Counters is the cost): https://edisonrul.ing/cards/c/cosmic-fortress-golgar.html
+      canActivate: (ctx) => aOnField(ctx.game) >= 2 && ctx.field('opp', (c) => ctx.canTarget(c)).length > 0,
       activate: async (ctx) => {
         if (!(await removeA(ctx, 2))) return false;
+        await ctx.selectTargets(ctx.field('opp'), 1, 1, 'Target 1 card your opponent controls to destroy.', 'destroy');
       },
       resolve: async (ctx) => {
-        const f = ctx.field('opp');
-        if (!f.length) return;
-        const sel = await ctx.select(f, 1, 1, 'Destroy 1 card your opponent controls.', 'destroy');
-        if (sel.length) await ctx.destroy(sel);
+        const t = ctx.validTargets((c) => c.onField);
+        if (t.length) await ctx.destroy(t);
       },
       ai: { score: (ctx) => (ctx.field('opp').length ? 55 : 0) },
     },
@@ -1129,17 +1143,18 @@ monster(SKY_FIRE, {
       opt: true,
       label: 'Discard: destroy 1 card',
       categories: ['destroy'],
-      canActivate: (ctx) => ctx.hand('me').length > 0 && ctx.field('opp').length > 0,
+      // 2010 ruling: sending 1 card from the hand is the cost, and the card to destroy is targeted on activation.
+      // https://edisonrul.ing/cards/f/flying-fortress-sky-fire.html
+      canActivate: (ctx) => ctx.hand('me').length > 0 && ctx.field('opp', (c) => ctx.canTarget(c)).length > 0,
       activate: async (ctx) => {
         const sel = await ctx.select(ctx.hand('me'), 1, 1, 'Send 1 card from your hand to the GY.', 'discard');
         if (!sel.length) return false;
         await ctx.sendToGrave(sel, 'cost');
+        await ctx.selectTargets(ctx.field('opp'), 1, 1, 'Target 1 card your opponent controls to destroy.', 'destroy', { aiScore: (c) => cardValue(ctx.game, c) });
       },
       resolve: async (ctx) => {
-        const f = ctx.field('opp');
-        if (!f.length) return;
-        const sel = await ctx.select(f, 1, 1, 'Destroy 1 card your opponent controls.', 'destroy');
-        if (sel.length) await ctx.destroy(sel);
+        const t = ctx.validTargets((c) => c.onField);
+        if (t.length) await ctx.destroy(t);
       },
       ai: { score: (ctx) => (bestTarget(ctx.game, ctx.field('opp')) && cardValue(ctx.game, bestTarget(ctx.game, ctx.field('opp'))) >= 1200 ? 55 : 0) },
     },
@@ -1155,12 +1170,18 @@ monster(SKY_FIRE, {
       condition: skyFireOk,
       activate: async (ctx) => {
         ctx.self.flags.skyFireTurn = ctx.turn;
-        ctx.data.card = evc(ctx.event!);
-        ctx.data.mid = (ctx.data.card as C).moveId;
+        // 2010 ruling: monsters Summoned at the same time are all destroyed. https://edisonrul.ing/cards/f/flying-fortress-sky-fire.html
+        const ev = ctx.event!;
+        const same = ctx.game.recentEvents
+          .filter((e) => e.type === 'summoned' && e.batch === ev.batch && e.player === ctx.opp && e.method !== 'flip')
+          .map((e) => e.card as C)
+          .filter((c) => !!c && c.location === 'mzone' && c.controller === ctx.opp);
+        const list = [...new Set([evc(ev)!, ...same])];
+        ctx.data.cards = list.map((c) => ({ c, mid: c.moveId }));
       },
       resolve: async (ctx) => {
-        const c = ctx.data.card as C;
-        if (c.location === 'mzone' && c.moveId === ctx.data.mid) await ctx.destroy(c);
+        const list = ((ctx.data.cards ?? []) as { c: C; mid: number }[]).filter((x) => x.c.location === 'mzone' && x.c.moveId === x.mid).map((x) => x.c);
+        if (list.length) await ctx.destroy(list);
         await ctx.damage(ctx.opp, 800);
       },
       ai: { score: (ctx) => (ctx.event && cardValue(ctx.game, evc(ctx.event)!) >= 1500 ? 70 : 35) },
@@ -1673,12 +1694,11 @@ monster('Desert Protector', {
         if (cards.includes(ctx.self) || !faceUpOn(ctx.self)) return [];
         const mine = cards.filter((c) => c.location === 'mzone' && c.controller === ctx.player && c.faceUp && raceIs(c, 'Insect'));
         if (!mine.length) return [];
-        const [save] = await ctx.select(mine, 0, 1, 'Destroy Desert Protector instead of which Insect-Type monster?', 'generic', {
-          aiScore: (c) => cardValue(ctx.game, c) - cardValue(ctx.game, ctx.self) - 200,
-        });
-        if (!save) return [];
+        // 1 Desert Protector saves every Insect destroyed at the same time: https://edisonrul.ing/cards/d/desert-protector.html
+        const worth = mine.reduce((a, c) => a + cardValue(ctx.game, c), 0) - cardValue(ctx.game, ctx.self) - 200;
+        if (!(await ctx.confirm(`Destroy Desert Protector instead of ${mine.map((c) => c.name).join(', ')}?`, worth > 0))) return [];
         await ctx.game.destroy([ctx.self], 'effect', ctx.player, ctx.self);
-        return [save];
+        return mine;
       },
     },
   ],
@@ -2056,10 +2076,12 @@ monster('Zeta Reticulant', {
       mandatory: true,
       label: 'Special Summon an Eva Token',
       categories: ['specialSummon'],
+      // 2010 ruling: the Token is still Summoned if Zeta Reticulant leaves the GY in response.
+      // https://edisonrul.ing/cards/z/zeta-reticulant.html
       eventFilter: (ctx, ev) => !!evc(ev)?.isMonster && ev.from === 'mzone' && ev.fromController === ctx.opp,
       condition: (ctx) => ctx.canSpecialSummon(),
       resolve: async (ctx) => {
-        if (ctx.self.location === 'grave' && ctx.canSpecialSummon()) await ctx.createTokens(evaToken, 1, 'def');
+        if (ctx.canSpecialSummon()) await ctx.createTokens(evaToken, 1, 'def');
       },
     },
   ],
@@ -2072,16 +2094,20 @@ monster('Tethys, Goddess of Light', {
   atk: 2400,
   def: 1800,
   aiValue: 800,
-  text: 'When you draw a Fairy monster(s) (except during the Damage Step): You can reveal 1 of those monsters; draw 1 card. This card must be face-up on the field to activate and to resolve this effect.',
+  text: 'When you draw a Fairy-Type monster(s), you can reveal 1 of those monsters to draw 1 more card.',
   effects: [
     {
+      // 2010 rulings: an optional "When" trigger (misses timing if the draw is not the last thing to happen, e.g.
+      // "Upstart Goblin"); it can be activated during the Damage Step. https://edisonrul.ing/cards/t/tethys-goddess-of-light.html
       kind: 'trigger',
       event: 'drawn',
+      when: true,
+      damageStep: true,
       label: 'Reveal a Fairy: draw 1',
       categories: ['draw'],
       eventFilter: (ctx, ev) => {
         const c = evc(ev);
-        return !!c && ev.player === ctx.player && raceIs(c, 'Fairy') && c.location === 'hand' && monActive(ctx) && !ctx.battle?.inDamageStep;
+        return !!c && ev.player === ctx.player && raceIs(c, 'Fairy') && c.location === 'hand' && monActive(ctx);
       },
       activate: async (ctx) => {
         const c = evc(ctx.event!)!;
@@ -2101,7 +2127,7 @@ monster(IDO, {
   atk: 2200,
   def: 800,
   aiValue: 300,
-  text: 'You cannot Summon or Normal Set monsters. You can only control 1 "Ido the Supreme Magical Force". Once per turn, during the Standby Phase of the next turn after this card was destroyed by card effect and sent to the GY: Special Summon this card from the GY, and if you do, destroy all other monsters you control.',
+  text: 'You cannot Summon or Normal Set monsters. You can only control 1 "Ido the Supreme Magical Force". During your next Standby Phase after this card was destroyed by a card effect and sent to the GY: Special Summon this card from the GY, and if you do, destroy all other monsters you control.',
   effects: [
     PATCH_LISTENER,
     { kind: 'continuous', mods: [{ q: 'cannotSpecialSummon', to: 'players', filter: (ctx, p) => p === ctx.player }] },
@@ -2111,7 +2137,8 @@ monster(IDO, {
       event: 'sentToGrave',
       eventFilter: (ctx, ev) => {
         const r = reasonsOf(ev);
-        if (ev.card === ctx.self && ev.from === 'mzone' && r.includes('destroy') && r.includes('effect')) idoDestroyed.set(ctx.self, { turn: ctx.turn, moveId: ctx.self.moveId });
+        if (ev.card === ctx.self && ev.from === 'mzone' && r.includes('destroy') && r.includes('effect'))
+          idoDestroyed.set(ctx.self, { turn: ctx.turn, turnPlayer: ctx.game.turnPlayer, moveId: ctx.self.moveId });
         return false;
       },
     },
@@ -2123,9 +2150,11 @@ monster(IDO, {
       opt: true,
       label: 'Revive',
       categories: ['specialSummon', 'destroy'],
+      // 2010 ruling: during YOUR next Standby Phase; if that Standby Phase is skipped, the chance is missed.
+      // https://edisonrul.ing/cards/i/ido-the-supreme-magical-force.html
       eventFilter: (ctx, ev) => {
         const d = idoDestroyed.get(ctx.self);
-        return ev.phase === 'standby' && !!d && d.moveId === ctx.self.moveId && ctx.turn === d.turn + 1;
+        return ev.phase === 'standby' && !!d && d.moveId === ctx.self.moveId && ctx.isMyTurn && ctx.turn === d.turn + (d.turnPlayer === ctx.player ? 2 : 1);
       },
       condition: (ctx) => ctx.canSummonSelf(),
       resolve: async (ctx) => {
@@ -2138,7 +2167,7 @@ monster(IDO, {
     },
   ],
 });
-const idoDestroyed = new WeakMap<C, { turn: number; moveId: number }>();
+const idoDestroyed = new WeakMap<C, { turn: number; turnPlayer: PlayerId; moveId: number }>();
 
 monster('Violet Witch', {
   attribute: 'DARK',
@@ -2337,26 +2366,30 @@ spell('Star Blast', 'normal', {
       categories: [],
       // Current Level (a monster in hand may already be lowered by another Star Blast), as the activation uses.
       canActivate: (ctx) => ctx.lp > 500 && (ctx.faceUpMonsters('me', (c) => ctx.level(c) > 1).length > 0 || ctx.hand('me', (c) => c.isMonster && ctx.level(c) > 1).length > 0),
+      // 2010 rulings: Star Blast does not target; the monster is chosen when it resolves. The LP you can pay is capped by
+      // the highest Level among the legal choices at activation (no over-paying), and the chosen monster must keep a
+      // Level of 1 or more (paid 1000: no Level 2). No legal choice on resolution: no effect.
+      // https://edisonrul.ing/cards/s/star-blast.html
       activate: async (ctx) => {
         ensureCrmsPatches(ctx.game);
-        const cands = [...ctx.faceUpMonsters('me', (c) => ctx.level(c) > 1), ...ctx.hand('me', (c) => c.isMonster && ctx.level(c) > 1 && c !== ctx.self)];
-        const [m] = await ctx.select(cands, 1, 1, 'Choose 1 monster you control or in your hand.', 'buff', { aiScore: (c) => starBlastAiValue(ctx, c) });
-        if (!m) return false;
-        const lvNow = ctx.level(m);
-        const maxN = Math.min(lvNow - 1, Math.floor((ctx.lp - 1) / 500));
+        const cands = starBlastChoices(ctx, 1);
+        if (!cands.length) return false;
+        const maxLv = Math.max(...cands.map((c) => ctx.level(c)));
+        const maxN = Math.min(maxLv - 1, Math.floor((ctx.lp - 1) / 500));
         if (maxN < 1) return false;
+        const best = cands.reduce((a, c) => (starBlastAiValue(ctx, c) > starBlastAiValue(ctx, a) ? c : a), cands[0]);
+        const want = best.location === 'hand' ? Math.max(1, ctx.level(best) - 4) : 1;
         const opts = Array.from({ length: maxN }, (_, i) => `Pay ${(i + 1) * 500} LP (-${i + 1} Level)`);
-        const want = m.location === 'hand' ? Math.max(1, lvNow - 4) : 1;
         const i = await ctx.option('How many Life Points?', opts, (k) => -Math.abs(k + 1 - want));
-        ctx.data.m = m;
-        ctx.data.mid = m.moveId;
         ctx.data.n = i + 1;
         await ctx.payLp((i + 1) * 500);
       },
       resolve: async (ctx) => {
-        const m = ctx.data.m as C;
         const n = ctx.data.n as number;
-        if (m.moveId !== ctx.data.mid) return;
+        const cands = starBlastChoices(ctx, n);
+        if (!cands.length) return;
+        const [m] = await ctx.select(cands, 1, 1, `Choose 1 monster you control or in your hand (Level -${n}).`, 'buff', { aiScore: (c) => starBlastAiValue(ctx, c) });
+        if (!m) return;
         if (m.location === 'hand') {
           starBlast.set(m, { turn: ctx.turn, moveId: m.moveId, n });
           ctx.log(`${m.name}'s Level is reduced by ${n}.`);
@@ -2373,6 +2406,11 @@ spell('Star Blast', 'normal', {
     },
   ],
 });
+/** Star Blast: face-up monsters you control / monsters in your hand whose Level stays 1 or more after -n. */
+function starBlastChoices(ctx: Ctx, n: number) {
+  return [...ctx.faceUpMonsters('me', (c) => ctx.level(c) > n), ...ctx.hand('me', (c) => c.isMonster && ctx.level(c) > n && c !== ctx.self)];
+}
+
 /** AI: worth of making `c` summonable without Tributes. */
 function starBlastAiValue(ctx: Ctx, c: C) {
   if (c.location !== 'hand' || c.data.cannotNormalSummon || c.isExtra) return -1;
@@ -2384,14 +2422,16 @@ function starBlastAiValue(ctx: Ctx, c: C) {
 }
 
 spell('Raptor Wing Strike', 'normal', {
-  text: 'Shuffle 1 "Blackwing" monster you control into the Main Deck; add 1 "Blackwing" monster from your Deck to your hand.',
+  text: 'Return 1 "Blackwing" monster you control to the Deck; add 1 "Blackwing" monster from your Deck to your hand.',
   effects: [
     {
       kind: 'activate',
       categories: ['search', 'toDeck'],
-      canActivate: (ctx) => ctx.faceUpMonsters('me', (c) => isBW(c) && !c.isExtra && !c.isToken).length > 0 && ctx.deck('me', isBW).length > 0,
+      // https://edisonrul.ing/cards/r/raptor-wing-strike.html — a "Blackwing" Synchro Monster can pay the cost (it returns to
+      // the Extra Deck).
+      canActivate: (ctx) => ctx.faceUpMonsters('me', (c) => isBW(c) && !c.isToken).length > 0 && ctx.deck('me', isBW).length > 0,
       activate: async (ctx) => {
-        const sel = await ctx.select(ctx.faceUpMonsters('me', (c) => isBW(c) && !c.isExtra && !c.isToken), 1, 1, 'Shuffle 1 "Blackwing" monster you control into the Deck.', 'cost');
+        const sel = await ctx.select(ctx.faceUpMonsters('me', (c) => isBW(c) && !c.isToken), 1, 1, 'Shuffle 1 "Blackwing" monster you control into the Deck.', 'cost');
         if (!sel.length) return false;
         await ctx.toDeck(sel, 'shuffle', 'cost');
       },
@@ -2519,14 +2559,27 @@ spell('Telekinetic Power Well', 'quickplay', {
     {
       kind: 'activate',
       categories: ['specialSummon'],
-      canActivate: (ctx) => ctx.canSpecialSummon() && ctx.grave('me', (c) => raceIs(c, 'Psychic') && lvl(c) <= 2 && ctx.canSummonCard(c)).length > 0,
-      resolve: async (ctx) => {
+      // 2010 ruling: it targets the Psychic monsters in the GY; if some are removed in response, the rest are still
+      // Summoned, and the damage counts only the monsters actually Summoned.
+      // https://edisonrul.ing/cards/t/telekinetic-power-well.html
+      canActivate: (ctx) =>
+        ctx.canSpecialSummon() && ctx.freeMZones() > 0 && ctx.grave('me', (c) => raceIs(c, 'Psychic') && lvl(c) <= 2 && ctx.canSummonCard(c) && ctx.canTarget(c)).length > 0,
+      activate: async (ctx) => {
         const cands = ctx.grave('me', (c) => raceIs(c, 'Psychic') && lvl(c) <= 2 && ctx.canSummonCard(c));
         const room = ctx.freeMZones();
-        if (!cands.length || !room) return;
-        const sel = await ctx.select(cands, 1, room, 'Special Summon any number of Level 2 or lower Psychic-Type monsters from your GY.', 'specialSummon', {
+        await ctx.selectTargets(cands, 1, Math.max(1, room), 'Target any number of Level 2 or lower Psychic-Type monsters in your GY.', 'specialSummon', {
           aiScore: (c) => (c.data.atk ?? 0) + (c.isTuner ? 500 : 0),
         });
+      },
+      resolve: async (ctx) => {
+        const room = ctx.freeMZones();
+        let sel = ctx.validTargets((c) => c.location === 'grave' && ctx.canSummonCard(c));
+        if (!sel.length || !room) return;
+        if (sel.length > room) {
+          sel = await ctx.select(sel, room, room, 'Special Summon monsters from your GY.', 'specialSummon', {
+            aiScore: (c) => (c.data.atk ?? 0) + (c.isTuner ? 500 : 0),
+          });
+        }
         // AI guard (not a rule): never take lethal damage from this card.
         if (!ctx.game.controllers[ctx.player].isHuman) while (sel.length > 1 && sel.reduce((a, c) => a + lvl(c), 0) * 300 >= ctx.lp) sel.pop();
         const r = await ctx.specialSummon(sel, { pos: 'choose' });
@@ -2689,6 +2742,9 @@ spell('Verdant Sanctuary', 'continuous', {
       categories: ['search'],
       eventFilter: (ctx, ev) => {
         const c = evc(ev);
+        // 2010 ruling: not for a face-down Insect that was attacked (flipped) and destroyed by battle.
+        // https://edisonrul.ing/cards/v/verdant-sanctuary.html
+        if (ev.dsId !== undefined && ctx.game.eventLog.some((e) => e.type === 'flipped' && e.card === c && e.dsId === ev.dsId)) return false;
         return !!c && raceIs(c, 'Insect') && ev.from === 'mzone' && ev.fromFaceUp !== false && reasonsOf(ev).includes('destroy') && stActive(ctx);
       },
       activate: async (ctx) => {
@@ -3126,15 +3182,15 @@ trap('Nightmare Archfiends', 'normal', {
       mandatory: true,
       label: 'Nightmare Archfiend Token: 800 damage',
       categories: ['damage'],
+      // https://edisonrul.ing/cards/n/nightmare-archfiends.html — the damage when a Token is destroyed does not start a
+      // chain (Barrel Behind the Door cannot be activated against it).
+      noChain: true,
       eventFilter: (ctx, ev) => {
         const c = evc(ev);
         return !!c && c.isToken && !!nightmareTokens.get(ctx.self)?.has(c.uid);
       },
-      activate: async (ctx) => {
-        ctx.data.p = ctx.event!.fromController ?? ctx.opp;
-      },
       resolve: async (ctx) => {
-        await ctx.game.damage(ctx.data.p as PlayerId, 800, 'effect', ctx.self, ctx.player);
+        await ctx.game.damage(ctx.event!.fromController ?? ctx.opp, 800, 'effect', ctx.self, ctx.player);
       },
     },
   ],
@@ -3145,7 +3201,9 @@ trap('Ebon Arrow', 'normal', {
   text: 'Select 1 face-up monster you control. Until the End Phase, it loses 500 ATK and during battle between that attacking monster and a Defense Position monster whose DEF is lower than the selected monster\'s ATK, inflict the difference as Battle Damage to your opponent. When the selected monster destroys a monster by battle and sends it to the Graveyard this turn, inflict damage to your opponent equal to the destroyed monster\'s original DEF.',
   effects: [
     {
+      // Can be activated during the Damage Step: https://edisonrul.ing/cards/e/ebon-arrow.html
       kind: 'activate',
+      damageStep: true,
       categories: ['damage'],
       canActivate: (ctx) => ctx.faceUpMonsters('me', (c) => ctx.canTarget(c)).length > 0,
       activate: async (ctx) => {
@@ -3179,7 +3237,9 @@ trap('Ebon Arrow', 'normal', {
         const c = evc(ev);
         const o = evo(ev);
         if (!c || !o || c.location !== 'grave') return false;
-        return (ebonMarks.get(ctx.game) ?? []).some((m) => m.trap === ctx.self.uid && m.turn === ctx.turn && m.uid === o.uid && m.mid === o.moveId);
+        // Still applies when the selected monster is destroyed in the same battle (equal ATK): https://edisonrul.ing/cards/e/ebon-arrow.html
+        const same = (mid: number) => o.moveId === mid || (o.moveId === mid + 1 && o.location === 'grave');
+        return (ebonMarks.get(ctx.game) ?? []).some((m) => m.trap === ctx.self.uid && m.turn === ctx.turn && m.uid === o.uid && same(m.mid));
       },
       activate: async (ctx) => {
         ctx.data.d = evc(ctx.event!)!.data.def ?? 0;
@@ -3310,6 +3370,9 @@ trap('Morphtronic Forcefield', 'counter', {
         const l = ctx.prevLink();
         return !!l && !l.negated && l.isCardActivation && (l.card.isSpell || l.card.isTrap) && threatensMorph(ctx, l);
       },
+      // https://edisonrul.ing/cards/m/morphtronic-forcefield.html — it cannot be activated with no "Morphtronic" monsters
+      // in your Deck, or while "Thunder King Rai-Oh" is on the field (no adding from the Deck).
+      canActivate: (ctx) => !ctx.game.queryPlayer(ctx.player, 'cannotAddFromDeck') && ctx.deck('me', (c) => c.isMonster && isMorph(c)).length > 0,
       activate: async (ctx) => {
         ctx.data.link = ctx.prevLink();
       },
@@ -3405,7 +3468,9 @@ trap('Supernatural Regeneration', 'normal', {
     {
       kind: 'activate',
       categories: ['recover'],
-      condition: (ctx) => ctx.phase === 'end',
+      // 2010 ruling: cannot be activated if no Psychic-Type monster was sent to the GY this turn.
+      // https://edisonrul.ing/cards/s/supernatural-regeneration.html
+      condition: (ctx) => ctx.phase === 'end' && psychicsToGraveThisTurn(ctx.game) > 0,
       resolve: async (ctx) => {
         const n = psychicsToGraveThisTurn(ctx.game);
         if (n) await ctx.recover(ctx.player, 1000 * n);

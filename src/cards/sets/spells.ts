@@ -494,23 +494,26 @@ spell('Card Destruction', 'normal', {
 });
 
 spell('Hand Destruction', 'quickplay', {
-  text: 'Each player sends 2 cards from their hand to the GY, then draws 2 cards.',
+  text: 'Each player sends 2 cards from their hand to the Graveyard and draws 2 cards.',
   effects: [
     {
       kind: 'activate',
       categories: ['draw', 'discard'],
       canActivate: (ctx) =>
         otherHand(ctx).length >= 2 && ctx.hand('opp').length >= 2 && ctx.deck('me').length >= 2 && ctx.deck('opp').length >= 2,
+      // 2010 rulings: the cards are sent to the GY (not discarded, so no "Dark World" effects), and if a player does
+      // not have 2 cards in hand on resolution, neither player sends nor draws. https://edisonrul.ing/cards/h/hand-destruction.html
       resolve: async (ctx) => {
         const tp = ctx.game.turnPlayer;
         const order: PlayerId[] = [tp, ctx.game.opp(tp)];
+        if (order.some((p) => ctx.game.zone(p, 'hand').filter((c) => c !== ctx.self).length < 2)) return;
         const chosen: CardInstance[] = [];
         for (const p of order) {
-          const hand = ctx.game.zone(p, 'hand');
-          const sel = await ctx.game.select(p, hand, Math.min(2, hand.length), Math.min(2, hand.length), 'Send 2 cards from your hand to the GY.', 'discard', { source: ctx.self });
+          const hand = ctx.game.zone(p, 'hand').filter((c) => c !== ctx.self);
+          const sel = await ctx.game.select(p, hand, 2, 2, 'Send 2 cards from your hand to the GY.', 'toGrave', { source: ctx.self });
           chosen.push(...sel);
         }
-        if (chosen.length) await ctx.game.discard(chosen, 'effect', ctx.player, ctx.self);
+        if (chosen.length) await ctx.game.sendToGrave(chosen, 'effect', ctx.player, ctx.self);
         for (const p of order) await ctx.draw(2, p);
       },
       ai: {
@@ -1026,7 +1029,9 @@ spell('Reasoning', 'normal', {
     {
       kind: 'activate',
       categories: ['specialSummon', 'mill'],
-      canActivate: (ctx) => ctx.deck().length > 0,
+      // https://edisonrul.ing/cards/r/reasoning.html — cannot be activated after "Scapegoat" this turn (no Special Summons);
+      // if no monster is picked up, the Deck is shuffled and put back and the effect disappears.
+      canActivate: (ctx) => ctx.deck().length > 0 && !ctx.game.queryPlayer(ctx.player, 'cannotSpecialSummon'),
       resolve: async (ctx) => {
         const levels = Array.from({ length: 12 }, (_, i) => `Level ${i + 1}`);
         const lvIdx = await ctx.game.option(ctx.opp, 'Declare a monster Level for Reasoning.', levels, ctx.self, (i) => (i === 3 ? 10 : i === 2 ? 6 : i === 1 ? 4 : i === 0 ? 3 : 1));
@@ -1034,6 +1039,10 @@ spell('Reasoning', 'normal', {
         ctx.log(`${ctx.game.players[ctx.opp].name} declares Level ${declared}.`);
         const { found, others } = excavateForMonster(ctx);
         await ctx.game.anim({ type: 'reveal', cards: [...others, ...(found ? [found] : [])].map((c) => c.uid), player: ctx.player });
+        if (!found) {
+          ctx.game.shuffleDeck(ctx.player);
+          return;
+        }
         if (found && (found.data.level ?? 0) !== declared && ctx.canSummonCard(found)) {
           const r = await ctx.specialSummon(found);
           await excavatedToGrave(ctx, r.length ? others : [...others, found]);
@@ -1734,11 +1743,16 @@ spell('Butterfly Dagger - Elma', 'equip', {
     equipActivate({ score: buffEquipScore(() => 300) }),
     { kind: 'continuous', mods: [{ q: 'atk', to: 'cards', filter: equipped, value: 300 }] },
     {
+      // 2010 rulings: an optional "when ... you can" effect, so it misses the timing if this card is destroyed in the
+      // middle of a Chain; and it does not return when it is sent to the GY because the equipped monster left the field.
+      // https://edisonrul.ing/cards/b/butterfly-dagger-elma.html
       kind: 'trigger',
       event: 'sentToGrave',
+      when: true,
       label: 'Return to hand',
       categories: ['toHand'],
-      eventFilter: (ctx, ev) => ev.card === ctx.self && (ev.from === 'szone' || ev.from === 'fzone') && (ev.reasons ?? []).includes('destroy'),
+      eventFilter: (ctx, ev) =>
+        ev.card === ctx.self && (ev.from === 'szone' || ev.from === 'fzone') && (ev.reasons ?? []).includes('destroy') && !(ev.reasons ?? []).includes('rule'),
       resolve: async (ctx) => {
         if (ctx.self.location === 'grave') await ctx.toHand(ctx.self);
       },
@@ -1940,6 +1954,11 @@ spell('Double Summon', 'normal', {
       kind: 'activate',
       categories: [],
       resolve: async (ctx) => {
+        // Several copies can be activated, but only 1 extra Normal Summon per turn comes from this card:
+        // https://edisonrul.ing/cards/d/double-summon.html
+        const key = `doubleSummon:${ctx.player}`;
+        if (ctx.game.turnData[key]) return;
+        ctx.game.turnData[key] = true;
         ctx.gainNormalSummon(1);
       },
       ai: {
@@ -1955,7 +1974,7 @@ spell('Double Summon', 'normal', {
 });
 
 spell('Card of Safe Return', 'continuous', {
-  text: 'When a monster is Special Summoned from your GY to your field: You can draw 1 card.',
+  text: 'When a monster is Special Summoned from your Graveyard to the field, you can draw 1 card.',
   effects: [
     { kind: 'activate', categories: ['draw'], ai: { score: (ctx) => (ctx.grave('me', isMonster).length ? 28 : 15) } },
     {
@@ -1964,9 +1983,11 @@ spell('Card of Safe Return', 'continuous', {
       range: ['szone'],
       label: 'Draw',
       categories: ['draw'],
+      // 2010 ruling: it also draws when your opponent Special Summons a monster from your GY ("Monster Reborn").
+      // https://edisonrul.ing/cards/c/card-of-safe-return.html
       eventFilter: (ctx, ev) => {
         const c = ev.card as CardInstance;
-        return ev.from === 'grave' && !!c && c.owner === ctx.player && c.controller === ctx.player;
+        return ev.from === 'grave' && !!c && c.owner === ctx.player;
       },
       condition: activeST,
       resolve: async (ctx) => {

@@ -139,7 +139,14 @@ function unionEffects(): EffectDef[] {
         ctx.markUsed(key(ctx));
       },
       resolve: async (ctx) => {
-        if (ctx.self.location !== 'szone' || !ctx.canSpecialSummon()) return;
+        if (ctx.self.location !== 'szone') return;
+        // https://edisonrul.ing/cards/m/machina-gearframe.html — "If you have no open Monster Card Zone when this effect
+        // resolves, send this card to the Graveyard."
+        if (ctx.freeMZones() <= 0) {
+          await ctx.game.sendToGrave([ctx.self], 'rule');
+          return;
+        }
+        if (!ctx.canSpecialSummon()) return;
         await ctx.specialSummon(ctx.self, { pos: 'atk' });
       },
       ai: {
@@ -414,6 +421,10 @@ once('Dimensional Alchemist', () =>
   }),
 );
 
+/** Machina Fortress's Summon cost: Machines in the hand; not this card itself while a discard would be banished (Macro Cosmos). */
+const fortressFodder = (ctx: Ctx) =>
+  ctx.hand('me', (c) => isMachine(c) && !(c === ctx.self && (ctx.game.queryPlayer(c.owner, 'banishInsteadOfGrave') || ctx.game.queryCard(c, 'banishInsteadOfGrave'))));
+
 once('Machina Fortress', () =>
   monster('Machina Fortress', {
     attribute: 'EARTH',
@@ -423,25 +434,27 @@ once('Machina Fortress', () =>
     def: 1600,
     sets: ['machina'],
     aiValue: 1100,
-    text: 'You can discard Machine monster(s) whose total Levels equal 8 or more, then Special Summon this card (from your hand or GY). If this card is destroyed by battle and sent to the GY: Target 1 card your opponent controls; destroy that target. Before resolving an opponent\'s monster effect that targets this face-up card, look at your opponent\'s hand and discard 1 card from their hand.',
+    text: "You can discard Machine-Type monster(s) whose total Levels equal 8 or more to Special Summon this card from your hand or Graveyard. When this card is destroyed by battle and sent to the Graveyard, select and destroy 1 card your opponent controls. When this face-up card you control is targeted by an opponent's Effect Monster's effect, look at your opponent's hand and discard 1 card from their hand.",
     effects: [
       {
-        kind: 'ignition',
+        // https://edisonrul.ing/cards/m/machina-fortress.html — the Special Summon does not start a chain (an inherent
+        // Summon procedure, not an effect); discarding the Machines is the cost.
+        kind: 'proc',
         range: ['hand', 'grave'],
         label: 'Discard Machines (Levels 8+): Special Summon',
         categories: ['specialSummon', 'discard'],
-        canActivate: (ctx) => {
+        condition: (ctx) => {
           if (!ctx.canSummonSelf()) return false;
-          // From the hand, this card itself can be part of the discard (it is then Special Summoned from the GY):
-          // OCG text "(自身を捨てた場合、墓地から特殊召喚する)" and the Macro Cosmos ruling on discarding Fortress for itself.
-          const lv = ctx.hand('me', (c) => isMachine(c)).reduce((a, c) => a + (c.data.level ?? 0), 0);
+          // From the hand, this card itself can be part of the discard (it is then Special Summoned from the GY), except
+          // while discarded cards are banished instead (Macro Cosmos ruling on the same page).
+          const lv = fortressFodder(ctx).reduce((a, c) => a + (c.data.level ?? 0), 0);
           return lv >= 8;
         },
-        activate: async (ctx) => {
+        perform: async (ctx) => {
           const picked: C[] = [];
           let total = 0;
           while (total < 8) {
-            const rest = ctx.hand('me', (c) => isMachine(c) && !picked.includes(c));
+            const rest = fortressFodder(ctx).filter((c) => !picked.includes(c));
             if (!rest.length) break;
             const need = 8 - total;
             const selfNote = ctx.self.location === 'hand' ? ' This card can be one of them (it is then Summoned from the GY).' : '';
@@ -465,9 +478,7 @@ once('Machina Fortress', () =>
           }
           if (total < 8) return false;
           await ctx.discard(picked, 'cost');
-        },
-        resolve: async (ctx) => {
-          if ((ctx.self.location === 'hand' || ctx.self.location === 'grave') && ctx.canSummonSelf()) await ctx.specialSummon(ctx.self);
+          return (ctx.self.location === 'hand' || ctx.self.location === 'grave') && ctx.freeMZones() > 0;
         },
         ai: {
           score: (ctx) => {
@@ -709,10 +720,9 @@ once('Tempest Magician', () =>
 
 once('Necrovalley', () =>
   spell('Necrovalley', 'field', {
-    // The GY lock (src/cards/necrovalley.ts): GY-banish costs are not offered and GY cards cannot be banished; card
-    // effects do not move cards out of the GY (an effect that targets a GY card, or that a GY card activates to move
-    // itself, is negated on activation); Zombie World's Type change does not apply in the GY.
-    text: 'All "Gravekeeper\'s" monsters on the field gain 500 ATK/DEF. Cards in the GY cannot be banished. Negate any card effect that would move a card in the GY to a different place. Negate any card effect that changes Types or Attributes in the GY.',
+    // 2010 text (https://edisonrul.ing/cards/n/necrovalley.html): only effects that TARGET a card in a GY are negated
+    // (on activation), and GY cards cannot be removed from play; see src/cards/necrovalley.ts.
+    text: 'Negate the effects of Spells, Traps, and Effect Monsters that target a card(s) in either player\'s Graveyard. Cards in either player\'s Graveyard cannot be removed from play. All "Gravekeeper\'s" monsters gain 500 ATK and DEF.',
     aiValue: 600,
     effects: [
       {
@@ -921,8 +931,9 @@ once('Needle Ceiling', () =>
         kind: 'activate',
         categories: ['destroy', 'destroyMulti'],
         condition: (ctx) => ctx.monsters('both').length >= 4,
+        // https://edisonrul.ing/cards/n/needle-ceiling.html — face-down monsters and Tokens count, and if there are fewer
+        // than 4 monsters by the time it resolves (Ring of Destruction chained...), it still resolves.
         resolve: async (ctx) => {
-          if (ctx.monsters('both').length < 4) return;
           await ctx.destroy(ctx.faceUpMonsters('both'));
         },
         ai: {

@@ -632,12 +632,14 @@ spell('Card Trader', 'continuous', {
       categories: ['draw', 'toDeck'],
       eventFilter: (ctx, ev) => ev.phase === 'standby' && ctx.game.turnPlayer === ctx.player && stActive(ctx),
       canActivate: (ctx) => ctx.hand('me').length > 0,
+      // 2010 rulings: shuffling the card into the Deck is a cost, and the effect starts a Chain.
+      // https://edisonrul.ing/cards/c/card-trader.html
+      activate: async (ctx) => {
+        const [c] = await ctx.select(ctx.hand('me'), 1, 1, 'Return 1 card from your hand to the Deck.', 'cost', { aiScore: (x) => -cardValue(ctx.game, x) });
+        if (!c) return false;
+        await ctx.toDeck(c, 'shuffle', 'cost');
+      },
       resolve: async (ctx) => {
-        const hand = ctx.hand('me');
-        if (!hand.length) return;
-        const [c] = await ctx.select(hand, 1, 1, 'Return 1 card from your hand to the Deck.', 'toDeck', { aiScore: (x) => -cardValue(ctx.game, x) });
-        if (!c) return;
-        await ctx.toDeck(c, 'shuffle');
         await ctx.draw(1);
       },
       ai: {

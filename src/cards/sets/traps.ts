@@ -467,16 +467,24 @@ defTrap('Compulsory Evacuation Device', 'normal', {
   ],
 });
 
+/**
+ * Phoenix Wing Wind Blast cannot target a face-up non-Continuous, non-Equip Spell/Trap that was activated (it is on the
+ * chain, already "considered destroyed"); a face-up "Swords of Revealing Light" that stays on the field can be targeted.
+ */
+const pwwbTargetable = (ctx: Ctx) => (c: CardInstance) =>
+  !(c.faceUp && (c.isSpell || c.isTrap) && !['continuous', 'equip', 'field'].includes(c.data.stype ?? '') && c.data.ttype !== 'continuous' && ctx.game.chain.some((l) => l.card === c && l.isCardActivation));
 defTrap('Phoenix Wing Wind Blast', 'normal', {
-  text: 'Discard 1 card, then target 1 card your opponent controls; place that target on the top of the Deck.',
+  text: 'Discard 1 card. Return 1 card your opponent controls to the top of the Deck.',
   effects: [
     {
       kind: 'activate',
       categories: ['toDeck'],
-      canActivate: (ctx) => ctx.hand().length > 0 && ctx.field('opp', (c) => ctx.canTarget(c)).length > 0,
+      // https://edisonrul.ing/cards/p/phoenix-wing-wind-blast.html — a face-up non-Continuous, non-Equip Spell/Trap (one
+      // resolving on the chain) cannot be targeted: it is already "considered to be destroyed" once activated.
+      canActivate: (ctx) => ctx.hand().length > 0 && ctx.field('opp', (c) => pwwbTargetable(ctx)(c) && ctx.canTarget(c)).length > 0,
       activate: async (ctx) => {
         await ctx.discardFromHand(1, undefined, 'cost', ctx.player, 'Discard 1 card.');
-        await ctx.selectTargets(ctx.field('opp'), 1, 1, 'Target 1 card your opponent controls to place on top of the Deck.', 'toDeck');
+        await ctx.selectTargets(ctx.field('opp', pwwbTargetable(ctx)), 1, 1, 'Target 1 card your opponent controls to place on top of the Deck.', 'toDeck');
       },
       resolve: async (ctx) => {
         const t = ctx.validTargets((c) => c.onField);
@@ -666,11 +674,14 @@ function declarableNames(ctx: Ctx) {
 }
 
 defTrap('Mind Crush', 'normal', {
-  text: 'Declare 1 card name; if that card is in your opponent\'s hand, they must discard all copies of it. Otherwise, you discard 1 random card.',
+  text: 'Declare 1 card name. If that card is in your opponent\'s hand, they must discard all copies of it from their hand. If it is not, you randomly discard 1 card.',
   effects: [
     {
       kind: 'activate',
       categories: ['discard'],
+      // https://edisonrul.ing/cards/m/mind-crush.html — "You CANNOT activate "Mind Crush" while either player has no
+      // cards in hand."
+      canActivate: (ctx) => ctx.hand('me').length > 0 && ctx.hand('opp').length > 0,
       resolve: async (ctx) => {
         const g = ctx.game;
         const ctrl = g.controllers[ctx.player];
@@ -1215,6 +1226,17 @@ defTrap('Wall of Revealing Light', 'continuous', {
         ctx.self.flags.wallAmount = amount;
         ctx.log(`Monsters with ${amount} or less ATK cannot attack.`);
       },
+      // 2010 ruling: activated after an attack is declared, it stops that attack if the attacker's ATK is not more than
+      // the LP paid. https://edisonrul.ing/cards/w/wall-of-revealing-light.html
+      resolve: async (ctx) => {
+        const b = ctx.game.battle;
+        if (!b || b.inDamageStep || b.negated || !ctx.self.onField || ctx.game.isNegated(ctx.self)) return;
+        const a = b.attacker;
+        if (a.location === 'mzone' && a.controller === ctx.opp && ctx.atk(a) <= (ctx.self.flags.wallAmount ?? 0)) {
+          b.negated = true;
+          ctx.log(`The attack of ${a.name} stops (Wall of Revealing Light).`);
+        }
+      },
       ai: {
         score: (ctx) => {
           if (haveActiveCopy(ctx)) return 0;
@@ -1445,7 +1467,14 @@ defTrap('Spellbinding Circle', 'continuous', {
         });
       },
       resolve: async (ctx) => {
-        await bindTarget(ctx);
+        const t = await bindTarget(ctx);
+        // 2010 ruling: "If a monster attacks and you activate Spellbinding Circle, the monster's attack stops."
+        // https://edisonrul.ing/cards/s/spellbinding-circle.html
+        const b = ctx.game.battle;
+        if (t && b && b.attacker === t && !b.inDamageStep && !b.negated) {
+          b.negated = true;
+          ctx.log(`The attack of ${t.name} stops (Spellbinding Circle).`);
+        }
       },
       ai: { score: (ctx) => bindAiScore(ctx, 36, 0) },
     },
@@ -1600,7 +1629,9 @@ defTrap('Imperial Order', 'continuous', {
         if (ctx.lp > 700 && (await ctx.confirm('Pay 700 LP to keep Imperial Order?', ctx.lp > 2500))) {
           await ctx.payLp(700);
         } else {
-          await ctx.destroy(ctx.self);
+          // 2010 ruling: a Continuous Trap whose maintenance cost is not paid is destroyed even under "Imperial
+          // Custom" (no destruction protection applies). https://edisonrul.ing/cards/i/imperial-custom.html
+          await ctx.game.moveCards([ctx.self], 'grave', { reason: 'effect', reasons: ['effect', 'destroy'], reasonPlayer: ctx.player, reasonCard: ctx.self, destroyed: true });
         }
       },
     },
@@ -1792,14 +1823,22 @@ defTrap('Crush Card Virus', 'normal', {
 });
 
 defTrap('Exchange of the Spirit', 'normal', {
-  text: 'Activate only if both players have 15 or more cards in their GYs. Each player swaps the cards in their GY with the cards in their Deck, then shuffles their new Deck.',
+  text: 'Activate only when there are 15 or more cards in your Graveyard. Each player exchanges all the cards in their Graveyard with all the cards in their Deck, then shuffles their new Deck.',
   effects: [
     {
       kind: 'activate',
       categories: ['toDeck', 'mill'],
-      condition: (ctx) => ctx.grave('me').length >= 15 && ctx.grave('opp').length >= 15,
+      // 2010 ruling: only your own GY needs 15 or more cards; your opponent's GY can hold any number, including 0.
+      // https://edisonrul.ing/cards/e/exchange-of-the-spirit.html
+      condition: (ctx) => ctx.grave('me').length >= 15,
       resolve: async (ctx) => {
         const g = ctx.game;
+        // https://edisonrul.ing/cards/e/exchange-of-the-spirit.html — "Necrovalley" negates its effect (card ruling,
+        // although it does not target).
+        if (g.gyLocked()) {
+          g.log('Necrovalley negates Exchange of the Spirit.', 'chain');
+          return;
+        }
         for (const p of [ctx.player, ctx.opp] as PlayerId[]) {
           const deck = [...g.players[p].deck];
           const grave = [...g.players[p].grave];

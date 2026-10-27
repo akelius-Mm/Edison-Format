@@ -146,15 +146,15 @@ function destroyedByEffectThisTurn(g: Game): Set<C> {
   return out;
 }
 
-/** Scary Moth: did player p Special Summon this turn? Cached per game. */
-const ssCache = new WeakMap<Game, { turn: number; last: number; res: [boolean, boolean] }>();
-function specialSummonedThisTurn(g: Game, p: PlayerId) {
+/** Scary Moth: did player p Special Summon this turn after event `since` (another monster than `except`)? Cached per game. */
+const ssCache = new WeakMap<Game, { turn: number; last: number; since: number; res: [boolean, boolean] }>();
+function specialSummonedThisTurn(g: Game, p: PlayerId, since = -1, except?: CardInstance) {
   const lastSeq = g.eventLog.length ? g.eventLog[g.eventLog.length - 1].seq : 0;
   let e = ssCache.get(g);
-  if (!e || e.turn !== g.turn || e.last !== lastSeq) {
+  if (!e || e.turn !== g.turn || e.last !== lastSeq || e.since !== since) {
     const res: [boolean, boolean] = [false, false];
-    for (const ev of turnEvents(g)) if (ev.type === 'specialSummoned' && ev.player !== undefined) res[ev.player] = true;
-    e = { turn: g.turn, last: lastSeq, res };
+    for (const ev of turnEvents(g)) if (ev.type === 'specialSummoned' && ev.player !== undefined && ev.seq > since && ev.card !== except) res[ev.player] = true;
+    e = { turn: g.turn, last: lastSeq, since, res };
     ssCache.set(g, e);
   }
   return e.res[p];
@@ -202,15 +202,19 @@ export function ensureAnprPatches(g: Game) {
   };
 
   const origCanNS = g.canNormalSummon.bind(g);
+  const origNormalSummon = g.normalSummon.bind(g);
+  anyG.normalSummon = async (p: PlayerId, card: C, set: boolean) => {
+    labGrant(g, p);
+    return origNormalSummon(p, card, set);
+  };
   anyG.canNormalSummon = (p: PlayerId, card: C, set = false) => {
+    // Brain Research Lab: its extra Psychic Normal Summon is granted as soon as the turn player's Normal Summons are looked at.
+    labGrant(g, p);
     if (!origCanNS(p, card, set)) return false;
     if (!set && isEI(card) && anyFaceUpEI(g)) return false;
     // AI guard (not a rule): the AI does not Summon an Earthbound Immortal that would destroy itself at once.
     if (isEI(card) && !faceUpFieldSpell(g) && !g.controllers[p].isHuman) return false;
     if (!set && card.name === 'Jester Confit' && g.faceUpMonsters(p).some((c) => c.name === 'Jester Confit')) return false;
-    const lab = g.turnData[`anpr:brl:${p}`];
-    // Brain Research Lab's extra Normal Summon: a Psychic-Type monster, face-up (not a Set).
-    if (lab?.pending && g.players[p].normalSummonsLeft <= 1 && (set || card.data.race !== 'Psychic')) return false;
     return true;
   };
 
@@ -862,7 +866,9 @@ monster('Earthbound Immortal Cusillu', {
         if (!(await ctx.confirm(`Tribute 1 other monster instead of destroying ${ctx.self.name} (and halve your opponent's LP)?`))) return [];
         const [t] = await ctx.select(others, 1, 1, 'Tribute 1 other monster.', 'tribute');
         if (!t) return [];
-        await tributeCost(ctx, [t]);
+        // Tributing is part of the effect, not a cost: https://edisonrul.ing/cards/e/earthbound-immortal-cusillu.html
+        ctx.game.log(`${ctx.game.players[ctx.player].name} Tributes ${t.name}.`, 'action', ctx.player);
+        await ctx.game.moveCards([t], 'grave', { reason: 'tribute', reasons: ['tribute', 'effect'], reasonPlayer: ctx.player, reasonCard: ctx.self });
         const ps = ctx.game.players[ctx.opp];
         ps.lp = Math.ceil(ps.lp / 2);
         ctx.log(`${ps.name}'s LP are halved (LP ${ps.lp}).`);
@@ -957,14 +963,18 @@ monster("Koa'ki Meiru Crusader", {
       event: 'battleDestroyed',
       label: "Add Koa'ki Meiru card",
       categories: ['toHand'],
-      eventFilter: selfDestroysByBattle,
-      canActivate: (ctx) => ctx.grave('me', isKoaki).length > 0,
-      resolve: async (ctx) => {
-        const cands = ctx.grave('me', isKoaki);
-        const sel = await ctx.select(cands, 1, 1, 'Add 1 "Koa\'ki Meiru" card from your GY to your hand.', 'toHand', {
+      // https://edisonrul.ing/cards/k/koaki-meiru-crusader.html — "This effect targets 1 "Koa'ki Meiru" card in your
+      // Graveyard. If this card battles a monster with the same ATK and both are destroyed, its effect will activate."
+      eventFilter: (ctx, ev) => ev.type === 'battleDestroyed' && ev.other === ctx.self && (ev.card as C).owner !== ctx.player,
+      canActivate: (ctx) => ctx.grave('me', (c) => isKoaki(c) && ctx.canTarget(c)).length > 0,
+      activate: async (ctx) => {
+        await ctx.selectTargets(ctx.grave('me', isKoaki), 1, 1, 'Target 1 "Koa\'ki Meiru" card in your GY to add to your hand.', 'toHand', {
           aiScore: (c) => (isIronCore(c) ? 5000 : cardValue(ctx.game, c)),
         });
-        if (sel.length) await ctx.toHand(sel);
+      },
+      resolve: async (ctx) => {
+        const t = ctx.validTargets((c) => c.location === 'grave');
+        if (t.length) await ctx.toHand(t);
       },
     },
   ],
@@ -1175,7 +1185,18 @@ monster('Scary Moth', {
   effects: [
     {
       kind: 'continuous',
-      mods: [{ q: 'cannotSpecialSummon', to: 'players', filter: (ctx, p) => specialSummonedThisTurn(ctx.game, p) }],
+      // https://edisonrul.ing/cards/s/scary-moth.html — monsters Special Summoned before Scary Moth was Summoned (and Scary
+      // Moth's own Special Summon) do not count.
+      mods: [{ q: 'cannotSpecialSummon', to: 'players', filter: (ctx, p) => specialSummonedThisTurn(ctx.game, p, ctx.self.flags.mothSeq ?? -1, ctx.self) }],
+    },
+    {
+      // Bookkeeping (never activates): when this card arrived face-up.
+      kind: 'trigger',
+      event: ['summoned', 'specialSummoned', 'flipped'],
+      eventFilter: (ctx, ev) => {
+        if (ev.card === ctx.self) ctx.self.flags.mothSeq = Math.max(ev.seq, ctx.self.flags.mothSeq ?? -1);
+        return false;
+      },
     },
   ],
 });
@@ -1221,12 +1242,14 @@ monster('Armed Sea Hunter', {
   atk: 1800,
   def: 400,
   aiValue: 200,
-  text: 'After damage calculation, if this card battles an Effect Monster: Negate the effects of that monster (including in the Graveyard). You must control another face-up WATER monster to activate and to resolve this effect. If this card would be destroyed, you can destroy 1 face-up Level 3 or lower WATER monster you control instead.',
+  text: 'If you control another face-up WATER monster, negate the effects of the monster that battled with this card, after damage calculation. If this card would be destroyed, you can destroy 1 face-up Level 3 or lower WATER monster you control instead.',
   effects: [
     {
+      // 2010 rulings: it activates after damage calculation (before battle-destroyed monsters leave the field), even
+      // if this card is destroyed by that battle; it does not target. https://edisonrul.ing/cards/a/armed-sea-hunter.html
       // APPROX: the negation only applies while that monster stays on the field (no GY negation hook).
       kind: 'trigger',
-      event: 'damageStepEnd',
+      event: 'damageCalculated',
       mandatory: true,
       label: 'Negate battled monster',
       categories: ['negate'],
@@ -1253,7 +1276,11 @@ monster('Armed Sea Hunter', {
       label: 'Destroy a WATER instead',
       replaceDestroy: async (ctx, cards) => {
         if (!cards.includes(ctx.self)) return [];
-        const subs = ctx.faceUpMonsters('me', (c) => c !== ctx.self && !cards.includes(c) && c.data.attribute === 'WATER' && ctx.level(c) <= 3);
+        // 2010 ruling: a monster that cannot be destroyed ("Aegis of the Ocean Dragon Lord") cannot be the substitute.
+        const subs = ctx.faceUpMonsters(
+          'me',
+          (c) => c !== ctx.self && !cards.includes(c) && c.data.attribute === 'WATER' && ctx.level(c) <= 3 && !ctx.game.queryCard(c, 'indestructibleEffect'),
+        );
         if (!subs.length) return [];
         if (!(await ctx.confirm(`Destroy 1 Level 3 or lower WATER monster instead of ${ctx.self.name}?`))) return [];
         const [s] = await ctx.select(subs, 1, 1, 'Destroy 1 face-up Level 3 or lower WATER monster you control instead.', 'cost');
@@ -1487,19 +1514,22 @@ monster('Cyborg Doctor', {
       opt: true,
       label: 'Tribute Tuner: revive',
       categories: ['specialSummon'],
-      canActivate: (ctx) => ctx.faceUpMonsters('me', (c) => c.isTuner && tributable(ctx, c)).some((t) => doctorMatches(ctx, t, true).length > 0),
+      // A face-down Tuner can be Tributed (cost); the effect targets 1 monster in your GY:
+      // https://edisonrul.ing/cards/c/cyborg-doctor.html
+      canActivate: (ctx) => ctx.monsters('me', (c) => c.isTuner && tributable(ctx, c)).some((t) => doctorMatches(ctx, t, true).length > 0),
       activate: async (ctx) => {
-        const tuners = ctx.faceUpMonsters('me', (c) => c.isTuner && tributable(ctx, c)).filter((t) => doctorMatches(ctx, t, true).length > 0);
+        const tuners = ctx.monsters('me', (c) => c.isTuner && tributable(ctx, c)).filter((t) => doctorMatches(ctx, t, true).length > 0);
         const [t] = await ctx.select(tuners, 1, 1, 'Tribute 1 Tuner monster you control.', 'tribute');
-        ctx.data.attr = t.data.attribute;
-        ctx.data.level = ctx.level(t);
+        if (!t) return false;
+        const attr = t.data.attribute;
+        const level = t.faceUp ? ctx.level(t) : lvl(t);
         await tributeCost(ctx, [t]);
+        const cands = ctx.grave('me', (c) => c.isMonster && c.data.attribute === attr && lvl(c) === level && ctx.canSummonCard(c));
+        await ctx.selectTargets(cands, 1, 1, 'Target 1 monster with the same Attribute and Level in your GY.', 'specialSummon');
       },
       resolve: async (ctx) => {
-        if (!ctx.canSpecialSummon()) return;
-        const cands = ctx.grave('me', (c) => c.isMonster && c.data.attribute === ctx.data.attr && lvl(c) === ctx.data.level && ctx.canSummonCard(c));
-        const sel = await ctx.select(cands, 1, 1, 'Special Summon 1 monster with the same Attribute and Level from your GY.', 'specialSummon');
-        if (sel.length) await ctx.specialSummon(sel[0]);
+        const [t] = ctx.validTargets((c) => c.location === 'grave');
+        if (t && ctx.canSummonCard(t)) await ctx.specialSummon(t);
       },
       ai: {
         score: (ctx) => {
@@ -1867,6 +1897,9 @@ monster('White Night Dragon', {
     {
       // APPROX: a mandatory effect in the real game; here it is a Quick Effect the AI always uses.
       kind: 'quick',
+      // 2010 ruling: can be activated in the Damage Step, more than once per Chain.
+      // https://edisonrul.ing/cards/w/white-night-dragon.html
+      damageStep: true,
       label: 'Negate targeting Spell/Trap',
       categories: ['negate'],
       condition: (ctx) => {
@@ -1944,6 +1977,9 @@ monster('Card Blocker', {
         const t = evo(ev);
         return !!t && t !== ctx.self && t.controller === ctx.player && t.faceUp && faceUpOn(ctx.self);
       },
+      // 2010 ruling: with several "Card Blocker", only 1 of them can change the attack target for that attack.
+      // https://edisonrul.ing/cards/c/card-blocker.html
+      canActivate: (ctx) => !ctx.game.chain.some((l) => l.card.name === 'Card Blocker' && l.effect.label === 'Become the attack target'),
       resolve: async (ctx) => {
         const b = ctx.battle;
         if (!b || b.negated || !faceUpOn(ctx.self)) return;
@@ -1969,16 +2005,18 @@ monster('Card Blocker', {
       categories: ['mill', 'atkChange'],
       eventFilter: (ctx, ev) => evo(ev) === ctx.self && faceUpOn(ctx.self) && evc(ev)?.controller === ctx.opp,
       canActivate: (ctx) => ctx.deck().length > 1,
+      // 2010 ruling: sending up to 3 cards from the Deck to the Graveyard is a cost. https://edisonrul.ing/cards/c/card-blocker.html
       activate: async (ctx) => {
         const max = Math.min(3, ctx.deck().length - 1);
         const a = ctx.battle ? ctx.atk(ctx.battle.attacker) : 0;
         const need = Math.max(1, Math.min(max, Math.ceil((a + 1 - ctx.def(ctx.self)) / 500)));
         const opts = Array.from({ length: max }, (_, i) => `${i + 1}`);
-        ctx.data.n = (await ctx.option('Send how many cards from the top of your Deck?', opts, (i) => (i + 1 === need ? 10 : -i))) + 1;
+        const n = (await ctx.option('Send how many cards from the top of your Deck?', opts, (i) => (i + 1 === need ? 10 : -i))) + 1;
+        const sent = await ctx.game.mill(ctx.player, n, 'cost', ctx.self);
+        ctx.data.n = sent.filter((c) => c.location === 'grave').length;
       },
       resolve: async (ctx) => {
-        const r = await ctx.mill(ctx.data.n);
-        if (faceUpOn(ctx.self) && r.length) ctx.addTempMod(ctx.self, 'def', 500 * r.length, 'turn');
+        if (faceUpOn(ctx.self) && ctx.data.n) ctx.addTempMod(ctx.self, 'def', 500 * ctx.data.n, 'turn');
       },
       ai: {
         score: (ctx) => {
@@ -2105,7 +2143,7 @@ monster('Gaap the Divine Soldier', {
   atk: 2200,
   def: 2000,
   aiValue: 300,
-  text: 'All monsters are changed to Attack Position, also their battle positions cannot be changed. (Flip Effects are not activated.) Once per turn: You can reveal any number of Fiend monsters in your hand; this card gains 300 ATK for each, until the end of this turn.',
+  text: 'All monsters are changed to face-up Attack Position, and their battle positions cannot be changed. (Flip Effects are not activated at this time.) Once per turn, you can reveal any number of Fiend-Type monsters in your hand to give this card 300 ATK for each revealed card, until the End Phase.',
   effects: [
     { kind: 'continuous', mods: [{ q: 'cannotChangePos', to: 'cards', filter: (_ctx, c) => c.location === 'mzone' }] },
     {
@@ -2132,11 +2170,18 @@ monster('Gaap the Divine Soldier', {
       label: 'Reveal Fiends',
       categories: ['atkChange'],
       canActivate: (ctx) => ctx.hand('me', isRace('Fiend')).length > 0,
-      resolve: async (ctx) => {
+      // 2010 ruling: revealing the Fiend-Type monsters is a cost (done on activation).
+      // https://edisonrul.ing/cards/g/gaap-the-divine-soldier.html
+      activate: async (ctx) => {
         const fiends = ctx.hand('me', isRace('Fiend'));
-        const sel = await ctx.select(fiends, 1, fiends.length, 'Reveal any number of Fiend monsters in your hand.', 'buff');
+        const sel = await ctx.select(fiends, 1, fiends.length, 'Reveal any number of Fiend monsters in your hand.', 'cost');
+        if (!sel.length) return false;
         for (const c of sel) reveal(ctx, c);
-        if (faceUpOn(ctx.self) && sel.length) ctx.addTempMod(ctx.self, 'atk', 300 * sel.length, 'turn');
+        ctx.data.n = sel.length;
+      },
+      resolve: async (ctx) => {
+        const n = (ctx.data.n as number | undefined) ?? 0;
+        if (faceUpOn(ctx.self) && n) ctx.addTempMod(ctx.self, 'atk', 300 * n, 'turn');
       },
       ai: { score: (ctx) => (ctx.phase === 'main1' && ctx.game.turn > 1 ? 30 : 0) },
     },
@@ -2256,11 +2301,16 @@ monster('Turbo Cannon', {
       opt: true,
       label: 'Destroy & burn',
       categories: ['destroy', 'damage'],
-      canActivate: (ctx) => ctx.faceUpMonsters('both').length > 0,
+      // 2010 rulings: it targets 1 face-up monster; not applied if the target is flipped face-down; the damage goes to
+      // its controller on resolution (half its current ATK). https://edisonrul.ing/cards/t/turbo-cannon.html
+      canActivate: (ctx) => ctx.faceUpMonsters('both', (c) => ctx.canTarget(c)).length > 0,
+      activate: async (ctx) => {
+        await ctx.selectTargets(ctx.faceUpMonsters('both'), 1, 1, 'Target 1 face-up monster on the field.', 'destroy', {
+          aiScore: (c) => (c.controller === ctx.opp ? 1000 + ctx.atk(c) : -ctx.atk(c)),
+        });
+      },
       resolve: async (ctx) => {
-        const cands = ctx.faceUpMonsters('both');
-        if (!cands.length) return;
-        const [t] = await ctx.select(cands, 1, 1, 'Destroy 1 face-up monster on the field.', 'destroy');
+        const [t] = ctx.validTargets((c) => faceUpOn(c));
         if (!t) return;
         const atk = ctx.atk(t);
         const who = t.controller;
@@ -2310,8 +2360,10 @@ monster('Arcana Knight Joker', {
   },
   effects: [
     {
+      // 2010 ruling: it can be activated during the Damage Step. https://edisonrul.ing/cards/a/arcana-knight-joker.html
       kind: 'quick',
       opt: true,
+      damageStep: true,
       label: 'Discard: negate',
       categories: ['negate'],
       condition: (ctx) => {
@@ -2378,7 +2430,9 @@ spell('Release Restraint Wave', 'normal', {
     {
       kind: 'activate',
       categories: ['destroy', 'destroyMulti'],
-      canActivate: (ctx) => ctx.spellTraps('me', (c) => c.faceUp && c.data.stype === 'equip' && c !== ctx.self && ctx.canTarget(c)).length > 0,
+      // https://edisonrul.ing/cards/r/release-restraint-wave.html — cannot be activated if the opponent has no Set Spell/Trap Cards.
+      canActivate: (ctx) =>
+        ctx.spellTraps('opp', (c) => !c.faceUp).length > 0 && ctx.spellTraps('me', (c) => c.faceUp && c.data.stype === 'equip' && c !== ctx.self && ctx.canTarget(c)).length > 0,
       activate: async (ctx) => {
         await ctx.selectTargets(ctx.spellTraps('me', (c) => c.faceUp && c.data.stype === 'equip' && c !== ctx.self), 1, 1, 'Target 1 face-up Equip Spell you control.', 'cost');
       },
@@ -2401,8 +2455,11 @@ spell('Silver Wing', 'equip', {
       replaceDestroy: async (ctx, cards, reason) => {
         const eq = ctx.equipTarget;
         if (!eq || !cards.includes(eq)) return [];
+        // https://edisonrul.ing/cards/s/silver-wing.html — copies are not cumulative (2 battles per turn per monster, not per
+        // copy), and it cannot replace when it is destroyed by the same effect as the monster.
+        if (reason !== 'battle' && cards.includes(ctx.self)) return [];
         if (reason === 'battle') {
-          const k = `anpr:silverwing:${ctx.self.uid}`;
+          const k = `anpr:silverwing:${eq.uid}:${eq.moveId}`;
           const used = ctx.game.turnData[k] ?? 0;
           if (used >= 2) return [];
           ctx.game.turnData[k] = used + 1;
@@ -2472,13 +2529,17 @@ spell('Ancient Forest', 'field', {
       },
     },
     {
-      // Bookkeeping: mark each monster that attacks while this card is face-up (never activates).
+      // Bookkeeping: mark each monster that attacks while this card is face-up (never activates). 2010 rulings: a
+      // monster that attacks while this card is negated is still destroyed if the negation is gone by the end of the
+      // Battle Phase; one whose attack was negated ("Magic Cylinder") is not. https://edisonrul.ing/cards/a/ancient-forest.html
       kind: 'trigger',
-      event: 'attackDeclared',
+      event: ['attackDeclared', 'attackNegated'],
       range: ['fzone'],
       eventFilter: (ctx, ev) => {
         const a = evc(ev);
-        if (a && stActive(ctx)) a.flags.anprForestTurn = ctx.game.turn;
+        if (!a || !ctx.self.faceUp || !ctx.self.activeOnField) return false;
+        if (ev.type === 'attackDeclared') a.flags.anprForestTurn = ctx.game.turn;
+        else if (a.flags.anprForestTurn === ctx.game.turn) delete a.flags.anprForestTurn;
         return false;
       },
     },
@@ -2498,18 +2559,23 @@ spell('Ancient Forest', 'field', {
 });
 
 spell('Emergency Assistance', 'normal', {
-  text: 'Activate during your Main Phase 2, to Special Summon 1 Level 4 monster from your Graveyard that was destroyed by a card effect and sent to the Graveyard this turn.',
+  text: 'Activate only during your Main Phase 2. Select and Special Summon 1 Level 4 monster from your Graveyard that was destroyed by a card effect and sent to the Graveyard this turn.',
   effects: [
     {
       kind: 'activate',
       categories: ['specialSummon'],
       condition: (ctx) => ctx.phase === 'main2' && ctx.isMyTurn,
-      canActivate: (ctx) => ctx.canSpecialSummon() && emergencyCands(ctx).length > 0,
+      canActivate: (ctx) => ctx.canSpecialSummon() && emergencyCands(ctx).some((c) => ctx.canTarget(c)),
+      // 2010 ruling: this effect targets 1 monster (chosen on activation).
+      // https://edisonrul.ing/cards/e/emergency-assistance.html
+      activate: async (ctx) => {
+        await ctx.selectTargets(emergencyCands(ctx), 1, 1, 'Target 1 Level 4 monster in your GY destroyed by a card effect this turn.', 'specialSummon', {
+          aiScore: (c) => (c.data.atk ?? 0) + (c.data.aiValue ?? 0),
+        });
+      },
       resolve: async (ctx) => {
-        const cands = emergencyCands(ctx);
-        if (!cands.length || !ctx.canSpecialSummon()) return;
-        const sel = await ctx.select(cands, 1, 1, 'Special Summon 1 Level 4 monster destroyed by a card effect this turn.', 'specialSummon');
-        if (sel.length) await ctx.specialSummon(sel[0]);
+        const [t] = ctx.validTargets((c) => c.location === 'grave');
+        if (t && ctx.canSpecialSummon() && ctx.canSummonCard(t)) await ctx.specialSummon(t);
       },
       ai: { score: (ctx) => (Math.max(0, ...emergencyCands(ctx).map((c) => c.data.atk ?? 0)) >= 1400 ? 50 : 0) },
     },
@@ -2587,7 +2653,7 @@ spell('Spirit Burner', 'equip', {
 });
 
 spell('Future Visions', 'field', {
-  text: 'Each time a monster is Normal Summoned: Target that monster; banish it. During the next Standby Phase of the player who controlled that monster: Return it to the field in face-up Attack Position.',
+  text: 'When a monster is Normal Summoned, remove from play that monster. During the next Standby Phase of the controller who Summoned that monster, return it to the field in face-up Attack Position.',
   effects: [
     { kind: 'activate', categories: ['banish'], ai: { score: (ctx) => (!ctx.hand('me', (c) => c.isMonster).length && ctx.hand('opp').length >= 3 ? 15 : 0) } },
     {
@@ -2602,17 +2668,22 @@ spell('Future Visions', 'field', {
         const c = evc(ctx.event!)!;
         if (ctx.canTarget(c)) ctx.addTargets([c]);
       },
+      // 2010 rulings: this card must remain face-up on the field to activate and resolve both effects.
+      // https://edisonrul.ing/cards/f/future-visions.html
       resolve: async (ctx) => {
         const [t] = ctx.validTargets((c) => c.location === 'mzone');
-        if (!t) return;
+        if (!t || !stActive(ctx)) return;
         const ctrl = t.controller;
         const r = await ctx.banish(t);
         if (!r.length || t.location !== 'banished') return;
         const id = t.moveId;
         const g = ctx.game;
+        const fv = ctx.self;
+        const fvMid = fv.moveId;
         g.addDelayed(
           'standby',
           async () => {
+            if (fv.location !== 'fzone' || fv.moveId !== fvMid || !fv.faceUp || g.isNegated(fv)) return;
             if (t.location === 'banished' && t.moveId === id) await returnToField(g, t, t.owner === ctrl ? ctrl : t.owner, 'atk');
           },
           g.turnPlayer === ctrl ? 2 : 1,
@@ -2768,40 +2839,44 @@ const waterHazardOk = (c: C) => c.isMonster && !c.isExtra && c.data.attribute ==
 
 /** Brain Research Lab: counters survive the move that resets them, so its leave-field damage can read them. */
 const labCounters = new WeakMap<C, { moveId: number; n: number }>();
+interface LabGrant {
+  lab: C;
+  entry: { allow: (card: C, set: boolean) => boolean };
+  used: boolean;
+}
+const labLive = (g: Game, lab: C, p: PlayerId) =>
+  lab.location === 'fzone' && lab.faceUp && lab.activeOnField && lab.controller === p && !g.isNegated(lab);
+/** Brain Research Lab: once per turn, the turn player with a face-up Lab gets 1 extra Normal Summon for a Psychic-Type monster. */
+function labGrant(g: Game, p: PlayerId) {
+  if (g.turnPlayer !== p || g.turnData[`anpr:brl:${p}`]) return;
+  const lab = g.players[p].fzone;
+  if (!lab || lab.name !== 'Brain Research Lab' || !labLive(g, lab, p)) return;
+  const entry = { allow: (card: C, set: boolean) => !set && card.data.race === 'Psychic' && labLive(g, lab, p) };
+  const ps = g.players[p];
+  ps.normalSummonsLeft += 1;
+  (ps.restrictedSummons ??= []).push(entry);
+  g.turnData[`anpr:brl:${p}`] = { lab, entry, used: false } satisfies LabGrant;
+}
 spell('Brain Research Lab', 'field', {
   text: 'Once per turn, you can Normal Summon 1 Psychic-Type monster in addition to your Normal Summon or Set. If successful, place 1 Psychic Counter on this card. You can also place 1 Psychic Counter on this card instead of paying Life Points to activate any Psychic-Type monster\'s effect that you control. When this card is removed from the field, the controller of this card takes 1000 damage for each Psychic Counter on it.',
   effects: [
     PATCH_LISTENER,
     { kind: 'activate', categories: ['lockdown'], ai: { score: (ctx) => (ctx.hand('me', isRace('Psychic')).length >= 2 ? 25 : 0) } },
     {
-      // APPROX: the extra Normal Summon is offered as an ignition effect once the regular one is used.
-      // The "Psychic Counter instead of paying LP" option is not implemented.
-      kind: 'ignition',
-      opt: true,
-      label: 'Extra Psychic Normal Summon',
-      categories: ['specialSummon'],
-      condition: (ctx) => ctx.game.players[ctx.player].normalSummonsLeft === 0 && ctx.hand('me', isRace('Psychic')).length > 0,
-      resolve: async (ctx) => {
-        if (!stActive(ctx)) return;
-        ensureAnprPatches(ctx.game);
-        ctx.gainNormalSummon(1);
-        ctx.game.turnData[`anpr:brl:${ctx.player}`] = { pending: true, lab: ctx.self };
-      },
-      ai: {
-        score: (ctx) =>
-          ctx.hand('me', (c) => isRace('Psychic')(c) && (lvl(c) <= 4 || ctx.monsters('me').length >= (lvl(c) >= 7 ? 2 : 1))).length && ctx.freeMZones() > 0 ? 45 : 0,
-      },
-    },
-    {
-      // Bookkeeping: count the Psychic Counter when the extra Normal Summon is used (never activates).
+      // 2010 rulings: the extra Normal Summon is a Continuous-like effect (no Chain, nothing to activate). It can be used
+      // before or after your regular Normal Summon/Set, only to Normal (Tribute) Summon a Psychic-Type monster (not to
+      // Set), and only once per turn even with 2 copies (the grant is per player, see labGrant). The Psychic Counter is
+      // placed when it is used. https://edisonrul.ing/cards/b/brain-research-lab.html
+      // APPROX: the "Psychic Counter instead of paying Life Points" option is not implemented.
+      // Bookkeeping (never activates): place the Psychic Counter when the extra Normal Summon was used.
       kind: 'trigger',
       event: 'normalSummoned',
       range: ['fzone'],
       eventFilter: (ctx, ev) => {
-        const lab = ctx.game.turnData[`anpr:brl:${ctx.player}`];
+        const grant = ctx.game.turnData[`anpr:brl:${ctx.player}`] as LabGrant | undefined;
         const c = evc(ev);
-        if (lab?.pending && lab.lab === ctx.self && c && ev.player === ctx.player && c.data.race === 'Psychic') {
-          lab.pending = false;
+        if (grant && !grant.used && grant.lab === ctx.self && c && ev.player === ctx.player && !(ctx.game.players[ctx.player].restrictedSummons ?? []).includes(grant.entry)) {
+          grant.used = true;
           ctx.self.counters.psychic = (ctx.self.counters.psychic ?? 0) + 1;
           labCounters.set(ctx.self, { moveId: ctx.self.moveId, n: ctx.self.counters.psychic });
           ctx.game.log(`A Psychic Counter is placed on ${ctx.self.name}.`, 'action', ctx.player);
@@ -3046,6 +3121,15 @@ trap('Reinforce Truth', 'normal', {
       canActivate: (ctx) => ctx.canSpecialSummon() && ctx.deck('me', (c) => truthFilter(c) && ctx.canSummonCard(c)).length > 0,
       activate: async (ctx) => {
         ctx.addPlayerMod(ctx.player, 'cannotDeclareAttack');
+        ctx.data.lock = ctx.game.playerMods.slice(-1);
+      },
+      // https://edisonrul.ing/cards/r/reinforce-truth.html — if its activation is negated (Seven Tools, Solemn Judgment) you
+      // can still conduct your Battle Phase; if only its effect is negated (Royal Decree) you cannot.
+      onActivationNegated: (ctx) => {
+        const g = ctx.game;
+        const lock = (ctx.data.lock ?? []) as typeof g.playerMods;
+        g.playerMods = g.playerMods.filter((m) => !lock.includes(m));
+        g.update();
       },
       resolve: async (ctx) => {
         const cands = ctx.deck('me', (c) => truthFilter(c) && ctx.canSummonCard(c));
@@ -3079,10 +3163,10 @@ trap('Pixie Ring', 'continuous', {
           q: 'cannotBeAttacked',
           to: 'cards',
           filter: (ctx, c) => {
-            if (!faceUpOn(c) || c.controller !== ctx.player || c.pos !== 'atk') return false;
-            const atkPos = ctx.faceUpMonsters('me', (m) => m.pos === 'atk');
-            if (atkPos.length < 2) return false;
-            const min = Math.min(...atkPos.map((m) => ctx.atk(m)));
+            // https://edisonrul.ing/cards/p/pixie-ring.html — your lowest-ATK monster cannot be attacked even in Defense Position.
+            if (!faceUpOn(c) || c.controller !== ctx.player) return false;
+            if (ctx.faceUpMonsters('me', (m) => m.pos === 'atk').length < 2) return false;
+            const min = Math.min(...ctx.faceUpMonsters('me').map((m) => ctx.atk(m)));
             return ctx.atk(c) === min;
           },
         },
@@ -3117,7 +3201,7 @@ trap('Fairy Wind', 'normal', {
 });
 
 trap('Imperial Custom', 'continuous', {
-  text: 'Face-up Continuous Traps cannot be destroyed by battle or card effect, except "Imperial Custom". You can only control 1 "Imperial Custom".',
+  text: 'Face-up Continuous Trap Cards cannot be destroyed, except "Imperial Custom". You can only control 1 "Imperial Custom".',
   effects: [
     {
       kind: 'activate',
@@ -3134,7 +3218,9 @@ trap('Imperial Custom', 'continuous', {
     },
   ],
 });
-const imperialProtected = (c: C) => c.location === 'szone' && c.faceUp && c.isTrap && c.data.ttype === 'continuous' && c.name !== 'Imperial Custom';
+// 2010 ruling: Trap Monsters (Continuous Traps on the Monster Card Zone, e.g. "Zoma the Spirit") are protected too.
+// https://edisonrul.ing/cards/i/imperial-custom.html
+const imperialProtected = (c: C) => (c.location === 'szone' || c.location === 'mzone') && c.faceUp && c.isTrap && c.data.ttype === 'continuous' && c.name !== 'Imperial Custom';
 
 trap('Discord', 'continuous', {
   text: 'Neither player can Synchro Summon. Send this card to the Graveyard during your 3rd End Phase after activation.',
@@ -3160,17 +3246,23 @@ trap('Discord', 'continuous', {
       mods: [{ q: 'cannotBeSynchroMaterial', to: 'cards', filter: (_ctx, c) => c.location === 'mzone' }],
     },
     {
+      // Sending it to the GY on your 3rd End Phase does not start a Chain: https://edisonrul.ing/cards/d/discord.html
       kind: 'trigger',
       event: 'phaseStart',
       range: ['szone'],
-      mandatory: true,
-      label: 'Turn count',
-      eventFilter: (ctx, ev) => ev.phase === 'end' && ctx.isMyTurn && stActive(ctx),
-      resolve: async (ctx) => {
-        if (!ctx.self.onField) return;
-        const n = (ctx.self.counters.discord ?? 0) + 1;
-        ctx.self.counters.discord = n;
-        if (n >= 3) await ctx.sendToGrave(ctx.self);
+      label: '(End Phase count)',
+      eventFilter: (ctx, ev) => {
+        if (ev.phase !== 'end' || !ctx.isMyTurn || !stActive(ctx)) return false;
+        const me = ctx.self;
+        const n = (me.counters.discord ?? 0) + 1;
+        me.counters.discord = n;
+        if (n >= 3) {
+          const mid = me.moveId;
+          ctx.game.addDelayed('end', async () => {
+            if (me.onField && me.moveId === mid) await ctx.game.sendToGrave([me], 'effect', me.controller, me);
+          });
+        }
+        return false;
       },
     },
   ],
@@ -3234,13 +3326,17 @@ trap('Depth Amulet', 'continuous', {
       event: 'attackDeclared',
       label: 'Discard: negate attack',
       categories: ['negateAttack'],
+      // Targets the attacking monster; discarding is not a cost: the discard and the negation happen together on
+      // resolution: https://edisonrul.ing/cards/d/depth-amulet.html
       eventFilter: (ctx, ev) => evc(ev)?.controller === ctx.opp && !!ctx.battle && !ctx.battle.inDamageStep && !ctx.battle.negated,
-      canActivate: (ctx) => ctx.hand().length > 0,
+      canActivate: (ctx) => ctx.hand().length > 0 && !!ctx.battle && ctx.canTarget(ctx.battle.attacker),
       activate: async (ctx) => {
-        await ctx.discardFromHand(1, undefined, 'cost', ctx.player, 'Discard 1 card.');
+        if (ctx.battle) ctx.addTargets([ctx.battle.attacker]);
       },
       resolve: async (ctx) => {
-        if (ctx.battle) ctx.negateAttack();
+        if (!ctx.hand().length) return;
+        const d = await ctx.discardFromHand(1, undefined, 'effect', ctx.player, 'Discard 1 card.');
+        if (d.length && ctx.battle && ctx.validTargets((c) => c === ctx.battle?.attacker).length) ctx.negateAttack();
       },
       ai: {
         score: (ctx) => {
@@ -3308,7 +3404,10 @@ trap('Battle Teleportation', 'normal', {
     {
       kind: 'activate',
       categories: ['atkChange', 'control'],
-      condition: (ctx) => ctx.isMyTurn && (ctx.phase === 'main1' || ctx.phase === 'battle') && !ctx.battle,
+      // 2010 rulings: it can be activated any time from your Draw Phase to the end of your Battle Phase (not if you cannot
+      // conduct a Battle Phase); if your opponent has no open Monster Card Zone, the monster cannot move and is
+      // destroyed. https://edisonrul.ing/cards/b/battle-teleportation.html
+      condition: (ctx) => ctx.isMyTurn && ctx.game.turn > 1 && ['draw', 'standby', 'main1', 'battle'].includes(ctx.phase),
       canActivate: (ctx) => {
         const ps = ctx.faceUpMonsters('me', isRace('Psychic'));
         return ps.length === 1 && ctx.canTarget(ps[0]);
@@ -3341,7 +3440,9 @@ trap('Battle Teleportation', 'normal', {
       resolve: async (ctx) => {
         for (const e of teleported(ctx)) {
           delete ctx.game.turnData[`anpr:teleport:${e.card.uid}`];
-          if (e.card.location === 'mzone' && e.card.moveId === e.moveId && e.card.controller !== e.to) await ctx.game.takeControl(e.card, e.to, false);
+          if (e.card.location !== 'mzone' || e.card.moveId !== e.moveId || e.card.controller === e.to) continue;
+          if (ctx.game.freeMZones(e.to) <= 0) await ctx.game.destroy([e.card], 'effect', ctx.player, ctx.self);
+          else await ctx.game.takeControl(e.card, e.to, false);
         }
       },
     },
@@ -3389,9 +3490,13 @@ trap('Core Reinforcement', 'continuous', {
       mandatory: true,
       label: 'Take damage',
       categories: ['damage'],
+      // Not when the monster is destroyed because this card left the field first (MST in the End Phase), but yes when
+      // both are destroyed together (Icarus Attack): https://edisonrul.ing/cards/c/core-reinforcement.html
       eventFilter: (ctx, ev) => {
         const l = coreLinks.get(ctx.self);
-        return !!l && ev.card === l.mon && l.mon.moveId === l.moveId + 1 && ctx.phase === 'end' && ctx.game.turnPlayer === ctx.player;
+        return (
+          !!l && ev.card === l.mon && l.mon.moveId === l.moveId + 1 && ctx.phase === 'end' && ctx.game.turnPlayer === ctx.player && !reasonsOf(ev).includes('rule')
+        );
       },
       resolve: async (ctx) => {
         const l = coreLinks.get(ctx.self);
@@ -3440,7 +3545,9 @@ trap('Battle of the Elements', 'normal', {
     {
       kind: 'activate',
       categories: ['toDeck', 'destroyMulti'],
-      condition: (ctx) => ctx.monsters('both').length > 0 && ctx.monsters('both').every((c) => c.faceUp),
+      // 2010 ruling: it can only be activated with at least 1 face-up monster on each side of the field.
+      // https://edisonrul.ing/cards/b/battle-of-the-elements.html
+      condition: (ctx) => ctx.monsters('me').length > 0 && ctx.monsters('opp').length > 0 && ctx.monsters('both').every((c) => c.faceUp),
       canActivate: (ctx) => [ctx.player, ctx.opp].some((p) => attrGroups(ctx.game, p).size > 1),
       resolve: async (ctx) => {
         if (!ctx.monsters('both').every((c) => c.faceUp)) return;
@@ -3478,18 +3585,18 @@ function attrGroups(g: Game, p: PlayerId) {
 }
 
 trap('Aegis of the Ocean Dragon Lord', 'normal', {
-  text: 'Until the End Phase, face-up Level 3 or lower WATER monsters you control cannot be destroyed by battle or by card effects.',
+  text: 'Until the End Phase of this turn, face-up Level 3 or lower WATER monsters you control cannot be destroyed by battle or by card effects.',
   effects: [
     {
+      // 2010 rulings: it can be activated with no such monster, and it also covers the ones Summoned after it resolved
+      // (a lingering effect for the rest of the turn). https://edisonrul.ing/cards/a/aegis-of-the-ocean-dragon-lord.html
       kind: 'activate',
       damageStep: true,
       categories: ['protect'],
-      canActivate: (ctx) => ctx.faceUpMonsters('me', aegisOk(ctx)).length > 0,
       resolve: async (ctx) => {
-        for (const c of ctx.faceUpMonsters('me', aegisOk(ctx))) {
-          ctx.addTempMod(c, 'indestructibleBattle', true, 'turn');
-          ctx.addTempMod(c, 'indestructibleEffect', true, 'turn');
-        }
+        const list = ((ctx.game.turnData.anprAegis ??= []) as { uid: number; p: PlayerId }[]);
+        list.push({ uid: ctx.self.uid, p: ctx.player });
+        ctx.game.update();
       },
       ai: {
         score: (ctx) => {
@@ -3504,6 +3611,17 @@ trap('Aegis of the Ocean Dragon Lord', 'normal', {
           return 0;
         },
       },
+    },
+    {
+      kind: 'continuous',
+      range: ALL_LOCS,
+      active: (ctx) => ((ctx.game.turnData.anprAegis ?? []) as { uid: number }[]).some((e) => e.uid === ctx.self.uid),
+      mods: (['indestructibleBattle', 'indestructibleEffect'] as const).map((q) => ({
+        q,
+        to: 'cards' as const,
+        filter: (ctx: Ctx, c: C) =>
+          faceUpOn(c) && aegisOk(ctx)(c) && ((ctx.game.turnData.anprAegis ?? []) as { uid: number; p: PlayerId }[]).some((e) => e.uid === ctx.self.uid && e.p === c.controller),
+      })),
     },
   ],
 });
