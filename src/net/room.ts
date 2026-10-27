@@ -19,7 +19,7 @@ import type { Decision } from '../engine/replay';
 import type { PlayerId } from '../engine/types';
 import { matchOutcome } from '../tournament/simulate';
 import type { GameResult } from '../tournament/types';
-import { PROTOCOL_VERSION, gameSeed, roomPeerId, type GameEnd, type LobbyState, type MatchStart, type Msg, type NetPlayer, type WireDeck } from './protocol';
+import { PROTOCOL_VERSION, cleanName, gameSeed, roomPeerId, type GameEnd, type LobbyState, type MatchStart, type Msg, type NetPlayer, type WireDeck } from './protocol';
 import { RemoteController } from './remote';
 import { NetSession, type NetStatus } from './session';
 import type { Transport } from './transport';
@@ -381,6 +381,7 @@ export class Room {
 
   /** A (re)connection: re-send everything the friend may have missed. */
   private connected(p: NetPlayer, theirMatch: string | null) {
+    p = { ...p, name: cleanName(p.name) || 'Duelist' };
     this.peer = p;
     this.ev.peer?.(p);
     const send = (m: Msg) => this.session.send(m);

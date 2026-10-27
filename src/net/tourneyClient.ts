@@ -13,7 +13,7 @@ import type { Room } from './room';
 import { PROTOCOL_VERSION, type Msg, type NetPlayer, type WireDeck } from './protocol';
 import { NetSession, type NetStatus } from './session';
 import type { Transport } from './transport';
-import { TOURNEY_PROTO, matchRoomCode, tourneyPeerId, type Report, type TMatch, type TView } from './tourneyProtocol';
+import { TOURNEY_PROTO, cleanName, matchRoomCode, tourneyPeerId, type Report, type TMatch, type TView } from './tourneyProtocol';
 
 /** What carries messages to the organiser: a NetSession, or the organiser's LocalLink. */
 export interface Link {
@@ -172,6 +172,17 @@ export class TourneyClient {
     this.link.send({ t: 'tido', tid: this.view?.tid ?? '', mid, on });
   }
 
+  /** Change my name for this event (the organiser makes it unique and tells everyone). */
+  rename(raw: string): boolean {
+    const name = cleanName(raw);
+    if (!name) return false;
+    this.me = { ...this.me, name };
+    this.ev.changed?.();
+    if (this.view) this.link.send({ t: 'tname', tid: this.view.tid, name });
+    else this.sendJoin(); // not in yet: the join carries the name
+    return true;
+  }
+
   /** Drop from the event (in the lobby: leave it). */
   drop() {
     this.dropped = true;
@@ -192,7 +203,7 @@ export class TourneyClient {
   // ------------------------------------------------------------------ wire
 
   private sendJoin() {
-    this.link.send({ t: 'tj', tp: TOURNEY_PROTO, tid: this.view?.tid ?? '', player: this.me, deck: this.deck, ready: this.ready });
+    this.link.send({ t: 'tj', tp: TOURNEY_PROTO, tid: this.view?.tid ?? '', player: this.me, deck: this.deck, ready: this.ready, build: this.o.build });
   }
 
   private sendReport(rep: Report) {
@@ -212,6 +223,7 @@ export class TourneyClient {
     for (const rep of Object.values(this.pending)) this.sendReport(rep);
     for (const mid of this.idOffers) this.link.send({ t: 'tido', tid: this.view!.tid, mid, on: true });
   }
+
 
   private receive(m: Msg) {
     if (this.closed) return;

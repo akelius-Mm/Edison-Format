@@ -3,6 +3,8 @@ import type { Difficulty } from '../ai/ai';
 
 export interface Settings {
   playerName: string;
+  /** The player picked a name (even "Duelist"): online play stops asking for one. */
+  nameChosen: boolean;
   /** Avatar id (procedural avatar seed or preset key). */
   avatar: string;
   /** Sleeve id from SLEEVES registry. */
@@ -36,6 +38,7 @@ export interface Settings {
 
 export const DEFAULT_SETTINGS: Settings = {
   playerName: 'Duelist',
+  nameChosen: false,
   avatar: 'avatar-1',
   sleeve: 'matte-black',
   playmat: 'tournament-black',

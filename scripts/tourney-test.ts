@@ -10,7 +10,9 @@
 // intentional draw by agreement; the organiser's phone reloading mid-round (state restored from its
 // save, players' queued reports re-sent); a spectator replaying a match from the feed to the same
 // final board; standings checked against the Swiss rules; and the whole event replayed with the
-// same seeds giving the identical result.
+// same seeds giving the identical result. Also: player names (cleaning, unique suffixes, renames by
+// the player and by the organiser, a re-join keeping an organiser rename), the version check at
+// join, and spectating failing with a clear reason instead of connecting forever.
 //
 // Usage: npx tsx scripts/tourney-test.ts [--verbose] [--only <name>]
 import { AIController, type Difficulty } from '../src/ai/ai';
@@ -24,10 +26,10 @@ import { MemoryHub, MemoryTransport } from '../src/net/memoryTransport';
 import { newRoomCode, type WireDeck } from '../src/net/protocol';
 import { AsHuman, RemoteController } from '../src/net/remote';
 import { Room } from '../src/net/room';
-import { SpectateClient, SpectateServer } from '../src/net/spectate';
+import { SpectateClient, SpectateError, SpectateServer } from '../src/net/spectate';
 import { TourneyHost, placeIn, viewStandings, type HostState } from '../src/net/tournament';
 import { TourneyClient, reportFromRoom, type ClientSnapshot } from '../src/net/tourneyClient';
-import type { TMatch, TView } from '../src/net/tourneyProtocol';
+import { NAME_MAX, cleanName, uniqueName, type TMatch, type TView } from '../src/net/tourneyProtocol';
 import { buildMatchGame, verifyReport } from '../src/net/verify';
 
 const args = process.argv.slice(2);
@@ -527,6 +529,125 @@ async function spectatorCheck(sc: Scenario, hub: MemoryHub, phones: Phone[]) {
   rb.leave();
 }
 
+// ------------------------------------------------------------------ names, versions, spectate errors
+
+async function namesCheck() {
+  // cleaning
+  check(cleanName('  Alex   the\tGreat  ') === 'Alex the Great', 'names: whitespace trimmed and collapsed');
+  check(cleanName('Al\u0000e\u0007x​‮') === 'Alex', 'names: control, zero-width and bidi characters stripped');
+  check(cleanName('<b>Bo</b>') === 'bBo/b', 'names: angle brackets stripped');
+  check(cleanName('x'.repeat(40)).length === NAME_MAX, `names: at most ${NAME_MAX} characters`);
+  const emoji = cleanName('😀'.repeat(25));
+  check(Array.from(emoji).length === NAME_MAX && !/[\ud800-\udbff]$/.test(emoji), 'names: long emoji names cut on whole characters');
+  check(cleanName('   ') === '' && cleanName(null) === '' && cleanName(42) === '42', 'names: empty and non-string input');
+  // unique
+  check(uniqueName('Alex', ['alex']) === 'Alex 2', 'names: a duplicate (any case) gets " 2"');
+  check(uniqueName('Alex', ['Alex', 'Alex 2']) === 'Alex 3', 'names: the next free number');
+  check(uniqueName('Bea', ['Alex']) === 'Bea', 'names: a free name is kept');
+  const long = uniqueName('y'.repeat(NAME_MAX), ['y'.repeat(NAME_MAX)]);
+  check(long.length === NAME_MAX && long.endsWith(' 2'), 'names: a long duplicate is shortened to fit its number');
+
+  // an event: three phones that all call themselves Alex, then renames
+  const hub = new MemoryHub();
+  const code = 'NAME-2345';
+  const ht = { heartbeatMs: 40, timeoutMs: 1500 };
+  const host = new TourneyHost({ code, me: { name: 'Org', avatar: 'a', sleeve: 's', clientId: 'org' }, build: BUILD, transport: new MemoryTransport(hub), settings: { bestOf: 1, topCut: 0, rounds: null, skipFirstDraw: true }, seed: 1, autoPairDelayMs: 0, ...ht });
+  await host.start();
+  const org = new TourneyClient({ code, me: { name: 'Org', avatar: 'a', sleeve: 's', clientId: 'org' }, build: BUILD, link: host.localLink(), ...ht });
+  await org.start();
+  const deck = wireDeck(PREMADE_DECKS[0]);
+  org.register(deck, true);
+  const mk = (id: string, name: string, build = BUILD) => {
+    const refused: string[] = [];
+    const c = new TourneyClient({ code, me: { name, avatar: 'a', sleeve: 's', clientId: id }, build, transport: new MemoryTransport(hub), events: { refused: (r) => refused.push(r) }, ...ht });
+    return { c, refused };
+  };
+  const ps = [mk('p1', 'Alex'), mk('p2', 'alex'), mk('p3', '  Alex\u0007 ')];
+  for (const { c } of ps) {
+    await c.start();
+    c.register(deck, true);
+  }
+  const nameOf = (c: TourneyClient, id: string) => c.view?.players.find((p) => p.id === id)?.name;
+  await waitFor(() => ps.every(({ c }) => c.view?.players.length === 4) && nameOf(ps[0].c, 'p3') != null, 3000, 'name event joined');
+  check(nameOf(ps[0].c, 'p1') === 'Alex' && nameOf(ps[0].c, 'p2') === 'alex 2' && nameOf(ps[0].c, 'p3') === 'Alex 3', `names: duplicates numbered in join order (${host.state.players.map((p) => p.name).join(', ')})`);
+  // a player renames itself: everyone sees it
+  check(ps[1].c.rename('  Bea '), 'names: the player renames itself');
+  await waitFor(() => ps.every(({ c }) => nameOf(c, 'p2') === 'Bea') && nameOf(org, 'p2') === 'Bea', 3000, 'rename reached everyone');
+  check(true, 'names: a rename reaches every phone and the organiser');
+  check(!ps[1].c.rename(' \u0000 '), 'names: an empty rename is refused');
+  // taking a name already used gets a number
+  ps[2].c.rename('BEA');
+  await waitFor(() => nameOf(ps[0].c, 'p3') === 'BEA 2', 3000, 'duplicate rename numbered');
+  check(true, 'names: renaming to a taken name gets a number');
+  // the organiser renames a player; that player's re-join (same asked name) keeps it
+  check(host.rename('p1', 'Champ'), 'names: the organiser renames a player');
+  check(!host.rename('p1', '   '), 'names: the organiser cannot set an empty name');
+  await waitFor(() => nameOf(ps[0].c, 'p1') === 'Champ', 3000, 'organiser rename seen');
+  ps[0].c.register(deck, true); // re-sends the join with "Alex"
+  await sleep(100);
+  check(host.player('p1')?.name === 'Champ', 'names: a re-join with the same name keeps the organiser rename');
+  ps[0].c.rename('Alex');
+  await waitFor(() => nameOf(org, 'p1') === 'Alex', 3000, 'self rename after organiser rename');
+  check(true, 'names: the player can still rename itself afterwards');
+  // the organiser renames itself through its own client
+  org.rename('Boss');
+  await waitFor(() => nameOf(ps[0].c, 'org') === 'Boss', 3000, 'organiser self rename');
+  check(true, 'names: the organiser renames itself');
+  // names reach the match: standings and pairings use the view names
+  check(host.startEvent(), 'names: the event starts');
+  await waitFor(() => !!ps[0].c.myMatch(), 3000, 'paired');
+  const v = ps[0].c.view!;
+  const named = v.rounds[0].flatMap((m) => [m.a, m.b]).filter(Boolean).map((id) => v.players.find((p) => p.id === id)?.name);
+  check(named.every((n) => n && n !== 'Duelist') && viewStandings(v).every((st) => v.players.find((p) => p.id === st.id)?.name), `names: pairings and standings carry the names (${named.join(', ')})`);
+  // mid-event rename still works
+  ps[0].c.rename('Alex Prime');
+  await waitFor(() => nameOf(ps[1].c, 'p1') === 'Alex Prime', 3000, 'mid-event rename');
+  check(true, 'names: renaming during the event');
+
+  // version check at join: another build is refused with 'version'
+  const old = mk('p9', 'Old', 'other-build');
+  await old.c.start().catch(() => {});
+  await waitFor(() => old.refused.length > 0, 3000, 'old build refused');
+  check(old.refused[0] === 'version', `version: a phone on another build is refused with 'version' (${old.refused.join(',')})`);
+  check(!host.player('p9'), 'version: the old build never joins the event');
+  old.c.close();
+
+  // spectating: a feed on another build fails fast with 'version'; no feed at all with 'unreachable'
+  const room = new Room({ role: 'host', code: 'SPEC-2345', me: { name: 'A', avatar: 'a', sleeve: 's', clientId: 'sa' }, build: 'other-build', transport: new MemoryTransport(hub), ...ht });
+  const feed = new SpectateServer(room, new MemoryTransport(hub), 0, { build: 'other-build', me: { name: 'A', avatar: 'a', sleeve: 's', clientId: 'sa' }, ...ht });
+  await feed.start();
+  const watcher = { name: 'W', avatar: 'a', sleeve: 's', clientId: 'w' };
+  let t0 = Date.now();
+  let err: unknown = null;
+  const s1 = new SpectateClient({ roomCode: 'SPEC-2345', transport: () => new MemoryTransport(hub), build: BUILD, me: watcher, ...ht });
+  await s1.begin([0, 1], 1500).catch((e) => (err = e));
+  check(err instanceof SpectateError && err.reason === 'version', `spectate: a feed on another build gives a 'version' error (${(err as Error)?.message})`);
+  check(Date.now() - t0 < 2500, `spectate: the version error comes within the timeout (${Date.now() - t0}ms)`);
+  s1.close();
+  feed.close();
+  t0 = Date.now();
+  err = null;
+  const s2 = new SpectateClient({ roomCode: 'NONE-2345', transport: () => new MemoryTransport(hub), build: BUILD, me: watcher, ...ht });
+  await s2.begin([0, 1], 1200).catch((e) => (err = e));
+  check(err instanceof SpectateError && err.reason === 'unreachable', `spectate: no feed gives an 'unreachable' error (${(err as Error)?.message})`);
+  check(Date.now() - t0 < 2500, `spectate: gives up within the timeout (${Date.now() - t0}ms)`);
+  s2.close();
+
+  // a match room: the friend's name arrives cleaned (it comes from another phone)
+  const ra = new Room({ role: 'host', code: 'ROOM-2345', me: { name: 'Hana', avatar: 'a', sleeve: 's', clientId: 'ra' }, build: BUILD, transport: new MemoryTransport(hub), ...ht });
+  const rb = new Room({ role: 'guest', code: 'ROOM-2345', me: { name: ' <i>Gus\u0000</i>   ', avatar: 'a', sleeve: 's', clientId: 'rb' }, build: BUILD, transport: new MemoryTransport(hub), ...ht });
+  await ra.start();
+  await rb.start();
+  await waitFor(() => !!ra.peer && !!rb.peer, 3000, 'room peers');
+  check(ra.peer!.name === 'iGus/i' && rb.peer!.name === 'Hana', `names: a match room cleans the friend's name (${ra.peer!.name})`);
+  ra.leave();
+  rb.leave();
+
+  for (const { c } of ps) c.close();
+  org.close();
+  host.close();
+}
+
 // ------------------------------------------------------------------ the runs
 
 const SCENARIOS: Scenario[] = [
@@ -550,6 +671,14 @@ const SCENARIOS: Scenario[] = [
       console.log(`${sc.name}: ${out.results.length} matches, champion ${out.view.players.find((p) => p.id === out.placements[0])!.name}, ${((Date.now() - t1) / 1000).toFixed(1)}s`);
     } catch (e) {
       fail(`${sc.name}: ${(e as Error).stack}`);
+    }
+  }
+  if (!only || only === 'names') {
+    try {
+      await namesCheck();
+      console.log('names, versions, spectate errors: checked');
+    } catch (e) {
+      fail(`names: ${(e as Error).stack}`);
     }
   }
   // determinism: the same event with the same seeds plays out identically

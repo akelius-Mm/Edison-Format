@@ -10,7 +10,10 @@
 //     hands hidden).
 //  4. A player reloads mid-match and the match resumes (Home's "Duel in progress" card, or the
 //     event picking it back up) and finishes.
-//  5. Screenshots, portrait 390×844 and landscape 844×390: lobby, pairings, standings, spectating,
+//  5. Names: Rio has never picked one and is asked when joining; Mei's saved name clashes with Gus
+//     ("Gus 2") and she renames herself in the lobby; Hana renames Rio from the lobby. Every phone
+//     shows the names in the lobby, standings and the duel's opponent name bar.
+//  6. Screenshots, portrait 390×844 and landscape 844×390: lobby, pairings, standings, spectating,
 //     ceremony. No horizontal scroll; no console errors anywhere (blocked card art excepted).
 //
 // Usage (after `npm run build`; Playwright is not a project dependency):
@@ -54,17 +57,18 @@ async function phone(browser, name, deck, opts = {}) {
   const iphone = { ...devices['iPhone 13'] };
   delete iphone.defaultBrowserType;
   const ctx = await browser.newContext(iphone);
+  const saved = opts.saved === undefined ? name : opts.saved;
   await ctx.addInitScript(
     ({ name, deck }) => {
       if (localStorage.getItem('e2e.init')) return;
       localStorage.setItem('e2e.init', '1');
-      localStorage.setItem('edison.settings.v1', JSON.stringify({ playerName: name, animationSpeed: 0, sound: false, music: false, haptics: false, confirmEndTurn: false, officialImages: false }));
+      localStorage.setItem('edison.settings.v1', JSON.stringify({ ...(name ? { playerName: name } : {}), animationSpeed: 0, sound: false, music: false, haptics: false, confirmEndTurn: false, officialImages: false }));
       localStorage.setItem('edison.settings.musicOn.v1', 'true');
       localStorage.setItem('edison.settings.firstDraw.v1', 'true');
       localStorage.setItem('edison.hint.hold', '1');
       localStorage.setItem('edison.friendsLocals.prefs.v1', JSON.stringify({ deck: `premade:${deck}` }));
     },
-    { name, deck },
+    { name: saved, deck },
   );
   const page = await ctx.newPage();
   page.on('console', (m) => {
@@ -166,8 +170,9 @@ async function spectate(phones) {
   try {
     const hana = await phone(browser, 'Hana', 'blackwings', { pace: 60 });
     const gus = await phone(browser, 'Gus', 'lightsworn', { pace: 60 });
-    const mei = await phone(browser, 'Mei', 'zombies', { pace: 60 });
-    const rio = await phone(browser, 'Rio', 'x-sabers', { pace: 60 });
+    // Mei's saved name clashes with Gus's; Rio has none yet (asked on joining)
+    const mei = await phone(browser, 'Mei', 'zombies', { pace: 60, saved: 'Gus' });
+    const rio = await phone(browser, 'Rio', 'x-sabers', { pace: 60, saved: null });
     phones.push(hana, gus, mei, rio);
     // log every phone's link to the organiser as it changes
     const last = {};
@@ -199,9 +204,35 @@ async function spectate(phones) {
     await rio.page.click('[data-test=fl-join]');
     await rio.page.fill('[data-test=fl-join-code]', code.toLowerCase().replace('-', ' '));
     await rio.page.keyboard.press('Enter');
+    // Rio never picked a name: asked before joining
+    const ask = rio.page.locator('[data-test=name-input]');
+    await ask.waitFor({ timeout: 10000 });
+    ok((await ask.inputValue()) === 'Duelist', 'a player without a name is asked for one before joining');
+    await ask.fill('  Rio\u0007  ');
+    await ask.press('Enter');
     for (const p of [gus, mei, rio]) await p.page.waitForSelector('[data-test=fl-players]', { timeout: 30000 });
     await hana.page.waitForFunction(() => window.__edisonLocals?.view?.players.length === 4, null, { timeout: 30000 });
     ok(true, 'three friends joined the lobby');
+    // ---------------------------------------------------------------- names
+    const namesOn = (p) => L(p, () => window.__edisonLocals.view.players.map((x) => x.name).sort().join(','));
+    await hana.page.waitForFunction(() => window.__edisonLocals.view.players.map((x) => x.name).sort().join(',') === 'Gus,Gus 2,Hana,Rio', null, { timeout: 15000 }).catch(() => {});
+    ok((await namesOn(hana)) === 'Gus,Gus 2,Hana,Rio', `names in the lobby, the duplicate numbered: ${await namesOn(hana)}`);
+    await mei.page.click('.fl-players [data-test=fl-rename-me]');
+    const mIn = mei.page.locator('[data-test=name-input]');
+    await mIn.waitFor({ timeout: 10000 });
+    await mIn.fill('Mei');
+    await mIn.press('Enter');
+    await hana.page.click('.fl-players [aria-label="Rename Rio"]');
+    const hIn = hana.page.locator('[data-test=name-input]');
+    await hIn.waitFor({ timeout: 10000 });
+    await hIn.fill('Rio <R>');
+    await hIn.press('Enter');
+    for (const p of phones) await p.page.waitForFunction(() => window.__edisonLocals.view.players.map((x) => x.name).sort().join(',') === 'Gus,Hana,Mei,Rio R', null, { timeout: 15000 }).catch(() => {});
+    const allNames = await Promise.all(phones.map((p) => namesOn(p)));
+    ok(allNames.every((n) => n === 'Gus,Hana,Mei,Rio R'), `renames (self and by the organiser) reach every phone: ${allNames.join(' | ')}`);
+    const lobbyText = await L(gus, () => document.querySelector('[data-test=fl-players]')?.textContent ?? '');
+    ok(['Hana', 'Mei', 'Rio R', 'Gus (you)'].every((n) => lobbyText.includes(n)) && !lobbyText.includes('Duelist'), 'the lobby lists everyone by name');
+    ok((await L(mei, () => JSON.parse(localStorage.getItem('edison.settings.v1')).playerName)) === 'Mei', 'a rename in the event is saved to the profile');
     for (const p of [gus, mei, rio]) {
       await p.page.waitForFunction(() => !document.querySelector('[data-test=fl-ready]')?.hasAttribute('disabled'), null, { timeout: 15000 });
       await p.page.click('[data-test=fl-ready]');
@@ -253,6 +284,16 @@ async function spectate(phones) {
         ok(true, `Mei resumed (had ${before} decisions) and play continues`);
         reloaded = true;
       }
+      if (round === 1) {
+        await gus.page.waitForSelector('.pp--opp .pp-name', { timeout: 60000 }).catch(() => {});
+        const bar = await L(gus, () => {
+          const l = window.__edisonLocals;
+          const m = l.client.myMatch();
+          const opp = m && l.view.players.find((x) => x.id === (m.a === l.client.me.clientId ? m.b : m.a));
+          return { shown: document.querySelector('.pp--opp .pp-name')?.textContent ?? '', want: opp?.name ?? '' };
+        });
+        ok(!!bar.want && bar.shown === bar.want, `the duel's opponent name bar shows the event name (${bar.shown})`);
+      }
       // round 1: a player from one table watches the other, which is slowed down so it is
       // certainly still going (decided by the pairings, not by timing)
       if (round === 1) await spectate(phones);
@@ -270,6 +311,8 @@ async function spectate(phones) {
         await gus.page.waitForFunction(() => !window.__edisonLocals.playing, null, { timeout: 30000 });
         await sleep(600);
         await tab(gus, 'Standings');
+        const stText = await L(gus, () => document.querySelector('.fl-screen')?.textContent ?? '');
+        ok(['Hana', 'Mei', 'Rio R', 'Gus (you)'].every((n) => stText.includes(n)) && !stText.includes('Duelist'), 'the standings show every name');
         await shot(gus, 'fl-standings-portrait.png');
         await shot(gus, 'fl-standings-landscape.png', true);
         await tab(gus, 'Round');

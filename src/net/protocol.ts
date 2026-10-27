@@ -90,6 +90,23 @@ export interface GameEnd {
   kind?: 'concede' | 'claim' | 'desync';
 }
 
+/** Longest player name (Play a friend and Friends Locals). */
+export const NAME_MAX = 20;
+
+/**
+ * A player name as typed or received: control, zero-width and bidi characters and angle brackets
+ * removed, whitespace collapsed, trimmed, at most NAME_MAX characters (never splitting a
+ * surrogate pair). Empty when nothing is left. Screens still escape names (they come from peers).
+ */
+export function cleanName(raw: unknown): string {
+  const s = String(raw ?? '')
+    .replace(/\s/g, ' ')
+    .replace(/[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u2028-\u202e\u2060-\u2069\ufeff<>]/g, '')
+    .replace(/ +/g, ' ')
+    .trim();
+  return Array.from(s).slice(0, NAME_MAX).join('').trim();
+}
+
 export type Msg =
   | { t: 'hello'; proto: number; build: string; sid: string; role: 'host' | 'guest'; player: NetPlayer; match: string | null; game: number | null; have: number }
   | { t: 'lobby'; state: LobbyState }

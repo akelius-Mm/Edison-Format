@@ -42,6 +42,7 @@ import { avatar } from './locals';
 import { frame, go, lockNav, scrollToTop, type Screen } from './nav';
 import { allDeckInfos, toDeckList, type DeckInfo } from './store';
 import { artInto } from './title';
+import { ensureName, nameChip, playerName } from './playerName';
 
 declare const __BUILD_ID__: string;
 const BUILD = typeof __BUILD_ID__ === 'string' ? __BUILD_ID__ : 'dev';
@@ -102,7 +103,7 @@ export function clientId(): string {
 
 export function mePlayer(): NetPlayer {
   const s = getSettings();
-  return { name: (s.playerName || 'Duelist').slice(0, 20), avatar: s.avatar, sleeve: s.sleeve, clientId: clientId() };
+  return { name: playerName(), avatar: s.avatar, sleeve: s.sleeve, clientId: clientId() };
 }
 
 export const wireDeck = (d: DeckInfo): WireDeck => {
@@ -190,8 +191,12 @@ export function friendScreen(params: Record<string, string>): Screen {
   }
   const join = params.join ? normalizeRoomCode(params.join) : null;
   if (join) {
-    active = new FriendSession(body, 'guest', join);
-    void active.open();
+    void (async () => {
+      if (!(await ensureName())) return landing(body, { joining: true });
+      if (active && !active.closed) return active.attach(body);
+      active = new FriendSession(body, 'guest', join);
+      void active.open();
+    })();
     return screen;
   }
   landing(body);
@@ -231,9 +236,12 @@ function landing(body: HTMLElement, opts: { joining?: boolean; error?: string } 
       codeIn.focus();
       return;
     }
-    active?.close();
-    active = new FriendSession(body, 'guest', code);
-    void active.open();
+    void (async () => {
+      if (!(await ensureName())) return;
+      active?.close();
+      active = new FriendSession(body, 'guest', code);
+      void active.open();
+    })();
   };
   codeIn.addEventListener('input', () => {
     const raw = codeIn.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8);
@@ -246,7 +254,8 @@ function landing(body: HTMLElement, opts: { joining?: boolean; error?: string } 
 
   const create = ctaButton(
     'Create room',
-    () => {
+    async () => {
+      if (!(await ensureName())) return;
       active?.close();
       active = new FriendSession(body, 'host', newRoomCode());
       void active.open();
@@ -281,6 +290,7 @@ function landing(body: HTMLElement, opts: { joining?: boolean; error?: string } 
       hero,
       opts.error ? h('div', { class: 'fr-error', role: 'alert' }, icon('warn'), h('span', null, opts.error)) : null,
       h('div', { class: 'fr-actions' }, create, joinToggle, joinBox),
+      nameChip(),
       h(
         'button',
         { type: 'button', class: 'fl-link', 'data-test': 'friends-locals', onclick: () => go('friend-locals') },
@@ -310,6 +320,8 @@ export interface MatchHooks {
   /** The paired opponent's clientId. */
   expectPeer: string;
   opponentName: string;
+  /** My name in the event (unique there): sent in the match hello so both phones show event names. */
+  myName?: string;
   deck: WireDeck;
   bestOf: 1 | 3;
   seed: number;
@@ -372,7 +384,7 @@ export class FriendSession {
     this.room = new Room({
       role,
       code,
-      me: snap?.me ? { ...snap.me, name: mePlayer().name } : mePlayer(),
+      me: { ...(snap?.me ?? mePlayer()), name: hooks?.myName || mePlayer().name },
       build: BUILD,
       transport: new PeerTransport(serverConfig()),
       snapshot: snap,
