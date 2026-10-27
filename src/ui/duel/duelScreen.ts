@@ -43,6 +43,7 @@ import { haptic } from '../haptics';
 import { duelLogLine, reportError, setDuelDiag } from '../diag';
 import { genericWhyNot, whyRow, whySentence } from '../../cards/why-not';
 import { openReportSheet } from '../screens/report';
+import { smartPrompt } from './promptRules';
 
 export async function startDuel(container: HTMLElement, opts: DuelOptions): Promise<DuelResult> {
   let o = opts;
@@ -1378,16 +1379,7 @@ class DuelScreen implements HumanUI {
   private shouldPrompt(p: PlayerId, req: ResponseRequest): boolean {
     if (!req.options.length) return false;
     if (getSettings().responsePrompts === 'always') return true;
-    if (req.kind === 'chain' || req.kind === 'attack' || req.kind === 'damage' || req.kind === 'summonNegation') return true;
-    // priority after your own summon: always ask when the monster you just summoned has an effect to use
-    if (req.kind === 'priority' && req.options.some((o) => o.effect.kind === 'ignition' && o.card.controller === p && o.card.location === 'mzone')) return true;
-    return req.options.some((o) => {
-      if (o.event) return true;
-      const c = o.card;
-      const setCard = c.onField && !c.faceUp && (c.isTrap || c.data.stype === 'quickplay');
-      if (!setCard) return false;
-      return this.aiScore(p, o) > 0;
-    });
+    return smartPrompt(this.game, p, req, (o) => this.aiScore(p, o));
   }
 
   private aiScore(p: PlayerId, o: Activation): number {
