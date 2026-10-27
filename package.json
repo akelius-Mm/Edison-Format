@@ -26,6 +26,7 @@
     "test:tourney": "tsx scripts/tourney-test.ts",
     "test:friends-locals-e2e": "node scripts/friends-locals-e2e.cjs",
     "test:routes-e2e": "node scripts/routes-e2e.cjs",
+    "test:guide-e2e": "node scripts/guide-settings-e2e.cjs",
     "test:undo-e2e": "node scripts/undo-e2e.cjs",
     "test:monkey-e2e": "node scripts/monkey-e2e.cjs",
     "test:whynot-e2e": "node scripts/whynot-e2e.cjs"

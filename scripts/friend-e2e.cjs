@@ -10,6 +10,7 @@
 //     finishes in step.
 //  5. Three matches in one room via Rematch (one "Rematch" lost in a dropped channel): nobody is
 //     ever thrown out of the room and every rematch is a new match on both phones.
+//  5b. The in-duel Settings sheet opened mid-game on one phone: settings save, the duel goes on, both end in step.
 //  6. Screenshots of the landing, lobby and "Opponent is thinking…" chip, portrait and landscape.
 //  No console errors anywhere (blocked card-art requests excepted).
 //
@@ -308,6 +309,26 @@ async function screenshots(browser) {
     ];
     for (const [a, b, bestOf] of matchups) await match(browser, `${a} vs ${b} (Bo${bestOf})`, a, b, { bestOf });
     await match(browser, 'Bo3 with siding', 'x-sabers', 'blackwings', { bestOf: 3, side: true });
+    // the in-duel Settings sheet (flag button → Settings) on one phone: the duel keeps going and both phones end in step
+    await match(browser, 'settings mid-duel', 'x-sabers', 'zombies', {
+      pace: 20,
+      midGame: async (host) => {
+        await host.page.locator('.duel-root .icon-btn--danger').click();
+        await host.page.locator('.dlg--leave button', { hasText: 'Settings' }).click();
+        const sheet = host.page.locator('[data-test=duel-settings]');
+        await sheet.waitFor({ timeout: 5000 });
+        const before = await decisions(host);
+        await sheet.locator('.seg-btn', { hasText: 'Always' }).click();
+        await sheet.locator('input[aria-label="Show duel log"]').evaluate((i) => i.click());
+        const saved = await host.page.evaluate(() => JSON.parse(localStorage.getItem('edison.settings.v1')));
+        const hidden = await host.page.evaluate(() => document.querySelector('.duel-root').classList.contains('hide-log'));
+        ok(saved.responsePrompts === 'always' && saved.showLog === false && hidden, 'settings mid-duel: changes saved and applied at once');
+        await host.page.screenshot({ path: path.join(OUT, 'friend-duel-settings-portrait.png') });
+        await host.page.waitForFunction((n) => { const c = window.__edisonNet?.room.current; return !c || c.logs[0].length + c.logs[1].length > n; }, before, { timeout: 20000 });
+        ok(true, 'settings mid-duel: the online duel keeps going while the sheet is open');
+        await host.page.locator('.modal-foot button', { hasText: 'Done' }).click();
+      },
+    });
     await match(browser, 'disconnect mid-game', 'lightsworn', 'blackwings', {
       pace: 20,
       midGame: async (host, guest) => {

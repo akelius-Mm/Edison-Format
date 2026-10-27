@@ -62,6 +62,8 @@ const ROUTES = [
   'rules',
   'rules?tab=banlist',
   'rules?tab=pool',
+  'guide',
+  'guide?section=rules',
   'tournament',
   'draft',
   'draft?customize=1',

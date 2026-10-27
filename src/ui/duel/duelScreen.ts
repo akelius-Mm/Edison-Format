@@ -43,6 +43,7 @@ import { haptic } from '../haptics';
 import { duelLogLine, reportError, setDuelDiag } from '../diag';
 import { genericWhyNot, whyRow, whySentence } from '../../cards/why-not';
 import { openReportSheet } from '../screens/report';
+import { openDuelSettings } from '../screens/settingsControls';
 import { smartPrompt } from './promptRules';
 
 export async function startDuel(container: HTMLElement, opts: DuelOptions): Promise<DuelResult> {
@@ -296,6 +297,8 @@ class DuelScreen implements HumanUI {
         this.flush();
         this.preview.invalidate();
       }
+      // the in-duel Settings sheet (flag menu → Settings) can switch the log too
+      this.root.classList.toggle('hide-log', !st.showLog);
       this.sfx.enabled = st.sound;
       this.sfx.volume = st.volume;
       this.updateSoundBtn();
@@ -801,6 +804,7 @@ class DuelScreen implements HumanUI {
             { label: 'Leave and save', kind: 'primary', onClick: () => (m.close(), resolve('leave')) },
             { label: 'Concede', kind: 'danger', onClick: () => (m.close(), resolve('concede')) },
             { label: 'Keep playing', kind: 'ghost', hotkey: 'Escape', onClick: () => (m.close(), resolve(null)) },
+            { label: 'Settings', kind: 'ghost', onClick: () => (m.close(), resolve(null), openDuelSettings()) },
             { label: 'Report a problem', kind: 'ghost', onClick: () => (m.close(), resolve(null), openReportSheet()) },
           ],
         });
@@ -820,6 +824,7 @@ class DuelScreen implements HumanUI {
         actions: [
           { label: this.spectator ? 'Stop' : 'Surrender', kind: this.spectator ? 'primary' : 'danger', hotkey: 'Enter', onClick: () => (m.close(), resolve(true)) },
           { label: 'Keep playing', kind: 'ghost', hotkey: 'Escape', onClick: () => (m.close(), resolve(false)) },
+          { label: 'Settings', kind: 'ghost', onClick: () => (m.close(), resolve(false), openDuelSettings({ spectator: this.spectator })) },
           { label: 'Report a problem', kind: 'ghost', onClick: () => (m.close(), resolve(false), openReportSheet()) },
         ],
       });

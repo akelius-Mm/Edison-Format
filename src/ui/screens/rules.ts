@@ -7,6 +7,7 @@ import { premadeInfo } from './store';
 import { button, clear, h, icon, modal, type Child } from './dom';
 import { renderCard } from './ext';
 import { frame, go, type Params, type Screen } from './nav';
+import { guideCard } from './title';
 
 type Tab = 'format' | 'rules' | 'pool' | 'banlist' | 'controls';
 
@@ -46,7 +47,7 @@ export function rulesScreen(params: Params): Screen {
     body.appendChild(tab === 'format' ? formatTab() : tab === 'rules' ? rulesTab() : tab === 'pool' ? poolTab() : tab === 'banlist' ? banlistTab() : controlsTab());
   };
   draw();
-  const el = frame('How to Play', { subtitle: 'The Edison Format, its rules and its Forbidden & Limited list', cls: 'rules rules-screen' }, tabs, body);
+  const el = frame('How to Play', { subtitle: 'The Edison Format, its rules and its Forbidden & Limited list', cls: 'rules rules-screen' }, tabs, body, guideCard());
   return { el };
 }
 

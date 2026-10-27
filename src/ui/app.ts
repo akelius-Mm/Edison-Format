@@ -9,6 +9,7 @@ import { packsScreen } from './screens/packs';
 import { duelSetupScreen, exhibitionScreen } from './screens/duelSetup';
 import { registerRoute, startRouter } from './screens/nav';
 import { rulesScreen } from './screens/rules';
+import { guideScreen } from './screens/guide';
 import { settingsScreen } from './screens/settingsScreen';
 import { titleScreen } from './screens/title';
 import { tournamentScreen } from './screens/tournament';
@@ -30,6 +31,7 @@ export function startApp(root: HTMLElement) {
   registerRoute('customize', customizeScreen);
   registerRoute('settings', settingsScreen);
   registerRoute('rules', rulesScreen);
+  registerRoute('guide', guideScreen);
   registerRoute('tournament', tournamentScreen);
   registerRoute('draft', draftScreen);
   registerRoute('packs', packsScreen);

@@ -131,7 +131,7 @@ export function titleScreen(): Screen {
     'div',
     { class: 'home', tabindex: '-1' },
     hero,
-    h('div', { class: 'home-body' }, browserBanner(), duelCard, resume, thisWeek, h('h2', { class: 'home-h' }, 'Your cards'), tiles, more, rulesNotesCard(), banlistCard(), h('p', { class: 'home-foot' }, 'Fan-made, non-commercial simulator. Not affiliated with the card game’s publisher.')),
+    h('div', { class: 'home-body' }, browserBanner(), duelCard, resume, thisWeek, h('h2', { class: 'home-h' }, 'Your cards'), tiles, more, rulesNotesCard(), banlistCard(), guideCard(), h('p', { class: 'home-foot' }, 'Fan-made, non-commercial simulator. Not affiliated with the card game’s publisher.')),
   );
 
   return { el };
@@ -242,6 +242,21 @@ function banlistCard(): HTMLElement {
         h('b', null, 'Banlist · March 2010'),
         h('small', null, `${FORBIDDEN.length} Forbidden · ${LIMITED.length} Limited · ${SEMI_LIMITED.length} Semi-Limited`),
       ),
+      icon('chevron'),
+    ),
+  );
+}
+
+/** Home row under the banlist (same style): the in-app Guide. Also shown on How to Play. */
+export function guideCard(): HTMLElement {
+  return h(
+    'section',
+    { class: 'rn-card rn-card--guide', 'aria-label': 'Guide' },
+    h(
+      'button',
+      { type: 'button', class: 'rn-open', 'data-test': 'home-guide', onclick: () => go('guide') },
+      h('span', { class: 'rn-icon' }, icon('info')),
+      h('span', { class: 'rn-text' }, h('b', null, 'Guide · How the app works'), h('small', null, 'Getting around, duels, playing friends, where the rules come from')),
       icon('chevron'),
     ),
   );
