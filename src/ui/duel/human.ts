@@ -36,6 +36,7 @@ export interface HumanUI {
   requestAttackTarget(p: PlayerId, attacker: CardInstance, targets: CardInstance[], canDirect: boolean): Promise<CardInstance | null | 'cancel'>;
   requestTrigger(p: PlayerId, act: Activation): Promise<boolean>;
   requestDeclare(p: PlayerId, prompt: string, names: string[]): Promise<string>;
+  requestTriggerOrder(p: PlayerId, acts: Activation[]): Promise<Activation[]>;
 }
 
 export class HumanController implements PlayerController {
@@ -69,6 +70,9 @@ export class HumanController implements PlayerController {
   }
   declareCard(_g: Game, p: PlayerId, prompt: string, names: string[]) {
     return traced('declare', this.ui.requestDeclare(p, prompt, names));
+  }
+  chooseTriggerOrder(_g: Game, p: PlayerId, acts: Activation[]) {
+    return traced('triggerOrder', this.ui.requestTriggerOrder(p, acts));
   }
 }
 
@@ -132,6 +136,10 @@ export class PacedController implements PlayerController {
   async confirmTrigger(g: Game, p: PlayerId, act: Activation) {
     await this.pacer.pace(0);
     return this.ai.confirmTrigger(g, p, act);
+  }
+  async chooseTriggerOrder(g: Game, p: PlayerId, acts: Activation[]) {
+    await this.pacer.pace(0);
+    return this.ai.chooseTriggerOrder ? this.ai.chooseTriggerOrder(g, p, acts) : acts;
   }
   async declareCard(g: Game, p: PlayerId, prompt: string, names: string[]) {
     await this.pacer.pace(140);

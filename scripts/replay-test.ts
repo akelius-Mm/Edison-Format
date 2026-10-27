@@ -67,6 +67,10 @@ class ScriptedHuman implements PlayerController {
   confirmTrigger(g: Game, p: PlayerId, act: Activation) {
     return this.ai.confirmTrigger(g, p, act);
   }
+  chooseTriggerOrder(g: Game, p: PlayerId, acts: Activation[]) {
+    // reversed, so the recorded order differs from the engine's default and the replay has to reproduce it
+    return this.ai.chooseTriggerOrder(g, p, acts).then((o) => o.reverse());
+  }
   declareCard(g: Game, p: PlayerId, prompt: string, names: string[]) {
     return this.ai.declareCard(g, p, prompt, names);
   }
@@ -103,6 +107,9 @@ class NoLive implements PlayerController {
   }
   confirmTrigger() {
     return this.no<boolean>();
+  }
+  chooseTriggerOrder() {
+    return this.no<Activation[]>();
   }
   declareCard() {
     return this.no<string>();
@@ -170,6 +177,10 @@ class Snapshotter implements PlayerController {
   confirmTrigger(g: Game, p: PlayerId, act: Activation) {
     this.s(g);
     return this.inner.confirmTrigger(g, p, act);
+  }
+  chooseTriggerOrder(g: Game, p: PlayerId, acts: Activation[]) {
+    this.s(g);
+    return this.inner.chooseTriggerOrder!(g, p, acts);
   }
   declareCard(g: Game, p: PlayerId, prompt: string, names: string[]) {
     this.s(g);
@@ -241,6 +252,7 @@ function compare(label: string, a: Run, b: Run) {
   const t0 = Date.now();
   const decks = PREMADE_DECKS;
   let decisions = 0;
+  let orders = 0;
   for (let i = 0; i < GAMES; i++) {
     const s: Setup = {
       a: decks[(i * 5) % decks.length],
@@ -259,6 +271,7 @@ function compare(label: string, a: Run, b: Run) {
       continue;
     }
     decisions += rec.log.length;
+    orders += rec.log.filter((d) => d.k === 'ord').length;
     // JSON round trip, as stored in localStorage
     const log: Decision[] = JSON.parse(JSON.stringify(rec.log));
 
@@ -298,7 +311,7 @@ function compare(label: string, a: Run, b: Run) {
   }
   const bo3 = await sidingMatches();
   console.log(`replay-test: ${bo3} best-of-3 matches with side decking replayed`);
-  console.log(`replay-test: ${GAMES} games, ${decisions} recorded decisions, ${failures} failure${failures === 1 ? '' : 's'}, ${((Date.now() - t0) / 1000).toFixed(1)}s`);
+  console.log(`replay-test: ${GAMES} games, ${decisions} recorded decisions (${orders} trigger orders), ${failures} failure${failures === 1 ? '' : 's'}, ${((Date.now() - t0) / 1000).toFixed(1)}s`);
   process.exit(failures ? 1 : 0);
 })();
 

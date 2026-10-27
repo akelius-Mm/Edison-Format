@@ -112,6 +112,13 @@ export interface PlayerController {
   ): Promise<CardInstance | null | 'cancel'>;
   /** Choose order/which optional triggers: called per optional trigger. */
   confirmTrigger(game: Game, player: PlayerId, act: Activation): Promise<boolean>;
+  /**
+   * Order the player's own simultaneous triggers of one SEGOC group (2+ different effects that will all be activated).
+   * Returns the same activations in the order they go on the Chain: the first becomes the lowest Chain Link, the last
+   * one resolves first. Optional: a controller without it keeps the order given (Official Rulebook v7.0 p.43,
+   * https://www.edisonformat.com/rulebook.html).
+   */
+  chooseTriggerOrder?(game: Game, player: PlayerId, acts: Activation[]): Promise<Activation[]>;
   /** Declare a card name (Mind Crush etc.). */
   declareCard?(game: Game, player: PlayerId, prompt: string, names: string[]): Promise<string>;
 }

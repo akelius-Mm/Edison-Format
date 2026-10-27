@@ -484,6 +484,25 @@ export class AIController implements PlayerController {
     return true;
   }
 
+  /**
+   * Chain order of simultaneous triggers (deterministic, no RNG): the effect that should resolve first goes on the Chain
+   * last. Removal / negation first (it acts on the board before the rest of the Chain changes it), then damage, then
+   * effects that gain resources (draw, search, Special Summon), then everything else; ties keep the engine's order.
+   */
+  async chooseTriggerOrder(_game: Game, _p: PlayerId, acts: Activation[]): Promise<Activation[]> {
+    const rank = (a: Activation) => {
+      const cats = a.effect.categories ?? [];
+      if (cats.some((c) => c === 'destroy' || c === 'destroyMulti' || c === 'banish' || c === 'control' || c === 'negate' || c === 'toHand')) return 3;
+      if (cats.includes('damage')) return 2;
+      if (cats.some((c) => c === 'draw' || c === 'search' || c === 'specialSummon')) return 1;
+      return 0;
+    };
+    return acts
+      .map((a, i) => ({ a, i, r: rank(a) }))
+      .sort((x, y) => x.r - y.r || x.i - y.i)
+      .map((x) => x.a);
+  }
+
   // ------------------------------------------------------------ selections
   async selectCards(game: Game, p: PlayerId, req: SelectRequest): Promise<CardInstance[]> {
     const harmful = HARMFUL.has(req.purpose);

@@ -43,7 +43,12 @@ export type Decision =
   /** Optional trigger: activate or skip. */
   | { k: 'trg'; v: boolean; c: number; h: string }
   /** Declared card name. */
-  | { k: 'name'; v: string; h: string };
+  | { k: 'name'; v: string; h: string }
+  /**
+   * Chain order of simultaneous triggers: `o` lists the offered activations' indices in the order they go on the Chain,
+   * `c` the matching cards (validation).
+   */
+  | { k: 'ord'; o: number[]; c: number[]; h: string };
 
 export type DecisionKind = Decision['k'];
 
@@ -99,6 +104,12 @@ export interface RecordingOptions {
    * position the decision will take in the log (engine/undo.ts marks its undo points here).
    */
   onRequest?: (kind: DecisionKind, game: Game, index: number) => void;
+  /**
+   * Replaying a log recorded before trigger ordering existed: a trigger-order request whose next recorded decision is
+   * of another kind takes the default order without consuming anything (the old engine used that order). On by default;
+   * the friend's seat (net/remote.ts) turns it off since its entries always come from the same build.
+   */
+  lenientOrder?: boolean;
 }
 
 export class RecordingController implements PlayerController {
@@ -282,6 +293,24 @@ export class RecordingController implements PlayerController {
     const v = await this.inner.confirmTrigger(game, p, act);
     this.push(game, { k: 'trg', v, c: cardRef(game, act.card), h }, false);
     return v;
+  }
+
+  async chooseTriggerOrder(game: Game, p: PlayerId, acts: Activation[]): Promise<Activation[]> {
+    if (this.queue.length && this.queue[0].k !== 'ord' && this.o.lenientOrder !== false && !this.mismatch) return acts;
+    const r = this.next(game, 'ord');
+    if (r) {
+      const n = acts.length;
+      const ok = r.o.length === n && new Set(r.o).size === n && r.o.every((i, j) => Number.isInteger(i) && i >= 0 && i < n && r.c[j] === cardRef(game, acts[i].card));
+      if (!ok) this.fail(`step ${this.log.length + 1}: trigger order does not fit the triggers`);
+      this.push(game, r, true);
+      return r.o.map((i) => acts[i]);
+    }
+    const h = stateDigest(game);
+    const got = this.inner.chooseTriggerOrder ? await this.inner.chooseTriggerOrder(game, p, acts.slice()) : acts;
+    let o = got.map((a) => acts.indexOf(a));
+    if (o.length !== acts.length || o.some((i) => i < 0) || new Set(o).size !== acts.length) o = acts.map((_, i) => i);
+    this.push(game, { k: 'ord', o, c: o.map((i) => cardRef(game, acts[i].card)), h }, false);
+    return o.map((i) => acts[i]);
   }
 
   async declareCard(game: Game, p: PlayerId, prompt: string, names: string[]): Promise<string> {
