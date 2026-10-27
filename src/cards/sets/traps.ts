@@ -1600,7 +1600,9 @@ defTrap('Imperial Order', 'continuous', {
         if (ctx.lp > 700 && (await ctx.confirm('Pay 700 LP to keep Imperial Order?', ctx.lp > 2500))) {
           await ctx.payLp(700);
         } else {
-          await ctx.destroy(ctx.self);
+          // 2010 ruling: a Continuous Trap whose maintenance cost is not paid is destroyed even under "Imperial
+          // Custom" (no destruction protection applies). https://edisonrul.ing/cards/i/imperial-custom.html
+          await ctx.game.moveCards([ctx.self], 'grave', { reason: 'effect', reasons: ['effect', 'destroy'], reasonPlayer: ctx.player, reasonCard: ctx.self, destroyed: true });
         }
       },
     },
@@ -1791,12 +1793,14 @@ defTrap('Crush Card Virus', 'normal', {
 });
 
 defTrap('Exchange of the Spirit', 'normal', {
-  text: 'Activate only if both players have 15 or more cards in their GYs. Each player swaps the cards in their GY with the cards in their Deck, then shuffles their new Deck.',
+  text: 'Activate only when there are 15 or more cards in your Graveyard. Each player exchanges all the cards in their Graveyard with all the cards in their Deck, then shuffles their new Deck.',
   effects: [
     {
       kind: 'activate',
       categories: ['toDeck', 'mill'],
-      condition: (ctx) => ctx.grave('me').length >= 15 && ctx.grave('opp').length >= 15,
+      // 2010 ruling: only your own GY needs 15 or more cards; your opponent's GY can hold any number, including 0.
+      // https://edisonrul.ing/cards/e/exchange-of-the-spirit.html
+      condition: (ctx) => ctx.grave('me').length >= 15,
       resolve: async (ctx) => {
         const g = ctx.game;
         for (const p of [ctx.player, ctx.opp] as PlayerId[]) {

@@ -494,23 +494,26 @@ spell('Card Destruction', 'normal', {
 });
 
 spell('Hand Destruction', 'quickplay', {
-  text: 'Each player sends 2 cards from their hand to the GY, then draws 2 cards.',
+  text: 'Each player sends 2 cards from their hand to the Graveyard and draws 2 cards.',
   effects: [
     {
       kind: 'activate',
       categories: ['draw', 'discard'],
       canActivate: (ctx) =>
         otherHand(ctx).length >= 2 && ctx.hand('opp').length >= 2 && ctx.deck('me').length >= 2 && ctx.deck('opp').length >= 2,
+      // 2010 rulings: the cards are sent to the GY (not discarded, so no "Dark World" effects), and if a player does
+      // not have 2 cards in hand on resolution, neither player sends nor draws. https://edisonrul.ing/cards/h/hand-destruction.html
       resolve: async (ctx) => {
         const tp = ctx.game.turnPlayer;
         const order: PlayerId[] = [tp, ctx.game.opp(tp)];
+        if (order.some((p) => ctx.game.zone(p, 'hand').filter((c) => c !== ctx.self).length < 2)) return;
         const chosen: CardInstance[] = [];
         for (const p of order) {
-          const hand = ctx.game.zone(p, 'hand');
-          const sel = await ctx.game.select(p, hand, Math.min(2, hand.length), Math.min(2, hand.length), 'Send 2 cards from your hand to the GY.', 'discard', { source: ctx.self });
+          const hand = ctx.game.zone(p, 'hand').filter((c) => c !== ctx.self);
+          const sel = await ctx.game.select(p, hand, 2, 2, 'Send 2 cards from your hand to the GY.', 'toGrave', { source: ctx.self });
           chosen.push(...sel);
         }
-        if (chosen.length) await ctx.game.discard(chosen, 'effect', ctx.player, ctx.self);
+        if (chosen.length) await ctx.game.sendToGrave(chosen, 'effect', ctx.player, ctx.self);
         for (const p of order) await ctx.draw(2, p);
       },
       ai: {

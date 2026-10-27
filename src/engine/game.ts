@@ -1788,13 +1788,13 @@ export class Game {
   }
 
   /** ABPF: monsters `p` can Tribute as the single Tribute of an alternative rule (EffectDef.altTribute) for `card`. */
-  altTributeCandidates(p: PlayerId, card: CardInstance): CardInstance[] {
+  altTributeCandidates(p: PlayerId, card: CardInstance, set = false): CardInstance[] {
     if (this.tributesNeeded(card) < 2) return [];
     const rules: ((c: CardInstance) => boolean)[] = [];
     for (const src of this.continuousSources) {
       if (src !== card && !(src.onField && src.controller === p)) continue;
       for (const ef of src.data.effects ?? []) {
-        if (ef.kind !== 'continuous' || !ef.altTribute || !this.sourceActive(src, ef, 'cannotBeTributed')) continue;
+        if (ef.kind !== 'continuous' || !ef.altTribute || (set && ef.altTributeNoSet) || !this.sourceActive(src, ef, 'cannotBeTributed')) continue;
         const ctx = this.effectCtx(src, ef);
         rules.push((c) => ef.altTribute!(ctx, card, c));
       }
@@ -1815,7 +1815,7 @@ export class Game {
     if (need === 0) return this.freeMZones(p) > 0;
     if (!set && this.queryCard(card, 'cannotTributeSummon')) return false;
     const trib = this.tributeCandidates(p, card);
-    return trib.length >= need || this.altTributeCandidates(p, card).length > 0; // ABPF: alternative Tribute rule
+    return trib.length >= need || this.altTributeCandidates(p, card, set).length > 0; // ABPF: alternative Tribute rule
   }
 
   /** Is one of the player's remaining Normal Summons usable for `card` (unrestricted, or a restricted one it fits)? */
@@ -1831,7 +1831,7 @@ export class Game {
     let tributes: CardInstance[] = [];
     if (need > 0) {
       // ABPF: alternative 1-Tribute rule (EffectDef.altTribute). Without one, this is the plain N-Tribute selection.
-      const alt = this.altTributeCandidates(p, card);
+      const alt = this.altTributeCandidates(p, card, set);
       let n = need;
       let pool = this.tributeCandidates(p, card);
       if (alt.length) {

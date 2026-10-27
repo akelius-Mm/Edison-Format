@@ -1422,7 +1422,9 @@ monster('Emissary from Pandemonium', {
   aiValue: 100,
   text: 'This card cannot be Special Summoned. You can Normal Summon this card with 1 Tribute. If you do, it becomes Level 5 and its original ATK and DEF are halved.',
   effects: [
-    { kind: 'continuous', range: ['hand'], altTribute: (ctx, summoned) => summoned === ctx.self },
+    // 2010 ruling: it cannot be Set by Tributing just 1 monster (the 1-Tribute rule is a Normal Summon only).
+    // https://edisonrul.ing/cards/e/emissary-from-pandemonium.html
+    { kind: 'continuous', range: ['hand'], altTribute: (ctx, summoned) => summoned === ctx.self, altTributeNoSet: true },
     {
       // Applies the 1-Tribute penalty (never activates).
       kind: 'trigger',
@@ -2055,23 +2057,34 @@ monster('Emperor Sem', {
   text: 'Each time you Tribute Summon a monster, each player can select 1 card from their Graveyard and return it to the top of their Deck.',
   effects: [
     {
+      // 2010 rulings: an optional Trigger Effect that starts a Chain. If you activate it you must target 1 card in your
+      // GY (so you need one); your opponent may also target 1 card in their GY (optional; their GY can be empty). If
+      // control of this card shifts to your opponent before it resolves, nothing happens.
+      // https://edisonrul.ing/cards/e/emperor-sem.html
       kind: 'trigger',
       event: 'tributeSummoned',
-      mandatory: true,
       label: 'Return a GY card to the top of the Deck',
       categories: ['toDeck'],
       eventFilter: (ctx, ev) => ev.player === ctx.player && faceUpOn(ctx.self) && ev.card !== ctx.self,
-      resolve: async (ctx) => {
-        for (const p of [ctx.player, ctx.opp] as PlayerId[]) {
-          const gy = ctx.game.zone(p, 'grave');
-          if (!gy.length) continue;
-          const best = bestTarget(ctx.game, gy);
-          const want = !!best && cardValue(ctx.game, best) >= 1800;
-          if (!(await ctx.game.confirm(p, 'Emperor Sem: return 1 card from your GY to the top of your Deck?', ctx.self, want))) continue;
-          const [c] = await ctx.select(gy, 1, 1, 'Select 1 card in your GY to put on top of your Deck.', 'toHand', { player: p, aiScore: (x) => cardValue(ctx.game, x) });
-          if (c) await ctx.game.toDeck([c], 'effect', 'top', p, ctx.self);
-        }
+      canActivate: (ctx) => ctx.grave('me').some((c) => ctx.canTarget(c)),
+      activate: async (ctx) => {
+        const mine = await ctx.selectTargets(ctx.grave('me'), 1, 1, 'Target 1 card in your GY to return to the top of your Deck.', 'toDeck', {
+          aiScore: (x) => cardValue(ctx.game, x),
+        });
+        if (!mine.length) return false;
+        const theirs = ctx.grave('opp').filter((c) => ctx.canTarget(c));
+        if (!theirs.length) return;
+        const best = bestTarget(ctx.game, theirs);
+        const want = !!best && cardValue(ctx.game, best) >= 1800;
+        if (!(await ctx.game.confirm(ctx.opp, 'Emperor Sem: target 1 card in your GY to return to the top of your Deck?', ctx.self, want))) return;
+        const [c] = await ctx.select(theirs, 1, 1, 'Target 1 card in your GY to return to the top of your Deck.', 'toDeck', { player: ctx.opp, aiScore: (x) => cardValue(ctx.game, x) });
+        if (c) ctx.addTargets([c]);
       },
+      resolve: async (ctx) => {
+        if (ctx.self.controller !== ctx.player) return;
+        for (const t of ctx.validTargets((c) => c.location === 'grave')) await ctx.game.toDeck([t], 'effect', 'top', t.owner, ctx.self);
+      },
+      ai: { score: (ctx) => (bestTarget(ctx.game, ctx.grave('me')) ? 30 : 0) },
     },
   ],
 });
@@ -3268,8 +3281,9 @@ trap('Fake Feather', 'normal', {
     {
       // APPROX: the copied Trap's own activation code runs with this card as `ctx.self`; the Trap in the GY is
       // chosen as the copy source but is not kept as one of the copied effect's targets.
+      // 2010 ruling: "Fake Feather" cannot be activated during the Damage Step.
+      // https://edisonrul.ing/cards/f/fake-feather.html
       kind: 'activate',
-      damageStep: true,
       categories: ['negate'],
       canActivate: (ctx) => ctx.hand('me', isBW).length > 0 && featherOptions(ctx).length > 0,
       activate: async (ctx) => {

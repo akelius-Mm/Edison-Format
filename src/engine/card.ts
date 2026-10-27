@@ -183,6 +183,8 @@ export interface EffectDef {
    * Applies to the source's own card (e.g. range ['hand']) or, for a card on the field, to its controller's summons.
    */
   altTribute?: (ctx: Ctx, summoned: CardInstance, tribute: CardInstance) => boolean;
+  /** The `altTribute` rule is for a Normal Summon only, not a Set (Emissary from Pandemonium). */
+  altTributeNoSet?: boolean;
   /**
    * SDMM (Blast Sphere): a 'trigger' with no event that activates while this card is a face-down monster attacked by
    * an opponent's monster, at the start of the Damage Step before it would be flipped face-up (Game.damageStep).
