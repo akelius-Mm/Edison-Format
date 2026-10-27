@@ -366,7 +366,10 @@ export class Game {
     return Math.max(0, empty - locked);
   }
   freeSZones(p: PlayerId) {
-    return this.players[p].szone.filter((c) => !c).length;
+    // A Trap Monster (flags.trapMonster) also takes up 1 Spell & Trap Zone of its controller.
+    // https://edisonrul.ing/cards/misc/trap-monsters.html
+    const trapMonsters = this.players[p].mzone.filter((c) => c?.flags.trapMonster).length;
+    return Math.max(0, this.players[p].szone.filter((c) => !c).length - trapMonsters);
   }
 
   isOptUsed(key: string) {
@@ -1871,6 +1874,45 @@ export class Game {
     await this.processTriggers(true);
   }
 
+  /**
+   * Gemini Summon: Normal Summon a face-up Gemini monster again so it becomes an Effect Monster. Not while its effects
+   * are negated (Skill Drain). https://edisonrul.ing/cards/misc/gemini-monsters-gigaplant-elemental-hero-neos-alius-etc.html
+   */
+  canGeminiSummon(p: PlayerId, card: CardInstance): boolean {
+    if (card.location !== 'mzone' || !card.faceUp || card.controller !== p || !card.hasType('gemini') || card.flags.geminiSummoned) return false;
+    if (this.chain.length || this.isNegated(card)) return false;
+    if (this.players[p].normalSummonsLeft <= 0 || !this.hasNormalSummonFor(p, card, false)) return false;
+    return !this.queryPlayer(p, 'cannotNormalSummon') && !this.queryCard(card, 'cannotBeSummoned');
+  }
+
+  /**
+   * The Gemini Summon (2010 rulings, page above): it does not start a chain and needs no Tributes; it can be negated
+   * (Solemn Judgment, which destroys the monster) and answered like any Normal Summon (Torrential Tribute, Black Garden).
+   * The monster stays on the field and keeps its position (it cannot change it afterwards this turn).
+   */
+  async geminiSummon(p: PlayerId, card: CardInstance) {
+    this.players[p].normalSummonsLeft--;
+    (this.turnData.normalSummonedOrSet ??= {})[p] = true;
+    const restricted = this.players[p].restrictedSummons ?? [];
+    const ri = restricted.findIndex((r) => r.allow(card, false));
+    if (ri >= 0) restricted.splice(ri, 1);
+    else if (restricted.length > this.players[p].normalSummonsLeft) restricted.splice(0, restricted.length - this.players[p].normalSummonsLeft);
+    this.recentEvents = [];
+    card.summonTurn = this.turn;
+    this.log(`${this.players[p].name} Gemini Summons ${card.name} (Normal Summon).`, 'action', p);
+    await this.anim({ type: 'summon', cards: [card.uid], method: 'normal', from: ['mzone'] });
+    if (await this.summonNegationWindow([card], p, 'normal')) return;
+    if (card.location !== 'mzone' || !card.faceUp) return;
+    card.flags.geminiSummoned = true;
+    this.log(`${card.name} is now treated as an Effect Monster.`, 'action', p);
+    this.beginBatch();
+    const common = { card, player: p, from: 'mzone' as Location, to: 'mzone' as Location, tributes: [] as CardInstance[], method: 'normal' as GameEvent['method'] };
+    this.emit({ type: 'normalSummoned', ...common });
+    this.emit({ type: 'summoned', ...common });
+    this.update();
+    await this.processTriggers(true);
+  }
+
   /** Window where summons can be negated (Solemn Judgment etc.). Returns true if negated. */
   async summonNegationWindow(cards: CardInstance[], player: PlayerId, method: string): Promise<boolean> {
     this.pendingSummon = { cards, player, method, negated: false };
@@ -2258,6 +2300,7 @@ export class Game {
   }
 
   canProc(p: PlayerId, c: CardInstance, ef: EffectDef, idx: number): boolean {
+    if (ef.geminiSummon) return this.canGeminiSummon(p, c);
     const range = this.defaultRange(c, ef);
     if (!range.includes(c.location)) return false;
     if (this.chain.length) return false;
@@ -2326,6 +2369,10 @@ export class Game {
       }
       case 'proc': {
         const { card, effect: ef, effectIndex: idx } = a.act;
+        if (ef.geminiSummon) {
+          await this.geminiSummon(p, card);
+          return;
+        }
         const ctx = new Ctx(this, card, ef, p);
         ctx.effectIndex = idx;
         if (ef.opt) this.useOpt(this.optKey(card, ef, idx, p));

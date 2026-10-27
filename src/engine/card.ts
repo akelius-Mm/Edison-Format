@@ -153,6 +153,11 @@ export interface EffectDef {
   /** For 'proc': allowed summon positions. */
   procPositions?: BattlePos[];
   /**
+   * For 'proc' (range ['mzone']) on a Gemini monster: the Gemini Summon — a Normal Summon of the face-up monster
+   * (Game.geminiSummon), not an effect: no chain, no Tributes, Solemn Judgment / Torrential Tribute can answer it.
+   */
+  geminiSummon?: boolean;
+  /**
    * ANPR: destruction replacement ("if X would be destroyed, you can ... instead").
    * Called by `Game.destroy` (reason 'effect') and by battle destruction (reason 'battle') for every
    * source card in `range` (default: monsters 'mzone', Spells/Traps 'szone'/'fzone'; face-up, not negated

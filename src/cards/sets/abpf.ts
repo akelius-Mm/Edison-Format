@@ -3288,6 +3288,7 @@ trap('Machine King - 3000 B.C.', 'continuous', {
         if (r.length) {
           me.flags.staysOnField = true;
           me.flags.mkSummoned = true;
+          me.flags.trapMonster = true;
         }
         ctx.addPlayerMod(ctx.player, 'cannotNormalSummon');
         ctx.addPlayerMod(ctx.player, 'cannotSpecialSummon');

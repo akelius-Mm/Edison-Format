@@ -804,8 +804,9 @@ function eq(a: unknown, b: unknown, msg: string) {
     const sd = place(0, cardByName('Stardust Dragon'), 'extra');
     eq(tm.isTuner, false, 'not a Tuner yet');
     eq(g.canSynchro(0, sd), false, 'no Synchro yet');
-    const gem = g.getActivations(0, { open: true }).find((a) => a.card === tm)!;
-    await g.performAction(0, { type: 'activate', card: tm, act: gem });
+    // The Gemini Summon is a Normal Summon (main action, no chain), not an activated effect.
+    const gem = g.legalMainActions(0).find((a) => a.type === 'proc' && a.card === tm)!;
+    await g.performAction(0, gem);
     eq(g.players[0].normalSummonsLeft, 0, 'uses the Normal Summon');
     eq(tm.isTuner, true, 'now a Tuner');
     eq(g.canSynchro(0, sd), true, 'Tuned Magician + Level 4 = Stardust Dragon');
@@ -5043,7 +5044,8 @@ async function extraDeckTests() {
     const sd = place(0, cardByName('Stardust Dragon'), 'extra');
     eq(g.canSynchro(0, sd), false, 'not a Tuner before the Gemini Summon');
     eq(tm.hasType('tuner'), false, 'no Tuner type yet');
-    await activateCard(g, 0, tm, 'Gemini Summon (Normal Summon again)');
+    eq(g.canGeminiSummon(0, tm), true, 'can be Gemini Summoned');
+    await g.geminiSummon(0, tm);
     eq(tm.isTuner, true, 'Tuner once Gemini Summoned');
     eq(g.canSynchro(0, sd), true, 'usable as the Tuner (4 + 4)');
     const sk = place(1, cardByName('Skill Drain'), 'szone', { faceUp: true });

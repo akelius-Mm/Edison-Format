@@ -252,23 +252,15 @@ function makeGeminiActive(ctx: Ctx, c: C) {
   ctx.log(`${c.name} is now treated as an Effect Monster.`);
   ctx.game.update();
 }
-/**
- * Gemini Summon. APPROX (as plants.ts / sovr.ts / ptdn.ts): the engine has no Gemini Summon action, so it is an
- * Ignition effect that uses the turn's Normal Summon; it starts a chain instead of being a Summon.
- */
+/** Gemini Summon: a Normal Summon of the face-up Gemini monster (Game.geminiSummon, no chain). */
 function geminiSummon(score: (ctx: Ctx) => number = () => 40): EffectDef {
   return {
-    kind: 'ignition',
+    // The Gemini Summon is a Normal Summon, not an effect (Game.geminiSummon; no chain).
+    kind: 'proc',
+    geminiSummon: true,
+    range: ['mzone'],
     label: 'Gemini Summon (Normal Summon again)',
     categories: [],
-    condition: (ctx) =>
-      ctx.self.faceUp && !ctx.self.flags.geminiSummoned && ctx.game.players[ctx.player].normalSummonsLeft > 0 && !ctx.game.queryPlayer(ctx.player, 'cannotNormalSummon'),
-    activate: async (ctx) => {
-      ctx.game.players[ctx.player].normalSummonsLeft--;
-    },
-    resolve: async (ctx) => {
-      makeGeminiActive(ctx, ctx.self);
-    },
     ai: {
       score: (ctx) => {
         const better = ctx.hand('me', (c) => c.isMonster && ctx.game.canNormalSummon(ctx.player, c) && (c.data.atk ?? 0) + (c.data.aiValue ?? 0) > 1900);
