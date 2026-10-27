@@ -448,14 +448,18 @@ monster('Doomkaiser Dragon/Assault Mode', {
       mandatory: true,
       label: 'Special Summon Zombies',
       categories: ['specialSummon'],
-      resolve: async (ctx) => {
+      // Targets the Zombies in the GY(s) when it activates: https://edisonrul.ing/cards/d/doomkaiser-dragonassault-mode.html
+      activate: async (ctx) => {
         const cands = ctx.grave('both', (c) => raceIs(c, 'Zombie') && ctx.canSummonCard(c));
         const room = ctx.freeMZones();
         if (!cands.length || !room || !ctx.canSpecialSummon()) return;
-        const sel = await ctx.select(cands, 0, room, 'Special Summon any number of Zombie-Type monsters from either GY.', 'specialSummon', {
+        await ctx.selectTargets(cands, 0, room, 'Target any number of Zombie-Type monsters in either GY to Special Summon.', 'specialSummon', {
           aiScore: (c) => (c.data.atk ?? 0) + (c.name === 'Bone Crusher' ? 2000 : 0),
         });
-        if (!sel.length) return;
+      },
+      resolve: async (ctx) => {
+        const sel = ctx.validTargets((c) => c.location === 'grave' && ctx.canSummonCard(c)).slice(0, ctx.freeMZones());
+        if (!sel.length || !ctx.canSpecialSummon()) return;
         const r = await ctx.specialSummon(sel, { pos: 'choose' });
         for (const m of r) {
           ctx.negateEffects(m, 'field');
@@ -938,15 +942,15 @@ monster("Cosmic Fortress Gol'gar", {
       opt: true,
       label: 'Remove 2 A-Counters: destroy 1 card',
       categories: ['destroy'],
-      canActivate: (ctx) => aOnField(ctx.game) >= 2 && ctx.field('opp').length > 0,
+      // Targets 1 card your opponent controls (removing the A-Counters is the cost): https://edisonrul.ing/cards/c/cosmic-fortress-golgar.html
+      canActivate: (ctx) => aOnField(ctx.game) >= 2 && ctx.field('opp', (c) => ctx.canTarget(c)).length > 0,
       activate: async (ctx) => {
         if (!(await removeA(ctx, 2))) return false;
+        await ctx.selectTargets(ctx.field('opp'), 1, 1, 'Target 1 card your opponent controls to destroy.', 'destroy');
       },
       resolve: async (ctx) => {
-        const f = ctx.field('opp');
-        if (!f.length) return;
-        const sel = await ctx.select(f, 1, 1, 'Destroy 1 card your opponent controls.', 'destroy');
-        if (sel.length) await ctx.destroy(sel);
+        const t = ctx.validTargets((c) => c.onField);
+        if (t.length) await ctx.destroy(t);
       },
       ai: { score: (ctx) => (ctx.field('opp').length ? 55 : 0) },
     },
@@ -1683,12 +1687,11 @@ monster('Desert Protector', {
         if (cards.includes(ctx.self) || !faceUpOn(ctx.self)) return [];
         const mine = cards.filter((c) => c.location === 'mzone' && c.controller === ctx.player && c.faceUp && raceIs(c, 'Insect'));
         if (!mine.length) return [];
-        const [save] = await ctx.select(mine, 0, 1, 'Destroy Desert Protector instead of which Insect-Type monster?', 'generic', {
-          aiScore: (c) => cardValue(ctx.game, c) - cardValue(ctx.game, ctx.self) - 200,
-        });
-        if (!save) return [];
+        // 1 Desert Protector saves every Insect destroyed at the same time: https://edisonrul.ing/cards/d/desert-protector.html
+        const worth = mine.reduce((a, c) => a + cardValue(ctx.game, c), 0) - cardValue(ctx.game, ctx.self) - 200;
+        if (!(await ctx.confirm(`Destroy Desert Protector instead of ${mine.map((c) => c.name).join(', ')}?`, worth > 0))) return [];
         await ctx.game.destroy([ctx.self], 'effect', ctx.player, ctx.self);
-        return [save];
+        return mine;
       },
     },
   ],
@@ -2394,14 +2397,16 @@ function starBlastAiValue(ctx: Ctx, c: C) {
 }
 
 spell('Raptor Wing Strike', 'normal', {
-  text: 'Shuffle 1 "Blackwing" monster you control into the Main Deck; add 1 "Blackwing" monster from your Deck to your hand.',
+  text: 'Return 1 "Blackwing" monster you control to the Deck; add 1 "Blackwing" monster from your Deck to your hand.',
   effects: [
     {
       kind: 'activate',
       categories: ['search', 'toDeck'],
-      canActivate: (ctx) => ctx.faceUpMonsters('me', (c) => isBW(c) && !c.isExtra && !c.isToken).length > 0 && ctx.deck('me', isBW).length > 0,
+      // https://edisonrul.ing/cards/r/raptor-wing-strike.html — a "Blackwing" Synchro Monster can pay the cost (it returns to
+      // the Extra Deck).
+      canActivate: (ctx) => ctx.faceUpMonsters('me', (c) => isBW(c) && !c.isToken).length > 0 && ctx.deck('me', isBW).length > 0,
       activate: async (ctx) => {
-        const sel = await ctx.select(ctx.faceUpMonsters('me', (c) => isBW(c) && !c.isExtra && !c.isToken), 1, 1, 'Shuffle 1 "Blackwing" monster you control into the Deck.', 'cost');
+        const sel = await ctx.select(ctx.faceUpMonsters('me', (c) => isBW(c) && !c.isToken), 1, 1, 'Shuffle 1 "Blackwing" monster you control into the Deck.', 'cost');
         if (!sel.length) return false;
         await ctx.toDeck(sel, 'shuffle', 'cost');
       },
@@ -3125,15 +3130,15 @@ trap('Nightmare Archfiends', 'normal', {
       mandatory: true,
       label: 'Nightmare Archfiend Token: 800 damage',
       categories: ['damage'],
+      // https://edisonrul.ing/cards/n/nightmare-archfiends.html — the damage when a Token is destroyed does not start a
+      // chain (Barrel Behind the Door cannot be activated against it).
+      noChain: true,
       eventFilter: (ctx, ev) => {
         const c = evc(ev);
         return !!c && c.isToken && !!nightmareTokens.get(ctx.self)?.has(c.uid);
       },
-      activate: async (ctx) => {
-        ctx.data.p = ctx.event!.fromController ?? ctx.opp;
-      },
       resolve: async (ctx) => {
-        await ctx.game.damage(ctx.data.p as PlayerId, 800, 'effect', ctx.self, ctx.player);
+        await ctx.game.damage(ctx.event!.fromController ?? ctx.opp, 800, 'effect', ctx.self, ctx.player);
       },
     },
   ],
@@ -3144,7 +3149,9 @@ trap('Ebon Arrow', 'normal', {
   text: 'Select 1 face-up monster you control. Until the End Phase, it loses 500 ATK and during battle between that attacking monster and a Defense Position monster whose DEF is lower than the selected monster\'s ATK, inflict the difference as Battle Damage to your opponent. When the selected monster destroys a monster by battle and sends it to the Graveyard this turn, inflict damage to your opponent equal to the destroyed monster\'s original DEF.',
   effects: [
     {
+      // Can be activated during the Damage Step: https://edisonrul.ing/cards/e/ebon-arrow.html
       kind: 'activate',
+      damageStep: true,
       categories: ['damage'],
       canActivate: (ctx) => ctx.faceUpMonsters('me', (c) => ctx.canTarget(c)).length > 0,
       activate: async (ctx) => {
@@ -3178,7 +3185,9 @@ trap('Ebon Arrow', 'normal', {
         const c = evc(ev);
         const o = evo(ev);
         if (!c || !o || c.location !== 'grave') return false;
-        return (ebonMarks.get(ctx.game) ?? []).some((m) => m.trap === ctx.self.uid && m.turn === ctx.turn && m.uid === o.uid && m.mid === o.moveId);
+        // Still applies when the selected monster is destroyed in the same battle (equal ATK): https://edisonrul.ing/cards/e/ebon-arrow.html
+        const same = (mid: number) => o.moveId === mid || (o.moveId === mid + 1 && o.location === 'grave');
+        return (ebonMarks.get(ctx.game) ?? []).some((m) => m.trap === ctx.self.uid && m.turn === ctx.turn && m.uid === o.uid && same(m.mid));
       },
       activate: async (ctx) => {
         ctx.data.d = evc(ctx.event!)!.data.def ?? 0;
@@ -3309,6 +3318,9 @@ trap('Morphtronic Forcefield', 'counter', {
         const l = ctx.prevLink();
         return !!l && !l.negated && l.isCardActivation && (l.card.isSpell || l.card.isTrap) && threatensMorph(ctx, l);
       },
+      // https://edisonrul.ing/cards/m/morphtronic-forcefield.html — it cannot be activated with no "Morphtronic" monsters
+      // in your Deck, or while "Thunder King Rai-Oh" is on the field (no adding from the Deck).
+      canActivate: (ctx) => !ctx.game.queryPlayer(ctx.player, 'cannotAddFromDeck') && ctx.deck('me', (c) => c.isMonster && isMorph(c)).length > 0,
       activate: async (ctx) => {
         ctx.data.link = ctx.prevLink();
       },

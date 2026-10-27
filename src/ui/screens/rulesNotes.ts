@@ -2,7 +2,7 @@
 // don't report a correct ruling as a bug. Shown once on Home (dismissible) and any time from Settings.
 import { h, icon, modal } from './dom';
 
-export const RULES_NOTES_KEY = 'edison.rulesNotes.v2';
+export const RULES_NOTES_KEY = 'edison.rulesNotes.v3';
 
 export const RULES_NOTES_INTRO = 'Cards now play exactly as written in April 2010.';
 
@@ -13,7 +13,7 @@ export const RULES_NOTES: { deck: string; items: string[] }[] = [
       'Brain Control can take any face-up monster, including Synchro and Fusion monsters, Tokens and Dark Armed Dragon (its 2010 text; the “can be Normal Summoned” limit came later).',
       'Treeborn Frog can’t come back while you control a face-up Treeborn Frog, so only one returns per Standby Phase.',
       'An effect that Special Summons its own card (Plaguespreader Zombie, Treeborn Frog…) isn’t offered when that card can’t be Summoned, so you never pay its cost for nothing.',
-      'Necrovalley: cards in the Graveyard can’t be banished, and effects that move cards out of the Graveyard are negated. Gravekeeper’s Priestess does the same while there’s no face-up Field Spell.',
+      'Necrovalley (its 2010 text): cards in the Graveyard can’t be banished, and effects that target a card in the Graveyard are negated (Monster Reborn, Debris Dragon, Pot of Avarice…). Effects that don’t target still work: Treeborn Frog, Plaguespreader Zombie, Rekindling, Red-Eyes Darkness Metal Dragon, and Zombie World’s Type change in the Graveyard. Gravekeeper’s Priestess does the same while there’s no face-up Field Spell.',
     ],
   },
   {
@@ -66,7 +66,7 @@ export const RULES_NOTES: { deck: string; items: string[] }[] = [
   {
     deck: 'Zombies, Gravekeepers & Aliens',
     items: [
-      'Zombie World makes monsters on the field and in the Graveyards Zombie-Type (not in the Graveyard while Necrovalley applies).',
+      'Zombie World makes monsters on the field and in the Graveyards Zombie-Type (also under Necrovalley).',
       'Red-Eyes Zombie Dragon only Special Summons a Zombie-Type monster it destroyed (any monster while Zombie World applies).',
       'Gravekeeper’s Descendant can only Tribute another face-up Gravekeeper’s monster.',
       'Alien Dog’s A-Counters work: a monster with A-Counters loses 300 ATK/DEF per counter while it battles Alien Dog.',

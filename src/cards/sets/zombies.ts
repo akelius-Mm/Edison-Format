@@ -151,7 +151,7 @@ monster('Mezuki', {
   level: 4,
   atk: 1700,
   def: 800,
-  text: 'You can banish this card from your GY, then target 1 Zombie-Type monster in your GY; Special Summon that target.',
+  text: 'You can remove from play this card from your Graveyard to Special Summon 1 Zombie-Type monster from your Graveyard.',
   aiValue: 600,
   effects: [
     {
@@ -166,8 +166,10 @@ monster('Mezuki', {
           aiScore: (c) => reviveValue(ctx, c),
         });
       },
+      // https://edisonrul.ing/cards/m/mezuki.html — "If the target is no longer a Zombie-Type monster, it is not Special
+      // Summoned."
       resolve: async (ctx) => {
-        const t = ctx.validTargets((c) => c.location === 'grave');
+        const t = ctx.validTargets((c) => c.location === 'grave' && isZombie(ctx, c));
         if (t.length) await ctx.specialSummon(t[0]);
       },
       ai: {
@@ -202,16 +204,16 @@ monster('Plaguespreader Zombie', {
   atk: 400,
   def: 200,
   types: ['tuner'],
-  text: 'During your Standby Phase, if this card is in your GY: You can place 1 card from your hand on top of your Deck; Special Summon this card. Banish it when it leaves the field.',
+  text: 'You can return 1 card from your hand to the top of the Deck to Special Summon this card from the Graveyard. If you do, remove this card from play when it is removed from the field.',
   aiValue: 700,
   effects: [
     {
-      kind: 'trigger',
-      event: 'phaseStart',
+      // https://edisonrul.ing/cards/p/plaguespreader-zombie.html — an Ignition Effect that activates & resolves in the GY
+      // (your Main Phase, not only the Standby Phase); placing the hand card on top of the Deck is the cost.
+      kind: 'ignition',
       range: ['grave'],
       label: 'Return a card to the Deck: revive',
       categories: ['specialSummon'],
-      eventFilter: (ctx, ev) => ev.phase === 'standby' && ctx.isMyTurn,
       condition: (ctx) => ctx.canSummonSelf() && ctx.hand().length > 0,
       activate: async (ctx) => {
         const sel = await ctx.select(ctx.hand(), 1, 1, 'Place 1 card from your hand on top of your Deck.', 'cost', { aiScore: (c) => putBackScore(ctx, c) });
@@ -226,12 +228,13 @@ monster('Plaguespreader Zombie', {
       ai: {
         score: (ctx) => {
           if (ctx.freeMZones() <= 0) return 0;
-          // In the Standby Phase other monsters may still be summoned; count likely materials.
-          if (synchroOptions(ctx, [{ card: ctx.self }]).length) return 1;
+          // Revive it for a Synchro Summon right away, or with a Normal Summon still to make that pairs with it.
+          if (synchroOptions(ctx, [{ card: ctx.self }]).length) return 55;
           const hand = ctx.hand();
+          if (ctx.game.players[ctx.player].normalSummonsLeft <= 0) return 0;
           // A normal-summonable non-Tuner in hand that pairs with it.
           const pair = hand.some((h) => h.isMonster && !h.isTuner && !h.data.cannotNormalSummon && (h.data.level ?? 0) <= 4 && synchroOptions(ctx, [{ card: ctx.self }, { card: h }]).length);
-          return pair && hand.length >= 2 ? 1 : 0;
+          return pair && hand.length >= 2 ? 45 : 0;
         },
       },
     },
@@ -252,6 +255,9 @@ monster('Pyramid Turtle', {
       event: 'battleDestroyed',
       label: 'Summon a Zombie from Deck',
       categories: ['specialSummon'],
+      // "When ... you can": an optional trigger that can miss the timing
+      // (https://edisonrul.ing/cards/misc/battle-tutors-mystic-tomato-shining-angel-ufo-turtle-mother-grizzly-flying-kaminari-1-giant-rat-pyramid-turtle-etc.html).
+      when: true,
       eventFilter: (ctx, ev) => ev.card === ctx.self && ctx.self.location === 'grave',
       condition: (ctx) => ctx.canSpecialSummon() && ctx.deck('me', (c) => c.isMonster && c.data.race === 'Zombie' && (c.data.def ?? 0) <= 2000 && !c.data.nomi).length > 0,
       resolve: async (ctx) => {
@@ -287,12 +293,18 @@ monster('Il Blud', {
       canActivate: (ctx) =>
         ctx.canSpecialSummon() &&
         [...ctx.hand('me', (c) => c.data.race === 'Zombie'), ...ctx.grave('both', (c) => isZombie(ctx, c))].some((c) => ctx.canSummonCard(c)),
+      activate: async (ctx) => {
+        ctx.data.mid = ctx.self.moveId;
+        ctx.data.fid = ctx.self.faceUpId;
+      },
       resolve: async (ctx) => {
-        if (!ctx.self.faceUpMonster) return;
+        // https://edisonrul.ing/cards/i/il-blud.html — the Special Summon still resolves if Il Blud is turned face-down or
+        // destroyed in response; a monster Summoned that way is not destroyed later by Il Blud's effect.
         const cands = [...ctx.hand('me', (c) => c.data.race === 'Zombie'), ...ctx.grave('both', (c) => isZombie(ctx, c))].filter((c) => ctx.canSummonCard(c));
         const sel = await ctx.select(cands, 1, 1, 'Special Summon 1 Zombie-Type monster from your hand or either GY.', 'specialSummon', { aiScore: (c) => reviveValue(ctx, c) });
         if (!sel.length) return;
         const r = await ctx.specialSummon(sel[0]);
+        if (!ctx.self.faceUpMonster || ctx.self.moveId !== ctx.data.mid || ctx.self.faceUpId !== ctx.data.fid) return;
         for (const c of r) c.flags.ilBludSource = ctx.self.uid;
       },
       ai: { score: () => 60 },
@@ -386,7 +398,6 @@ monster('Vampire Lord', {
   def: 1500,
   text: 'If this card inflicts battle damage to your opponent: Declare 1 card type (Monster, Spell or Trap); your opponent sends 1 card of that type from their Deck to the GY. If this card is destroyed by your opponent\'s card effect and sent to your GY: Special Summon it during your next Standby Phase.',
   aiValue: 300,
-  ignoresGyLock: true,
   effects: [
     {
       kind: 'trigger',
@@ -414,7 +425,7 @@ monster('Vampire Lord', {
       label: 'Return next Standby Phase',
       categories: ['specialSummon'],
       // https://edisonrul.ing/cards/v/vampire-lord.html — also when destroyed in the hand or Deck by the opponent's card
-      // effect; it is Special Summoned even under "Necrovalley" (ignoresGyLock).
+      // effect; it is Special Summoned even under "Necrovalley" (it does not target).
       eventFilter: (ctx, ev) =>
         ev.card === ctx.self &&
         (ev.from === 'mzone' || ev.from === 'hand' || ev.from === 'deck') &&
@@ -552,7 +563,8 @@ spell('Book of Life', 'quickplay', {
 spell('Zombie World', 'field', {
   text: 'All monsters on the field and in the GYs become Zombie-Type monsters. Neither player can Tribute Summon monsters, except Zombie-Type monsters.',
   aiValue: 200,
-  // The Type change is a dataMod: every check that reads `data.race` sees it (not in the GY under Necrovalley).
+  // The Type change is a dataMod: every check that reads `data.race` sees it (also in the GY under Necrovalley: non-targeting Type
+  // changes apply, https://edisonrul.ing/cards/n/necrovalley.html).
   // Monsters in the hand keep their Type, so only Zombies can be Tribute Summoned (Tribute Sets are allowed).
   effects: [
     {

@@ -103,23 +103,15 @@ function makeGeminiActive(ctx: Ctx, c: C) {
   ctx.game.update();
 }
 
-/**
- * Gemini Summon. APPROX (same as plants.ts): the engine has no Gemini Summon action, so it is an
- * Ignition effect that uses the turn's Normal Summon; it starts a chain instead of being a Summon.
- */
+/** Gemini Summon: a Normal Summon of the face-up Gemini monster (Game.geminiSummon, no chain). */
 function geminiSummon(score: (ctx: Ctx) => number = () => 40): EffectDef {
   return {
-    kind: 'ignition',
+    // The Gemini Summon is a Normal Summon, not an effect (Game.geminiSummon; no chain).
+    kind: 'proc',
+    geminiSummon: true,
+    range: ['mzone'],
     label: 'Gemini Summon (Normal Summon again)',
     categories: [],
-    condition: (ctx) =>
-      ctx.self.faceUp && !ctx.self.flags.geminiSummoned && ctx.game.players[ctx.player].normalSummonsLeft > 0 && !ctx.game.queryPlayer(ctx.player, 'cannotNormalSummon'),
-    activate: async (ctx) => {
-      ctx.game.players[ctx.player].normalSummonsLeft--;
-    },
-    resolve: async (ctx) => {
-      makeGeminiActive(ctx, ctx.self);
-    },
     ai: {
       score: (ctx) => {
         // Don't spend the Normal Summon if a better monster in hand still wants it (main phase 1).
@@ -340,7 +332,9 @@ function ritualPool(ctx: Ctx, ritual: C): C[] {
   return [
     ...ctx.hand('me', (c) => c.isMonster && c !== ritual),
     ...ctx.monsters('me', (c) => !ctx.query(c, 'cannotBeTributed')),
-    ...ctx.grave('me', isDjinn),
+    // https://edisonrul.ing/cards/d/djinn-releaser-of-rituals.html — not while "Necrovalley" is active (GY cards cannot
+    // be removed from play).
+    ...(ctx.game.gyBanishLocked(ctx.player) ? [] : ctx.grave('me', isDjinn)),
   ];
 }
 const levelSum = (cs: C[], ctx: Ctx) => cs.reduce((a, c) => a + (c.location === 'mzone' ? ctx.level(c) : lvl(c)), 0);
@@ -900,12 +894,16 @@ monster('Dark Spider', {
       opt: true,
       label: 'Insect Level +2',
       categories: [],
-      canActivate: (ctx) => ctx.faceUpMonsters('me', (c) => raceIs(c, 'Insect')).length > 0,
-      resolve: async (ctx) => {
+      // This effect targets: https://edisonrul.ing/cards/d/dark-spider.html
+      canActivate: (ctx) => ctx.faceUpMonsters('me', (c) => raceIs(c, 'Insect') && ctx.canTarget(c)).length > 0,
+      activate: async (ctx) => {
         const cands = ctx.faceUpMonsters('me', (c) => raceIs(c, 'Insect'));
-        const [c] = await ctx.select(cands, 1, 1, 'Increase the Level of 1 face-up Insect-Type monster by 2.', 'buff', {
+        await ctx.selectTargets(cands, 1, 1, 'Target 1 face-up Insect-Type monster you control (Level +2).', 'buff', {
           aiScore: (c) => (c === ctx.self ? 0 : 10),
         });
+      },
+      resolve: async (ctx) => {
+        const [c] = ctx.validTargets((x) => x.location === 'mzone' && x.faceUp && raceIs(x, 'Insect'));
         if (c) await raiseLevel(ctx, c, 2, 'turn');
       },
       ai: {
@@ -1209,7 +1207,8 @@ monster('Earthbound Immortal Ccarayhua', {
       mandatory: true,
       label: 'Destroy all cards on the field',
       categories: ['destroy', 'destroyMulti'],
-      eventFilter: (ctx, ev) => ev.card === ctx.self && ev.from === 'mzone' && (ev.reasons ?? []).includes('effect') && ev.reasonCard !== ctx.self,
+      // Also when it is destroyed in the hand or Deck: https://edisonrul.ing/cards/e/earthbound-immortal-ccarayhua.html
+      eventFilter: (ctx, ev) => ev.card === ctx.self && (ev.reasons ?? []).includes('effect') && ev.reasonCard !== ctx.self,
       resolve: async (ctx) => {
         const all = ctx.field('both');
         if (all.length) await ctx.destroy(all);
@@ -1399,15 +1398,18 @@ monster("Koa'ki Meiru Rooklord", {
       when: true,
       label: "Banish a Koa'ki Meiru: destroy up to 2",
       categories: ['destroy'],
-      canActivate: (ctx) => ctx.grave('me', isKoaki).length > 0 && ctx.field('opp').length > 0,
+      // https://edisonrul.ing/cards/k/koaki-meiru-rooklord.html — banishing the "Koa'ki Meiru" card is a cost, and the
+      // effect targets 1 or 2 cards your opponent controls.
+      canActivate: (ctx) => ctx.grave('me', isKoaki).length > 0 && ctx.field('opp', (c) => ctx.canTarget(c)).length > 0,
       activate: async (ctx) => {
         const cost = await ctx.select(ctx.grave('me', isKoaki), 1, 1, '"Koa\'ki Meiru" card to banish.', 'cost');
         if (!cost.length) return false;
         await ctx.banish(cost, 'cost');
+        await ctx.selectTargets(ctx.field('opp'), 1, 2, 'Target up to 2 cards your opponent controls to destroy.', 'destroy');
       },
       resolve: async (ctx) => {
-        const sel = await ctx.select(ctx.field('opp'), 1, 2, 'Destroy up to 2 cards your opponent controls.', 'destroy');
-        if (sel.length) await ctx.destroy(sel);
+        const t = ctx.validTargets((c) => c.onField);
+        if (t.length) await ctx.destroy(t);
       },
     },
   ],
@@ -2026,7 +2028,7 @@ monster('Shire, Lightsworn Spirit', {
   def: 1400,
   sets: ['lightsworn'],
   aiValue: 500,
-  text: 'This card gains 300 ATK for each "Lightsworn" monster with a different name in your Graveyard. During each of your End Phases: Send the top 2 cards of your Deck to the Graveyard.',
+  text: 'This card gains 300 ATK for each "Lightsworn" monster with a different name in your Graveyard. During each of your End Phases, send the top 2 cards of your Deck to the Graveyard.',
   effects: [
     { kind: 'continuous', mods: [{ q: 'atk', value: (ctx) => 300 * lsNames(ctx) }] },
     {
@@ -2038,6 +2040,8 @@ monster('Shire, Lightsworn Spirit', {
       categories: ['mill'],
       eventFilter: (ctx, ev) => ev.phase === 'end' && ctx.isMyTurn && ctx.self.faceUp,
       resolve: async (ctx) => {
+        // https://edisonrul.ing/cards/s/shire-lightsworn-spirit.html — it must remain face-up on the field to resolve.
+        if (ctx.self.location !== 'mzone' || !ctx.self.faceUp) return;
         await ctx.mill(2);
       },
     },
@@ -2525,8 +2529,9 @@ spell('Earthbound Whirlwind', 'normal', {
       categories: ['destroy', 'destroyMulti'],
       condition: (ctx) => ctx.faceUpMonsters('me', isEI).length > 0,
       canActivate: (ctx) => ctx.spellTraps('opp').length > 0,
+      // Still applied if you no longer control an "Earthbound Immortal" on resolution:
+      // https://edisonrul.ing/cards/e/earthbound-whirlwind.html
       resolve: async (ctx) => {
-        if (!ctx.faceUpMonsters('me', isEI).length) return;
         const st = ctx.spellTraps('opp');
         if (st.length) await ctx.destroy(st);
       },
@@ -2547,9 +2552,11 @@ spell('Savage Colosseum', 'field', {
       mandatory: true,
       label: 'Attacker\'s controller gains 300 LP',
       categories: ['recover'],
-      eventFilter: (ctx, ev) => stActive(ctx) && ev.player !== undefined,
+      // https://edisonrul.ing/cards/s/savage-colosseum.html — no LP if the attacker left the field before the end of the Damage
+      // Step; the player who controls it then gains the LP.
+      eventFilter: (ctx, ev) => stActive(ctx) && !!evc(ev) && evc(ev)!.location === 'mzone',
       activate: async (ctx) => {
-        ctx.data.p = ctx.event!.player;
+        ctx.data.p = evc(ctx.event!)!.controller;
       },
       resolve: async (ctx) => {
         await ctx.recover(ctx.data.p as PlayerId, 300);
@@ -2562,8 +2569,8 @@ spell('Savage Colosseum', 'field', {
       mandatory: true,
       label: 'Destroy monsters that did not attack',
       categories: ['destroy'],
+      // https://edisonrul.ing/cards/s/savage-colosseum.html — activates every End Phase, even with no monster to destroy.
       eventFilter: (ctx, ev) => ev.phase === 'end' && stActive(ctx),
-      condition: (ctx) => ctx.game.faceUpMonsters(ctx.game.turnPlayer).some((c) => c.pos === 'atk' && c.attacksThisTurn === 0),
       resolve: async (ctx) => {
         const t = ctx.game.faceUpMonsters(ctx.game.turnPlayer).filter((c) => c.pos === 'atk' && c.attacksThisTurn === 0);
         if (t.length) await ctx.destroy(t);
@@ -2761,12 +2768,16 @@ spell('Herculean Power', 'continuous', {
 });
 
 spell('Gemini Spark', 'quickplay', {
-  text: 'Tribute 1 face-up Level 4 Gemini monster, then target 1 card on the field; destroy it, and if you do, draw 1 card.',
+  text: 'Tribute 1 face-up Level 4 Gemini Monster you control and select 1 card on the field. Destroy the selected card and draw 1 card.',
   effects: [
     {
       kind: 'activate',
       categories: ['destroy', 'draw'],
-      canActivate: (ctx) => tributable(ctx, (c) => c.faceUp && isGemini(c) && ctx.level(c) === 4).length > 0 && ctx.field('both', (c) => c !== ctx.self && ctx.canTarget(c)).length > 0,
+      // https://edisonrul.ing/cards/g/gemini-spark.html — "Gemini Spark" cannot be activated if you have no cards in the Deck.
+      canActivate: (ctx) =>
+        ctx.deck().length > 0 &&
+        tributable(ctx, (c) => c.faceUp && isGemini(c) && ctx.level(c) === 4).length > 0 &&
+        ctx.field('both', (c) => c !== ctx.self && ctx.canTarget(c)).length > 0,
       activate: async (ctx) => {
         const cost = await ctx.select(tributable(ctx, (c) => c.faceUp && isGemini(c) && ctx.level(c) === 4), 1, 1, 'Tribute 1 face-up Level 4 Gemini monster.', 'tribute');
         if (!cost.length) return false;
@@ -2903,7 +2914,8 @@ spell('Raging Mad Plants', 'quickplay', {
         for (const c of ctx.faceUpMonsters('me', (m) => raceIs(m, 'Plant'))) ctx.addTempMod(c, 'atk', bonus, 'turn');
         const p = ctx.player;
         ctx.later('end', async () => {
-          const plants = ctx.game.monsters(p).filter((c) => raceIs(c, 'Plant'));
+          // https://edisonrul.ing/cards/r/raging-mad-plants.html — destroys all face-up Plant-Type monsters you control.
+          const plants = ctx.game.monsters(p).filter((c) => c.faceUp && raceIs(c, 'Plant'));
           if (plants.length) await ctx.game.destroy(plants, 'effect', p, ctx.self);
         });
       },
@@ -3134,7 +3146,12 @@ function gatewayEffect(
       ctx.game.update();
       await target(ctx);
     },
-    resolve,
+    // https://edisonrul.ing/cards/g/gateway-of-the-six.html — "Gateway of the Six" must remain face-up on the field in
+    // order to resolve this effect.
+    resolve: async (ctx) => {
+      if (!ctx.self.onField || !ctx.self.faceUp) return;
+      await resolve(ctx);
+    },
     ai: { score },
   };
 }
@@ -3275,7 +3292,8 @@ trap('Slip Summon', 'normal', {
         if (!s) return;
         const mid = s.moveId;
         ctx.later('end', async () => {
-          if (s.location === 'mzone' && s.moveId === mid) await ctx.game.toHand([s], 'effect', ctx.player, ctx.self);
+          // https://edisonrul.ing/cards/s/slip-summon.html — a monster unaffected by Traps (Elemental Hero Wildheart) stays.
+          if (s.location === 'mzone' && s.moveId === mid && !ctx.game.isUnaffected(s, ctx.self)) await ctx.game.toHand([s], 'effect', ctx.player, ctx.self);
         });
       },
       ai: {
@@ -3537,20 +3555,22 @@ trap('Roar of the Earthbound Immortal', 'continuous', {
   effects: [
     { kind: 'activate', categories: ['destroy'], ai: { score: (ctx) => (ctx.faceUpMonsters('me', isEI).length ? 30 : ctx.cards('me', ['hand'], isEI).length ? 15 : 0) } },
     {
-      kind: 'quick',
+      // https://edisonrul.ing/cards/r/roar-of-the-earthbound-immortal.html — it activates automatically (a chain, targeting the
+      // attacker) the first time an opponent's monster with less ATK than your "Earthbound Immortal" monster attacks.
+      kind: 'trigger',
       event: 'attackDeclared',
+      range: ['szone'],
+      mandatory: true,
       opt: true,
       label: 'Destroy the attacker, burn half its ATK',
       categories: ['destroy', 'damage'],
-      eventFilter: (ctx, ev) => evc(ev)?.controller === ctx.opp,
-      condition: (ctx) => {
-        const b = ctx.battle;
-        if (!b || b.inDamageStep || b.attacker.controller !== ctx.opp) return false;
-        return ctx.faceUpMonsters('me', (c) => isEI(c) && ctx.atk(c) > ctx.atk(b.attacker)).length > 0;
+      eventFilter: (ctx, ev) => {
+        const a = evc(ev);
+        return !!a && a.controller === ctx.opp && stActive(ctx) && ctx.faceUpMonsters('me', (c) => isEI(c) && ctx.atk(c) > ctx.atk(a)).length > 0;
       },
-      canActivate: (ctx) => !!ctx.battle && ctx.canTarget(ctx.battle.attacker),
+      canActivate: (ctx) => !!ctx.event && !!evc(ctx.event) && evc(ctx.event)!.location === 'mzone' && ctx.canTarget(evc(ctx.event)!),
       activate: async (ctx) => {
-        await ctx.selectTargets([ctx.battle!.attacker], 1, 1, 'Target the attacking monster.', 'destroy');
+        await ctx.selectTargets([evc(ctx.event!)!], 1, 1, 'Target the attacking monster.', 'destroy');
       },
       resolve: async (ctx) => {
         const t = ctx.validTargets((c) => c.location === 'mzone')[0];
@@ -3791,14 +3811,19 @@ trap('Seal of Wickedness', 'continuous', {
       ai: { score: (ctx) => (!ctx.isMyTurn && ctx.phase === 'draw' && ctx.field('opp', (c) => c.faceUp && (c.hasType('effect') || !c.isMonster)).length ? 40 : 0) },
     },
     {
-      kind: 'quick',
+      // https://edisonrul.ing/cards/s/seal-of-wickedness.html — a mandatory effect that starts a chain in the opponent's
+      // Standby Phase; it targets 1 face-up card (it can target itself).
+      kind: 'trigger',
+      event: 'phaseStart',
+      range: ['szone'],
+      mandatory: true,
       opt: true,
       label: 'Negate 1 face-up card this turn',
       categories: ['negate'],
-      condition: (ctx) => ctx.phase === 'standby' && !ctx.isMyTurn,
-      canActivate: (ctx) => ctx.field('both', (c) => c.faceUp && c !== ctx.self && ctx.canTarget(c)).length > 0,
+      eventFilter: (ctx, ev) => ev.phase === 'standby' && !ctx.isMyTurn && stActive(ctx),
+      canActivate: (ctx) => ctx.field('both', (c) => c.faceUp && ctx.canTarget(c)).length > 0,
       activate: async (ctx) => {
-        await ctx.selectTargets(ctx.field('both', (c) => c.faceUp && c !== ctx.self), 1, 1, 'Select 1 face-up card on the field.', 'negate', {
+        await ctx.selectTargets(ctx.field('both', (c) => c.faceUp), 1, 1, 'Select 1 face-up card on the field.', 'negate', {
           aiScore: (c) => (c.controller === ctx.opp ? 1000 : -1000) + (c.hasType('effect') || !c.isMonster ? 500 : 0) + cardValue(ctx.game, c),
         });
       },

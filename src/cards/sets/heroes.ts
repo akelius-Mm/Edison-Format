@@ -214,23 +214,12 @@ monster('Elemental Hero Neos Alius', {
   text: 'Gemini: treated as a Normal Monster while face-up on the field or in the GY. While face-up on the field, you can Normal Summon it to have it become an Effect Monster with this effect. ● This card\'s name is treated as "Elemental Hero Neos" while it is face-up on the field.',
   effects: [
     {
-      kind: 'ignition',
+      // The Gemini Summon is a Normal Summon, not an effect (Game.geminiSummon; no chain).
+      kind: 'proc',
+      geminiSummon: true,
+      range: ['mzone'],
       label: 'Gemini Summon',
       categories: [],
-      condition: (ctx) =>
-        ctx.self.faceUp &&
-        !ctx.self.flags.geminiSummoned &&
-        ctx.game.players[ctx.player].normalSummonsLeft > 0 &&
-        !ctx.game.queryPlayer(ctx.player, 'cannotNormalSummon'),
-      activate: async (ctx) => {
-        // A Gemini Summon uses the turn's Normal Summon.
-        ctx.game.players[ctx.player].normalSummonsLeft--;
-      },
-      resolve: async (ctx) => {
-        if (ctx.self.location !== 'mzone' || !ctx.self.faceUp) return;
-        ctx.self.flags.geminiSummoned = true;
-        ctx.log(`${ctx.self.name} is Gemini Summoned and is now treated as "Elemental Hero Neos".`);
-      },
       ai: {
         score: (ctx) => {
           // Only worth it when the Normal Summon would otherwise be wasted.

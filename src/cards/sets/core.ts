@@ -117,12 +117,14 @@ spell('Monster Reborn', 'normal', {
 });
 
 spell('Pot of Avarice', 'normal', {
-  text: 'Target 5 monsters in your GY; shuffle all 5 into the Deck, then draw 2 cards.',
+  text: 'Select 5 Monster Cards in your Graveyard. Return those cards to the Deck, then draw 2 cards.',
   effects: [
     {
       kind: 'activate',
       categories: ['draw', 'toDeck'],
-      canActivate: (ctx) => ctx.grave('me', isMonster).length >= 5 && ctx.deck().length >= 0,
+      // https://edisonrul.ing/cards/p/pot-of-avarice.html — "This card CANNOT be activated while the player has 1 or 0
+      // cards remaining in their Deck."
+      canActivate: (ctx) => ctx.grave('me', isMonster).length >= 5 && ctx.deck().length >= 2,
       activate: async (ctx) => {
         await ctx.selectTargets(ctx.grave('me', isMonster), 5, 5, 'Target 5 monsters in your GY.', 'toDeck', {
           aiScore: (c) => (c.isExtra ? 2000 : 0) + (c.data.atk ?? 0),
@@ -198,7 +200,7 @@ spell('Brain Control', 'normal', {
 });
 
 spell('Limiter Removal', 'quickplay', {
-  text: 'Double the ATK of all face-up Machine monsters you currently control. Destroy them during the End Phase.',
+  text: 'Double the ATK of all face-up Machine-Type monsters you control, until the end of this turn. During the End Phase, destroy all monsters that were affected by this effect.',
   effects: [
     {
       kind: 'activate',
@@ -210,8 +212,11 @@ spell('Limiter Removal', 'quickplay', {
         for (const m of machines) {
           ctx.addTempMod(m, 'atk', ctx.atk(m), 'turn');
           const id = m.moveId;
+          const fid = m.faceUpId;
+          // https://edisonrul.ing/cards/l/limiter-removal.html — affected monsters are not destroyed if they were flipped
+          // face-down, left the field, or are no longer Machine-Type.
           ctx.later('end', async () => {
-            if (m.location === 'mzone' && m.moveId === id) await ctx.game.destroy([m], 'effect', ctx.player, ctx.self);
+            if (m.location === 'mzone' && m.moveId === id && m.faceUp && m.faceUpId === fid && m.data.race === 'Machine') await ctx.game.destroy([m], 'effect', ctx.player, ctx.self);
           });
         }
       },
@@ -651,8 +656,8 @@ monster('Treeborn Frog', {
   sets: ['frog'],
   text: 'If this card is in your Graveyard during your Standby Phase and you control no Spell or Trap Cards, you can Special Summon it. This effect cannot be activated if you control a face-up "Treeborn Frog".',
   aiValue: 200,
-  // https://edisonrul.ing/cards/t/treeborn-frog.html — it does not target and is not negated by "Necrovalley".
-  ignoresGyLock: true,
+  // https://edisonrul.ing/cards/t/treeborn-frog.html — it does not target and is not negated by "Necrovalley" (the
+  // general 2010 rule in src/cards/necrovalley.ts).
   effects: [
     {
       // Same source: no once-per-turn (it can activate several times in the same Standby Phase), but two copies
@@ -704,6 +709,9 @@ monster('Honest', {
         const mine = b.attacker.controller === ctx.player ? b.attacker : b.target;
         return mine.controller === ctx.player && mine.faceUp && mine.data.attribute === 'LIGHT';
       },
+      // https://edisonrul.ing/cards/h/honest.html — sending Honest to the GY is the cost: "This effect cannot be activated
+      // while "Dimensional Fissure" is active".
+      canActivate: (ctx) => !ctx.game.queryPlayer(ctx.player, 'banishInsteadOfGrave') && !ctx.game.queryCard(ctx.self, 'banishInsteadOfGrave'),
       activate: async (ctx) => {
         const b = ctx.battle!;
         ctx.data.mine = b.attacker.controller === ctx.player ? b.attacker : b.target;
@@ -737,8 +745,10 @@ monster('Goyo Guardian', {
   atk: 2800,
   def: 2000,
   types: ['synchro'],
-  text: '1 EARTH Tuner + 1 or more non-Tuner EARTH monsters\nWhen this card destroys an opponent\'s monster by battle and sends it to the GY: You can Special Summon that monster to your side of the field in face-up Defense Position.',
-  synchro: { tuner: attr('EARTH'), nonTuner: attr('EARTH'), desc: '1 EARTH Tuner + 1+ non-Tuner EARTH monsters' },
+  text: '1 Tuner + 1 or more non-Tuner monsters\nWhen this card destroys an opponent\'s monster by battle and sends it to the Graveyard, you can Special Summon that monster to your side of the field in face-up Defense Position.',
+  // https://edisonrul.ing/cards/g/goyo-guardian.html — "The Synchro Material Monsters do not need to be EARTH
+  // monsters, contrary to recent Errata."
+  synchro: { desc: '1 Tuner + 1+ non-Tuner monsters' },
   effects: [
     {
       kind: 'trigger',

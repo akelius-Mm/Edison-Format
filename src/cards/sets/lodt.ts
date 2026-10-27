@@ -1850,10 +1850,16 @@ M(SIMORGH, {
         const ts = (ev.tributes ?? []) as C[];
         return ev.card === ctx.self && ts.length > 0 && ts.every((t) => t.data.attribute === 'WIND');
       },
-      condition: (ctx) => ctx.field('opp').length > 0,
+      condition: (ctx) => ctx.field('opp', (c) => ctx.canTarget(c)).length > 0,
+      // https://edisonrul.ing/cards/s/simorgh-bird-of-ancestry.html — targets 1 or 2 of the opponent's cards.
+      activate: async (ctx) => {
+        await ctx.selectTargets(ctx.field('opp'), 1, 2, 'Target up to 2 cards your opponent controls to return to the hand.', 'bounce', {
+          aiScore: (c) => cardValue(ctx.game, c),
+        });
+      },
       resolve: async (ctx) => {
-        const sel = await ctx.select(ctx.field('opp'), 0, 2, 'Return up to 2 cards your opponent controls to the hand.', 'bounce');
-        if (sel.length) await ctx.toHand(sel);
+        const t = ctx.validTargets((c) => c.onField);
+        if (t.length) await ctx.toHand(t);
       },
     },
     {
@@ -1955,7 +1961,9 @@ M('Destiny End Dragoon', {
     materials: [namedCI('Destiny HERO - Plasma'), namedCI('Destiny HERO - Dogma')],
     desc: '"Destiny HERO - Plasma" + "Destiny HERO - Dogma"',
   },
-  text: '"Destiny HERO - Plasma" + "Destiny HERO - Dogma"\nA Fusion Summon of this card can only be done with the above Fusion Materials. Once per turn: You can target 1 monster your opponent controls; destroy that target, and if it was face-up, inflict damage to your opponent equal to the ATK it had on the field. You cannot conduct your Battle Phase the turn you activate this effect. Once per turn, during your Standby Phase, if this card is in your GY: You can banish 1 "Destiny HERO" card from your GY; Special Summon this card.',
+  // 2010 text and rulings (the Standby Phase effect has no once-per-turn and does not target):
+  // https://edisonrul.ing/cards/d/destiny-end-dragoon.html
+  text: '"Destiny Hero - Plasma" + "Destiny Hero - Dogma"\nA Fusion Summon of this monster can only be conducted with the above Fusion Material Monsters. Once per turn, you can destroy 1 monster your opponent controls and inflict damage to your opponent equal to its ATK. If you activate this effect you cannot conduct your Battle Phase this turn. During your Standby Phase, if this card is in your Graveyard you can remove from play 1 "Destiny Hero" card from your Graveyard to Special Summon this card.',
   effects: [
     {
       kind: 'ignition',
@@ -1989,7 +1997,6 @@ M('Destiny End Dragoon', {
       kind: 'trigger',
       event: 'phaseStart',
       range: ['grave'],
-      opt: true,
       label: 'Banish a Destiny HERO: Special Summon this card',
       categories: ['specialSummon'],
       eventFilter: (ctx, ev) => ev.phase === 'standby' && ctx.isMyTurn && ctx.self.location === 'grave',
@@ -2652,16 +2659,23 @@ S('D - Formation', 'continuous', {
       when: true,
       label: 'Send this card: add 2 copies',
       categories: ['search', 'toHand'],
-      eventFilter: (ctx, ev) => stActive(ctx) && (ctx.self.counters.d ?? 0) >= 2 && ev.player === ctx.player && ctx.isMyTurn && isMain(ctx),
+      // Not for a face-down Summon; if the Summoned monster is flipped face-down in Chain the effect does nothing:
+      // https://edisonrul.ing/cards/d/d-formation.html
+      eventFilter: (ctx, ev) => stActive(ctx) && (ctx.self.counters.d ?? 0) >= 2 && ev.player === ctx.player && ctx.isMyTurn && isMain(ctx) && !!evc(ev)?.faceUp,
       canActivate: (ctx) => {
         const name = evc(ctx.event!)?.name;
         return !!name && ctx.cards('me', ['deck', 'grave'], (c) => c.name === name).length > 0;
       },
       activate: async (ctx) => {
-        ctx.data.name = evc(ctx.event!)?.name;
+        const m = evc(ctx.event!);
+        ctx.data.name = m?.name;
+        ctx.data.mon = m;
+        ctx.data.mid = m?.moveId;
         await ctx.sendToGrave(ctx.self, 'cost');
       },
       resolve: async (ctx) => {
+        const m = ctx.data.mon as C | undefined;
+        if (m && m.location === 'mzone' && !m.faceUp && m.moveId === ctx.data.mid) return;
         const cands = ctx.cards('me', ['deck', 'grave'], (c) => c.name === ctx.data.name);
         const sel = await ctx.select(cands, 1, 2, `Add up to 2 "${ctx.data.name}" from your Deck and/or GY to your hand.`, 'toHand');
         const fromDeck = sel.some((c) => c.location === 'deck');
@@ -2708,7 +2722,8 @@ S('Cup of Ace', 'normal', {
     {
       kind: 'activate',
       categories: ['draw'],
-      canActivate: (ctx) => ctx.deck('me').length >= 2,
+      // Not while either player has 1 or fewer cards in the Deck: https://edisonrul.ing/cards/c/cup-of-ace.html
+      canActivate: (ctx) => ctx.deck('me').length >= 2 && ctx.deck('opp').length >= 2,
       resolve: async (ctx) => {
         const r = tossCoin(ctx.game, ctx.player, ctx.self);
         await ctx.draw(2, r === 'H' ? ctx.player : ctx.opp);
@@ -2774,10 +2789,15 @@ S('Quick Charger', 'quickplay', {
     {
       kind: 'activate',
       categories: ['toHand'],
-      canActivate: (ctx) => ctx.grave('me', (c) => isBatteryman(c) && lvl(c) <= 4).length >= 2,
+      canActivate: (ctx) => ctx.grave('me', (c) => isBatteryman(c) && lvl(c) <= 4 && ctx.canTarget(c)).length >= 2,
+      // https://edisonrul.ing/cards/q/quick-charger.html — targets the 2 "Batteryman" monsters; if 1 leaves the GY in the
+      // chain, the other is still added to the hand.
+      activate: async (ctx) => {
+        await ctx.selectTargets(ctx.grave('me', (c) => isBatteryman(c) && lvl(c) <= 4), 2, 2, 'Target 2 Level 4 or lower "Batteryman" monsters in your GY.', 'toHand');
+      },
       resolve: async (ctx) => {
-        const sel = await ctx.select(ctx.grave('me', (c) => isBatteryman(c) && lvl(c) <= 4), 2, 2, 'Add 2 Level 4 or lower "Batteryman" monsters to your hand.', 'toHand');
-        if (sel.length) await ctx.toHand(sel);
+        const t = ctx.validTargets((c) => c.location === 'grave');
+        if (t.length) await ctx.toHand(t);
       },
       ai: { score: (ctx) => (ctx.isMyTurn ? 45 : 0) },
     },
@@ -2861,11 +2881,32 @@ S(DECK_LOCKDOWN, 'continuous', {
   effects: [
     { kind: 'activate', categories: ['lockdown'], ai: { score: (ctx) => (ctx.isMyTurn && ctx.deck('opp').length > 10 ? 18 : 0) } },
     { kind: 'continuous', mods: [{ q: 'cannotAddFromDeck', to: 'players' }] },
-    secondStandbyDestroy(),
+    // Destroying it during the Standby Phase does not start a Chain: https://edisonrul.ing/cards/d/deck-lockdown.html
+    secondStandbyDestroy(true),
   ],
 });
 /** "Destroy this card during your 2nd Standby Phase after activation." */
-function secondStandbyDestroy(): EffectDef {
+function secondStandbyDestroy(chainless = false): EffectDef {
+  if (chainless)
+    return {
+      // Rule-like count: the destruction is applied right after the Standby Phase starts, without a Chain Link.
+      kind: 'trigger',
+      event: 'phaseStart',
+      range: ['szone'],
+      label: '(Standby Phase count)',
+      eventFilter: (ctx, ev) => {
+        if (ev.phase !== 'standby' || !ctx.isMyTurn || !ctx.self.faceUp || !ctx.self.activeOnField) return false;
+        const me = ctx.self;
+        me.flags.standbys = (me.flags.standbys ?? 0) + 1;
+        if (me.flags.standbys >= 2) {
+          const mid = me.moveId;
+          ctx.game.addDelayed('standby', async () => {
+            if (me.onField && me.moveId === mid) await ctx.game.destroy([me], 'effect', me.controller, me);
+          });
+        }
+        return false;
+      },
+    };
   return {
     kind: 'trigger',
     event: 'phaseStart',
@@ -2912,6 +2953,9 @@ S('Ribbon of Rebirth', 'equip', {
         const p = s.controller;
         const mid = c.moveId;
         g.addDelayed('end', async () => {
+          // https://edisonrul.ing/cards/r/ribbon-of-rebirth.html — no effect if Ribbon of Rebirth is not in the GY or the
+          // removed zone during the End Phase.
+          if (!(s.location === 'grave' || s.location === 'banished')) return;
           if (c.location === 'grave' && c.moveId === mid && g.freeMZones(p) > 0) {
             g.log(`Ribbon of Rebirth returns ${c.name}.`, 'action', p);
             await g.specialSummon([c], p, { pos: 'choose', reasonCard: s });
@@ -3135,6 +3179,9 @@ T('Hero Blast', 'normal', {
   ],
 });
 
+// https://edisonrul.ing/cards/r/rainbow-gravity.html — a "Rainbow Dragon" / "Rainbow Dark Dragon" in the GY that was not
+// properly Special Summoned first cannot be Special Summoned with it.
+const gravityOk = (c: C) => isUltimateCrystal(c) && (c.location !== 'grave' || c.properlySummoned);
 T('Rainbow Gravity', 'normal', {
   text: 'If you have 7 "Crystal Beast" cards with different names on your field and/or in your GY: Special Summon 1 "Ultimate Crystal" monster from your Deck or GY, ignoring its Summoning conditions.',
   effects: [
@@ -3142,9 +3189,9 @@ T('Rainbow Gravity', 'normal', {
       kind: 'activate',
       categories: ['specialSummon'],
       condition: (ctx) => new Set(ctx.cards('me', ['mzone', 'szone', 'grave'], (c) => isCrystalBeast(c) && (c.faceUp || c.location === 'grave')).map((c) => c.name)).size >= 7,
-      canActivate: (ctx) => ctx.canSpecialSummon() && ctx.cards('me', ['deck', 'grave'], isUltimateCrystal).length > 0,
+      canActivate: (ctx) => ctx.canSpecialSummon() && ctx.cards('me', ['deck', 'grave'], gravityOk).length > 0,
       resolve: async (ctx) => {
-        const [c] = await ctx.select(ctx.cards('me', ['deck', 'grave'], isUltimateCrystal), 1, 1, 'Special Summon 1 "Ultimate Crystal" monster.', 'specialSummon');
+        const [c] = await ctx.select(ctx.cards('me', ['deck', 'grave'], gravityOk), 1, 1, 'Special Summon 1 "Ultimate Crystal" monster.', 'specialSummon');
         const fromDeck = c?.location === 'deck';
         if (c) await ctx.specialSummon(c, { pos: 'choose', ignoreConditions: true });
         if (fromDeck) ctx.game.shuffleDeck(ctx.player);
@@ -3319,11 +3366,14 @@ T('Glorious Illusion', 'continuous', {
 });
 
 /** Does this chain link destroy a monster on the field (Destruction Jammer)? APPROX: read from the effect's categories and targets. */
-function destroysMonster(l: ChainLink) {
+// Not the Ignition-like effect of a face-up Continuous Spell/Trap (Skull Lair), and only while a monster is on the field
+// (Light and Darkness Dragon): https://edisonrul.ing/cards/d/destruction-jammer.html
+function destroysMonster(l: ChainLink, g: Game) {
   const cats = l.effect.categories ?? [];
   if (!cats.includes('destroy') && !cats.includes('destroyMulti')) return false;
+  if ((l.card.isSpell || l.card.isTrap) && !l.isCardActivation && l.effect.kind === 'ignition') return false;
   const ts = l.ctx.targets;
-  return !ts.length || ts.some((t) => t.isMonster && t.location === 'mzone');
+  return ts.length ? ts.some((t) => t.isMonster && t.location === 'mzone') : g.monsters(0).length + g.monsters(1).length > 0;
 }
 T('Destruction Jammer', 'counter', {
   text: "Discard 1 card. Negate the activation of a Spell Card, Trap Card, or Effect Monster's effect that destroys a monster(s) on the field, and destroy that card.",
@@ -3333,7 +3383,7 @@ T('Destruction Jammer', 'counter', {
       categories: ['negate'],
       condition: (ctx) => {
         const l = ctx.prevLink();
-        return !!l && destroysMonster(l);
+        return !!l && destroysMonster(l, ctx.game);
       },
       canActivate: (ctx) => ctx.hand('me', (c) => c !== ctx.self).length > 0,
       activate: async (ctx) => {
@@ -3480,15 +3530,25 @@ function ragingCands(ctx: Ctx): C[] {
 
 T(SANGUINE_SWAMP, 'continuous', {
   text: 'If you control any other Spell or Trap Cards, destroy this card. Face-down Spell and Trap Cards cannot be activated. Destroy this card during your 2nd Standby Phase after activation.',
-  // APPROX: when another Spell/Trap is activated from the hand, this card is destroyed after that Chain (not at once).
+  // https://edisonrul.ing/cards/s/sanguine-swamp.html — its effects do not start a chain; activated while you control
+  // other (face-down) Spell/Trap Cards, it is destroyed after it resolves.
+  // APPROX: a Spell/Trap Set later (no engine event for Setting) only destroys it when a Spell/Trap Card is next activated.
   effects: [
-    { kind: 'activate', categories: ['lockdown'], ai: { score: (ctx) => (ctx.spellTraps('me', (c) => c !== ctx.self).length === 0 && ctx.spellTraps('opp', (c) => !c.faceUp).length >= 2 ? 40 : 0) } },
-    secondStandbyDestroy(),
+    {
+      kind: 'activate',
+      categories: ['lockdown'],
+      resolve: async (ctx) => {
+        if (ctx.self.onField && ctx.spellTraps('me', (c) => c !== ctx.self).length) await ctx.destroy(ctx.self);
+      },
+      ai: { score: (ctx) => (ctx.spellTraps('me', (c) => c !== ctx.self).length === 0 && ctx.spellTraps('opp', (c) => !c.faceUp).length >= 2 ? 40 : 0) },
+    },
+    { ...secondStandbyDestroy(), noChain: true },
     {
       kind: 'trigger',
       event: 'cardActivated',
       range: ['szone'],
       mandatory: true,
+      noChain: true,
       label: 'Destroy this card',
       categories: ['destroy'],
       eventFilter: (ctx, ev) => {
@@ -3520,7 +3580,8 @@ T('Dice Try!', 'counter', {
       categories: ['negate'],
       condition: (ctx) => {
         const l = ctx.prevLink();
-        return !!l && l.player === ctx.opp && rollsDice(l);
+        // Not against the Ignition-like effect of a face-up Continuous Spell/Trap: https://edisonrul.ing/cards/d/dice-try.html
+        return !!l && l.player === ctx.opp && rollsDice(l) && !((l.card.isSpell || l.card.isTrap) && !l.isCardActivation && l.effect.kind === 'ignition');
       },
       resolve: async (ctx) => {
         await ctx.negateAndDestroy(ctx.prevLink());
