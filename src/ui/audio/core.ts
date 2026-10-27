@@ -16,6 +16,8 @@ export interface AudioGraph {
 }
 
 const graphs = new WeakMap<Ctx, AudioGraph>();
+const fades = new WeakMap<Ctx, GainNode>();
+let hideTimer = 0;
 
 /** Input level that maps to the end of the clip curve (louder input is held at full scale). */
 const CLIP_RANGE = 1.5;
@@ -61,7 +63,10 @@ export function graphFor(ctx: Ctx): AudioGraph {
   out.gain.value = 1 / CLIP_RANGE;
   const clip = ctx.createWaveShaper();
   clip.curve = clipCurve() as any;
-  out.connect(clip).connect(ctx.destination);
+  // master fade: lets the app fade out before it is paused (leaving the app) and back in on return, instead of a hard cut
+  const fade = ctx.createGain();
+  fades.set(ctx, fade);
+  out.connect(clip).connect(fade).connect(ctx.destination);
 
   const reverb = ctx.createGain();
   const hp = ctx.createBiquadFilter();
@@ -180,14 +185,34 @@ function onGesture() {
 function onVisibility() {
   const c = live;
   if (!c) return;
+  const fade = fades.get(c);
   if (document.hidden) {
     if (c.state === 'running') {
       suspendedForHidden = true;
-      c.suspend().catch(() => {});
+      // a short fade, then pause: no click or cut-off when the app goes to the background
+      if (fade) {
+        const t = c.currentTime;
+        fade.gain.cancelScheduledValues(t);
+        fade.gain.setValueAtTime(fade.gain.value, t);
+        fade.gain.linearRampToValueAtTime(0, t + 0.18);
+      }
+      window.clearTimeout(hideTimer);
+      hideTimer = window.setTimeout(() => {
+        if (document.hidden && c.state === 'running') c.suspend().catch(() => {});
+      }, fade ? 220 : 0);
     }
-  } else if (suspendedForHidden || c.state !== 'running') {
-    suspendedForHidden = false;
-    resumeAudio();
+  } else {
+    window.clearTimeout(hideTimer);
+    if (fade) {
+      const t = c.currentTime;
+      fade.gain.cancelScheduledValues(t);
+      fade.gain.setValueAtTime(fade.gain.value, t);
+      fade.gain.linearRampToValueAtTime(1, t + 0.45);
+    }
+    if (suspendedForHidden || c.state !== 'running') {
+      suspendedForHidden = false;
+      resumeAudio();
+    }
   }
 }
 
