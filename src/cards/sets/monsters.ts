@@ -372,8 +372,9 @@ monster('Tragoedia', {
       },
       activate: async (ctx) => {
         const targets = ctx.faceUpMonsters('opp', (t) => ctx.canTarget(t));
-        const best = (lv: number) => Math.max(-1, ...targets.filter((t) => ctx.level(t) === lv).map((t) => cardValue(ctx.game, t)));
-        const costs = ctx.hand('me', (c) => c.isMonster && best(c.data.level ?? 0) >= 0);
+        // any matching target counts (a Token's value can be negative)
+        const best = (lv: number) => Math.max(-Infinity, ...targets.filter((t) => ctx.level(t) === lv).map((t) => cardValue(ctx.game, t)));
+        const costs = ctx.hand('me', (c) => c.isMonster && targets.some((t) => ctx.level(t) === (c.data.level ?? 0)));
         const cost = await ctx.select(costs, 1, 1, 'Send 1 monster from your hand to the GY.', 'cost', {
           aiScore: (c) => best(c.data.level ?? 0) - cardValue(ctx.game, c) / 2,
         });
