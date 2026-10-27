@@ -1670,6 +1670,16 @@ monster('XX-Saber Fulhelmknight', {
       },
     },
     {
+      // "Once while this card is face-up on the field": once turned face-down (Book of Moon etc.) and flipped face-up
+      // again, the attack negation can be used again (bookkeeping, never activates).
+      kind: 'trigger',
+      event: 'flipped',
+      eventFilter: (ctx, ev) => {
+        if (ev.card === ctx.self) delete ctx.self.flags.fulhelmUsed;
+        return false;
+      },
+    },
+    {
       kind: 'trigger',
       event: 'battleDestroyed',
       label: 'Revive X-Saber',
