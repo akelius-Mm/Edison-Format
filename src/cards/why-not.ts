@@ -197,8 +197,10 @@ export const WHY_NOT: [string, number, Why][] = [
       const p = cantSummonSelf(ctx);
       if (p) return p;
       if (ctx.self.location === 'grave' && ctx.game.gyLocked()) return NECROVALLEY;
-      const lv = ctx.hand('me', (c) => c !== ctx.self && c.isMonster && c.data.race === 'Machine').reduce((a, c) => a + (c.data.level ?? 0), 0);
-      return lv < 8 ? `needs Machines with 8+ Levels to discard\nYour hand has ${lv}` : null;
+      // From the hand this card itself counts toward the 8 Levels (it is then Summoned from the GY).
+      const lv = ctx.hand('me', (c) => c.isMonster && c.data.race === 'Machine').reduce((a, c) => a + (c.data.level ?? 0), 0);
+      const self = ctx.self.location === 'hand' ? ', counting this card' : '';
+      return lv < 8 ? `needs Machines with 8+ Levels to discard\nYour hand has ${lv}${self}` : null;
     },
   ],
 

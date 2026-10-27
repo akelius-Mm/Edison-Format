@@ -429,23 +429,36 @@ once('Machina Fortress', () =>
         categories: ['specialSummon', 'discard'],
         canActivate: (ctx) => {
           if (!ctx.canSummonSelf()) return false;
-          const lv = ctx.hand('me', (c) => c !== ctx.self && isMachine(c)).reduce((a, c) => a + (c.data.level ?? 0), 0);
+          // From the hand, this card itself can be part of the discard (it is then Special Summoned from the GY):
+          // OCG text "(自身を捨てた場合、墓地から特殊召喚する)" and the Macro Cosmos ruling on discarding Fortress for itself.
+          const lv = ctx.hand('me', (c) => isMachine(c)).reduce((a, c) => a + (c.data.level ?? 0), 0);
           return lv >= 8;
         },
         activate: async (ctx) => {
           const picked: C[] = [];
           let total = 0;
           while (total < 8) {
-            const rest = ctx.hand('me', (c) => c !== ctx.self && isMachine(c) && !picked.includes(c));
+            const rest = ctx.hand('me', (c) => isMachine(c) && !picked.includes(c));
             if (!rest.length) break;
             const need = 8 - total;
-            const [c] = await ctx.select(rest, 1, 1, `Discard Machine monsters with total Levels of 8 or more (${total}/8).`, 'discard', {
-              // Prefer a single card that finishes the total, then the lowest-value Machines.
-              aiScore: (x) => ((x.data.level ?? 0) >= need ? 2000 - (x.data.level ?? 0) * 10 : 0) - cardValue(ctx.game, x) / 10 + (x.data.level ?? 0) * 20,
+            const selfNote = ctx.self.location === 'hand' ? ' This card can be one of them (it is then Summoned from the GY).' : '';
+            const prompt = picked.length
+              ? `Total so far ${total}/8: select more Machine monsters to discard.`
+              : `Discard Machine monsters with total Levels of 8 or more: select one or more (${total}/8).${selfNote}`;
+            // One dialog for as many Machines as the player wants; asked again only if the total is still under 8.
+            const sel = await ctx.select(rest, 1, rest.length, prompt, 'discard', {
+              // Discarding this card itself is free (it comes straight back from the GY), then prefer a single card that
+              // finishes the total, then the lowest-value Machines.
+              aiScore: (x) =>
+                x === ctx.self
+                  ? 5000
+                  : ((x.data.level ?? 0) >= need ? 2000 - (x.data.level ?? 0) * 10 : 0) - cardValue(ctx.game, x) / 10 + (x.data.level ?? 0) * 20,
             });
-            if (!c) break;
-            picked.push(c);
-            total += c.data.level ?? 0;
+            if (!sel.length) break;
+            for (const c of sel) {
+              picked.push(c);
+              total += c.data.level ?? 0;
+            }
           }
           if (total < 8) return false;
           await ctx.discard(picked, 'cost');
