@@ -31,6 +31,9 @@ import {
   eventsThisWeek,
   formatLine,
   loadActiveEvent,
+  clearActiveEvent,
+  validateEvent,
+  type EventRun,
   loadRatings,
   loadSeason,
   nextStandaloneNumber,
@@ -53,7 +56,9 @@ import { getSettings, loadJSON, saveJSON } from '../settings';
 import { artInto, ctaButton, deckShelf, iosGroup, iosNav, linkButton, lobbySection, stickyBar } from './components';
 import { confirmDialog, h, icon, segmented, toast, type Child } from './dom';
 import { reconcileActiveDuel } from '../duel/resume';
-import { eventRunScreen } from './eventRun';
+import { eventRunScreen, eventScope } from './eventRun';
+import { endRisky, installCrashGuard, interruptedStep, type RiskyMark } from '../crashGuard';
+import { reportError } from '../diag';
 import { AVATAR_PRESETS, SLEEVES } from './ext';
 import { avatar, packIcon } from './locals';
 import { frame, go, type Screen } from './nav';
@@ -75,7 +80,7 @@ export function eventsScreen(params: Record<string, string>): Screen {
   if (params.resume) history.replaceState(null, '', `#/events${params.view ? `?view=${params.view}` : ''}`);
   switch (params.view) {
     case 'run':
-      return run ? eventRunScreen(run, params.resume === '1') : hubScreen();
+      return run ? openEventRun(run, params.resume === '1') : hubScreen();
     case 'checkin':
       return checkInScreen(params);
     case 'season': {
@@ -89,6 +94,67 @@ export function eventsScreen(params: Record<string, string>): Screen {
     default:
       return hubScreen();
   }
+}
+
+// =================================================================== opening the live event safely
+
+/**
+ * The live event, unless its save is damaged or the last attempt to open it (or a step taken on it)
+ * killed the app: then a recovery screen (try again / abandon) instead of the same crash again.
+ */
+function openEventRun(run: EventRun, autoResume: boolean): Screen {
+  installCrashGuard();
+  const scope = eventScope(run);
+  const damaged = validateEvent(run);
+  if (damaged) return eventRecoveryScreen(run, { damaged });
+  const crashed = interruptedStep(scope);
+  if (crashed) return eventRecoveryScreen(run, { crashed });
+  try {
+    return eventRunScreen(run, autoResume);
+  } catch (e) {
+    endRisky(scope);
+    reportError(e, 'event screen failed to open');
+    return eventRecoveryScreen(run, { error: e instanceof Error ? e.message : String(e) });
+  }
+}
+
+/** Shown instead of the live event when it cannot be opened safely. */
+export function eventRecoveryScreen(run: EventRun, why: { damaged?: string; crashed?: RiskyMark; error?: string }): Screen {
+  const scope = eventScope(run);
+  const canRetry = !why.damaged;
+  const text = why.damaged
+    ? `The saved event is damaged (${why.damaged}), so it can't be continued.`
+    : why.crashed
+      ? `The app closed while ${why.crashed.what}. That can happen when the phone runs low on memory. You can try again, or abandon the event.`
+      : `Something went wrong opening the event${why.error ? ` (${why.error})` : ''}. You can try again, or abandon the event.`;
+  const abandon = async () => {
+    if (!(await confirmDialog('Abandon this event?', 'It is removed without prizes or rating changes beyond the matches already rated. Your collection and other modes are not affected.', 'Abandon', true))) return;
+    endRisky(scope);
+    clearActiveEvent();
+    reconcileActiveDuel('events', null);
+    toast('Event abandoned.', 'info');
+    go('events', run.season ? { view: 'season' } : {}, { replace: true });
+  };
+  const retry = () => {
+    endRisky(scope);
+    go('events', { view: 'run' }, { replace: true });
+  };
+  const el = frame(
+    EVENT_SPECS[run.kind]?.short ?? 'Event',
+    { compact: true, cls: 'lobby-screen lx-screen ev-recover', backTo: () => go('events'), backLabel: 'Events' },
+    h(
+      'div',
+      { class: 'lx-empty', 'data-test': 'event-recovery' },
+      icon('warn'),
+      h('b', null, why.damaged ? 'This event can’t be continued' : 'This event couldn’t be opened'),
+      h('span', null, `${run.title ?? 'Event'} · ${text}`),
+    ),
+    stickyBar(
+      canRetry ? ctaButton('Try again', retry, 'refresh') : null,
+      h('div', { class: 'lx-bar-row' }, h('button', { type: 'button', class: 'lx-btn', 'data-test': 'event-abandon', onclick: () => void abandon() }, icon('door'), 'Abandon event')),
+    ),
+  );
+  return { el };
 }
 
 // =================================================================== small pieces

@@ -51,6 +51,7 @@ import { sleevePreview } from './ext';
 import { avatar, deckArtEl, listLine, timer, toTop } from './locals';
 import { runMatch, type MatchSetup } from './match';
 import { reconcileActiveDuel, type SavedDuel } from '../duel/resume';
+import { beginRisky, endRisky } from '../crashGuard';
 import { resumeDuelCard } from './resumeCard';
 import { frame, go, type Screen } from './nav';
 import { showResults } from './results';
@@ -90,10 +91,26 @@ function knownDeck(r: EventRun, id: string) {
   return false;
 }
 
+/** Crash-guard scope of an event (crashGuard.ts): events.ts checks it before opening the screen. */
+export const eventScope = (r: Pick<EventRun, 'id'>) => `events:${r.id}`;
+
 /** The saved-duel key of an event match. */
 const duelKey = (r: EventRun, m: LocalsMatch) => `events:${r.id}:${m.id}`;
 
 export function eventRunScreen(r: EventRun, autoResume = false): Screen {
+  const scope = eventScope(r);
+  // opening runs the whole sheet from the save: if that ever kills the app, the next open offers a way out
+  beginRisky(scope, 'opening the event');
+  const opened = setTimeout(() => endRisky(scope), 4000);
+  /** A step that simulates or re-pairs the field, guarded the same way. */
+  const step = <T>(what: string, fn: () => T): T => {
+    beginRisky(scope, what);
+    try {
+      return fn();
+    } finally {
+      endRisky(scope);
+    }
+  };
   if (r.phase === 'done') closeOutEvent(r);
   const spec = EVENT_SPECS[r.kind];
   const big = r.size > 40;
@@ -622,7 +639,7 @@ export function eventRunScreen(r: EventRun, autoResume = false): Screen {
   }
 
   function afterMine(msg?: string) {
-    finishRound(r);
+    step('playing out the round', () => finishRound(r));
     saveEvent(r);
     animateRound = roundKey(currentRound(r));
     tab = 'round';
@@ -656,7 +673,7 @@ export function eventRunScreen(r: EventRun, autoResume = false): Screen {
   }
 
   function collect() {
-    finishRound(r);
+    step('playing out the round', () => finishRound(r));
     saveEvent(r);
     animateRound = roundKey(currentRound(r));
     tab = 'round';
@@ -665,8 +682,11 @@ export function eventRunScreen(r: EventRun, autoResume = false): Screen {
   }
 
   function next() {
-    const res = advance(r);
-    if (res === 'done') closeOutEvent(r);
+    const res = step(r.phase === 'swiss' && r.rounds.length < r.swissRounds ? `pairing round ${r.rounds.length + 1}` : 'pairing the top cut', () => {
+      const out = advance(r);
+      if (out === 'done') closeOutEvent(r);
+      return out;
+    });
     saveEvent(r);
     if (res === 'round' || res === 'topcut' || res === 'top-round') postRound = roundKey(currentRound(r));
     tab = res === 'done' ? 'prizes' : res === 'topcut' ? 'bracket' : 'round';
@@ -676,8 +696,10 @@ export function eventRunScreen(r: EventRun, autoResume = false): Screen {
   }
 
   function skipToEnd() {
-    runToEnd(r);
-    closeOutEvent(r);
+    step('playing out the rest of the event', () => {
+      runToEnd(r);
+      closeOutEvent(r);
+    });
     saveEvent(r);
     tab = 'prizes';
     redraw();
@@ -689,6 +711,9 @@ export function eventRunScreen(r: EventRun, autoResume = false): Screen {
     const m = pendingHumanMatch(r);
     if (!m || m.b == null) return;
     busy = true;
+    // the duel has its own restore guard (match.ts)
+    clearTimeout(opened);
+    endRisky(scope);
     const s = getSettings();
     const me = entrantOf(r, r.humanId)!;
     const opp = opponentOf(r, m)!;
@@ -734,8 +759,10 @@ export function eventRunScreen(r: EventRun, autoResume = false): Screen {
     if (!(await confirmDialog('Drop from the event?', 'Your current match is conceded and the rest of the event plays out without you. You keep any prizes you have earned.', 'Drop', true))) return;
     const m = pendingHumanMatch(r);
     if (m && m.b != null) lastRating = concede(r);
-    dropHuman(r);
-    closeOutEvent(r);
+    step('playing out the rest of the event', () => {
+      dropHuman(r);
+      closeOutEvent(r);
+    });
     saveEvent(r);
     tab = 'prizes';
     redraw();
@@ -755,6 +782,8 @@ export function eventRunScreen(r: EventRun, autoResume = false): Screen {
   return {
     el,
     dispose: () => {
+      clearTimeout(opened);
+      endRisky(scope);
       clearInterval(interval);
       revealTimers.forEach(clearTimeout);
     },

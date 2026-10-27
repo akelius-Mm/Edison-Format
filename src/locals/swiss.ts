@@ -199,6 +199,8 @@ export function topCutSeeds(n: NightLike & Pick<LocalsNight, 'topCut'>): string[
  * the top seeds can only meet late.
  */
 export function bracketPairs(size: number): [number, number][] {
+  // a damaged save (a cut of 0, 12 or a huge number) must not spin here allocating forever
+  if (!Number.isInteger(size) || size < 2 || size > 1024 || (size & (size - 1)) !== 0) throw new Error(`Top cut of ${size} is not a power of two from 2 to 1024`);
   let order = [0, 1];
   while (order.length < size) {
     const n = order.length * 2;
