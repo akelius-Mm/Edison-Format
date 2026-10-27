@@ -1479,8 +1479,11 @@ monster('Superancient Deepsea King Coelacanth', {
       ai: { score: (ctx) => (fishFromDeck(ctx).length && ctx.freeMZones() > 0 ? 45 : 0) },
     },
     {
+      // https://edisonrul.ing/cards/s/superancient-deepsea-king-coelacanth.html — usable several times per turn, even
+      // in the Damage Step.
       kind: 'quick',
       label: 'Tribute a Fish: negate the effect that targets this card',
+      damageStep: true,
       categories: ['negate', 'destroy'],
       condition: (ctx) => {
         const l = ctx.prevLink();

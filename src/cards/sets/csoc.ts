@@ -1579,9 +1579,11 @@ M('The White Stone of Legend', {
       mandatory: true,
       label: 'Add "Blue-Eyes White Dragon"',
       categories: ['search'],
+      // https://edisonrul.ing/cards/t/the-white-stone-of-legend.html — the mandatory effect activates even with no
+      // "Blue-Eyes White Dragon" left in the Deck (and under Thunder King Rai-Oh it activates but adds nothing).
       eventFilter: (ctx, ev) => ev.card === ctx.self && ctx.self.location === 'grave',
-      condition: (ctx) => !cantAdd(ctx) && ctx.deck('me', (c) => c.name === 'Blue-Eyes White Dragon').length > 0,
       resolve: async (ctx) => {
+        if (cantAdd(ctx) || !ctx.deck('me', (c) => c.name === 'Blue-Eyes White Dragon').length) return;
         await ctx.search((c) => c.name === 'Blue-Eyes White Dragon', 1, 'Add 1 "Blue-Eyes White Dragon" from your Deck to your hand.');
       },
     },

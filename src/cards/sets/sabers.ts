@@ -316,27 +316,32 @@ spell("Gottoms' Emergency Call", 'normal', {
   ],
 });
 
+// https://edisonrul.ing/cards/s/saber-slash.html — it does not target: count your face-up Attack Position "X-Saber"
+// monsters when it resolves and destroy that many face-up cards on the field (your own included, never itself).
+const slashCount = (ctx: Ctx) => ctx.faceUpMonsters('me', (c) => isXS(c) && c.pos === 'atk').length;
 trap('Saber Slash', 'normal', {
-  text: 'Target face-up cards your opponent controls, up to the number of face-up Attack Position "X-Saber" monsters you control; destroy them.',
+  text: 'Destroy a number of face-up cards on the field equal to the number of face-up Attack Position "X-Saber" monsters you control.',
   effects: [
     {
       kind: 'activate',
       categories: ['destroy'],
-      canActivate: (ctx) =>
-        ctx.faceUpMonsters('me', (c) => isXS(c) && c.pos === 'atk').length > 0 && ctx.field('opp', (c) => c.faceUp && ctx.canTarget(c)).length > 0,
-      activate: async (ctx) => {
-        const n = ctx.faceUpMonsters('me', (c) => isXS(c) && c.pos === 'atk').length;
-        await ctx.selectTargets(ctx.field('opp', (c) => c.faceUp), 1, n, `Target up to ${n} face-up cards your opponent controls.`, 'destroy', {
-          aiScore: (c) => cardValue(ctx.game, c) - (spentOnChain(ctx, c) ? 5000 : 0),
-        });
-      },
       resolve: async (ctx) => {
-        await ctx.destroy(ctx.validTargets((c) => c.onField && c.faceUp));
+        const n = slashCount(ctx);
+        const cands = ctx.field('both', (c) => c.faceUp && c !== ctx.self);
+        const k = Math.min(n, cands.length);
+        if (k <= 0) return;
+        const sel = await ctx.select(cands, k, k, `Destroy ${k} face-up card(s) on the field.`, 'destroy', {
+          aiScore: (c) => (c.controller === ctx.opp ? cardValue(ctx.game, c) - (spentOnChain(ctx, c) ? 5000 : 0) : -10000 - cardValue(ctx.game, c)),
+        });
+        if (sel.length) await ctx.destroy(sel);
       },
       ai: {
         score: (ctx) => {
-          const opp = ctx.field('opp', (c) => c.faceUp && ctx.canTarget(c) && !spentOnChain(ctx, c));
-          if (!opp.length) return -1;
+          const n = slashCount(ctx);
+          const opp = ctx.field('opp', (c) => c.faceUp && !spentOnChain(ctx, c));
+          if (!n || !opp.length) return -1;
+          // Never more X-Sabers than there are opposing face-up cards: the rest would be our own.
+          if (n > opp.length) return -1;
           const val = opp.reduce((a, c) => a + cardValue(ctx.game, c), 0);
           const top = ctx.chainTop();
           if (top && top.player === ctx.opp && top.ctx.targets.some((t) => t.controller === ctx.player && isXS(t))) return 70;
@@ -351,6 +356,7 @@ trap('Saber Slash', 'normal', {
   ],
 });
 
+
 // ============================================================ EXTRA DECK
 
 monster('XX-Saber Gottoms', {
@@ -363,17 +369,19 @@ monster('XX-Saber Gottoms', {
   types: ['synchro'],
   sets: XXS,
   aiValue: 400,
-  text: '1 Tuner + 1 or more non-Tuner EARTH monsters\nYou can Tribute 1 "X-Saber" monster; discard 1 random card from your opponent\'s hand.',
-  synchro: { nonTuner: attr('EARTH'), desc: '1 Tuner + 1+ non-Tuner EARTH monsters' },
+  // https://edisonrul.ing/cards/x/xx-saber-gottoms.html — "1 Tuner + 1 or more EARTH monsters": the EARTH monsters need
+  // not be non-Tuners; the Tribute is a cost and can be a face-up or face-down X-Saber.
+  text: '1 Tuner + 1 or more EARTH monsters\nYou can Tribute 1 "X-Saber" monster to discard 1 random card from your opponent\'s hand.',
+  synchro: { nonTuner: attr('EARTH'), tunersAsNonTuners: true, desc: '1 Tuner + 1+ EARTH monsters' },
   effects: [
     {
       kind: 'ignition',
       label: 'Tribute X-Saber: random discard',
       categories: ['discard'],
-      canActivate: (ctx) => ctx.hand('opp').length > 0 && ctx.monsters('me', (c) => c.faceUp && isXS(c) && !ctx.query(c, 'cannotBeTributed')).length > 0,
+      canActivate: (ctx) => ctx.hand('opp').length > 0 && ctx.monsters('me', (c) => isXS(c) && !ctx.query(c, 'cannotBeTributed')).length > 0,
       activate: async (ctx) => {
         const cost = await ctx.select(
-          ctx.monsters('me', (c) => c.faceUp && isXS(c) && !ctx.query(c, 'cannotBeTributed')),
+          ctx.monsters('me', (c) => isXS(c) && !ctx.query(c, 'cannotBeTributed')),
           1,
           1,
           'Tribute 1 "X-Saber" monster.',

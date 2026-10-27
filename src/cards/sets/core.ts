@@ -17,6 +17,7 @@ import {
 } from '../helpers';
 import type { CardInstance } from '../../engine/card';
 import type { Ctx } from '../../engine/ctx';
+import type { ChainLink } from '../../engine/game';
 
 // ============================================================ SPELLS
 
@@ -237,7 +238,16 @@ spell('Scapegoat', 'quickplay', {
     {
       kind: 'activate',
       categories: ['specialSummon', 'protect'],
-      canActivate: (ctx) => ctx.freeMZones() >= 4 && ctx.canSpecialSummon(),
+      // https://edisonrul.ing/cards/s/scapegoat.html — not if you already Summoned a monster this turn (even by the
+      // opponent's Cyber Jar); if its ACTIVATION is negated (Magic Jammer) you may still Summon that turn, if only its
+      // effect is negated (Imperial Order) you may not.
+      canActivate: (ctx) => ctx.freeMZones() >= 4 && ctx.canSpecialSummon() && !ctx.game.turnData.summonedBy?.[ctx.player],
+      onActivationNegated: (ctx) => {
+        const g = ctx.game;
+        const lock = (ctx.data.lock ?? []) as typeof g.playerMods;
+        g.playerMods = g.playerMods.filter((m) => !lock.includes(m));
+        g.update();
+      },
       activate: async (ctx) => {
         // "You cannot Summon other monsters the turn you activate this card": applies from activation (even if this card
         // is negated). Setting is not a Summon and stays legal. The Sheep Tokens themselves are exempt (see resolve).
@@ -420,7 +430,7 @@ trap('Call of the Haunted', 'continuous', {
 });
 
 trap('Royal Oppression', 'continuous', {
-  text: 'Any player can pay 800 LP to negate the Special Summon of a monster(s), and destroy that monster(s).',
+  text: 'Either player can pay 800 Life Points to negate the Special Summon of a monster(s), and/or an effect that Special Summons a monster(s), and destroy those cards.',
   effects: [
     { kind: 'activate', categories: ['lockdown'], ai: { score: (ctx) => (ctx.isMyTurn ? 0 : 20) } },
     {
@@ -445,6 +455,34 @@ trap('Royal Oppression', 'continuous', {
           if (!ps || ps.player === ctx.player) return 0;
           const v = Math.max(0, ...ps.cards.map((c) => cardValue(ctx.game, c)));
           return v >= 1800 && ctx.lp > 2000 ? 60 : 0;
+        },
+      },
+    },
+    {
+      // https://edisonrul.ing/cards/r/royal-oppression.html — "...negate the Special Summon of a monster(s), and/or an
+      // effect that Special Summons a monster(s), and destroy those cards": it can also respond to the activation of a
+      // card / effect that would (or might) Special Summon (Debris Dragon, Call of the Haunted, Starlight Road...).
+      // Not in the Damage Step (no damageStep flag).
+      kind: 'quick',
+      label: 'Pay 800: negate an effect that Special Summons',
+      anyPlayer: true,
+      categories: ['negate', 'destroy'],
+      condition: (ctx) => {
+        const l = ctx.prevLink();
+        return !!l && !l.negated && l.card !== ctx.self && (l.effect.categories ?? []).includes('specialSummon') && ctx.lp > 800;
+      },
+      activate: async (ctx) => {
+        ctx.data.link = ctx.prevLink();
+        await ctx.payLp(800);
+      },
+      resolve: async (ctx) => {
+        await ctx.negateEffectAndDestroy(ctx.data.link as ChainLink);
+      },
+      ai: {
+        score: (ctx) => {
+          const l = ctx.prevLink();
+          if (!l || l.player === ctx.player || ctx.lp <= 2000) return 0;
+          return cardValue(ctx.game, l.card) >= 1500 || (l.card.data.aiValue ?? 0) >= 500 ? 55 : 0;
         },
       },
     },
@@ -608,20 +646,24 @@ monster('Treeborn Frog', {
   atk: 100,
   def: 100,
   sets: ['frog'],
-  text: 'During your Standby Phase, if this card is in your Graveyard and you do not control any Spell or Trap Cards, you can Special Summon this card. This effect cannot be activated if there is a face-up "Treeborn Frog" on your side of the field.',
+  text: 'If this card is in your Graveyard during your Standby Phase and you control no Spell or Trap Cards, you can Special Summon it. This effect cannot be activated if you control a face-up "Treeborn Frog".',
   aiValue: 200,
+  // https://edisonrul.ing/cards/t/treeborn-frog.html — it does not target and is not negated by "Necrovalley".
+  ignoresGyLock: true,
   effects: [
     {
+      // Same source: no once-per-turn (it can activate several times in the same Standby Phase), but two copies
+      // cannot be activated in the same chain.
       kind: 'trigger',
       event: 'phaseStart',
       range: ['grave'],
-      opt: true,
       label: 'Revive',
       categories: ['specialSummon'],
       eventFilter: (ctx, ev) => ev.phase === 'standby' && ctx.isMyTurn,
       // Edison text: not while you control a face-up "Treeborn Frog", so only one comes back per Standby Phase (checked
       // again on resolution, when two were chained together)
       condition: (ctx) => ctx.spellTraps('me').length === 0 && !faceUpTreeborn(ctx) && ctx.canSummonSelf(),
+      canActivate: (ctx) => !ctx.game.chain.some((l) => l.card !== ctx.self && l.card.name === 'Treeborn Frog' && !l.isCardActivation),
       resolve: async (ctx) => {
         if (ctx.self.location === 'grave' && ctx.spellTraps('me').length === 0 && !faceUpTreeborn(ctx)) await ctx.specialSummon(ctx.self);
       },

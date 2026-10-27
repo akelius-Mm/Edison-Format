@@ -61,6 +61,8 @@ export interface ChainLink {
   fromLocation: Location;
   /** The card's moveId once its costs were paid ("negate and destroy" only hits that same card). */
   moveIdAfterCost?: number;
+  /** With `negated`: only the effect was negated (Starlight Road), not the activation. */
+  effectOnly?: boolean;
 }
 
 interface PendingTrigger {
@@ -388,6 +390,15 @@ export class Game {
     return new Ctx(this, card, ef, card.controller);
   }
 
+  /**
+   * Trap Stun: "Negate the effects of all other Trap Cards on the field during this turn" — also Traps activated after
+   * it resolved, which can still be activated (https://edisonrul.ing/cards/t/trap-stun.html).
+   */
+  trapStunned(card: CardInstance): boolean {
+    const uid = this.turnData.trapStunUid as number | undefined;
+    return uid !== undefined && card.isTrap && card.uid !== uid;
+  }
+
   /** Is a continuous effect source currently applying? */
   private sourceActive(src: CardInstance, ef: EffectDef, q: QueryKey): boolean {
     const range = ef.range ?? (src.isMonster ? ['mzone'] : ['szone', 'fzone']);
@@ -472,6 +483,7 @@ export class Game {
   isNegated(card: CardInstance): boolean {
     if (!card.onField) return false;
     if (card.flags.negatedTurn === this.turn) return true;
+    if (this.trapStunned(card)) return true;
     return this.queryCard(card, 'negated');
   }
 
@@ -523,6 +535,8 @@ export class Game {
   }
 
   emit(ev: Omit<GameEvent, 'seq' | 'batch'>): GameEvent {
+    // Scapegoat: "you cannot activate it if you already Summoned a monster this turn" (by any means).
+    if (ev.type === 'summoned' && ev.player !== undefined) (this.turnData.summonedBy ??= {})[ev.player] = true;
     if (ev.type === 'summoned' && ev.card && ev.player === this.turnPlayer && !this.chain.length && !this.resolvingChain && !this.battle && (this.phase === 'main1' || this.phase === 'main2'))
       this.prioritySummoned.push(ev.card as CardInstance);
     const full: GameEvent = {
@@ -1579,6 +1593,7 @@ export class Game {
         await this.anim({ type: 'resolve', card: link.card.uid, chainIndex: link.index });
         if (link.negated) {
           this.log(`Chain Link ${link.index} (${link.card.name}) is negated.`, 'chain');
+          if (!link.effectOnly) link.effect.onActivationNegated?.(link.ctx);
         } else {
           await this.resolveLink(link);
         }
@@ -1621,7 +1636,7 @@ export class Game {
         this.log(`${card.name} is no longer on the field; its effect does not resolve.`, 'chain');
         return;
       }
-      if ((card.isTrap && this.queryPlayer(link.player, 'cannotActivateTraps') && card.onField) || this.isNegated(card)) {
+      if ((card.isTrap && this.queryPlayer(link.player, 'cannotActivateTraps') && card.onField) || this.isNegated(card) || (link.fromLocation !== 'grave' && this.trapStunned(card))) {
         this.log(`${card.name}'s effect is negated.`, 'chain');
         return;
       }
@@ -1648,7 +1663,7 @@ export class Game {
 
   negateLink(link: ChainLink, destroy = false, by?: CardInstance) {
     link.negated = true;
-    this.log(`${link.card.name}'s activation is negated${by ? ` by ${by.name}` : ''}.`, 'chain');
+    this.log(`${link.card.name}'s ${link.effectOnly ? 'effect' : 'activation'} is negated${by ? ` by ${by.name}` : ''}.`, 'chain');
     void this.anim({ type: 'negate', card: link.card.uid });
     if (destroy) link.ctx.data.__destroyOnNegate = true;
   }
@@ -1831,6 +1846,8 @@ export class Game {
       await this.moveCards(tributes, 'grave', { reason: 'tribute', reasons: ['tribute', 'cost'], reasonPlayer: p, reasonCard: card });
     }
     this.players[p].normalSummonsLeft--;
+    // Red-Eyes Wyvern: a Normal Summon / Set counts even if it is negated afterwards (Solemn Judgment).
+    (this.turnData.normalSummonedOrSet ??= {})[p] = true;
     // Use up a restricted extra Normal Summon this monster fits, keeping the unrestricted one for later.
     const restricted = this.players[p].restrictedSummons ?? [];
     const ri = restricted.findIndex((r) => r.allow(card, set));
@@ -1961,7 +1978,7 @@ export class Game {
     const tuners = mons.filter((c) => c.isTuner && (!req.tuner || req.tuner(c)));
     const combos: CardInstance[][] = [];
     for (const t of tuners) {
-      const nonT = mons.filter((c) => c !== t && !c.isTuner && (!req.nonTuner || req.nonTuner(c)));
+      const nonT = mons.filter((c) => c !== t && (!c.isTuner || req.tunersAsNonTuners) && (!req.nonTuner || req.nonTuner(c)));
       // Some tuners can also be non-tuners (treat tuners as non-tuners when allowed? Not in this era)
       const minN = req.minNonTuners ?? 1;
       const maxN = req.maxNonTuners ?? 99;

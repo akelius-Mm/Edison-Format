@@ -12,7 +12,7 @@ import { findCard, monster, spell, trap } from '../define';
 import { bestTarget, cardValue, flip, race, selfDestroysByBattle } from '../helpers';
 import { dataVariant, type CardInstance, type EffectDef } from '../../engine/card';
 import type { Ctx } from '../../engine/ctx';
-import type { ChainLink } from '../../engine/game';
+import type { ChainLink, Game } from '../../engine/game';
 import type { GameEvent } from '../../engine/types';
 import { necrovalleyNegates } from '../necrovalley';
 
@@ -742,14 +742,15 @@ once('Necrovalley', () =>
 
 once('Royal Tribute', () =>
   spell('Royal Tribute', 'normal', {
-    text: 'If you control "Necrovalley": Both players discard any monsters in their hands.',
+    text: 'This card can only be activated when "Necrovalley" is on your side of the field. Both players discard all Monster Cards in their hands to the Graveyard.',
     effects: [
       {
         kind: 'activate',
         categories: ['discard'],
         condition: (ctx) => ctx.cards('me', 'fzone', (c) => c.name === 'Necrovalley' && c.faceUp).length > 0,
+        // https://edisonrul.ing/cards/r/royal-tribute.html — "Necrovalley" only needs to be face-up when this card is
+        // activated: it still resolves if Necrovalley leaves the field in the chain.
         resolve: async (ctx) => {
-          if (!ctx.cards('me', 'fzone', (c) => c.name === 'Necrovalley' && c.faceUp).length) return;
           for (const p of [ctx.player, ctx.opp]) {
             const mons = ctx.game.zone(p, 'hand').filter((c) => c.isMonster);
             if (mons.length) await ctx.game.discard(mons, 'effect', ctx.player, ctx.self);
@@ -1003,10 +1004,52 @@ once('The Transmigration Prophecy', () =>
   }),
 );
 
+/**
+ * https://edisonrul.ing/cards/s/shadow-imprisoning-mirror.html — whether a monster effect activated on the field or in the
+ * GY is negated is checked when it RESOLVES (its Attribute then, e.g. after "DNA Transplant"), if a Mirror applies then.
+ * The link's resolve is wrapped once, like Light-Imprisoning Mirror.
+ */
+function shadowMirrorWatch(game: Game, link: ChainLink & { shadowWatch?: boolean }) {
+  const c = link.card;
+  if (link.shadowWatch || link.isCardActivation || !c.isMonster) return;
+  if (!(link.fromLocation === 'mzone' || link.fromLocation === 'grave' || c.location === 'grave')) return;
+  link.shadowWatch = true;
+  const orig = link.effect;
+  link.effect = {
+    ...orig,
+    resolve: async (c2) => {
+      const mirror = game.allFieldCards().find((m) => m.name === 'Shadow-Imprisoning Mirror' && m.faceUp && m.activeOnField && !game.isNegated(m));
+      if (mirror && c.data.attribute === 'DARK') {
+        game.log(`${c.name}'s effect is negated by ${mirror.name}.`, 'chain');
+        void game.anim({ type: 'negate', card: c.uid });
+        return;
+      }
+      if (orig.resolve) await orig.resolve(c2);
+    },
+  };
+}
 once('Shadow-Imprisoning Mirror', () =>
   trap('Shadow-Imprisoning Mirror', 'continuous', {
-    text: 'Negate all DARK monster effects activated on the field or in the GY.',
-    effects: imprisoningMirror('DARK'),
+    text: 'When the effect of a DARK monster activates on the field or in the Graveyard, negate it.',
+    effects: [
+      {
+        ...imprisoningMirror('DARK')[0],
+        // Chained to a monster effect: checked when that effect resolves after this card.
+        resolve: async (ctx) => {
+          for (const l of ctx.game.chain) if (l !== ctx.link) shadowMirrorWatch(ctx.game, l);
+        },
+      },
+      {
+        kind: 'trigger',
+        event: 'chainActivated',
+        label: 'Shadow-Imprisoning Mirror (negate)',
+        eventFilter: (ctx, ev) => {
+          const link = ev.data?.link as ChainLink | undefined;
+          if (link && stActive(ctx)) shadowMirrorWatch(ctx.game, link);
+          return false;
+        },
+      },
+    ],
   }),
 );
 

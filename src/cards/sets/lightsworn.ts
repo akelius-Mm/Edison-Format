@@ -444,7 +444,8 @@ spell('Solar Recharge', 'normal', {
     {
       kind: 'activate',
       categories: ['draw', 'mill', 'discard'],
-      canActivate: (ctx) => ctx.hand('me', (c) => c !== ctx.self && isLS(c)).length > 0 && ctx.deck().length >= 2,
+      // https://edisonrul.ing/cards/s/solar-recharge.html — cannot be activated with 3 or fewer cards left in the Deck.
+      canActivate: (ctx) => ctx.hand('me', (c) => c !== ctx.self && isLS(c)).length > 0 && ctx.deck().length >= 4,
       activate: async (ctx) => {
         const sel = await ctx.select(ctx.hand('me', (c) => c !== ctx.self && isLS(c)), 1, 1, 'Discard 1 "Lightsworn" monster.', 'discard', { aiScore: (c) => lsDumpScore(ctx, c) });
         if (!sel.length) return false;
