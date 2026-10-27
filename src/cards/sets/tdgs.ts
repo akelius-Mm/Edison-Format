@@ -28,6 +28,7 @@ import type { ChainLink, Game } from '../../engine/game';
 import type { Attribute, BattlePos, GameEvent, Location, PlayerId, Race, Reason } from '../../engine/types';
 import { patchData, variant } from './abpf';
 import { tributable, tributeCost } from './plants';
+import { QUESTION_ATK } from './sovr';
 
 type C = CardInstance;
 
@@ -185,7 +186,8 @@ function noTributeOk(g: Game, card: C) {
 const geartownOn = (g: Game) => liveCards(g, GEARTOWN).length > 0;
 const powerFilterOn = (g: Game) => liveCards(g, POWER_FILTER).length > 0;
 /** Power Filter: original ATK of 1000 or less (a "?" ATK counts as 0). */
-const lowAtk = (c: C) => c.isMonster && (c.data.atk ?? 0) <= 1000;
+// https://edisonrul.ing/cards/p/power-filter.html — monsters with "?" ATK can be Special Summoned.
+const lowAtk = (c: C) => c.isMonster && (c.data.atk ?? 0) <= 1000 && !QUESTION_ATK.has(c.data.name);
 
 /** Telekinetic Charging Cell equipped to this (Psychic) monster. */
 function chargingCellOn(g: Game, m: C) {
@@ -573,12 +575,16 @@ M('Ghost Gardna', {
       label: '1 opponent monster loses 1000 ATK',
       categories: ['atkChange'],
       eventFilter: (ctx, ev) => ev.card === ctx.self && ctx.self.location === 'grave',
-      condition: (ctx) => ctx.faceUpMonsters('opp').length > 0,
-      resolve: async (ctx) => {
-        const [t] = await ctx.select(ctx.faceUpMonsters('opp'), 1, 1, '1 face-up monster your opponent controls loses 1000 ATK.', 'target', {
+      // 2010 ruling: this effect targets 1 of your opponent's monsters. https://edisonrul.ing/cards/g/ghost-gardna.html
+      condition: (ctx) => ctx.faceUpMonsters('opp', (c) => ctx.canTarget(c)).length > 0,
+      activate: async (ctx) => {
+        await ctx.selectTargets(ctx.faceUpMonsters('opp'), 1, 1, 'Target 1 face-up monster your opponent controls (it loses 1000 ATK).', 'target', {
           aiScore: (c) => ctx.atk(c),
         });
-        if (t && faceUpOn(t)) ctx.addTempMod(t, 'atk', -1000, 'turn');
+      },
+      resolve: async (ctx) => {
+        const [t] = ctx.validTargets(faceUpOn);
+        if (t) ctx.addTempMod(t, 'atk', -1000, 'turn');
       },
     },
   ],
@@ -604,7 +610,8 @@ M('Shield Warrior', {
       categories: ['protect'],
       condition: (ctx) => {
         const b = ctx.battle;
-        return !!b && b.inDamageStep && !b.calc && !b.negated && !!b.target && (b.attacker.controller === ctx.player || b.target.controller === ctx.player);
+        // https://edisonrul.ing/cards/s/shield-warrior.html — cannot be activated if your monster would not be destroyed by the battle.
+        return !!b && b.inDamageStep && !b.calc && !b.negated && !!b.target && (b.attacker.controller === ctx.player || b.target.controller === ctx.player) && !!myBattleMonsterLoses(ctx);
       },
       activate: async (ctx) => {
         await ctx.banish(ctx.self, 'cost');
@@ -644,7 +651,8 @@ function pieceGolem(name: string, other: string, atk: number, level: number) {
         condition: (ctx) => ctx.faceUpMonsters('me', (c) => c.name === BIG_PIECE).length > 0,
         canActivate: (ctx) => ctx.canSpecialSummon() && ctx.deck('me', (c) => c.name === other && ctx.canSummonCard(c)).length > 0,
         resolve: async (ctx) => {
-          if (!ctx.faceUpMonsters('me', (c) => c.name === BIG_PIECE).length) return;
+          // https://edisonrul.ing/cards/s/small-piece-golem.html — still Special Summons if the only "Big Piece Golem"
+          // left the field in the chain.
           const r = await summonFromDeck(ctx, (c) => c.name === other, `Special Summon 1 "${other}" from your Deck.`);
           if (r.length) ctx.negateEffects(r[0], 'field');
         },
@@ -1610,7 +1618,12 @@ M('Herald of Orange Light', {
         const l = ctx.prevLink();
         return !!l && !l.negated && l.player === ctx.opp && l.card.isMonster && !l.isCardActivation;
       },
-      canActivate: (ctx) => ctx.hand('me', (c) => c !== ctx.self && raceIs(c, 'Fairy')).length > 0,
+      // https://edisonrul.ing/cards/h/herald-of-orange-light.html — sending the cards to the GY is the cost, so "this
+      // effect cannot activate while "Macro Cosmos" is active".
+      canActivate: (ctx) =>
+        !ctx.game.queryPlayer(ctx.player, 'banishInsteadOfGrave') &&
+        !ctx.game.queryCard(ctx.self, 'banishInsteadOfGrave') &&
+        ctx.hand('me', (c) => c !== ctx.self && raceIs(c, 'Fairy')).length > 0,
       activate: async (ctx) => {
         const sel = await ctx.select(ctx.hand('me', (c) => c !== ctx.self && raceIs(c, 'Fairy')), 1, 1, 'Send 1 other Fairy-Type monster from your hand to the Graveyard.', 'cost', {
           aiScore: (c) => -cardValue(ctx.game, c),
@@ -2079,15 +2092,18 @@ S('Domino Effect', 'continuous', {
       label: 'Send 1 monster: destroy 1 opponent monster',
       categories: ['destroy'],
       eventFilter: (ctx, ev) => ev.fromController === ctx.opp && evc(ev)?.location === 'grave' && stActive(ctx),
-      canActivate: (ctx) => ctx.monsters('me').length > 0 && ctx.monsters('opp').length > 0,
+      // Sending your monster is the cost; the effect targets 1 monster your opponent controls:
+      // https://edisonrul.ing/cards/d/domino-effect.html
+      canActivate: (ctx) => ctx.monsters('me').length > 0 && ctx.monsters('opp', (c) => ctx.canTarget(c)).length > 0,
       activate: async (ctx) => {
         const sel = await ctx.select(ctx.monsters('me'), 1, 1, 'Send 1 monster you control to the Graveyard.', 'cost', { aiScore: (c) => -cardValue(ctx.game, c) });
         if (!sel.length) return false;
         await ctx.sendToGrave(sel, 'cost');
+        await ctx.selectTargets(ctx.monsters('opp'), 1, 1, 'Target 1 monster your opponent controls to destroy.', 'destroy');
       },
       resolve: async (ctx) => {
-        const [t] = await ctx.select(ctx.monsters('opp'), 1, 1, 'Destroy 1 monster your opponent controls.', 'destroy');
-        if (t) await ctx.destroy(t);
+        const t = ctx.validTargets((c) => c.location === 'mzone');
+        if (t.length) await ctx.destroy(t);
       },
       ai: {
         score: (ctx) => {
@@ -2143,24 +2159,29 @@ S('Battle Tuned', 'quickplay', {
     {
       kind: 'activate',
       damageStep: true,
-      // Cost: removes a Tuner from play from the GY (not payable under Necrovalley).
-      gyBanishCost: true,
-      categories: ['atkChange'],
-      canActivate: (ctx) => ctx.grave('me', (c) => c.isMonster && c.isTuner).length > 0 && ctx.faceUpMonsters('me', (c) => ctx.canTarget(c)).length > 0,
+      // 2010 ruling: "Battle Tuned" targets 1 Tuner monster in your Graveyard (it is removed from play on resolution,
+      // not as a cost). https://edisonrul.ing/cards/b/battle-tuned.html
+      categories: ['atkChange', 'banish'],
+      canActivate: (ctx) => ctx.grave('me', (c) => c.isMonster && c.isTuner && ctx.canTarget(c)).length > 0 && ctx.faceUpMonsters('me', (c) => ctx.canTarget(c)).length > 0,
       activate: async (ctx) => {
-        const [cost] = await ctx.select(ctx.grave('me', (c) => c.isMonster && c.isTuner), 1, 1, 'Remove from play 1 Tuner monster from your Graveyard.', 'cost', {
+        const [tuner] = await ctx.selectTargets(ctx.grave('me', (c) => c.isMonster && c.isTuner), 1, 1, 'Target 1 Tuner monster in your Graveyard.', 'banish', {
           aiScore: (c) => c.data.atk ?? 0,
         });
-        if (!cost) return false;
-        ctx.data.atk = cost.data.atk ?? 0;
-        await ctx.banish(cost, 'cost');
-        await ctx.selectTargets(ctx.faceUpMonsters('me'), 1, 1, 'Target 1 face-up monster you control.', 'buff', {
+        if (!tuner) return false;
+        ctx.data.tuner = tuner;
+        const [mon] = await ctx.selectTargets(ctx.faceUpMonsters('me'), 1, 1, 'Target 1 face-up monster you control.', 'buff', {
           aiScore: (c) => (ctx.battle && (ctx.battle.attacker === c || ctx.battle.target === c) ? 5000 : 0) + ctx.atk(c),
         });
+        ctx.data.mon = mon;
       },
       resolve: async (ctx) => {
-        const t = ctx.validTargets(faceUpOn)[0];
-        if (t) ctx.addTempMod(t, 'atk', ctx.data.atk ?? 0, 'field');
+        const valid = ctx.validTargets();
+        const tuner = ctx.data.tuner as C | undefined;
+        const mon = ctx.data.mon as C | undefined;
+        if (!tuner || !valid.includes(tuner) || tuner.location !== 'grave') return;
+        await ctx.banish(tuner);
+        if ((tuner.location as string) !== 'banished') return;
+        if (mon && valid.includes(mon) && faceUpOn(mon)) ctx.addTempMod(mon, 'atk', tuner.data.atk ?? 0, 'field');
       },
       ai: {
         score: (ctx) => {
@@ -2273,7 +2294,9 @@ S('Psi-Impulse', 'normal', {
     {
       kind: 'activate',
       categories: ['toDeck'],
-      canActivate: (ctx) => tributable(ctx, isPsychic).length > 0,
+      // https://edisonrul.ing/cards/p/psi-impulse.html — cannot be activated if the opponent has fewer than 3 cards in the
+      // Deck or no cards in the hand; if their hand is empty when it resolves, the effect disappears.
+      canActivate: (ctx) => tributable(ctx, isPsychic).length > 0 && ctx.hand('opp').length > 0 && ctx.deck('opp').length >= 3,
       activate: async (ctx) => {
         const sel = await ctx.select(tributable(ctx, isPsychic), 1, 1, 'Tribute 1 Psychic-Type monster.', 'tribute', { aiScore: (c) => -cardValue(ctx.game, c) });
         if (!sel.length) return false;
@@ -2281,7 +2304,8 @@ S('Psi-Impulse', 'normal', {
       },
       resolve: async (ctx) => {
         const hand = ctx.hand('opp');
-        if (hand.length) await ctx.toDeck(hand, 'shuffle');
+        if (!hand.length) return;
+        await ctx.toDeck(hand, 'shuffle');
         await ctx.draw(3, ctx.opp);
       },
       ai: { score: (ctx) => (myOpenMain(ctx) && ctx.hand('opp').length >= 5 && tributable(ctx, (c) => isPsychic(c) && cardValue(ctx.game, c) < 1200).length ? 30 : 0) },
@@ -2372,7 +2396,7 @@ function spiritEquipReturn(): EffectDef[] {
 const spiritHostBack = new WeakMap<C, number>();
 
 S(GEARTOWN, 'field', {
-  text: 'Both players can Normal Summon "Ancient Gear" monsters for 1 less Tribute. When this card is destroyed and sent to the Graveyard, the controller of this card can Special Summon 1 "Ancient Gear" monster from their hand, Deck, or Graveyard.',
+  text: 'Both players can Tribute Summon "Ancient Gear" monsters with 1 less Tribute than required. When this card is destroyed and sent to the Graveyard, you can Special Summon 1 "Ancient Gear" monster from your hand, Deck, or Graveyard.',
   effects: [
     { kind: 'activate', categories: [], ai: { score: (ctx) => (ctx.cards('me', ['hand', 'deck'], isAncientGear).length >= 2 ? 30 : 5) } },
     {
@@ -2381,7 +2405,13 @@ S(GEARTOWN, 'field', {
       when: true,
       label: 'Special Summon an "Ancient Gear" monster',
       categories: ['specialSummon'],
-      eventFilter: (ctx, ev) => ev.card === ctx.self && ev.from === 'fzone' && ev.fromFaceUp === true && ctx.self.location === 'grave',
+      // https://edisonrul.ing/cards/g/geartown.html — it activates when this card is destroyed and sent to the GY face-up
+      // or face-down, or from the hand; not when its controller replaced it by activating a new Field Spell.
+      eventFilter: (ctx, ev) =>
+        ev.card === ctx.self &&
+        (ev.from === 'fzone' || ev.from === 'hand') &&
+        ctx.self.location === 'grave' &&
+        !(ev.reason === 'rule' && ev.reasonPlayer === ctx.player),
       canActivate: (ctx) => ctx.canSpecialSummon() && ctx.cards('me', ['hand', 'deck', 'grave'], (c) => isAncientGear(c) && ctx.canSummonCard(c)).length > 0,
       resolve: async (ctx) => {
         const cands = ctx.cards('me', ['hand', 'deck', 'grave'], (c) => isAncientGear(c) && ctx.canSummonCard(c));
@@ -2688,7 +2718,9 @@ T('Defense Draw', 'normal', {
       kind: 'activate',
       damageStep: true,
       categories: ['protect', 'draw'],
-      condition: (ctx) => !ctx.isMyTurn && !!ctx.battle && ctx.battle.inDamageStep && !ctx.battle.calc && !ctx.battle.negated,
+      // Not if you would take no battle damage, nor with an empty Deck: https://edisonrul.ing/cards/d/defense-draw.html
+      condition: (ctx) =>
+        !ctx.isMyTurn && !!ctx.battle && ctx.battle.inDamageStep && !ctx.battle.calc && !ctx.battle.negated && expectedBattleDamage(ctx.game, ctx.player) > 0 && ctx.deck('me').length > 0,
       resolve: async (ctx) => {
         ensureTdgsPatches(ctx.game);
         const b = ctx.battle as any;
@@ -2831,7 +2863,9 @@ T('Broken Blocker', 'normal', {
       eventFilter: (ctx, ev) => {
         const c = evc(ev);
         const calc = ctx.battle?.calc;
-        return !!c && ev.fromController === ctx.player && !!calc && calc.targetPos === 'def' && ctx.battle?.target === c && calc.targetDef > g0(c.data.atk);
+        // 2010 ruling: compare the monster's ATK and DEF on the field (with gains/losses), not its printed ATK.
+        // https://edisonrul.ing/cards/b/broken-blocker.html
+        return !!c && ev.fromController === ctx.player && !!calc && calc.targetPos === 'def' && ctx.battle?.target === c && calc.targetDef > calc.targetAtk;
       },
       canActivate: (ctx) => {
         const c = evc(ctx.event!);
@@ -3053,18 +3087,20 @@ T('Judgment of Thunder', 'normal', {
 });
 
 T('Fish Depth Charge', 'normal', {
-  text: 'Tribute 1 Fish-Type monster to destroy 1 card on the field. Then draw 1 card.',
+  text: 'Tribute 1 Fish-Type monster to select and destroy 1 card your opponent controls. Then draw 1 card.',
   effects: [
     {
+      // 2010 ruling: it targets 1 card your opponent controls; no draw if that card is not destroyed.
+      // https://edisonrul.ing/cards/f/fish-depth-charge.html
       kind: 'activate',
       categories: ['destroy', 'draw'],
-      canActivate: (ctx) => tributable(ctx, (c) => raceIs(c, 'Fish')).length > 0 && ctx.field('both', (c) => c !== ctx.self && ctx.canTarget(c)).length > 0,
+      canActivate: (ctx) => tributable(ctx, (c) => raceIs(c, 'Fish')).length > 0 && ctx.field('opp', (c) => ctx.canTarget(c)).length > 0,
       activate: async (ctx) => {
         const sel = await ctx.select(tributable(ctx, (c) => raceIs(c, 'Fish')), 1, 1, 'Tribute 1 Fish-Type monster.', 'tribute', { aiScore: (c) => -cardValue(ctx.game, c) });
         if (!sel.length) return false;
         await tributeCost(ctx, sel);
-        await ctx.selectTargets(ctx.field('both', (c) => c !== ctx.self), 1, 1, 'Target 1 card on the field.', 'destroy', {
-          aiScore: (c) => (c.controller === ctx.opp ? cardValue(ctx.game, c) : -5000),
+        await ctx.selectTargets(ctx.field('opp'), 1, 1, 'Target 1 card your opponent controls.', 'destroy', {
+          aiScore: (c) => cardValue(ctx.game, c),
         });
       },
       resolve: async (ctx) => {

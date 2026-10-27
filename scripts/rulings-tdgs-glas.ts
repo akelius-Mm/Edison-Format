@@ -182,14 +182,16 @@ function eq(a: unknown, b: unknown, msg: string) {
     }
   });
 
-  await test('Battle Tuned cannot be activated under Necrovalley (its cost removes a Tuner in the GY from play)', async () => {
+  // 2010 ruling: "Battle Tuned" targets the Tuner in the GY (removed on resolution, not as a cost), so the old
+  // "cost under Necrovalley" premise no longer holds. https://edisonrul.ing/cards/b/battle-tuned.html
+  await test('Battle Tuned targets 1 Tuner monster in your Graveyard', async () => {
     const { g, place } = setup();
     const bt = place(0, cardByName('Battle Tuned'), 'hand');
-    place(0, cardByName('Nitro Synchron'), 'grave');
+    const tuner = place(0, cardByName('Nitro Synchron'), 'grave');
     place(0, T.brute, 'mzone');
-    eq(offered(g, 0, bt), true, 'offered without Necrovalley');
-    live(place(1, cardByName('Necrovalley'), 'fzone', { faceUp: true }));
-    eq(offered(g, 0, bt), false, 'not offered under Necrovalley');
+    eq(offered(g, 0, bt), true, 'offered');
+    await g.performAction(0, { type: 'activate', card: bt, act: g.getActivations(0, { open: true }).find((a) => a.card === bt)! });
+    eq(tuner.location, 'banished', 'Tuner removed from play');
   });
 
   await test('Trap of Darkness cannot be activated under Necrovalley (its cost removes the copied Trap from play)', async () => {

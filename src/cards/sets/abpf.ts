@@ -391,7 +391,7 @@ monster("Gravekeeper's Priestess", {
   text: `While there is no face-up Field Spell, the field is treated as "Necrovalley". All "Gravekeeper's" monsters on the field gain 200 ATK/DEF.`,
   effects: [
     {
-      // Necrovalley's "+500 ATK/DEF to Gravekeeper's monsters" and its GY lock (src/cards/necrovalley.ts) apply while
+      // Necrovalley's "+500 ATK/DEF to Gravekeeper's monsters" and its 2010 effects (src/cards/necrovalley.ts) apply while
       // there is no face-up Field Spell.
       kind: 'continuous',
       mods: [
@@ -532,6 +532,7 @@ monster('Ogre of the Scarlet Sorrow', {
   ],
 });
 
+const suppliedAlready = (ctx: Ctx, c: C) => ((ctx.self.flags.supplied ?? []) as { uid: number; moveId: number }[]).some((s) => s.uid === c.uid && s.moveId === c.moveId);
 monster('Power Supplier', {
   attribute: 'EARTH',
   race: 'Spellcaster',
@@ -546,11 +547,11 @@ monster('Power Supplier', {
       opt: true,
       label: '+400 ATK',
       categories: ['atkChange'],
-      canActivate: (ctx) => ctx.faceUpMonsters('me', (c) => ctx.canTarget(c)).length > 0,
+      // https://edisonrul.ing/cards/p/power-supplier.html — it cannot be applied again to a monster it already targets.
+      canActivate: (ctx) => ctx.faceUpMonsters('me', (c) => ctx.canTarget(c) && !suppliedAlready(ctx, c)).length > 0,
       activate: async (ctx) => {
-        const supplied = (ctx.self.flags.supplied ?? []) as { uid: number; moveId: number }[];
-        await ctx.selectTargets(ctx.faceUpMonsters('me'), 1, 1, 'Target 1 face-up monster you control.', 'buff', {
-          aiScore: (c) => (supplied.some((s) => s.uid === c.uid && s.moveId === c.moveId) ? -5000 : ctx.atk(c)),
+        await ctx.selectTargets(ctx.faceUpMonsters('me', (c) => !suppliedAlready(ctx, c)), 1, 1, 'Target 1 face-up monster you control.', 'buff', {
+          aiScore: (c) => ctx.atk(c),
         });
       },
       resolve: async (ctx) => {
@@ -803,11 +804,11 @@ monster('Dragon Queen of Tragic Endings', {
       categories: ['discard', 'draw'],
       eventFilter: (ctx, ev) => ev.reasonCard === ctx.self && ev.player === ctx.opp && ctx.battle?.attacker === ctx.self,
       resolve: async (ctx) => {
+        // No draw if your opponent has no card in hand to send: https://edisonrul.ing/cards/d/dragon-queen-of-tragic-endings.html
         const hand = ctx.hand('opp');
-        if (hand.length) {
-          const s = await ctx.select(hand, 1, 1, 'Send 1 card from your hand to the GY.', 'toGrave', { player: ctx.opp });
-          await ctx.sendToGrave(s);
-        }
+        if (!hand.length) return;
+        const s = await ctx.select(hand, 1, 1, 'Send 1 card from your hand to the GY.', 'toGrave', { player: ctx.opp });
+        await ctx.sendToGrave(s);
         await ctx.draw(1);
       },
     },
@@ -1415,7 +1416,8 @@ monster('Codarus', {
         await ctx.selectTargets(ctx.field('opp'), 1, 2, 'Target up to 2 cards your opponent controls.', 'destroy');
       },
       resolve: async (ctx) => {
-        const t = ctx.validTargets((c) => c.onField);
+        // A target you gained control of in the meantime is not sent: https://edisonrul.ing/cards/c/codarus.html
+        const t = ctx.validTargets((c) => c.onField && c.controller === ctx.opp);
         if (t.length) await ctx.sendToGrave(t);
       },
       ai: { score: (ctx) => (ctx.field('opp').reduce((a, c) => a + cardValue(ctx.game, c), 0) >= 2500 ? 50 : 0) },
@@ -2534,12 +2536,28 @@ spell('Power Pickaxe', 'equip', {
       },
       resolve: async (ctx) => {
         const t = ctx.validTargets((c) => c.location === 'grave')[0];
-        if (!t) return;
-        const r = await ctx.banish(t);
         const e = ctx.equipTarget;
-        if (r.length && e && e.location === 'mzone' && e.faceUp) ctx.addTempMod(e, 'atk', 500, 'turn');
+        // https://edisonrul.ing/cards/p/power-pickaxe.html — not removed if its Level is now higher than the equipped
+        // monster's; no ATK gain if it was not removed; the gain is lost if Power Pickaxe is destroyed or negated.
+        if (!t || !e || (t.data.level ?? 0) > ctx.level(e)) return;
+        const r = await ctx.banish(t);
+        if (r.length && e.location === 'mzone' && e.faceUp) ctx.self.flags.pickaxe = { turn: ctx.turn, uid: e.uid, mid: e.moveId };
       },
       ai: { score: () => 40 },
+    },
+    {
+      kind: 'continuous',
+      mods: [
+        {
+          q: 'atk',
+          to: 'cards',
+          filter: (ctx, c: C) => {
+            const f = ctx.self.flags.pickaxe as { turn: number; uid: number; mid: number } | undefined;
+            return !!f && f.turn === ctx.turn && c === ctx.equipTarget && c.uid === f.uid && c.moveId === f.mid;
+          },
+          value: 500,
+        },
+      ],
     },
   ],
 });
@@ -2926,7 +2944,11 @@ trap('Changing Destiny', 'normal', {
         const t = ctx.validTargets((c) => c.location === 'mzone')[0];
         if (!t || !ctx.battle || ctx.battle.attacker !== t) return;
         ctx.negateAttack();
-        if (t.faceUp && t.pos !== 'def') await ctx.changePos(t, 'def', true);
+        // 2010 rulings: if the monster cannot be changed to Defense Position (e.g. it already is), the rest of the
+        // effect is not applied. https://edisonrul.ing/cards/c/changing-destiny.html
+        if (!t.faceUp || t.pos === 'def') return;
+        await ctx.changePos(t, 'def', true);
+        if (t.location !== 'mzone' || (t.pos as string) !== 'def') return;
         ctx.addTempMod(t, 'cannotChangePos', true, 'field');
         const half = Math.floor(ctx.atk(t) / 2);
         if (half <= 0) return;
@@ -3163,7 +3185,8 @@ trap('Destruct Potion', 'normal', {
       resolve: async (ctx) => {
         const t = ctx.validTargets((c) => c.location === 'mzone')[0];
         if (!t) return;
-        const a = ctx.atk(t);
+        // A face-down target gives no LP: https://edisonrul.ing/cards/d/destruct-potion.html
+        const a = t.faceUp ? ctx.atk(t) : 0;
         const d = await ctx.destroy(t);
         if (d.length && a > 0) await ctx.recover(ctx.player, a);
       },
@@ -3302,6 +3325,7 @@ trap('Machine King - 3000 B.C.', 'continuous', {
         if (r.length) {
           me.flags.staysOnField = true;
           me.flags.mkSummoned = true;
+          me.flags.trapMonster = true;
         }
         ctx.addPlayerMod(ctx.player, 'cannotNormalSummon');
         ctx.addPlayerMod(ctx.player, 'cannotSpecialSummon');

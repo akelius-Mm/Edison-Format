@@ -26,7 +26,6 @@ const lvl = (c: C) => c.data.level ?? 0;
 const stActive = (ctx: Ctx) => ctx.self.onField && ctx.self.faceUp && ctx.self.activeOnField && !ctx.game.isNegated(ctx.self);
 /** Turn offset of this player's next turn (for ctx.later). */
 const nextOwnTurn = (ctx: Ctx) => (ctx.isMyTurn ? 2 : 1);
-const nextOppTurnEnd = (ctx: Ctx) => (ctx.isMyTurn ? 1 : 0);
 const mainPhase = (ctx: Ctx) => ctx.phase === 'main1' || ctx.phase === 'main2';
 
 /** Tribute cards as a cost (not for a Tribute Summon). */
@@ -90,6 +89,7 @@ const hasQuestionAtk = (c: C) => c.isMonster && QUESTION_ATK.has(c.data.name);
 const isGemini = (c: C) => c.isMonster && c.hasType('gemini');
 /** A Gemini monster that has been Gemini Summoned (is an Effect Monster now). */
 const geminiActive = (c: C) => isGemini(c) && c.location === 'mzone' && c.faceUp && !!c.flags.geminiSummoned;
+const faceUpOn = (c: C) => c.location === 'mzone' && c.faceUp;
 /** Normal Monster, or a Gemini monster where it is treated as a Normal Monster (GY / face-up un-Gemini'd). */
 const isNormalLike = (c: C) =>
   c.isMonster &&
@@ -104,23 +104,15 @@ function makeGeminiActive(ctx: Ctx, c: C) {
   ctx.game.update();
 }
 
-/**
- * Gemini Summon. APPROX (same as plants.ts): the engine has no Gemini Summon action, so it is an
- * Ignition effect that uses the turn's Normal Summon; it starts a chain instead of being a Summon.
- */
+/** Gemini Summon: a Normal Summon of the face-up Gemini monster (Game.geminiSummon, no chain). */
 function geminiSummon(score: (ctx: Ctx) => number = () => 40): EffectDef {
   return {
-    kind: 'ignition',
+    // The Gemini Summon is a Normal Summon, not an effect (Game.geminiSummon; no chain).
+    kind: 'proc',
+    geminiSummon: true,
+    range: ['mzone'],
     label: 'Gemini Summon (Normal Summon again)',
     categories: [],
-    condition: (ctx) =>
-      ctx.self.faceUp && !ctx.self.flags.geminiSummoned && ctx.game.players[ctx.player].normalSummonsLeft > 0 && !ctx.game.queryPlayer(ctx.player, 'cannotNormalSummon'),
-    activate: async (ctx) => {
-      ctx.game.players[ctx.player].normalSummonsLeft--;
-    },
-    resolve: async (ctx) => {
-      makeGeminiActive(ctx, ctx.self);
-    },
     ai: {
       score: (ctx) => {
         // Don't spend the Normal Summon if a better monster in hand still wants it (main phase 1).
@@ -341,7 +333,9 @@ function ritualPool(ctx: Ctx, ritual: C): C[] {
   return [
     ...ctx.hand('me', (c) => c.isMonster && c !== ritual),
     ...ctx.monsters('me', (c) => !ctx.query(c, 'cannotBeTributed')),
-    ...ctx.grave('me', isDjinn),
+    // https://edisonrul.ing/cards/d/djinn-releaser-of-rituals.html — not while "Necrovalley" is active (GY cards cannot
+    // be removed from play).
+    ...(ctx.game.gyBanishLocked(ctx.player) ? [] : ctx.grave('me', isDjinn)),
   ];
 }
 const levelSum = (cs: C[], ctx: Ctx) => cs.reduce((a, c) => a + (c.location === 'mzone' ? ctx.level(c) : lvl(c)), 0);
@@ -901,12 +895,16 @@ monster('Dark Spider', {
       opt: true,
       label: 'Insect Level +2',
       categories: [],
-      canActivate: (ctx) => ctx.faceUpMonsters('me', (c) => raceIs(c, 'Insect')).length > 0,
-      resolve: async (ctx) => {
+      // This effect targets: https://edisonrul.ing/cards/d/dark-spider.html
+      canActivate: (ctx) => ctx.faceUpMonsters('me', (c) => raceIs(c, 'Insect') && ctx.canTarget(c)).length > 0,
+      activate: async (ctx) => {
         const cands = ctx.faceUpMonsters('me', (c) => raceIs(c, 'Insect'));
-        const [c] = await ctx.select(cands, 1, 1, 'Increase the Level of 1 face-up Insect-Type monster by 2.', 'buff', {
+        await ctx.selectTargets(cands, 1, 1, 'Target 1 face-up Insect-Type monster you control (Level +2).', 'buff', {
           aiScore: (c) => (c === ctx.self ? 0 : 10),
         });
+      },
+      resolve: async (ctx) => {
+        const [c] = ctx.validTargets((x) => x.location === 'mzone' && x.faceUp && raceIs(x, 'Insect'));
         if (c) await raiseLevel(ctx, c, 2, 'turn');
       },
       ai: {
@@ -1210,7 +1208,8 @@ monster('Earthbound Immortal Ccarayhua', {
       mandatory: true,
       label: 'Destroy all cards on the field',
       categories: ['destroy', 'destroyMulti'],
-      eventFilter: (ctx, ev) => ev.card === ctx.self && ev.from === 'mzone' && (ev.reasons ?? []).includes('effect') && ev.reasonCard !== ctx.self,
+      // Also when it is destroyed in the hand or Deck: https://edisonrul.ing/cards/e/earthbound-immortal-ccarayhua.html
+      eventFilter: (ctx, ev) => ev.card === ctx.self && (ev.reasons ?? []).includes('effect') && ev.reasonCard !== ctx.self,
       resolve: async (ctx) => {
         const all = ctx.field('both');
         if (all.length) await ctx.destroy(all);
@@ -1400,15 +1399,18 @@ monster("Koa'ki Meiru Rooklord", {
       when: true,
       label: "Banish a Koa'ki Meiru: destroy up to 2",
       categories: ['destroy'],
-      canActivate: (ctx) => ctx.grave('me', isKoaki).length > 0 && ctx.field('opp').length > 0,
+      // https://edisonrul.ing/cards/k/koaki-meiru-rooklord.html — banishing the "Koa'ki Meiru" card is a cost, and the
+      // effect targets 1 or 2 cards your opponent controls.
+      canActivate: (ctx) => ctx.grave('me', isKoaki).length > 0 && ctx.field('opp', (c) => ctx.canTarget(c)).length > 0,
       activate: async (ctx) => {
         const cost = await ctx.select(ctx.grave('me', isKoaki), 1, 1, '"Koa\'ki Meiru" card to banish.', 'cost');
         if (!cost.length) return false;
         await ctx.banish(cost, 'cost');
+        await ctx.selectTargets(ctx.field('opp'), 1, 2, 'Target up to 2 cards your opponent controls to destroy.', 'destroy');
       },
       resolve: async (ctx) => {
-        const sel = await ctx.select(ctx.field('opp'), 1, 2, 'Destroy up to 2 cards your opponent controls.', 'destroy');
-        if (sel.length) await ctx.destroy(sel);
+        const t = ctx.validTargets((c) => c.onField);
+        if (t.length) await ctx.destroy(t);
       },
     },
   ],
@@ -2027,7 +2029,7 @@ monster('Shire, Lightsworn Spirit', {
   def: 1400,
   sets: ['lightsworn'],
   aiValue: 500,
-  text: 'This card gains 300 ATK for each "Lightsworn" monster with a different name in your Graveyard. During each of your End Phases: Send the top 2 cards of your Deck to the Graveyard.',
+  text: 'This card gains 300 ATK for each "Lightsworn" monster with a different name in your Graveyard. During each of your End Phases, send the top 2 cards of your Deck to the Graveyard.',
   effects: [
     { kind: 'continuous', mods: [{ q: 'atk', value: (ctx) => 300 * lsNames(ctx) }] },
     {
@@ -2039,6 +2041,8 @@ monster('Shire, Lightsworn Spirit', {
       categories: ['mill'],
       eventFilter: (ctx, ev) => ev.phase === 'end' && ctx.isMyTurn && ctx.self.faceUp,
       resolve: async (ctx) => {
+        // https://edisonrul.ing/cards/s/shire-lightsworn-spirit.html — it must remain face-up on the field to resolve.
+        if (ctx.self.location !== 'mzone' || !ctx.self.faceUp) return;
         await ctx.mill(2);
       },
     },
@@ -2247,20 +2251,10 @@ monster('Ice Queen', {
   def: 2100,
   aiValue: 400,
   text: 'Cannot be Special Summoned from the GY. When this face-up card you control is destroyed and sent to your GY: You can target 1 Spell in your GY; add that target to your hand. You must have 3 or more Spellcaster monsters in your GY to activate and to resolve this effect.',
+  // 2010 ruling: "cannot be Special Summoned from the Graveyard" is not an effect (a Summoning condition).
+  // https://edisonrul.ing/cards/i/ice-queen.html
+  noSpecialFrom: ['grave'],
   effects: [
-    {
-      // APPROX: there is no per-card "cannot be Special Summoned" check in the engine, so an Ice Queen that is
-      // Special Summoned from the GY is sent straight back to the GY.
-      kind: 'trigger',
-      event: 'specialSummoned',
-      mandatory: true,
-      label: 'Cannot be Special Summoned from the GY',
-      categories: [],
-      eventFilter: (ctx, ev) => ev.card === ctx.self && ev.from === 'grave',
-      resolve: async (ctx) => {
-        if (ctx.self.location === 'mzone') await ctx.game.moveCards([ctx.self], 'grave', { reason: 'rule', reasonPlayer: ctx.player, reasonCard: ctx.self });
-      },
-    },
     {
       kind: 'trigger',
       event: 'sentToGrave',
@@ -2268,7 +2262,8 @@ monster('Ice Queen', {
       label: 'Add 1 Spell from your GY',
       categories: ['toHand'],
       eventFilter: (ctx, ev) =>
-        ev.card === ctx.self && ev.from === 'mzone' && ev.fromFaceUp === true && ev.fromController === ctx.self.owner && (ev.reasons ?? []).includes('destroy'),
+        // 2010 ruling: also when it was face-up as an Equip Card ("Relinquished") and destroyed.
+        ev.card === ctx.self && (ev.from === 'mzone' || ev.from === 'szone') && ev.fromFaceUp === true && ev.fromController === ctx.self.owner && (ev.reasons ?? []).includes('destroy'),
       condition: (ctx) => ctx.grave('me', (c) => raceIs(c, 'Spellcaster')).length >= 3,
       canActivate: (ctx) => ctx.grave('me', (c) => c.isSpell).length > 0,
       activate: async (ctx) => {
@@ -2386,7 +2381,7 @@ monster('Guardian Eatos', {
   atk: 2500,
   def: 2000,
   aiValue: 700,
-  text: 'If you have no monsters in your GY, you can Special Summon this card (from your hand). You can send 1 of your Equip Spells equipped to this card to the GY, then target up to 3 monsters in your opponent\'s GY; banish those targets, and if you do, this card gains 500 ATK for each monster banished by this effect, until the end of this turn.',
+  text: 'If you have no monsters in your Graveyard, you can Special Summon this card from your hand. You can send 1 Equip Spell Card equipped to this card to the Graveyard to select and remove from play up to 3 monsters in your opponent\'s Graveyard. This card gains 500 ATK for each monster removed by this effect, until the End Phase.',
   effects: [
     {
       kind: 'proc',
@@ -2398,10 +2393,11 @@ monster('Guardian Eatos', {
       kind: 'ignition',
       label: 'Send an Equip Spell: banish up to 3',
       categories: ['banish', 'atkChange'],
-      canActivate: (ctx) =>
-        ctx.game.equipsOf(ctx.self).some((e) => e.isSpell && e.controller === ctx.player) && ctx.grave('opp', (c) => c.isMonster && ctx.canTarget(c)).length > 0,
+      // 2010 ruling: an opponent's Equip Spell equipped to this card can be sent as the cost too.
+      // https://edisonrul.ing/cards/g/guardian-eatos.html
+      canActivate: (ctx) => ctx.game.equipsOf(ctx.self).some((e) => e.isSpell) && ctx.grave('opp', (c) => c.isMonster && ctx.canTarget(c)).length > 0,
       activate: async (ctx) => {
-        const eq = ctx.game.equipsOf(ctx.self).filter((e) => e.isSpell && e.controller === ctx.player);
+        const eq = ctx.game.equipsOf(ctx.self).filter((e) => e.isSpell);
         const [e] = await ctx.select(eq, 1, 1, 'Send 1 Equip Spell equipped to this card to the GY.', 'cost');
         if (!e) return false;
         await ctx.sendToGrave(e, 'cost');
@@ -2527,8 +2523,9 @@ spell('Earthbound Whirlwind', 'normal', {
       categories: ['destroy', 'destroyMulti'],
       condition: (ctx) => ctx.faceUpMonsters('me', isEI).length > 0,
       canActivate: (ctx) => ctx.spellTraps('opp').length > 0,
+      // Still applied if you no longer control an "Earthbound Immortal" on resolution:
+      // https://edisonrul.ing/cards/e/earthbound-whirlwind.html
       resolve: async (ctx) => {
-        if (!ctx.faceUpMonsters('me', isEI).length) return;
         const st = ctx.spellTraps('opp');
         if (st.length) await ctx.destroy(st);
       },
@@ -2549,9 +2546,11 @@ spell('Savage Colosseum', 'field', {
       mandatory: true,
       label: 'Attacker\'s controller gains 300 LP',
       categories: ['recover'],
-      eventFilter: (ctx, ev) => stActive(ctx) && ev.player !== undefined,
+      // https://edisonrul.ing/cards/s/savage-colosseum.html — no LP if the attacker left the field before the end of the Damage
+      // Step; the player who controls it then gains the LP.
+      eventFilter: (ctx, ev) => stActive(ctx) && !!evc(ev) && evc(ev)!.location === 'mzone',
       activate: async (ctx) => {
-        ctx.data.p = ctx.event!.player;
+        ctx.data.p = evc(ctx.event!)!.controller;
       },
       resolve: async (ctx) => {
         await ctx.recover(ctx.data.p as PlayerId, 300);
@@ -2564,8 +2563,8 @@ spell('Savage Colosseum', 'field', {
       mandatory: true,
       label: 'Destroy monsters that did not attack',
       categories: ['destroy'],
+      // https://edisonrul.ing/cards/s/savage-colosseum.html — activates every End Phase, even with no monster to destroy.
       eventFilter: (ctx, ev) => ev.phase === 'end' && stActive(ctx),
-      condition: (ctx) => ctx.game.faceUpMonsters(ctx.game.turnPlayer).some((c) => c.pos === 'atk' && c.attacksThisTurn === 0),
       resolve: async (ctx) => {
         const t = ctx.game.faceUpMonsters(ctx.game.turnPlayer).filter((c) => c.pos === 'atk' && c.attacksThisTurn === 0);
         if (t.length) await ctx.destroy(t);
@@ -2596,17 +2595,17 @@ spell('Attack Pheromones', 'continuous', {
           raceIs(a, 'Reptile') &&
           ctx.game.battle?.calc?.targetPos === 'def' &&
           t.location === 'mzone' &&
-          t.pos === 'def'
+          t.pos === 'def' &&
+          ctx.canTarget(t)
         );
       },
+      // 2010 ruling: the effect targets the Defense Position monster. https://edisonrul.ing/cards/a/attack-pheromones.html
       activate: async (ctx) => {
-        const t = evo(ctx.event!)!;
-        ctx.data.t = t;
-        ctx.data.mid = t.moveId;
+        ctx.addTargets([evo(ctx.event!)!]);
       },
       resolve: async (ctx) => {
-        const t = ctx.data.t as C;
-        if (t && t.location === 'mzone' && t.moveId === ctx.data.mid && t.pos === 'def') await ctx.changePos(t, 'atk', true);
+        const [t] = ctx.validTargets((c) => c.location === 'mzone' && c.pos === 'def');
+        if (t) await ctx.changePos(t, 'atk', true);
       },
     },
   ],
@@ -2753,7 +2752,9 @@ spell('Herculean Power', 'continuous', {
       canActivate: (ctx) => ctx.canSpecialSummon() && ctx.hand('me', (c) => isGemini(c) && lvl(c) <= 4 && ctx.canSummonCard(c)).length > 0,
       resolve: async (ctx) => {
         const cands = ctx.hand('me', (c) => isGemini(c) && lvl(c) <= 4 && ctx.canSummonCard(c));
-        if (!cands.length || ctx.monsters('me').length) return;
+        // 2010 ruling: nothing is Summoned if you control a monster, or your opponent controls none, on resolution.
+        // https://edisonrul.ing/cards/h/herculean-power.html
+        if (!cands.length || ctx.monsters('me').length || !ctx.monsters('opp').length) return;
         const [c] = await ctx.select(cands, 1, 1, 'Special Summon 1 Level 4 or lower Gemini monster from your hand.', 'specialSummon');
         if (c) await ctx.specialSummon(c, { pos: aiPos(ctx, c) });
       },
@@ -2763,12 +2764,16 @@ spell('Herculean Power', 'continuous', {
 });
 
 spell('Gemini Spark', 'quickplay', {
-  text: 'Tribute 1 face-up Level 4 Gemini monster, then target 1 card on the field; destroy it, and if you do, draw 1 card.',
+  text: 'Tribute 1 face-up Level 4 Gemini Monster you control and select 1 card on the field. Destroy the selected card and draw 1 card.',
   effects: [
     {
       kind: 'activate',
       categories: ['destroy', 'draw'],
-      canActivate: (ctx) => tributable(ctx, (c) => c.faceUp && isGemini(c) && ctx.level(c) === 4).length > 0 && ctx.field('both', (c) => c !== ctx.self && ctx.canTarget(c)).length > 0,
+      // https://edisonrul.ing/cards/g/gemini-spark.html — "Gemini Spark" cannot be activated if you have no cards in the Deck.
+      canActivate: (ctx) =>
+        ctx.deck().length > 0 &&
+        tributable(ctx, (c) => c.faceUp && isGemini(c) && ctx.level(c) === 4).length > 0 &&
+        ctx.field('both', (c) => c !== ctx.self && ctx.canTarget(c)).length > 0,
       activate: async (ctx) => {
         const cost = await ctx.select(tributable(ctx, (c) => c.faceUp && isGemini(c) && ctx.level(c) === 4), 1, 1, 'Tribute 1 face-up Level 4 Gemini monster.', 'tribute');
         if (!cost.length) return false;
@@ -2905,7 +2910,8 @@ spell('Raging Mad Plants', 'quickplay', {
         for (const c of ctx.faceUpMonsters('me', (m) => raceIs(m, 'Plant'))) ctx.addTempMod(c, 'atk', bonus, 'turn');
         const p = ctx.player;
         ctx.later('end', async () => {
-          const plants = ctx.game.monsters(p).filter((c) => raceIs(c, 'Plant'));
+          // https://edisonrul.ing/cards/r/raging-mad-plants.html — destroys all face-up Plant-Type monsters you control.
+          const plants = ctx.game.monsters(p).filter((c) => c.faceUp && raceIs(c, 'Plant'));
           if (plants.length) await ctx.game.destroy(plants, 'effect', p, ctx.self);
         });
       },
@@ -2985,7 +2991,9 @@ spell('Faustian Bargain', 'normal', {
         const t = ctx.validTargets((c) => c.location === 'mzone');
         if (!t.length) return;
         const sent = await ctx.sendToGrave(t);
-        if (!sent.some((c) => c.location !== 'mzone')) return;
+        // 2010 ruling: under "Macro Cosmos" the monster is not actually sent to the GY, so no Normal Monster is Summoned.
+        // https://edisonrul.ing/cards/f/faustian-bargain.html
+        if (!sent.some((c) => c.location === 'grave')) return;
         const n = ctx.hand('me', (c) => c.isMonster && c.hasType('normal') && lvl(c) <= 4 && ctx.canSummonCard(c));
         if (!n.length || !ctx.canSpecialSummon()) return;
         const [m] = await ctx.select(n, 1, 1, 'Special Summon 1 Level 4 or lower Normal Monster from your hand.', 'specialSummon');
@@ -3136,7 +3144,12 @@ function gatewayEffect(
       ctx.game.update();
       await target(ctx);
     },
-    resolve,
+    // https://edisonrul.ing/cards/g/gateway-of-the-six.html — "Gateway of the Six" must remain face-up on the field in
+    // order to resolve this effect.
+    resolve: async (ctx) => {
+      if (!ctx.self.onField || !ctx.self.faceUp) return;
+      await resolve(ctx);
+    },
     ai: { score },
   };
 }
@@ -3277,7 +3290,8 @@ trap('Slip Summon', 'normal', {
         if (!s) return;
         const mid = s.moveId;
         ctx.later('end', async () => {
-          if (s.location === 'mzone' && s.moveId === mid) await ctx.game.toHand([s], 'effect', ctx.player, ctx.self);
+          // https://edisonrul.ing/cards/s/slip-summon.html — a monster unaffected by Traps (Elemental Hero Wildheart) stays.
+          if (s.location === 'mzone' && s.moveId === mid && !ctx.game.isUnaffected(s, ctx.self)) await ctx.game.toHand([s], 'effect', ctx.player, ctx.self);
         });
       },
       ai: {
@@ -3342,7 +3356,9 @@ trap('Enlightenment', 'normal', {
         const a = evo(ev);
         return !!a && ctx.battle?.attacker === a && a.controller === ctx.player && raceIs(a, 'Spellcaster') && ev.fromController === ctx.opp;
       },
-      condition: (ctx) => !ctx.game.turnData[`sovrSummoned:${ctx.player}`] && !!ctx.battle && !ctx.battle.inDamageStep,
+      // 2010 ruling: the Spellcaster-Type monster must survive the battle. https://edisonrul.ing/cards/e/enlightenment.html
+      condition: (ctx) =>
+        !ctx.game.turnData[`sovrSummoned:${ctx.player}`] && !!ctx.battle && !ctx.battle.inDamageStep && faceUpOn(ctx.battle.attacker) && ctx.battle.attacker.controller === ctx.player,
       activate: async (ctx) => {
         ctx.data.a = ctx.battle!.attacker;
         ctx.data.mid = ctx.battle!.attacker.moveId;
@@ -3550,20 +3566,22 @@ trap('Roar of the Earthbound Immortal', 'continuous', {
   effects: [
     { kind: 'activate', categories: ['destroy'], ai: { score: (ctx) => (ctx.faceUpMonsters('me', isEI).length ? 30 : ctx.cards('me', ['hand'], isEI).length ? 15 : 0) } },
     {
-      kind: 'quick',
+      // https://edisonrul.ing/cards/r/roar-of-the-earthbound-immortal.html — it activates automatically (a chain, targeting the
+      // attacker) the first time an opponent's monster with less ATK than your "Earthbound Immortal" monster attacks.
+      kind: 'trigger',
       event: 'attackDeclared',
+      range: ['szone'],
+      mandatory: true,
       opt: true,
       label: 'Destroy the attacker, burn half its ATK',
       categories: ['destroy', 'damage'],
-      eventFilter: (ctx, ev) => evc(ev)?.controller === ctx.opp,
-      condition: (ctx) => {
-        const b = ctx.battle;
-        if (!b || b.inDamageStep || b.attacker.controller !== ctx.opp) return false;
-        return ctx.faceUpMonsters('me', (c) => isEI(c) && ctx.atk(c) > ctx.atk(b.attacker)).length > 0;
+      eventFilter: (ctx, ev) => {
+        const a = evc(ev);
+        return !!a && a.controller === ctx.opp && stActive(ctx) && ctx.faceUpMonsters('me', (c) => isEI(c) && ctx.atk(c) > ctx.atk(a)).length > 0;
       },
-      canActivate: (ctx) => !!ctx.battle && ctx.canTarget(ctx.battle.attacker),
+      canActivate: (ctx) => !!ctx.event && !!evc(ctx.event) && evc(ctx.event)!.location === 'mzone' && ctx.canTarget(evc(ctx.event)!),
       activate: async (ctx) => {
-        await ctx.selectTargets([ctx.battle!.attacker], 1, 1, 'Target the attacking monster.', 'destroy');
+        await ctx.selectTargets([evc(ctx.event!)!], 1, 1, 'Target the attacking monster.', 'destroy');
       },
       resolve: async (ctx) => {
         const t = ctx.validTargets((c) => c.location === 'mzone')[0];
@@ -3660,7 +3678,7 @@ trap('Nega-Ton Corepanel', 'counter', {
 });
 
 trap('Gemini Counter', 'counter', {
-  text: 'Change 1 face-up Gemini monster you control to face-down Defense Position and negate the activation of an opponent\'s Spell Card, and destroy it.',
+  text: 'Select 1 face-up Gemini monster you control and change it to face-down Defense Position. Negate the activation of a Spell Card your opponent controls and destroy it.',
   effects: [
     {
       kind: 'activate',
@@ -3669,15 +3687,21 @@ trap('Gemini Counter', 'counter', {
         const l = ctx.prevLink();
         return !!l && l.isCardActivation && l.card.isSpell && l.player === ctx.opp && !l.negated;
       },
-      canActivate: (ctx) => ctx.faceUpMonsters('me', isGemini).length > 0,
+      // 2010 ruling: it targets 1 face-up Gemini monster you control and turns it face-down on resolution (not a cost).
+      // https://edisonrul.ing/cards/g/gemini-counter.html
+      canActivate: (ctx) => ctx.faceUpMonsters('me', (c) => isGemini(c) && ctx.canTarget(c)).length > 0,
       activate: async (ctx) => {
-        const [g] = await ctx.select(ctx.faceUpMonsters('me', isGemini), 1, 1, 'Change 1 face-up Gemini monster you control to face-down Defense Position.', 'cost');
+        ctx.data.link = ctx.prevLink();
+        const [g] = await ctx.selectTargets(ctx.faceUpMonsters('me', isGemini), 1, 1, 'Target 1 face-up Gemini monster you control.', 'position');
         if (!g) return false;
-        g.flags.geminiSummoned = false;
-        await ctx.changePos(g, 'def', false);
       },
       resolve: async (ctx) => {
-        await ctx.negateAndDestroy(ctx.prevLink());
+        const [g] = ctx.validTargets((c) => faceUpOn(c) && c.controller === ctx.player);
+        if (g) {
+          g.flags.geminiSummoned = false;
+          await ctx.changePos(g, 'def', false);
+        }
+        await ctx.negateAndDestroy(ctx.data.link ?? ctx.prevLink());
       },
       ai: {
         score: (ctx) => {
@@ -3695,7 +3719,9 @@ trap('Gemini Booster', 'normal', {
   text: 'Equip this card to a Gemini monster you control as an Equip Card. It gains 700 ATK. When this card is destroyed while equipped and sent to the Graveyard, select 1 face-up Gemini monster and treat it as an Effect Monster.',
   effects: [
     {
+      // 2010 ruling: it can be activated during the Damage Step. https://edisonrul.ing/cards/g/gemini-booster.html
       kind: 'activate',
+      damageStep: true,
       categories: ['atkChange'],
       canActivate: (ctx) => ctx.faceUpMonsters('me', (c) => isGemini(c) && ctx.canTarget(c)).length > 0,
       activate: async (ctx) => {
@@ -3727,13 +3753,19 @@ trap('Gemini Booster', 'normal', {
       mandatory: true,
       label: 'Treat a Gemini as an Effect Monster',
       categories: [],
-      // Destroyed by a card effect (not the rule destruction when its monster left the field).
-      eventFilter: (ctx, ev) => ev.card === ctx.self && ev.from === 'szone' && ev.fromFaceUp === true && (ev.reasons ?? []).includes('destroy') && ev.reason !== 'rule',
-      canActivate: (ctx) => ctx.faceUpMonsters('both', (c) => isGemini(c) && !c.flags.geminiSummoned).length > 0,
+      // 2010 rulings: it targets 1 face-up Gemini monster you control (even one already treated as an Effect Monster),
+      // and it also activates when this card is destroyed because its monster was destroyed by battle.
+      // https://edisonrul.ing/cards/g/gemini-booster.html
+      eventFilter: (ctx, ev) => ev.card === ctx.self && ev.from === 'szone' && ev.fromFaceUp === true && (ev.reasons ?? []).includes('destroy'),
+      canActivate: (ctx) => ctx.faceUpMonsters('me', (c) => isGemini(c) && ctx.canTarget(c)).length > 0,
+      activate: async (ctx) => {
+        await ctx.selectTargets(ctx.faceUpMonsters('me', isGemini), 1, 1, 'Target 1 face-up Gemini monster you control to treat as an Effect Monster.', 'buff', {
+          aiScore: (c) => (c.flags.geminiSummoned ? 0 : 1000) + ctx.atk(c),
+        });
+      },
       resolve: async (ctx) => {
-        const cands = ctx.faceUpMonsters('both', (c) => isGemini(c) && !c.flags.geminiSummoned);
-        const [g] = await ctx.select(cands, 1, 1, 'Select 1 face-up Gemini monster to treat as an Effect Monster.', 'buff');
-        if (g) makeGeminiActive(ctx, g);
+        const [g] = ctx.validTargets((c) => faceUpOn(c) && isGemini(c));
+        if (g && !g.flags.geminiSummoned) makeGeminiActive(ctx, g);
       },
     },
   ],
@@ -3804,14 +3836,19 @@ trap('Seal of Wickedness', 'continuous', {
       ai: { score: (ctx) => (!ctx.isMyTurn && ctx.phase === 'draw' && ctx.field('opp', (c) => c.faceUp && (c.hasType('effect') || !c.isMonster)).length ? 40 : 0) },
     },
     {
-      kind: 'quick',
+      // https://edisonrul.ing/cards/s/seal-of-wickedness.html — a mandatory effect that starts a chain in the opponent's
+      // Standby Phase; it targets 1 face-up card (it can target itself).
+      kind: 'trigger',
+      event: 'phaseStart',
+      range: ['szone'],
+      mandatory: true,
       opt: true,
       label: 'Negate 1 face-up card this turn',
       categories: ['negate'],
-      condition: (ctx) => ctx.phase === 'standby' && !ctx.isMyTurn,
-      canActivate: (ctx) => ctx.field('both', (c) => c.faceUp && c !== ctx.self && ctx.canTarget(c)).length > 0,
+      eventFilter: (ctx, ev) => ev.phase === 'standby' && !ctx.isMyTurn && stActive(ctx),
+      canActivate: (ctx) => ctx.field('both', (c) => c.faceUp && ctx.canTarget(c)).length > 0,
       activate: async (ctx) => {
-        await ctx.selectTargets(ctx.field('both', (c) => c.faceUp && c !== ctx.self), 1, 1, 'Select 1 face-up card on the field.', 'negate', {
+        await ctx.selectTargets(ctx.field('both', (c) => c.faceUp), 1, 1, 'Select 1 face-up card on the field.', 'negate', {
           aiScore: (c) => (c.controller === ctx.opp ? 1000 : -1000) + (c.hasType('effect') || !c.isMonster ? 500 : 0) + cardValue(ctx.game, c),
         });
       },
@@ -3840,12 +3877,15 @@ trap('Seal of Wickedness', 'continuous', {
 });
 
 trap('Appointer of the Red Lotus', 'normal', {
-  text: 'Pay 2000 LP and reveal your entire hand; look at your opponent\'s hand and banish 1 card from their hand, until your opponent\'s next End Phase.',
+  text: 'Pay 2000 Life Points and reveal all cards in your hand. Look at your opponent\'s hand and select 1 card. Remove that card from play until the End Phase of your opponent\'s next turn.',
   effects: [
     {
+      // 2010 rulings: revealing your hand is part of the cost (minimum 1 card), and the card comes back during the End
+      // Phase of your opponent's NEXT turn, even if this card was activated during their turn.
+      // https://edisonrul.ing/cards/a/appointer-of-the-red-lotus.html
       kind: 'activate',
       categories: ['banish'],
-      canActivate: (ctx) => ctx.lp > 2000 && ctx.hand('opp').length > 0,
+      canActivate: (ctx) => ctx.lp > 2000 && ctx.hand('opp').length > 0 && ctx.hand('me', (c) => c !== ctx.self).length > 0,
       activate: async (ctx) => {
         await ctx.payLp(2000);
         for (const c of ctx.hand('me')) c.revealedUntil = ctx.turn;
@@ -3865,7 +3905,7 @@ trap('Appointer of the Red Lotus', 'normal', {
           async () => {
             if (c.location === 'banished' && c.moveId === mid) await ctx.game.toHand([c], 'effect', ctx.player, ctx.self);
           },
-          nextOppTurnEnd(ctx),
+          ctx.isMyTurn ? 1 : 2,
         );
       },
       ai: { score: (ctx) => (ctx.lp >= 5000 && ctx.hand('opp').length >= 2 && !ctx.isMyTurn && ctx.phase === 'standby' ? 35 : 0) },

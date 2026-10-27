@@ -3,6 +3,8 @@ import { monster, normal, spell, trap } from '../define';
 import { attr, cardValue, selfDestroysByBattle, selfSummoned, selfToGrave } from '../helpers';
 import type { CardInstance, EffectDef } from '../../engine/card';
 import type { Ctx } from '../../engine/ctx';
+import type { Game } from '../../engine/game';
+import type { PlayerId } from '../../engine/types';
 
 // ------------------------------------------------------------------ helpers
 
@@ -214,23 +216,12 @@ monster('Elemental Hero Neos Alius', {
   text: 'Gemini: treated as a Normal Monster while face-up on the field or in the GY. While face-up on the field, you can Normal Summon it to have it become an Effect Monster with this effect. ● This card\'s name is treated as "Elemental Hero Neos" while it is face-up on the field.',
   effects: [
     {
-      kind: 'ignition',
+      // The Gemini Summon is a Normal Summon, not an effect (Game.geminiSummon; no chain).
+      kind: 'proc',
+      geminiSummon: true,
+      range: ['mzone'],
       label: 'Gemini Summon',
       categories: [],
-      condition: (ctx) =>
-        ctx.self.faceUp &&
-        !ctx.self.flags.geminiSummoned &&
-        ctx.game.players[ctx.player].normalSummonsLeft > 0 &&
-        !ctx.game.queryPlayer(ctx.player, 'cannotNormalSummon'),
-      activate: async (ctx) => {
-        // A Gemini Summon uses the turn's Normal Summon.
-        ctx.game.players[ctx.player].normalSummonsLeft--;
-      },
-      resolve: async (ctx) => {
-        if (ctx.self.location !== 'mzone' || !ctx.self.faceUp) return;
-        ctx.self.flags.geminiSummoned = true;
-        ctx.log(`${ctx.self.name} is Gemini Summoned and is now treated as "Elemental Hero Neos".`);
-      },
       ai: {
         score: (ctx) => {
           // Only worth it when the Normal Summon would otherwise be wasted.
@@ -346,8 +337,45 @@ monster('Elemental Hero Woodsman', {
   ],
 });
 
-const skyscraperOnField = (ctx: Ctx) =>
-  [ctx.game.players[0].fzone, ctx.game.players[1].fzone].some((c) => !!c && c.faceUp && c.name === 'Skyscraper');
+const skyscraperUp = (g: Game) => [g.players[0].fzone, g.players[1].fzone].some((c) => !!c && c.faceUp && c.name === 'Skyscraper');
+const skyscraperOnField = (ctx: Ctx) => skyscraperUp(ctx.game);
+
+/**
+ * Captain Gold's "If Skyscraper is not on the field, destroy this card" is a Continuous Effect: it destroys the card
+ * without using the Chain, as soon as Skyscraper is gone (also between Chain Links). Checked after every move
+ * (Game.ruleCleanup) and every action, like the engine's other state checks.
+ * https://edisonrul.ing/cards/e/elemental-hero-captain-gold.html
+ */
+const goldPatched = new WeakSet<Game>();
+function ensureCaptainGoldCheck(g: Game) {
+  if (goldPatched.has(g)) return;
+  goldPatched.add(g);
+  let checking = false;
+  const check = async () => {
+    if (checking || g.over || skyscraperUp(g)) return;
+    checking = true;
+    try {
+      const doomed = [...g.monsters(0), ...g.monsters(1)].filter((m) => m.name === 'Elemental Hero Captain Gold' && m.faceUp && !g.isNegated(m));
+      if (doomed.length) {
+        g.log('Elemental Hero Captain Gold is destroyed ("Skyscraper" is not on the field).', 'action');
+        await g.destroy(doomed, 'effect', doomed[0].controller, doomed[0]);
+      }
+    } finally {
+      checking = false;
+    }
+  };
+  const anyG = g as any;
+  const origRC = g.ruleCleanup.bind(g);
+  anyG.ruleCleanup = async () => {
+    await origRC();
+    await check();
+  };
+  const origPA = g.performAction.bind(g);
+  anyG.performAction = async (...a: Parameters<Game['performAction']>) => {
+    await origPA(...a);
+    await check();
+  };
+}
 
 monster('Elemental Hero Captain Gold', {
   attribute: 'LIGHT',
@@ -357,7 +385,7 @@ monster('Elemental Hero Captain Gold', {
   def: 800,
   sets: HERO_SETS,
   aiValue: 0,
-  text: 'You can discard this card; add 1 "Skyscraper" from your Deck to your hand. If "Skyscraper" is not on the field, destroy this card.',
+  text: 'You can discard this card to the Graveyard to add 1 "Skyscraper" from your Deck to your hand. If this card is on the field but "Skyscraper" is not on the field, destroy this card.',
   effects: [
     {
       kind: 'ignition',
@@ -374,15 +402,13 @@ monster('Elemental Hero Captain Gold', {
       ai: { score: (ctx) => (ctx.hand('me', (c) => c.name === 'Skyscraper').length || skyscraperOnField(ctx) ? 0 : 40) },
     },
     {
+      // Installs the chainless self-destruction check (never activates). See ensureCaptainGoldCheck.
       kind: 'trigger',
-      event: ['summoned', 'leftField', 'phaseStart', 'positionChanged'],
-      mandatory: true,
-      label: 'Self-destruct (no Skyscraper)',
-      categories: ['destroy'],
-      eventFilter: (ctx, ev) => ctx.self.location === 'mzone' && ctx.self.faceUp && (ev.type !== 'summoned' || ev.card === ctx.self),
-      condition: (ctx) => !skyscraperOnField(ctx),
-      resolve: async (ctx) => {
-        if (ctx.self.location === 'mzone' && ctx.self.faceUp && !skyscraperOnField(ctx)) await ctx.destroy(ctx.self);
+      event: ['phaseStart', 'summoned', 'drawn', 'addedToHand'],
+      range: ['hand', 'deck', 'grave', 'banished', 'mzone', 'szone', 'extra'],
+      eventFilter: (ctx) => {
+        ensureCaptainGoldCheck(ctx.game);
+        return false;
       },
     },
   ],
@@ -505,17 +531,26 @@ trap('Hero Signal', 'normal', {
   ],
 });
 
+const heroBarrierKey = (c: CardInstance) => `heroBarrier:${c.uid}:${c.moveId}`;
 trap('Hero Barrier', 'normal', {
-  text: 'When an opponent\'s monster declares an attack, while you control a face-up "Elemental HERO" monster: Negate the attack.',
+  text: 'Negate an attack from 1 of your opponent\'s monsters once this turn, as long as you have an "Elemental Hero" monster on your side of the field.',
   effects: [
     {
+      // 2010 rulings: it can be activated at any time before the Damage Step, even with no face-up "Elemental Hero"
+      // (then it does nothing if you still have none when it resolves). Activated before an attack, it negates the
+      // first attack your opponent declares this turn. https://edisonrul.ing/cards/h/hero-barrier.html
       kind: 'activate',
-      event: 'attackDeclared',
       categories: ['negateAttack'],
-      eventFilter: (ctx, ev) => (ev.card as CardInstance).controller === ctx.opp,
-      condition: (ctx) => !!ctx.battle && !ctx.battle.inDamageStep && ctx.faceUpMonsters('me', isEHero).length > 0,
+      condition: (ctx) => !ctx.battle?.inDamageStep,
       resolve: async (ctx) => {
-        if (ctx.faceUpMonsters('me', isEHero).length) ctx.negateAttack();
+        if (!ctx.faceUpMonsters('me', isEHero).length) return;
+        const b = ctx.battle;
+        if (b && !b.negated && b.attacker.controller === ctx.opp) {
+          ctx.negateAttack();
+          return;
+        }
+        // Waits for the first attack the opponent declares this turn (this card is in the GY by then).
+        ctx.game.turnData[heroBarrierKey(ctx.self)] = ctx.player;
       },
       ai: {
         score: (ctx) => {
@@ -524,15 +559,31 @@ trap('Hero Barrier', 'normal', {
           const a = ctx.atk(b.attacker);
           if (!b.target) return a >= 1500 ? 50 : 0;
           const stat = b.target.faceUp ? (b.target.pos === 'atk' ? ctx.atk(b.target) : ctx.def(b.target)) : 1500;
-          return a > stat ? 50 : 0;
+          return b.attacker.controller === ctx.opp && a > stat ? 50 : 0;
         },
+      },
+    },
+    {
+      // The lingering "once this turn" negation (no Chain): the first attack the opponent declares after it resolved.
+      kind: 'trigger',
+      event: 'attackDeclared',
+      range: ['grave', 'banished', 'hand', 'deck', 'szone'],
+      eventFilter: (ctx, ev) => {
+        const g = ctx.game;
+        const key = Object.keys(g.turnData).find((k) => k.startsWith(`heroBarrier:${ctx.self.uid}:`));
+        if (!key) return false;
+        const p = g.turnData[key] as PlayerId;
+        if ((ev.card as CardInstance).controller === p) return false;
+        delete g.turnData[key];
+        if (g.battle && !g.battle.negated && g.faceUpMonsters(p).some(isEHero)) g.negateAttack();
+        return false;
       },
     },
   ],
 });
 
 trap('A Hero Emerges', 'normal', {
-  text: 'When an opponent\'s monster declares an attack: Your opponent chooses 1 card from your hand at random. If it is a monster that can be Special Summoned, Special Summon it.',
+  text: 'You can only activate this card when your opponent declares an attack. Your opponent selects 1 random card from your hand. If it is a Monster Card, Special Summon it on your side of the field. If not, send it to the Graveyard.',
   effects: [
     {
       kind: 'activate',
@@ -547,7 +598,10 @@ trap('A Hero Emerges', 'normal', {
         const c = hand[ctx.game.rng.int(hand.length)];
         ctx.log(`${ctx.game.players[ctx.opp].name} picks ${c.name} at random.`);
         c.revealedUntil = ctx.turn;
-        if (c.isMonster && !c.data.cannotNormalSummon && ctx.canSummonCard(c)) await ctx.specialSummon(c);
+        // 2010 text/rulings: a card that is not Summoned (not a monster, a Special Summon-only or Spirit monster) is
+        // sent to the Graveyard. https://edisonrul.ing/cards/a/a-hero-emerges.html
+        if (c.isMonster && !c.data.cannotNormalSummon && !c.hasType('spirit') && ctx.canSummonCard(c)) await ctx.specialSummon(c);
+        if (c.location === 'hand') await ctx.sendToGrave(c);
       },
       ai: {
         score: (ctx) => {

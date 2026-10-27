@@ -252,23 +252,15 @@ function makeGeminiActive(ctx: Ctx, c: C) {
   ctx.log(`${c.name} is now treated as an Effect Monster.`);
   ctx.game.update();
 }
-/**
- * Gemini Summon. APPROX (as plants.ts / sovr.ts / ptdn.ts): the engine has no Gemini Summon action, so it is an
- * Ignition effect that uses the turn's Normal Summon; it starts a chain instead of being a Summon.
- */
+/** Gemini Summon: a Normal Summon of the face-up Gemini monster (Game.geminiSummon, no chain). */
 function geminiSummon(score: (ctx: Ctx) => number = () => 40): EffectDef {
   return {
-    kind: 'ignition',
+    // The Gemini Summon is a Normal Summon, not an effect (Game.geminiSummon; no chain).
+    kind: 'proc',
+    geminiSummon: true,
+    range: ['mzone'],
     label: 'Gemini Summon (Normal Summon again)',
     categories: [],
-    condition: (ctx) =>
-      ctx.self.faceUp && !ctx.self.flags.geminiSummoned && ctx.game.players[ctx.player].normalSummonsLeft > 0 && !ctx.game.queryPlayer(ctx.player, 'cannotNormalSummon'),
-    activate: async (ctx) => {
-      ctx.game.players[ctx.player].normalSummonsLeft--;
-    },
-    resolve: async (ctx) => {
-      makeGeminiActive(ctx, ctx.self);
-    },
     ai: {
       score: (ctx) => {
         const better = ctx.hand('me', (c) => c.isMonster && ctx.game.canNormalSummon(ctx.player, c) && (c.data.atk ?? 0) + (c.data.aiValue ?? 0) > 1900);
@@ -570,6 +562,26 @@ function gbTagScore(ctx: Ctx, c: C, by: C, already: C[] = []): number {
 }
 
 /** "At the end of the Battle Phase, if this card attacked or was attacked: return it to the (Extra) Deck; SS n GB from Deck". */
+/**
+ * Bookkeeping (never activates): this card was involved in damage calculation this turn. 2010 rulings: a "Gladiator
+ * Beast" can only tag out at the end of the Battle Phase if it was engaged in damage calculation (not when its attack
+ * was negated), and not if it was flipped face-down during the Battle Phase (a face-up-only flag).
+ * https://edisonrul.ing/cards/g/gladiator-beast-alexander.html
+ */
+const gbCalc: EffectDef = {
+  kind: 'trigger',
+  event: 'damageCalculated',
+  eventFilter: (ctx, ev) => {
+    if ((ev.card === ctx.self || ev.other === ctx.self) && ctx.self.location === 'mzone') ctx.self.flags.gbCalcTurn = ctx.game.turn;
+    return false;
+  },
+};
+faceUpFlag('gbCalcTurn');
+// A face-down "Gladiator Beast" is a new card once flipped face-up (Dimacari's double attack no longer applies).
+// https://edisonrul.ing/cards/g/gladiator-beast-dimacari.html
+faceUpFlag('gbSummoned');
+const gbBattled = (ctx: Ctx) => ctx.self.attackedThisTurnOrWasAttacked && ctx.self.flags.gbCalcTurn === ctx.game.turn;
+
 function tagOut(n = 1, excludeSelfName = true, exclude?: string): EffectDef {
   const cands = (ctx: Ctx, selfName: string) =>
     ctx.deck('me', (c) => isGB(c) && (!excludeSelfName || c.name !== selfName) && c.name !== exclude && !glasSummonForbidden(ctx.game, c, ctx.self));
@@ -578,7 +590,7 @@ function tagOut(n = 1, excludeSelfName = true, exclude?: string): EffectDef {
     event: 'battleEnd',
     label: n > 1 ? `Tag out (${n} Gladiator Beasts)` : 'Tag out',
     categories: ['specialSummon', 'toDeck'],
-    eventFilter: (ctx) => faceUpOn(ctx.self) && ctx.self.attackedThisTurnOrWasAttacked,
+    eventFilter: (ctx) => faceUpOn(ctx.self) && gbBattled(ctx),
     canActivate: (ctx) => !ctx.game.queryPlayer(ctx.player, 'cannotSpecialSummon') && ctx.freeMZones() + 1 >= n && cands(ctx, ctx.self.name).length >= n,
     activate: async (ctx) => {
       ctx.data.name = ctx.self.name;
@@ -625,6 +637,7 @@ M(OCTAVIUS, {
   aiValue: 500,
   text: 'When this card is Special Summoned by the effect of a "Gladiator Beast" monster, destroy 1 face-down Spell or Trap Card on the field. At the end of the Battle Phase, if this card attacked or was attacked, return it to the Deck or discard 1 card.',
   effects: [
+    gbCalc,
     {
       kind: 'trigger',
       event: 'specialSummoned',
@@ -647,7 +660,9 @@ M(OCTAVIUS, {
       mandatory: true,
       label: 'Return to the Deck or discard 1 card',
       categories: ['toDeck', 'discard'],
-      eventFilter: (ctx) => faceUpOn(ctx.self) && ctx.self.attackedThisTurnOrWasAttacked,
+      // "Battled" needs damage calculation (Edisonformat.net revised ruling; the 2010 section is silent for Octavius).
+      // https://edisonrul.ing/cards/g/gladiator-beast-octavius.html
+      eventFilter: (ctx) => faceUpOn(ctx.self) && gbBattled(ctx),
       resolve: async (ctx) => {
         if (!faceUpOn(ctx.self)) return;
         const hand = ctx.hand();
@@ -672,7 +687,7 @@ M(ALEXANDER, {
   sets: GB,
   aiValue: 600,
   text: `This card cannot be Special Summoned except by the effect of "${DIMACARI}". If this card was Special Summoned, it is unaffected by the effects of Spell Cards. At the end of the Battle Phase, if this card attacked or was attacked, you can return it to the Deck to Special Summon 1 "Gladiator Beast" monster from your Deck, except "${ALEXANDER}".`,
-  effects: [{ kind: 'continuous', active: (ctx) => ctx.self.summonMethod === 'special', mods: [{ q: 'unaffectedBySpells' }] }, tagOut()],
+  effects: [{ kind: 'continuous', active: (ctx) => ctx.self.summonMethod === 'special', mods: [{ q: 'unaffectedBySpells' }] }, tagOut(), gbCalc],
 });
 
 M(SPARTACUS, {
@@ -703,6 +718,7 @@ M(SPARTACUS, {
       },
     },
     tagOut(),
+    gbCalc,
   ],
 });
 
@@ -715,7 +731,7 @@ M(DIMACARI, {
   sets: GB,
   aiValue: 400,
   text: `If this card was Special Summoned by the effect of a "Gladiator Beast" monster, it can attack twice during each Battle Phase. At the end of the Battle Phase, if this card attacked or was attacked, you can return it to the Deck to Special Summon 1 "Gladiator Beast" monster from your Deck, except "${DIMACARI}".`,
-  effects: [markGB, { kind: 'continuous', active: (ctx) => !!ctx.self.flags.gbSummoned, mods: [{ q: 'extraAttacks', value: 1 }] }, tagOut()],
+  effects: [markGB, { kind: 'continuous', active: (ctx) => !!ctx.self.flags.gbSummoned, mods: [{ q: 'extraAttacks', value: 1 }] }, tagOut(), gbCalc],
 });
 
 M(TORAX, {
@@ -729,12 +745,13 @@ M(TORAX, {
   text: 'If this card was Special Summoned by the effect of a "Gladiator Beast" monster, at the end of any Battle Phase that this card attacked or was attacked, you can return it to the Deck to draw 1 card.',
   effects: [
     markGB,
+    gbCalc,
     {
       kind: 'trigger',
       event: 'battleEnd',
       label: 'Return to the Deck: draw 1',
       categories: ['draw', 'toDeck'],
-      eventFilter: (ctx) => faceUpOn(ctx.self) && !!ctx.self.flags.gbSummoned && ctx.self.attackedThisTurnOrWasAttacked,
+      eventFilter: (ctx) => faceUpOn(ctx.self) && !!ctx.self.flags.gbSummoned && gbBattled(ctx),
       activate: async (ctx) => {
         await ctx.toDeck(ctx.self, 'shuffle', 'cost');
       },
@@ -776,8 +793,11 @@ M('Test Ape', {
   ],
 });
 
-/** Face-up Gladiator Beasts the player can return for a contact fusion. */
-const fieldGBs = (ctx: Ctx) => ctx.faceUpMonsters('me', isGB);
+/**
+ * Gladiator Beasts the player can return for Gaiodiaz's contact fusion. 2010 ruling: face-up and face-down Fusion
+ * Material Monsters you control can be used (face-down ones are revealed). https://edisonrul.ing/cards/g/gladiator-beast-gaiodiaz.html
+ */
+const fieldGBs = (ctx: Ctx) => ctx.monsters('me', isGB);
 
 M(GAIODIAZ, {
   attribute: 'DARK',
@@ -808,6 +828,7 @@ M(GAIODIAZ, {
           aiScore: (c) => -cardValue(ctx.game, c),
         });
         if (!o.length) return false;
+        for (const m of [sp[0], o[0]]) if (!m.faceUp) await reveal(ctx, [m]);
         ctx.log(`${ctx.game.players[ctx.player].name} shuffles ${sp[0].name} and ${o[0].name} into the Deck.`);
         await ctx.toDeck([sp[0], o[0]], 'shuffle', 'material');
         return true;
@@ -820,13 +841,16 @@ M(GAIODIAZ, {
       mandatory: true,
       label: 'Inflict damage equal to its DEF',
       categories: ['damage'],
-      eventFilter: (ctx, ev) => evo(ev) === ctx.self && evc(ev)?.location === 'grave',
+      // 2010 ruling: this monster must be face-up on the field to activate it.
+      // https://edisonrul.ing/cards/g/gladiator-beast-gaiodiaz.html
+      eventFilter: (ctx, ev) => evo(ev) === ctx.self && evc(ev)?.location === 'grave' && faceUpOn(ctx.self),
       resolve: async (ctx) => {
         const d = evc(ctx.event!);
         if (d) await ctx.damage(ctx.opp, d.data.def ?? 0);
       },
     },
     tagOut(2, false, SPARTACUS),
+    gbCalc,
   ],
 });
 
@@ -916,16 +940,18 @@ S(COLOSSEUM, 'field', {
       ai: { score: (ctx) => (ctx.spellTraps('me', (c) => c.name === COLOSSEUM && c.faceUp).length ? 0 : 40) },
     },
     {
-      // Counters are placed by the card itself, not by an activated effect (never builds a chain link).
+      // Placing the Counter starts a Chain (2010 ruling): https://edisonrul.ing/cards/c/colosseum-cage-of-the-gladiator-beasts.html
       kind: 'trigger',
       event: 'specialSummoned',
       range: ['fzone'],
-      eventFilter: (ctx, ev) => {
-        if (ev.from === 'deck' && stActive(ctx)) {
-          ctx.self.counters.colosseum = (ctx.self.counters.colosseum ?? 0) + 1;
-          ctx.game.update();
-        }
-        return false;
+      mandatory: true,
+      label: 'Place 1 Counter',
+      categories: [],
+      eventFilter: (ctx, ev) => ev.from === 'deck' && stActive(ctx),
+      resolve: async (ctx) => {
+        if (ctx.self.location !== 'fzone' || !ctx.self.faceUp) return;
+        ctx.self.counters.colosseum = (ctx.self.counters.colosseum ?? 0) + 1;
+        ctx.game.update();
       },
     },
     {
@@ -986,13 +1012,19 @@ function gbCounter(kind: 'spell' | 'trap'): EffectDef {
       const l = ctx.prevLink();
       return !!l && !l.negated && l.isCardActivation && l.player !== ctx.player && (kind === 'spell' ? l.card.isSpell : l.card.isTrap);
     },
-    canActivate: (ctx) => ctx.hand('me', isGBCard).length > 0,
-    activate: async (ctx) => {
-      const [c] = await ctx.select(ctx.hand('me', isGBCard), 1, 1, 'Return 1 "Gladiator Beast" card from your hand to the Deck.', 'cost');
-      if (!c) return false;
-      await ctx.toDeck(c, 'shuffle', 'cost');
-    },
+    // The "Gladiator Beast" monster is shown and returned to the Deck on resolution (not a cost); it cannot be activated
+    // without one in hand: https://edisonrul.ing/cards/d/disarm.html, https://edisonrul.ing/cards/p/parry.html
+    // UNSETTLED: if no "Gladiator Beast" monster is left in hand on resolution, the negation still applies here.
+    canActivate: (ctx) => ctx.hand('me', (c) => c !== ctx.self && isGB(c)).length > 0,
     resolve: async (ctx) => {
+      const gb = ctx.hand('me', (c) => c !== ctx.self && isGB(c));
+      if (gb.length) {
+        const [c] = await ctx.select(gb, 1, 1, 'Return 1 "Gladiator Beast" monster from your hand to the Deck.', 'toDeck');
+        if (c) {
+          c.revealedUntil = ctx.turn;
+          await ctx.toDeck(c, 'shuffle');
+        }
+      }
       await ctx.negateAndDestroy(ctx.prevLink());
     },
     ai: {
@@ -1303,14 +1335,16 @@ S('Diamond-Dust Cyclone', 'quickplay', {
     {
       kind: 'activate',
       categories: ['destroy', 'draw'],
-      canActivate: (ctx) => ctx.monsters('both', (c) => fog(c) >= 4 && ctx.canTarget(c)).length > 0,
+      // Not with an empty Deck; a target flipped face-down in Chain is still destroyed, but its counters are gone so you
+      // draw nothing: https://edisonrul.ing/cards/d/diamond-dust-cyclone.html
+      canActivate: (ctx) => ctx.deck('me').length > 0 && ctx.monsters('both', (c) => fog(c) >= 4 && ctx.canTarget(c)).length > 0,
       activate: async (ctx) => {
         await ctx.selectTargets(ctx.monsters('both', (c) => fog(c) >= 4), 1, 1, 'Target 1 monster with 4 or more Fog Counters.', 'destroy', {
           aiScore: (c) => fog(c) * 100 + (c.controller === ctx.opp ? cardValue(ctx.game, c) : -cardValue(ctx.game, c) / 2),
         });
       },
       resolve: async (ctx) => {
-        const [t] = ctx.validTargets((c) => c.location === 'mzone' && fog(c) >= 4);
+        const [t] = ctx.validTargets((c) => c.location === 'mzone');
         if (!t) return;
         const n = Math.floor(fog(t) / 4);
         const r = await ctx.destroy(t);
@@ -1415,8 +1449,8 @@ S('Cloudian Squall', 'continuous', {
       event: 'phaseStart',
       mandatory: true,
       label: 'Fog Counters',
+      // Activates (starts a Chain) each Standby Phase even with no face-up monster: https://edisonrul.ing/cards/c/cloudian-squall.html
       eventFilter: (ctx, ev) => ev.phase === 'standby' && ev.player === ctx.player && stActive(ctx),
-      condition: (ctx) => ctx.faceUpMonsters('both').length > 0,
       resolve: async (ctx) => {
         for (const c of ctx.faceUpMonsters('both')) addFog(ctx.game, c, 1);
       },
@@ -1457,14 +1491,15 @@ T('Rain Storm', 'normal', {
           aiScore: (c) => ctx.atk(c),
         });
         if (!t) return false;
-        const opts = ['Reduce by 1000 (destroy 1 Spell/Trap)'];
-        if (ctx.atk(t) >= 2000) opts.push('Reduce by 2000 (destroy 2 cards)');
-        ctx.data.mode = opts.length > 1 ? await ctx.option('Rain Storm:', opts, (i) => (i === 1 && ctx.field('opp').length >= 2 ? 2 : i === 0 && ctx.spellTraps('opp').length ? 1 : 0)) : 0;
       },
       resolve: async (ctx) => {
         const [t] = ctx.validTargets(faceUpOn);
-        const x = ctx.data.mode === 1 ? 2000 : 1000;
-        if (!t || ctx.atk(t) < x) return;
+        if (!t || ctx.atk(t) < 1000) return;
+        // https://edisonrul.ing/cards/r/rain-storm.html — you select which effect to apply when resolving it.
+        const opts = ['Reduce by 1000 (destroy 1 Spell/Trap)'];
+        if (ctx.atk(t) >= 2000) opts.push('Reduce by 2000 (destroy 2 cards)');
+        const mode = opts.length > 1 ? await ctx.option('Rain Storm:', opts, (i) => (i === 1 && ctx.field('opp').length >= 2 ? 2 : i === 0 && ctx.spellTraps('opp').length ? 1 : 0)) : 0;
+        const x = mode === 1 ? 2000 : 1000;
         ctx.addTempMod(t, 'atk', -x, 'field');
         if (x === 1000) {
           const st = ctx.spellTraps('opp');
@@ -1753,6 +1788,9 @@ M('Evil HERO Inferno Wing', {
   types: ['fusion'],
   sets: [...EVIL_HERO, DARK_FUSION_ONLY],
   nomi: true,
+  // 2010 ruling: "cannot be Special Summoned except with Dark Fusion" also means never from the GY / removed from play.
+  // https://edisonrul.ing/cards/e/evil-hero-dark-gaia.html
+  noSpecialFrom: ['grave', 'banished'],
   aiValue: 500,
   text: '"Elemental HERO Avian" + "Elemental HERO Burstinatrix"\nThis monster cannot be Special Summoned except with "Dark Fusion". If this card attacks a Defense Position monster, inflict piercing Battle Damage to your opponent. When this card destroys a monster by battle and sends it to the Graveyard, inflict damage to your opponent equal to the ATK or DEF of the destroyed monster in the Graveyard, whichever is higher.',
   fusion: { materials: [namedCI('Elemental HERO Avian'), namedCI('Elemental HERO Burstinatrix')], noPoly: true, desc: '"Elemental HERO Avian" + "Elemental HERO Burstinatrix"' },
@@ -1782,6 +1820,9 @@ M('Evil HERO Lightning Golem', {
   types: ['fusion'],
   sets: [...EVIL_HERO, DARK_FUSION_ONLY],
   nomi: true,
+  // 2010 ruling: "cannot be Special Summoned except with Dark Fusion" also means never from the GY / removed from play.
+  // https://edisonrul.ing/cards/e/evil-hero-dark-gaia.html
+  noSpecialFrom: ['grave', 'banished'],
   aiValue: 700,
   text: '"Elemental HERO Sparkman" + "Elemental HERO Clayman"\nThis monster cannot be Special Summoned except with "Dark Fusion". Once per turn, you can destroy 1 monster on the field.',
   fusion: { materials: [namedCI('Elemental HERO Sparkman'), namedCI('Elemental HERO Clayman')], noPoly: true, desc: '"Elemental HERO Sparkman" + "Elemental HERO Clayman"' },
@@ -1813,13 +1854,19 @@ M(DARK_GAIA, {
   types: ['fusion'],
   sets: [...EVIL_HERO, DARK_FUSION_ONLY],
   nomi: true,
+  // 2010 ruling: "cannot be Special Summoned except with Dark Fusion" also means never from the GY / removed from play.
+  // https://edisonrul.ing/cards/e/evil-hero-dark-gaia.html
+  noSpecialFrom: ['grave', 'banished'],
   aiValue: 600,
-  text: '1 Fiend-Type monster + 1 Rock-Type monster\nThis monster cannot be Special Summoned except with "Dark Fusion". The original ATK of this card becomes the combined original ATK of the Fusion Material Monsters used to Fusion Summon this card. When this card declares an attack, you can change all Defense Position monsters your opponent controls to face-up Attack Position. (Flip Effects are not activated at this time.)',
+  text: '1 Fiend-Type monster + 1 Rock-Type monster\nThis card cannot be Special Summoned except with "Dark Fusion". The original ATK of this card is equal to the combined ATK of the Fusion Material Monsters used to Fusion Summon it. When this card declares an attack, change all Defense Position monsters your opponent controls to face-up Attack Position. Flip Effects are not activated at this time.',
   fusion: { materials: [(c) => c.data.race === 'Fiend', (c) => c.data.race === 'Rock'], noPoly: true, desc: '1 Fiend-Type monster + 1 Rock-Type monster' },
   effects: [
     {
+      // 2010 text/ruling: a mandatory Trigger Effect ("change", not "you can").
+      // https://edisonrul.ing/cards/e/evil-hero-dark-gaia.html
       kind: 'trigger',
       event: 'attackDeclared',
+      mandatory: true,
       label: 'Change Defense Position monsters to Attack Position',
       categories: ['position'],
       eventFilter: (ctx, ev) => ev.card === ctx.self,
@@ -1845,7 +1892,8 @@ M(DARK_GAIA, {
 });
 
 S('Dark Fusion', 'normal', {
-  text: 'Fusion Summon 1 Fiend-Type Fusion Monster from your Extra Deck, using monsters from your hand or your side of the field as Fusion Material Monsters. This turn, your opponent cannot select that monster as a target for card effects.',
+  // 2010 text: https://edisonrul.ing/cards/d/dark-fusion.html
+  text: "Send, from your hand or your side of the field to the Graveyard, Fusion Material Monsters that are listed on a Fiend-Type Fusion Monster Card, and Special Summon that Fusion Monster from your Fusion Deck. (This Special Summon is treated as a Fusion Summon). The Special Summoned monster cannot be targeted by the effects of your opponent's Monsters, Spells, and Traps this turn.",
   effects: [
     fusionSummonEffect({
       allowNoPoly: true,
@@ -2383,9 +2431,12 @@ T('Double-Edged Sword Technique', 'normal', {
         ctx.later('end', async () => {
           const still = r.filter((c, i) => c.location === 'mzone' && c.moveId === ids[i]);
           if (!still.length) return;
-          const atk = still.reduce((a, c) => a + ctx.atk(c), 0);
+          // Only the monsters actually destroyed count (Legendary Ebon Steed); no Chain:
+          // https://edisonrul.ing/cards/d/double-edged-sword-technique.html
+          const atkOf = new Map(still.map((c) => [c, ctx.atk(c)] as const));
           const d = await ctx.game.destroy(still, 'effect', ctx.player, ctx.self);
-          if (d.length) await ctx.game.damage(ctx.player, atk, 'effect', ctx.self, ctx.player);
+          const atk = d.reduce((a, c) => a + (atkOf.get(c) ?? 0), 0);
+          if (atk > 0) await ctx.game.damage(ctx.player, atk, 'effect', ctx.self, ctx.player);
         });
       },
       ai: { score: (ctx) => (ctx.isMyTurn && ctx.phase === 'main1' && ctx.lp > 5000 && ctx.monsters('opp').length === 0 ? 40 : 0) },
@@ -3012,7 +3063,16 @@ function overLimitCands(ctx: Ctx): C[] {
     const c = evc(e);
     if (e.type === 'battleDestroyed' && c && c.location === 'grave' && isNormalLike(c) && (c.data.atk ?? 0) <= 1000) out.add(c);
   }
-  return [...out];
+  // https://edisonrul.ing/cards/o/over-limit.html — a monster destroyed by battle that left the GY and was later sent back
+  // there this turn by other means (Tributed, etc.) cannot be Special Summoned: its last trip to the GY must be the battle.
+  const evs = turnEvents(ctx.game);
+  return [...out].filter((c) => {
+    for (let i = evs.length - 1; i >= 0; i--) {
+      const e = evs[i];
+      if (e.type === 'sentToGrave' && evc(e) === c) return (e.reasons ?? [e.reason]).includes('battle');
+    }
+    return false;
+  });
 }
 
 T('No Entry!!', 'normal', {
