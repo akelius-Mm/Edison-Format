@@ -214,7 +214,7 @@ async function clickText(page, sel, text, timeout = 15000) {
 /** Drive the app to leave something in progress in every mode; returns localStorage. */
 async function buildProgress(browser) {
   const bag = [];
-  const { ctx, page } = await phone(browser, PORTRAIT, { 'edison.settings.v1': JSON.stringify({ animationSpeed: 0, sound: false, music: false, haptics: false, confirmEndTurn: false, officialImages: false }), 'edison.hint.hold': '1' }, bag);
+  const { ctx, page } = await phone(browser, PORTRAIT, { 'edison.settings.v1': JSON.stringify({ animationSpeed: 0, sound: false, music: false, haptics: false, confirmEndTurn: false, officialImages: false, playerName: 'Tester', nameChosen: true }), 'edison.hint.hold': '1' }, bag);
   const step = async (name, f) => {
     try {
       await f();
