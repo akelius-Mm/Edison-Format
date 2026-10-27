@@ -2157,6 +2157,31 @@ monster('Metabo-Shark', {
 
 normal('Dark Rabbit', 'DARK', 'Beast', 4, 1100, 1500, 'He leaps up, down, and all around! Nobody can lay a hand on this funny bunny.');
 
+/** Dark Simorgh: "You can banish 1 DARK and 1 WIND monster from your <costFrom>; Special Summon this card" (from <from>). */
+function simorghSummon(from: 'hand' | 'grave', costFrom: 'hand' | 'grave'): EffectDef {
+  const pool = (ctx: Ctx, a: Attribute, not?: C) => (costFrom === 'hand' ? ctx.hand('me') : ctx.grave('me')).filter((c) => c !== ctx.self && c !== not && attrIs(c, a));
+  const pairOk = (ctx: Ctx) => pool(ctx, 'DARK').some((d) => pool(ctx, 'WIND', d).length > 0);
+  return {
+    kind: 'ignition',
+    range: [from],
+    label: `Banish 1 DARK + 1 WIND from your ${costFrom === 'hand' ? 'hand' : 'GY'}: Special Summon`,
+    categories: ['specialSummon'],
+    canActivate: (ctx) => ctx.canSummonSelf() && pairOk(ctx),
+    activate: async (ctx) => {
+      const where = costFrom === 'hand' ? 'hand' : 'GY';
+      const [d] = await ctx.select(pool(ctx, 'DARK').filter((x) => pool(ctx, 'WIND', x).length > 0), 1, 1, `Banish 1 DARK monster from your ${where}.`, 'cost');
+      if (!d) return false;
+      const [w] = await ctx.select(pool(ctx, 'WIND', d), 1, 1, `Banish 1 WIND monster from your ${where}.`, 'cost');
+      if (!w) return false;
+      await ctx.banish([d, w], 'cost');
+    },
+    resolve: async (ctx) => {
+      if (ctx.self.location === from && ctx.canSummonSelf()) await ctx.specialSummon(ctx.self, { pos: aiPos(ctx, ctx.self) });
+    },
+    ai: { score: (ctx) => (from === 'hand' ? 72 : ctx.hand('me').length >= 4 ? 60 : 0) },
+  };
+}
+
 monster('Dark Simorgh', {
   attribute: 'DARK',
   race: 'Winged Beast',
@@ -2165,47 +2190,11 @@ monster('Dark Simorgh', {
   def: 1000,
   aiValue: 800,
   // APPROX: the engine has one Attribute per card, so "also WIND while face-up" is not applied.
+  // Rulings: both self-Special Summons are Ignition Effects (they start a Chain); banishing is the cost.
   text: 'While face-up on the field, this card is also WIND-Attribute. If this card is in your hand: You can banish 1 DARK and 1 WIND monster from your GY; Special Summon this card. If this card is in your GY: You can banish 1 DARK and 1 WIND monster from your hand; Special Summon this card. Your opponent cannot Set cards.',
   effects: [
-    {
-      kind: 'proc',
-      label: 'Banish 1 DARK + 1 WIND from your GY',
-      condition: (ctx) =>
-        ctx.freeMZones() > 0 &&
-        ctx.grave('me', (c) => attrIs(c, 'DARK')).length > 0 &&
-        ctx.grave('me', (c) => attrIs(c, 'WIND')).length > 0,
-      perform: async (ctx) => {
-        const [d] = await ctx.select(ctx.grave('me', (c) => attrIs(c, 'DARK')), 1, 1, 'Banish 1 DARK monster from your GY.', 'cost');
-        if (!d) return false;
-        const winds = ctx.grave('me', (c) => attrIs(c, 'WIND') && c !== d);
-        if (!winds.length) return false;
-        const [w] = await ctx.select(winds, 1, 1, 'Banish 1 WIND monster from your GY.', 'cost');
-        if (!w) return false;
-        await ctx.banish([d, w], 'cost');
-        return true;
-      },
-      ai: { score: () => 72 },
-    },
-    {
-      kind: 'proc',
-      range: ['grave'],
-      label: 'Banish 1 DARK + 1 WIND from your hand',
-      condition: (ctx) =>
-        ctx.freeMZones() > 0 &&
-        ctx.hand('me', (c) => attrIs(c, 'DARK')).length > 0 &&
-        ctx.hand('me', (c) => attrIs(c, 'WIND')).length > 0,
-      perform: async (ctx) => {
-        const [d] = await ctx.select(ctx.hand('me', (c) => attrIs(c, 'DARK')), 1, 1, 'Banish 1 DARK monster from your hand.', 'cost');
-        if (!d) return false;
-        const winds = ctx.hand('me', (c) => attrIs(c, 'WIND') && c !== d);
-        if (!winds.length) return false;
-        const [w] = await ctx.select(winds, 1, 1, 'Banish 1 WIND monster from your hand.', 'cost');
-        if (!w) return false;
-        await ctx.banish([d, w], 'cost');
-        return true;
-      },
-      ai: { score: (ctx) => (ctx.hand('me').length >= 4 ? 60 : 0) },
-    },
+    simorghSummon('hand', 'grave'),
+    simorghSummon('grave', 'hand'),
     { kind: 'continuous', mods: [{ q: 'cannotSet', to: 'players', filter: (ctx, p: PlayerId) => p === ctx.opp }] },
   ],
 });
@@ -2688,30 +2677,33 @@ spell("Fortune's Future", 'normal', {
 });
 
 spell('Time Passage', 'quickplay', {
+  // Rulings: it targets the "Fortune Lady" monster, and it cannot be activated during the Damage Step (it changes a
+  // Level, not ATK/DEF directly).
   text: 'Increase the Level of 1 face-up "Fortune Lady" monster you control by 3, until the End Phase.',
   effects: [
     {
       kind: 'activate',
-      damageStep: true,
       categories: ['atkChange'],
-      canActivate: (ctx) => ctx.faceUpMonsters('me', isFortuneLady).length > 0,
-      resolve: async (ctx) => {
-        const cands = ctx.faceUpMonsters('me', isFortuneLady);
-        const b = ctx.battle;
-        const [c] = await ctx.select(cands, 1, 1, 'Increase the Level of 1 face-up "Fortune Lady" monster by 3.', 'buff', {
-          aiScore: (c) => (b && (b.attacker === c || b.target === c) ? 1000 : 0) + (c.data.name === 'Fortune Lady Earth' ? 100 : 0),
+      canActivate: (ctx) => ctx.faceUpMonsters('me', (c) => isFortuneLady(c) && ctx.canTarget(c)).length > 0,
+      activate: async (ctx) => {
+        await ctx.selectTargets(ctx.faceUpMonsters('me', isFortuneLady), 1, 1, 'Target 1 face-up "Fortune Lady" monster you control.', 'buff', {
+          aiScore: (c) => (c.data.name === 'Fortune Lady Earth' ? 100 : 0) + ctx.atk(c) / 100,
         });
+      },
+      resolve: async (ctx) => {
+        const [c] = ctx.validTargets((x) => x.location === 'mzone' && x.faceUp && isFortuneLady(x) && x.controller === ctx.player);
         if (c) await raiseLevel(ctx, c, 3, 'turn');
       },
       ai: {
         score: (ctx) => {
           const b = ctx.battle;
-          if (b && b.inDamageStep && b.target) {
+          // Attack declaration (before the Damage Step): pump the attacking or attacked Fortune Lady.
+          if (b && !b.inDamageStep && b.target) {
             const mine = b.attacker.controller === ctx.player ? b.attacker : b.target;
             const theirs = mine === b.attacker ? b.target : b.attacker;
-            if (!isFortuneLady(mine) || !mine.faceUp) return 0;
+            if (!isFortuneLady(mine) || !mine.faceUp || mine.controller !== ctx.player) return 0;
             const mult = mine.data.name === 'Fortune Lady Wind' || mine.data.name === 'Fortune Lady Water' ? 300 : 400;
-            const their = theirs.pos === 'atk' ? ctx.atk(theirs) : ctx.def(theirs);
+            const their = theirs.pos === 'atk' ? ctx.atk(theirs) : theirs.faceUp ? ctx.def(theirs) : 1500;
             return ctx.atk(mine) <= their && ctx.atk(mine) + 3 * mult > their ? 85 : 0;
           }
           return ctx.faceUpMonsters('me', (c) => c.data.name === 'Fortune Lady Earth').length && !ctx.isMyTurn && ctx.phase === 'end' ? 35 : 0;
@@ -3073,9 +3065,12 @@ spell('Gateway of the Six', 'continuous', {
         return false;
       },
     },
-    gatewayEffect(2, 'Target a Six Samurai/Shien: +500 ATK', ['atkChange'], (ctx) => ctx.faceUpMonsters('me', (c) => (isSixSamurai(c) || isShien(c)) && c.hasType('effect') && ctx.canTarget(c)).length > 0,
+    // The +500 ATK target can be on either side of the field (the text does not say "you control").
+    gatewayEffect(2, 'Target a Six Samurai/Shien: +500 ATK', ['atkChange'], (ctx) => ctx.faceUpMonsters('both', (c) => (isSixSamurai(c) || isShien(c)) && c.hasType('effect') && ctx.canTarget(c)).length > 0,
       async (ctx) => {
-        await ctx.selectTargets(ctx.faceUpMonsters('me', (c) => (isSixSamurai(c) || isShien(c)) && c.hasType('effect')), 1, 1, 'Target 1 "Six Samurai" or "Shien" Effect Monster.', 'buff');
+        await ctx.selectTargets(ctx.faceUpMonsters('both', (c) => (isSixSamurai(c) || isShien(c)) && c.hasType('effect')), 1, 1, 'Target 1 "Six Samurai" or "Shien" Effect Monster.', 'buff', {
+          aiScore: (c) => (c.controller === ctx.player ? 1000 + ctx.atk(c) : -1000),
+        });
       },
       async (ctx) => {
         const t = ctx.validTargets((c) => c.location === 'mzone' && c.faceUp);

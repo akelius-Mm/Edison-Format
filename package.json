@@ -10,7 +10,7 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "sim": "tsx scripts/sim.ts",
-    "test": "tsx scripts/rules-test.ts && tsx scripts/prompt-test.ts && tsx scripts/undo-test.ts --games 30 && tsx scripts/replay-test.ts --games 40 && tsx scripts/pack-odds-test.ts && tsx scripts/sim.ts --games 40 && tsx scripts/locals-test.ts && tsx scripts/draft-setup-test.ts && tsx scripts/events-test.ts && tsx scripts/side-deck-test.ts && tsx scripts/net-test.ts && tsx scripts/tourney-test.ts",
+    "test": "tsx scripts/rules-test.ts && tsx scripts/rulings-sovr-anpr.ts && tsx scripts/prompt-test.ts && tsx scripts/undo-test.ts --games 30 && tsx scripts/replay-test.ts --games 40 && tsx scripts/pack-odds-test.ts && tsx scripts/sim.ts --games 40 && tsx scripts/locals-test.ts && tsx scripts/draft-setup-test.ts && tsx scripts/events-test.ts && tsx scripts/side-deck-test.ts && tsx scripts/net-test.ts && tsx scripts/tourney-test.ts",
     "test:draft": "tsx scripts/draft-setup-test.ts",
     "test:rules": "tsx scripts/rules-test.ts",
     "test:undo": "tsx scripts/undo-test.ts --games 30",
