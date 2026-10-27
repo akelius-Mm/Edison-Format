@@ -5536,15 +5536,21 @@ async function archetypeAuditTests() {
     eq(st.location, 'deck', 'Raiza spun the Set trap');
   });
 
-  await test("Treeborn Frog: each copy revives in your Standby Phase; any Spell/Trap you control (Set card, Field Spell) stops it; not on the opponent's Standby; Necrovalley stops it", async () => {
+  await test("Treeborn Frog: only one copy revives (not while a face-up Treeborn Frog is on your field); any Spell/Trap you control (Set card, Field Spell) stops it; not on the opponent's Standby; Necrovalley stops it", async () => {
     const { g, place } = setup();
     const f1 = place(0, cardByName('Treeborn Frog'), 'grave');
     const f2 = place(0, cardByName('Treeborn Frog'), 'grave');
     await standby(g, 1);
     eq(f1.location, 'grave', "not in the opponent's Standby Phase");
     await standby(g, 0);
-    eq(f1.location, 'mzone', 'first copy');
-    eq(f2.location, 'mzone', 'second copy');
+    eq([f1, f2].filter((f) => f.location === 'mzone').length, 1, 'one copy revives');
+    await standby(g, 0);
+    eq([f1, f2].filter((f) => f.location === 'mzone').length, 1, 'the other stays while a face-up Treeborn Frog is on the field');
+    const up = setup();
+    up.place(0, cardByName('Treeborn Frog'), 'mzone');
+    const f6 = up.place(0, cardByName('Treeborn Frog'), 'grave');
+    await standby(up.g, 0);
+    eq(f6.location, 'grave', 'a face-up Treeborn Frog blocks it');
     const s = setup();
     const f3 = s.place(0, cardByName('Treeborn Frog'), 'grave');
     s.place(0, cardByName('Mirror Force'), 'szone');

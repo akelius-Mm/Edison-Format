@@ -245,7 +245,13 @@ export const WHY_NOT: [string, number, Why][] = [
   [
     'Treeborn Frog',
     0,
-    (ctx) => gyLock(ctx) ?? (ctx.spellTraps('me').length ? 'you control a Spell/Trap\nSet cards and Field Spells count' : cantSummonSelf(ctx)),
+    (ctx) =>
+      gyLock(ctx) ??
+      (ctx.spellTraps('me').length
+        ? 'you control a Spell/Trap\nSet cards and Field Spells count'
+        : ctx.faceUpMonsters('me', (c) => c.name === 'Treeborn Frog').length
+          ? 'you control a face-up Treeborn Frog'
+          : cantSummonSelf(ctx)),
   ],
 ];
 

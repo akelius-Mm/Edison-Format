@@ -16,6 +16,7 @@ import {
   selfFieldToGrave,
 } from '../helpers';
 import type { CardInstance } from '../../engine/card';
+import type { Ctx } from '../../engine/ctx';
 
 // ============================================================ SPELLS
 
@@ -597,6 +598,8 @@ monster('Morphing Jar', {
   ],
 });
 
+const faceUpTreeborn = (ctx: Ctx) => ctx.faceUpMonsters('me', (c) => c.name === 'Treeborn Frog').length > 0;
+
 monster('Treeborn Frog', {
   attribute: 'WATER',
   race: 'Aqua',
@@ -604,7 +607,7 @@ monster('Treeborn Frog', {
   atk: 100,
   def: 100,
   sets: ['frog'],
-  text: 'Once per turn, during your Standby Phase, if this card is in your GY and you control no Spell/Trap Cards: You can Special Summon this card.',
+  text: 'During your Standby Phase, if this card is in your Graveyard and you do not control any Spell or Trap Cards, you can Special Summon this card. This effect cannot be activated if there is a face-up "Treeborn Frog" on your side of the field.',
   aiValue: 200,
   effects: [
     {
@@ -615,9 +618,11 @@ monster('Treeborn Frog', {
       label: 'Revive',
       categories: ['specialSummon'],
       eventFilter: (ctx, ev) => ev.phase === 'standby' && ctx.isMyTurn,
-      condition: (ctx) => ctx.spellTraps('me').length === 0 && ctx.canSummonSelf(),
+      // Edison text: not while you control a face-up "Treeborn Frog", so only one comes back per Standby Phase (checked
+      // again on resolution, when two were chained together)
+      condition: (ctx) => ctx.spellTraps('me').length === 0 && !faceUpTreeborn(ctx) && ctx.canSummonSelf(),
       resolve: async (ctx) => {
-        if (ctx.self.location === 'grave' && ctx.spellTraps('me').length === 0) await ctx.specialSummon(ctx.self);
+        if (ctx.self.location === 'grave' && ctx.spellTraps('me').length === 0 && !faceUpTreeborn(ctx)) await ctx.specialSummon(ctx.self);
       },
     },
   ],
