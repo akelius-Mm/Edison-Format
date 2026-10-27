@@ -3,7 +3,6 @@ import type { Difficulty } from '../../ai/ai';
 import { clearOfficialArtCache } from '../cards/officialArt';
 import { DEFAULT_SETTINGS, getSettings, updateSettings, type Settings } from '../settings';
 import { builtInTracksRow, nowPlayingRow, showAudioCredits, yourMusicGroup } from './audioSettings';
-import { haptic } from '../haptics';
 import { iosAction, iosGroup, iosNav, iosRow } from './components';
 import { packsDraftSettingsGroup } from './draftSetup';
 import { confirmDialog, h, segmented, toast, toggle } from './dom';
@@ -15,29 +14,11 @@ import { onlineSettingsGroup } from './friend';
 import { openReportSheet } from './report';
 import { openRulesNotes } from './rulesNotes';
 import { editName, playerName } from './playerName';
+import { OFFICIAL_IMAGES_FOOT, animationSpeedRow, confirmEndTurnRow, hapticsRow, musicRow, officialImagesRow, responsePromptsRow, showLogRow, soundRow, volumeRow } from './settingsControls';
 
 export function settingsScreen(): Screen {
   const s = getSettings();
   const set = (patch: Partial<Settings>) => updateSettings(patch);
-
-  const speeds: { value: number; label: string }[] = [
-    { value: 0, label: 'Instant' },
-    { value: 0.5, label: 'Fast' },
-    { value: 1, label: 'Normal' },
-    { value: 1.5, label: 'Relaxed' },
-    { value: 2, label: 'Slow' },
-  ];
-  const nearest = speeds.reduce((a, b) => (Math.abs(b.value - s.animationSpeed) < Math.abs(a.value - s.animationSpeed) ? b : a)).value;
-
-  const vol = h('input', { type: 'range', class: 'ios-range', min: '0', max: '1', step: '0.05', value: String(s.volume), 'aria-label': 'Volume' });
-  const volOut = h('span', { class: 'ios-detail' }, `${Math.round(s.volume * 100)}%`);
-  const paintVol = () => vol.style.setProperty('--v', `${Number(vol.value) * 100}%`);
-  paintVol();
-  vol.addEventListener('input', () => {
-    set({ volume: Number(vol.value) });
-    volOut.textContent = `${Math.round(Number(vol.value) * 100)}%`;
-    paintVol();
-  });
 
   const p = getProfile();
   const active = loadActiveTournament();
@@ -63,21 +44,8 @@ export function settingsScreen(): Screen {
     iosGroup(
       'Gameplay',
       [
-        iosRow('Animation speed', null, segmented(speeds, nearest, (v) => set({ animationSpeed: v }), 'Animation speed'), { stack: true }),
-        iosRow(
-          'Response prompts',
-          'Smart asks only when you have a relevant card. Always stops at every chance to respond.',
-          segmented<'smart' | 'always'>(
-            [
-              { value: 'smart', label: 'Smart' },
-              { value: 'always', label: 'Always' },
-            ],
-            s.responsePrompts,
-            (v) => set({ responsePrompts: v }),
-            'Response prompts',
-          ),
-          { stack: true },
-        ),
+        animationSpeedRow(),
+        responsePromptsRow(),
         iosRow(
           'Default AI difficulty',
           null,
@@ -95,31 +63,20 @@ export function settingsScreen(): Screen {
         ),
         iosRow('First player skips draw', 'Modern rule. Off in Edison: the player going first draws on turn 1.', toggle(s.skipFirstDraw, (v) => set({ skipFirstDraw: v }), 'First player skips draw')),
         iosRow('Side decking in best-of-3', 'Swap cards with your Side Deck between games. Off keeps both decks as they are.', toggle(s.sideDecking, (v) => set({ sideDecking: v }), 'Side decking in best-of-3')),
-        iosRow('Confirm end of turn', 'Ask when you still have plays.', toggle(s.confirmEndTurn, (v) => set({ confirmEndTurn: v }), 'Confirm end of turn')),
-        iosRow('Show duel log', null, toggle(s.showLog, (v) => set({ showLog: v }), 'Show duel log')),
+        confirmEndTurnRow(),
+        showLogRow(),
       ],
     ),
     iosGroup(
       'Display',
-      [iosRow('Official card images', null, toggle(s.officialImages, (v) => set({ officialImages: v }), 'Load official card images'))],
-      'Loads card artwork from the YGOPRODeck database when online. Card art is © its owners; generated art is used when it is unavailable.',
+      [officialImagesRow()],
+      OFFICIAL_IMAGES_FOOT,
     ),
     iosGroup('Audio', [
-      iosRow('Sound effects', null, toggle(s.sound, (v) => set({ sound: v }), 'Sound effects')),
-      iosRow(
-        'Haptics',
-        'Taps you can feel for plays, damage and results.',
-        toggle(
-          s.haptics,
-          (v) => {
-            set({ haptics: v });
-            if (v) haptic('selection');
-          },
-          'Haptics',
-        ),
-      ),
-      iosRow('Music', null, toggle(s.music, (v) => set({ music: v }), 'Music')),
-      iosRow('Volume', null, h('div', { class: 'ios-range-wrap' }, vol, volOut), { stack: true }),
+      soundRow(),
+      hapticsRow(),
+      musicRow(),
+      volumeRow(),
       nowPlayingRow(),
       builtInTracksRow(),
       iosNav('Audio credits', showAudioCredits, { icon: 'music' }),
@@ -128,8 +85,8 @@ export function settingsScreen(): Screen {
     onlineSettingsGroup(),
     iosGroup(
       'Help',
-      [iosNav('Report a problem', () => openReportSheet(), { icon: 'warn' })],
-      'Makes a report with what went wrong (and the duel, to replay it) to share or copy. Nothing is sent automatically.',
+      [iosNav('Guide', () => go('guide'), { icon: 'info', detail: 'How the app works' }), iosNav('Report a problem', () => openReportSheet(), { icon: 'warn' })],
+      'The Guide explains the app, where its rules come from and what to do when a card plays wrong. Report a problem makes a report with what went wrong (and the duel, to replay it) to share or copy. Nothing is sent automatically.',
     ),
     iosGroup(
       'Data',

@@ -1,0 +1,239 @@
+/* Guide screen (route `guide`) and the in-duel Settings sheet. Uses the app's tokens (polish.css / app.css). */
+.guide-screen .frame-body {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+.gd-stamps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.gd-stamps span {
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: var(--fill);
+  font: 500 12px/1.3 var(--font);
+  color: var(--text-2);
+}
+
+/* section links: an iOS grouped list */
+.gd-toc {
+  display: grid;
+  border-radius: 16px;
+  overflow: hidden;
+  background: var(--grp);
+}
+.gd-toc-btn {
+  display: flex;
+  width: 100%;
+  max-width: none;
+  align-items: center;
+  gap: 10px;
+  min-height: 46px;
+  padding: 0 12px 0 16px;
+  border: 0;
+  border-top: 1px solid var(--sep);
+  background: none;
+  color: var(--text);
+  font: 400 16px/1.3 var(--font);
+  text-align: left;
+  cursor: pointer;
+}
+.gd-toc-btn:first-child {
+  border-top: 0;
+}
+.gd-toc-btn span {
+  flex: 1 1 auto;
+  max-width: none;
+  min-width: 0;
+}
+.gd-toc-btn .icon {
+  flex: none;
+  margin-left: auto;
+  width: 16px;
+  height: 16px;
+  color: var(--faint);
+}
+.gd-toc-btn:active {
+  background: var(--grp-hi);
+}
+
+.gd-sections {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+.gd-section {
+  padding: 16px 18px;
+  border-radius: 16px;
+  background: var(--grp);
+  min-width: 0;
+  overflow-wrap: anywhere;
+  /* clear the sticky bar when a section link scrolls here */
+  scroll-margin-top: calc(64px + env(safe-area-inset-top, 0px));
+}
+.gd-h {
+  margin: 0 0 10px;
+  font: 700 19px/1.25 var(--font-display);
+  letter-spacing: -0.01em;
+  color: var(--text);
+  outline: none;
+}
+.gd-section p,
+.gd-section li {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--text-2);
+}
+.gd-section p + p,
+.gd-section p + ul,
+.gd-section p + ol,
+.gd-section ol + p,
+.gd-section ul + p,
+.gd-section .gd-sources + p,
+.gd-section p + .gd-sources {
+  margin-top: 10px;
+}
+.gd-section b {
+  color: var(--text);
+  font-weight: 600;
+}
+.gd-section a,
+.gd-link {
+  color: var(--blue);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.gd-link {
+  display: inline;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  cursor: pointer;
+}
+.gd-muted {
+  color: var(--muted) !important;
+}
+.gd-list {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 8px;
+}
+.gd-steps {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: gd;
+  display: grid;
+  gap: 10px;
+}
+.gd-steps li {
+  counter-increment: gd;
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+}
+.gd-steps li::before {
+  content: counter(gd);
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--fill-2);
+  color: var(--text);
+  font: 600 13px/1 var(--font);
+}
+.gd-note {
+  margin-top: 12px !important;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: rgba(212, 175, 55, 0.1);
+  border: 1px solid var(--gold-line);
+}
+
+/* the five tabs */
+.gd-tabs {
+  display: grid;
+  gap: 8px;
+}
+.gd-tab {
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  min-width: 0;
+}
+.gd-tab-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+  font: 600 15px/1.3 var(--font);
+  color: var(--text);
+}
+.gd-tab-name .icon {
+  width: 17px;
+  height: 17px;
+  color: var(--gold);
+}
+
+/* rule sources */
+.gd-sources {
+  display: grid;
+  gap: 8px;
+}
+.gd-src {
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  min-width: 0;
+}
+.gd-src-what {
+  margin-bottom: 4px;
+  font: 600 12px/1.3 var(--font);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--gold);
+}
+.gd-foot {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--faint);
+  text-align: center;
+}
+
+/* Home / How to Play entry: same row as the banlist card, blue accent */
+.rn-card--guide {
+  border-color: rgba(90, 169, 255, 0.35);
+}
+.rn-card--guide .rn-icon {
+  background: rgba(90, 169, 255, 0.16);
+  color: #8cc4ff;
+}
+.rules-screen .rn-card--guide {
+  margin-top: 16px;
+}
+
+/* in-duel Settings sheet (duel flag button → Settings) */
+.duel-settings {
+  display: grid;
+  gap: 14px;
+  max-height: min(64vh, 640px);
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+.duel-settings .ios-group {
+  margin: 0;
+}
+.duel-settings-note {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--muted);
+}
