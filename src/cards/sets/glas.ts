@@ -252,23 +252,15 @@ function makeGeminiActive(ctx: Ctx, c: C) {
   ctx.log(`${c.name} is now treated as an Effect Monster.`);
   ctx.game.update();
 }
-/**
- * Gemini Summon. APPROX (as plants.ts / sovr.ts / ptdn.ts): the engine has no Gemini Summon action, so it is an
- * Ignition effect that uses the turn's Normal Summon; it starts a chain instead of being a Summon.
- */
+/** Gemini Summon: a Normal Summon of the face-up Gemini monster (Game.geminiSummon, no chain). */
 function geminiSummon(score: (ctx: Ctx) => number = () => 40): EffectDef {
   return {
-    kind: 'ignition',
+    // The Gemini Summon is a Normal Summon, not an effect (Game.geminiSummon; no chain).
+    kind: 'proc',
+    geminiSummon: true,
+    range: ['mzone'],
     label: 'Gemini Summon (Normal Summon again)',
     categories: [],
-    condition: (ctx) =>
-      ctx.self.faceUp && !ctx.self.flags.geminiSummoned && ctx.game.players[ctx.player].normalSummonsLeft > 0 && !ctx.game.queryPlayer(ctx.player, 'cannotNormalSummon'),
-    activate: async (ctx) => {
-      ctx.game.players[ctx.player].normalSummonsLeft--;
-    },
-    resolve: async (ctx) => {
-      makeGeminiActive(ctx, ctx.self);
-    },
     ai: {
       score: (ctx) => {
         const better = ctx.hand('me', (c) => c.isMonster && ctx.game.canNormalSummon(ctx.player, c) && (c.data.atk ?? 0) + (c.data.aiValue ?? 0) > 1900);
@@ -916,16 +908,18 @@ S(COLOSSEUM, 'field', {
       ai: { score: (ctx) => (ctx.spellTraps('me', (c) => c.name === COLOSSEUM && c.faceUp).length ? 0 : 40) },
     },
     {
-      // Counters are placed by the card itself, not by an activated effect (never builds a chain link).
+      // Placing the Counter starts a Chain (2010 ruling): https://edisonrul.ing/cards/c/colosseum-cage-of-the-gladiator-beasts.html
       kind: 'trigger',
       event: 'specialSummoned',
       range: ['fzone'],
-      eventFilter: (ctx, ev) => {
-        if (ev.from === 'deck' && stActive(ctx)) {
-          ctx.self.counters.colosseum = (ctx.self.counters.colosseum ?? 0) + 1;
-          ctx.game.update();
-        }
-        return false;
+      mandatory: true,
+      label: 'Place 1 Counter',
+      categories: [],
+      eventFilter: (ctx, ev) => ev.from === 'deck' && stActive(ctx),
+      resolve: async (ctx) => {
+        if (ctx.self.location !== 'fzone' || !ctx.self.faceUp) return;
+        ctx.self.counters.colosseum = (ctx.self.counters.colosseum ?? 0) + 1;
+        ctx.game.update();
       },
     },
     {
@@ -986,14 +980,18 @@ function gbCounter(kind: 'spell' | 'trap'): EffectDef {
       const l = ctx.prevLink();
       return !!l && !l.negated && l.isCardActivation && l.player !== ctx.player && (kind === 'spell' ? l.card.isSpell : l.card.isTrap);
     },
-    // https://edisonrul.ing/cards/p/parry.html, https://edisonrul.ing/cards/d/disarm.html — cannot be activated without a
-    // "Gladiator Beast" in the hand; it is returned to the Deck (shown) when this resolves: not a cost.
-    canActivate: (ctx) => ctx.hand('me', isGBCard).length > 0,
+    // The "Gladiator Beast" monster is shown and returned to the Deck on resolution (not a cost); it cannot be activated
+    // without one in hand: https://edisonrul.ing/cards/d/disarm.html, https://edisonrul.ing/cards/p/parry.html
+    // UNSETTLED: if no "Gladiator Beast" monster is left in hand on resolution, the negation still applies here.
+    canActivate: (ctx) => ctx.hand('me', (c) => c !== ctx.self && isGB(c)).length > 0,
     resolve: async (ctx) => {
-      const [c] = await ctx.select(ctx.hand('me', isGBCard), 1, 1, 'Return 1 "Gladiator Beast" card from your hand to the Deck.', 'toDeck');
-      if (c) {
-        await ctx.game.anim({ type: 'reveal', cards: [c.uid], player: ctx.player });
-        await ctx.toDeck(c, 'shuffle');
+      const gb = ctx.hand('me', (c) => c !== ctx.self && isGB(c));
+      if (gb.length) {
+        const [c] = await ctx.select(gb, 1, 1, 'Return 1 "Gladiator Beast" monster from your hand to the Deck.', 'toDeck');
+        if (c) {
+          c.revealedUntil = ctx.turn;
+          await ctx.toDeck(c, 'shuffle');
+        }
       }
       await ctx.negateAndDestroy(ctx.prevLink());
     },
@@ -1305,14 +1303,16 @@ S('Diamond-Dust Cyclone', 'quickplay', {
     {
       kind: 'activate',
       categories: ['destroy', 'draw'],
-      canActivate: (ctx) => ctx.monsters('both', (c) => fog(c) >= 4 && ctx.canTarget(c)).length > 0,
+      // Not with an empty Deck; a target flipped face-down in Chain is still destroyed, but its counters are gone so you
+      // draw nothing: https://edisonrul.ing/cards/d/diamond-dust-cyclone.html
+      canActivate: (ctx) => ctx.deck('me').length > 0 && ctx.monsters('both', (c) => fog(c) >= 4 && ctx.canTarget(c)).length > 0,
       activate: async (ctx) => {
         await ctx.selectTargets(ctx.monsters('both', (c) => fog(c) >= 4), 1, 1, 'Target 1 monster with 4 or more Fog Counters.', 'destroy', {
           aiScore: (c) => fog(c) * 100 + (c.controller === ctx.opp ? cardValue(ctx.game, c) : -cardValue(ctx.game, c) / 2),
         });
       },
       resolve: async (ctx) => {
-        const [t] = ctx.validTargets((c) => c.location === 'mzone' && fog(c) >= 4);
+        const [t] = ctx.validTargets((c) => c.location === 'mzone');
         if (!t) return;
         const n = Math.floor(fog(t) / 4);
         const r = await ctx.destroy(t);
@@ -1417,8 +1417,8 @@ S('Cloudian Squall', 'continuous', {
       event: 'phaseStart',
       mandatory: true,
       label: 'Fog Counters',
+      // Activates (starts a Chain) each Standby Phase even with no face-up monster: https://edisonrul.ing/cards/c/cloudian-squall.html
       eventFilter: (ctx, ev) => ev.phase === 'standby' && ev.player === ctx.player && stActive(ctx),
-      condition: (ctx) => ctx.faceUpMonsters('both').length > 0,
       resolve: async (ctx) => {
         for (const c of ctx.faceUpMonsters('both')) addFog(ctx.game, c, 1);
       },
@@ -1846,7 +1846,8 @@ M(DARK_GAIA, {
 });
 
 S('Dark Fusion', 'normal', {
-  text: 'Fusion Summon 1 Fiend-Type Fusion Monster from your Extra Deck, using monsters from your hand or your side of the field as Fusion Material Monsters. This turn, your opponent cannot select that monster as a target for card effects.',
+  // 2010 text: https://edisonrul.ing/cards/d/dark-fusion.html
+  text: "Send, from your hand or your side of the field to the Graveyard, Fusion Material Monsters that are listed on a Fiend-Type Fusion Monster Card, and Special Summon that Fusion Monster from your Fusion Deck. (This Special Summon is treated as a Fusion Summon). The Special Summoned monster cannot be targeted by the effects of your opponent's Monsters, Spells, and Traps this turn.",
   effects: [
     fusionSummonEffect({
       allowNoPoly: true,
@@ -2382,9 +2383,12 @@ T('Double-Edged Sword Technique', 'normal', {
         ctx.later('end', async () => {
           const still = r.filter((c, i) => c.location === 'mzone' && c.moveId === ids[i]);
           if (!still.length) return;
-          const atk = still.reduce((a, c) => a + ctx.atk(c), 0);
+          // Only the monsters actually destroyed count (Legendary Ebon Steed); no Chain:
+          // https://edisonrul.ing/cards/d/double-edged-sword-technique.html
+          const atkOf = new Map(still.map((c) => [c, ctx.atk(c)] as const));
           const d = await ctx.game.destroy(still, 'effect', ctx.player, ctx.self);
-          if (d.length) await ctx.game.damage(ctx.player, atk, 'effect', ctx.self, ctx.player);
+          const atk = d.reduce((a, c) => a + (atkOf.get(c) ?? 0), 0);
+          if (atk > 0) await ctx.game.damage(ctx.player, atk, 'effect', ctx.self, ctx.player);
         });
       },
       ai: { score: (ctx) => (ctx.isMyTurn && ctx.phase === 'main1' && ctx.lp > 5000 && ctx.monsters('opp').length === 0 ? 40 : 0) },

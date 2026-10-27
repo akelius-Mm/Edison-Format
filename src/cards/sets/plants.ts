@@ -67,27 +67,11 @@ export function bestSynchroValue(ctx: Ctx, add: { card: CardInstance; level?: nu
 }
 
 /**
- * Gemini support: the engine has no Gemini Summon action, so a Gemini monster gets an
- * ignition effect that uses the player's Normal Summon to become an Effect Monster
- * (approximation: it starts a chain instead of being a summon).
+ * The Gemini Summon of a Gemini monster: a Normal Summon of the face-up monster that does not start a chain
+ * (Game.geminiSummon). https://edisonrul.ing/cards/misc/gemini-monsters-gigaplant-elemental-hero-neos-alius-etc.html
  */
-export function geminiSummonEffect(): EffectDef {
-  return {
-    kind: 'ignition',
-    label: 'Gemini Summon (Normal Summon again)',
-    categories: [],
-    condition: (ctx) => !ctx.self.flags.geminiSummoned && ctx.game.players[ctx.player].normalSummonsLeft > 0 && !ctx.game.queryPlayer(ctx.player, 'cannotNormalSummon'),
-    activate: async (ctx) => {
-      ctx.game.players[ctx.player].normalSummonsLeft--;
-    },
-    resolve: async (ctx) => {
-      if (ctx.self.location === 'mzone' && ctx.self.faceUp) {
-        ctx.self.flags.geminiSummoned = true;
-        ctx.log(`${ctx.self.name} is Gemini Summoned and becomes an Effect Monster.`);
-      }
-    },
-    ai: { score: () => 58 },
-  };
+export function geminiSummonEffect(score: (ctx: Ctx) => number = () => 58): EffectDef {
+  return { kind: 'proc', geminiSummon: true, range: ['mzone'], label: 'Gemini Summon (Normal Summon again)', categories: [], ai: { score } };
 }
 export const isGeminiActive = (ctx: Ctx) => !!ctx.self.flags.geminiSummoned;
 
@@ -383,7 +367,7 @@ monster('Level Eater', {
   level: 1,
   atk: 600,
   def: 0,
-  text: 'If this card is in your GY: You can target 1 Level 5 or higher monster you control; reduce its Level by 1, and if you do, Special Summon this card.',
+  text: 'If this card is in the Graveyard, you can activate its effect by selecting 1 face-up Level 5 or higher monster you control. Reduce that monster\'s Level by 1. Special Summon this card from the Graveyard.',
   aiValue: 500,
   effects: [
     {
@@ -397,10 +381,13 @@ monster('Level Eater', {
           aiScore: (c) => (c.isExtra ? 300 : 0) + (c.isTuner ? -200 : 100) + (c.name === 'Quickdraw Synchron' ? 150 : 0),
         });
       },
+      // https://edisonrul.ing/cards/l/level-eater.html — the target's Level is reduced even if it is below 5 by now, or
+      // if Level Eater already left the GY; Level Eater stays in the GY when the Level cannot be reduced.
       resolve: async (ctx) => {
-        const t = ctx.validTargets((c) => c.location === 'mzone' && c.faceUp && ctx.level(c) >= 5);
-        if (!t.length || ctx.self.location !== 'grave') return;
+        const t = ctx.validTargets((c) => c.location === 'mzone' && c.faceUp && ctx.level(c) > 1);
+        if (!t.length) return;
         ctx.addTempMod(t[0], 'level', -1, 'field');
+        if (ctx.self.location !== 'grave') return;
         const oppBest = Math.max(0, ...ctx.faceUpMonsters('opp', (m) => m.pos === 'atk').map((m) => ctx.atk(m)));
         await ctx.specialSummon(ctx.self, { pos: oppBest > 600 ? 'def' : 'choose' });
       },

@@ -191,6 +191,7 @@ function trapMonsterActivate(stats: Partial<CardData>, score: (ctx: Ctx) => numb
       if (r.length) {
         me.flags.staysOnField = true;
         me.flags.ptdnTrapMonster = true;
+        me.flags.trapMonster = true;
         after?.(ctx, me);
       }
     },
@@ -336,6 +337,8 @@ interface SpellInfo {
   ptdnSpell: true;
   player: PlayerId;
   turnPlayer: PlayerId;
+  /** The Spell was Chain Link 1 (nothing resolves after it). */
+  cl1?: boolean;
   phase: Game['phase'];
 }
 function watchSpell(g: Game, link: ChainLink) {
@@ -347,6 +350,7 @@ function watchSpell(g: Game, link: ChainLink) {
   link.effect = {
     ...orig,
     resolve: async (c) => {
+      info.cl1 = g.chain.length === 0 || g.chain[0] === link;
       if (orig.resolve) await orig.resolve(c);
       g.beginBatch();
       g.emit({ type: 'chainResolved', card: link.card, player: link.player, minor: true, data: info });
@@ -374,23 +378,15 @@ function makeGeminiActive(ctx: Ctx, c: C) {
   ctx.log(`${c.name} is now treated as an Effect Monster.`);
   ctx.game.update();
 }
-/**
- * Gemini Summon. APPROX (as in plants.ts / sovr.ts): the engine has no Gemini Summon action, so it is an
- * Ignition effect that uses the turn's Normal Summon; it starts a chain instead of being a Summon.
- */
+/** Gemini Summon: a Normal Summon of the face-up Gemini monster (Game.geminiSummon, no chain). */
 function geminiSummon(score: (ctx: Ctx) => number = () => 40): EffectDef {
   return {
-    kind: 'ignition',
+    // The Gemini Summon is a Normal Summon, not an effect (Game.geminiSummon; no chain).
+    kind: 'proc',
+    geminiSummon: true,
+    range: ['mzone'],
     label: 'Gemini Summon (Normal Summon again)',
     categories: [],
-    condition: (ctx) =>
-      ctx.self.faceUp && !ctx.self.flags.geminiSummoned && ctx.game.players[ctx.player].normalSummonsLeft > 0 && !ctx.game.queryPlayer(ctx.player, 'cannotNormalSummon'),
-    activate: async (ctx) => {
-      ctx.game.players[ctx.player].normalSummonsLeft--;
-    },
-    resolve: async (ctx) => {
-      makeGeminiActive(ctx, ctx.self);
-    },
     ai: {
       score: (ctx) => {
         const better = ctx.hand('me', (c) => c.isMonster && ctx.game.canNormalSummon(ctx.player, c) && revScore(c) > 1900);
@@ -971,7 +967,9 @@ monster('Dark Horus', {
       categories: ['specialSummon'],
       eventFilter: (ctx, ev) => {
         const info = spellResolved(ev);
-        return !!info && info.player === ctx.opp && info.turnPlayer === ctx.opp && (info.phase === 'main1' || info.phase === 'main2') && monActive(ctx);
+        // Activates after the Spell resolves and misses the timing unless that Spell was Chain Link 1:
+        // https://edisonrul.ing/cards/d/dark-horus.html
+        return !!info && !!info.cl1 && info.player === ctx.opp && info.turnPlayer === ctx.opp && (info.phase === 'main1' || info.phase === 'main2') && monActive(ctx);
       },
       canActivate: (ctx) => monActive(ctx) && ctx.canSpecialSummon() && ctx.grave('me', (c) => isDark(c) && lvl(c) === 4 && ctx.canSummonCard(c)).length > 0,
       activate: async (ctx) => {
@@ -2618,26 +2616,37 @@ spell('Spell Chronicle', 'continuous', {
   ],
 });
 
+const dimExplosionCands = (ctx: Ctx, p: PlayerId) =>
+  ctx.game
+    .zone(p, 'banished')
+    .filter((c) => c.isMonster && c.faceUp && !c.isToken && !(c.data.nomi && !c.properlySummoned) && !(c.isExtra && !c.properlySummoned) && ctx.canTarget(c));
 spell('Dimension Explosion', 'quickplay', {
-  text: 'Return 1 face-up Fusion Monster you control to the Extra Deck. Both players select up to 2 of their monsters that are removed from play, and Special Summon them.',
+  text: 'Return 1 face-up Fusion Monster you control to the Fusion Deck. Both players select up to 2 of their monsters that are removed from play, and Special Summon them.',
   effects: [
     {
       kind: 'activate',
       categories: ['specialSummon'],
-      canActivate: (ctx) => ctx.faceUpMonsters('me', (c) => c.hasType('fusion')).length > 0,
+      // Returning the Fusion Monster is the cost; it targets banished monsters of both players, and needs at least 1
+      // banished monster and 1 open Monster Card Zone for each player: https://edisonrul.ing/cards/d/dimension-explosion.html
+      canActivate: (ctx) =>
+        ctx.faceUpMonsters('me', (c) => c.hasType('fusion')).length > 0 &&
+        ([ctx.player, ctx.opp] as PlayerId[]).every((p) => dimExplosionCands(ctx, p).length > 0) &&
+        ctx.game.freeMZones(ctx.opp) > 0,
       activate: async (ctx) => {
         const s = await ctx.select(ctx.faceUpMonsters('me', (c) => c.hasType('fusion')), 1, 1, 'Return 1 face-up Fusion Monster you control to the Extra Deck.', 'cost');
         if (!s.length) return false;
         await ctx.toDeck(s, 'shuffle', 'cost');
+        for (const p of [ctx.player, ctx.opp] as PlayerId[]) {
+          const max = Math.max(1, Math.min(2, ctx.game.freeMZones(p)));
+          const t = await ctx.select(dimExplosionCands(ctx, p), 1, max, 'Select up to 2 of your banished monsters to Special Summon.', 'specialSummon', { player: p, aiScore: revScore });
+          ctx.addTargets(t);
+        }
       },
       resolve: async (ctx) => {
-        for (const p of [ctx.player, ctx.opp]) {
+        for (const p of [ctx.player, ctx.opp] as PlayerId[]) {
           const g = ctx.game;
           if (g.queryPlayer(p, 'cannotSpecialSummon') || g.freeMZones(p) <= 0) continue;
-          const cands = g.zone(p, 'banished').filter((c) => c.isMonster && c.faceUp && !c.isToken && !(c.data.nomi && !c.properlySummoned) && !(c.isExtra && !c.properlySummoned));
-          if (!cands.length) continue;
-          const max = Math.min(2, g.freeMZones(p));
-          const s = await ctx.select(cands, 0, max, 'Select up to 2 of your banished monsters to Special Summon.', 'specialSummon', { player: p, aiScore: revScore });
+          const s = ctx.validTargets((c) => c.location === 'banished' && c.owner === p).slice(0, g.freeMZones(p));
           if (s.length) await g.specialSummon(s, p, { pos: 'choose', reasonCard: ctx.self });
         }
       },
@@ -3375,9 +3384,12 @@ trap('Drastic Drop Off', 'counter', {
       kind: 'activate',
       event: 'addedToHand',
       categories: ['discard'],
+      // Not when the same resolution then has them discard (Graceful Charity): https://edisonrul.ing/cards/d/drastic-drop-off.html
       eventFilter: (ctx, ev) => {
         const c = evc(ev);
-        return !!c && ev.from === 'deck' && c.owner === ctx.opp && c.location === 'hand';
+        if (!c || ev.from !== 'deck' || c.owner !== ctx.opp || c.location !== 'hand') return false;
+        const evs = ctx.game.recentEvents;
+        return !evs.slice(evs.indexOf(ev) + 1).some((e) => e.type === 'discarded' && evc(e)?.owner === ctx.opp);
       },
       activate: async (ctx) => {
         ctx.data.cards = batchCards(ctx, ['addedToHand']).filter((c) => c.owner === ctx.opp && c.location === 'hand');

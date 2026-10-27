@@ -1062,6 +1062,7 @@ class DuelScreen implements HumanUI {
         return { label: 'Activate Effect', sub: a.act.label };
       }
       case 'proc':
+        if (a.act.effect.geminiSummon) return { label: 'Gemini Summon', sub: 'Normal Summon it again' };
         return { label: 'Special Summon', sub: a.act.label !== 'Special Summon' ? a.act.label : undefined };
       case 'synchro':
         return { label: 'Synchro Summon' };
