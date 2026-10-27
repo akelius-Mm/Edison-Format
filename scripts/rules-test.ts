@@ -897,6 +897,18 @@ function eq(a: unknown, b: unknown, msg: string) {
   await plantSaberSamuraiAuditTests();
   await gladiatorDeepTests();
   await deckExtras3Tests();
+
+  await test('Giant Trunade: Set cards returned to the hand stay hidden; face-up ones are revealed', async () => {
+    const { g, place } = setup();
+    const gt = place(0, cardByName('Giant Trunade'), 'hand');
+    const set = place(1, cardByName('Mirror Force'), 'szone');
+    const up = place(1, cardByName('Swords of Revealing Light'), 'szone', { faceUp: true });
+    await activateCard(g, 0, gt);
+    eq(set.location, 'hand', 'Set card back in hand');
+    eq(g.isPublic(set, 0), false, 'Set card hidden from the opponent');
+    eq(up.location, 'hand', 'face-up card back in hand');
+    eq(g.isPublic(up, 0), true, 'face-up card stays known');
+  });
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })();

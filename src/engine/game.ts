@@ -941,8 +941,11 @@ export class Game {
   }
 
   async toHand(cards: CardInstance[], reason: Reason, reasonPlayer?: PlayerId, reasonCard?: CardInstance) {
+    // a card added to the hand is shown to the opponent only if it was public: searched from the Deck, from the GY or
+    // banished face-up, or face-up on the field. A Set card bounced to the hand (Giant Trunade...) stays hidden.
+    const hidden = new Set(cards.filter((c) => (c.onField || c.location === 'banished') && !c.faceUp));
     const r = await this.moveCards(cards, 'hand', { reason, reasonPlayer, reasonCard });
-    for (const c of r) if (c.location === 'hand') c.revealedUntil = this.turn;
+    for (const c of r) if (c.location === 'hand' && !hidden.has(c)) c.revealedUntil = this.turn;
     return r;
   }
 
