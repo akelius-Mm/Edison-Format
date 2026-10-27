@@ -2789,8 +2789,7 @@ spell('Unleash Your Power!', 'quickplay', {
         ctx.later('end', async () => {
           for (const x of list) {
             if (x.c.location === 'mzone' && x.c.moveId === x.mid && x.c.faceUp) {
-              delete x.c.flags.geminiSummoned;
-              await ctx.game.setFaceDown(x.c);
+              await ctx.game.setFaceDown(x.c); // loses its Gemini status (engine: resetOnFaceDown)
             }
           }
         });

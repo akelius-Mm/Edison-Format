@@ -22,6 +22,7 @@
 import { monster, normal, spell, token, trap } from '../define';
 import { cardValue } from '../helpers';
 import type { CardInstance, EffectDef } from '../../engine/card';
+import { faceUpFlag } from '../../engine/card';
 import { Ctx } from '../../engine/ctx';
 import type { Game } from '../../engine/game';
 import type { GameEvent, Location, PlayerId } from '../../engine/types';
@@ -466,6 +467,8 @@ export function ensureGlasPatches(g: Game) {
   };
 }
 
+// the Raptinus mark goes with the Gemini status when the monster is turned face-down
+faceUpFlag('glasRapt');
 function syncState(g: Game, s: GlasState) {
   // Superalloy Beast Raptinus: every Gemini monster on the field is an Effect Monster.
   // APPROX: mirrored on the shared `geminiSummoned` flag (marked glasRapt) that all Gemini scripts read.
