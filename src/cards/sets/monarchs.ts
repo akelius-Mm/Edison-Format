@@ -244,7 +244,7 @@ monster('Swap Frog', {
   def: 500,
   sets: ['frog'],
   aiValue: 500,
-  text: 'You can Special Summon this card from your hand by sending 1 other WATER monster from your hand to the GY. When this card is Normal or Special Summoned: You can send 1 Level 2 or lower WATER Aqua monster from your Deck to the GY. Once per turn: You can return 1 monster you control to the hand; this turn, you can Normal Summon 1 Level 2 or lower WATER Aqua-Type monster in addition to your Normal Summon or Set.',
+  text: 'You can Special Summon this card from your hand by sending 1 other WATER monster from your hand to the GY. When this card is Summoned: You can send 1 Level 2 or lower WATER Aqua monster from your Deck to the GY. Once per turn: You can return 1 monster you control to the hand; this turn, you can Normal Summon 1 Level 2 or lower WATER Aqua-Type monster in addition to your Normal Summon or Set.',
   effects: [
     {
       kind: 'proc',
@@ -274,7 +274,8 @@ monster('Swap Frog', {
       when: true,
       label: 'Send a Level 2 or lower WATER Aqua to the GY',
       categories: ['mill'],
-      eventFilter: selfSummoned('normal', 'special'),
+      // Rulings audit: "When this card is Summoned" (OCG 召喚・反転召喚・特殊召喚): a Flip Summon triggers it too.
+      eventFilter: selfSummoned(),
       canActivate: (ctx) => ctx.deck('me', isLowAquaWater).length > 0,
       resolve: async (ctx) => {
         const cands = ctx.deck('me', isLowAquaWater);

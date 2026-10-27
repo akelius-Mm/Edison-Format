@@ -8,6 +8,7 @@ import type { BoardView, RenderOpts } from './board';
 import type { ChainStack, PlayerPanel } from './panels';
 import { type HapticKind, damageHaptic, haptic } from '../haptics';
 import { EASE, reducedMotion } from '../motion';
+import { esc } from '../theme/util';
 import type { Sfx } from './sound';
 
 export interface FxHost {
@@ -171,7 +172,7 @@ export class FxDirector {
         h.flush();
         h.sfx.play('turn');
         const mine = a.player === h.me;
-        const label = h.spectator ? `${h.names[a.player as PlayerId]}'s Turn` : mine ? 'Your Turn' : "Opponent's Turn";
+        const label = h.spectator ? `${esc(h.names[a.player as PlayerId])}'s Turn` : mine ? 'Your Turn' : "Opponent's Turn";
         this.banner(`<small>Turn ${a.turn}</small><b>${label}</b>`, `banner--turn ${mine ? 'is-me' : 'is-opp'}`, 900);
         return this.wait(STEP.turn);
       }
@@ -649,7 +650,7 @@ export class FxDirector {
   /** Who goes first, as a sentence for the viewer. */
   private firstLabel(first: PlayerId) {
     const mine = first === this.h.me;
-    return this.h.spectator ? `${this.h.names[first]} goes first` : mine ? 'You go first' : 'Opponent goes first';
+    return this.h.spectator ? `${esc(this.h.names[first])} goes first` : mine ? 'You go first' : 'Opponent goes first';
   }
 
   /** Games 2 and 3: the loser chose, so there is nothing to roll. A short caption only. */
@@ -684,7 +685,7 @@ export class FxDirector {
       break;
     }
     const top = (1 - this.h.me) as PlayerId;
-    const who = (p: PlayerId) => (this.h.spectator ? this.h.names[p] : p === this.h.me ? 'You' : 'Opponent');
+    const who = (p: PlayerId) => (this.h.spectator ? esc(this.h.names[p]) : p === this.h.me ? 'You' : 'Opponent');
     const slot = (p: PlayerId) => {
       const s = el(`dice-slot ${p === this.h.me ? 'is-me' : 'is-opp'}`);
       const tray = el('dice-tray');
@@ -714,7 +715,7 @@ export class FxDirector {
       }
       const tie = r[0] === r[1];
       const line = this.h.spectator
-        ? `${this.h.names[0]} rolled ${r[0]} · ${this.h.names[1]} rolled ${r[1]}`
+        ? `${esc(this.h.names[0])} rolled ${r[0]} · ${esc(this.h.names[1])} rolled ${r[1]}`
         : `You rolled ${r[this.h.me]} · Opponent rolled ${r[top]}`;
       caption.innerHTML = `<span>${line}</span><b>${tie ? 'Tie · roll again' : this.firstLabel(first)}</b>`;
       caption.classList.add('is-shown');

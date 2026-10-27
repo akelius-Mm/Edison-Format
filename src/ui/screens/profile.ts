@@ -24,6 +24,7 @@ import { h, icon, segmented, type Child } from './dom';
 import { avatar } from './locals';
 import { frame, go, type Screen } from './nav';
 import { getProfile, ordinal, winRate } from './store';
+import { editName, playerName } from './playerName';
 import './locals.css';
 import './events.css';
 
@@ -247,7 +248,7 @@ export function profileScreen(): Screen {
       'div',
       { class: 'pf-head' },
       avatar({ name: s.playerName || 'You', human: true }, 56),
-      h('div', { class: 'pf-head-text' }, h('b', null, s.playerName || 'Duelist'), h('span', null, `${profile.matches.w}-${profile.matches.l}${profile.matches.d ? `-${profile.matches.d}` : ''} in matches · ${hist.length} event${hist.length === 1 ? '' : 's'} · ${wins.length} ${wins.length === 1 ? 'trophy' : 'trophies'}`)),
+      h('div', { class: 'pf-head-text' }, h('button', { type: 'button', class: 'pf-name', 'data-test': 'profile-name', 'aria-label': 'Change your name', onclick: async (e: Event) => { const n = await editName(); if (n) (e.currentTarget as HTMLElement | null)?.replaceChildren(h('b', null, n), icon('edit')); } }, h('b', null, playerName()), icon('edit')), h('span', null, `${profile.matches.w}-${profile.matches.l}${profile.matches.d ? `-${profile.matches.d}` : ''} in matches · ${hist.length} event${hist.length === 1 ? '' : 's'} · ${wins.length} ${wins.length === 1 ? 'trophy' : 'trophies'}`)),
     ),
     h('div', { style: { marginBottom: '10px' } }, fmtSeg),
     ratingCard,

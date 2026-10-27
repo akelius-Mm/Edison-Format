@@ -632,11 +632,13 @@ function arcanaTossTrigger(event: EventType = 'summoned'): EffectDef {
 /** The coin-toss effects of every Arcana Force monster of this set (each gated on name + result). */
 const ARCANA_EFFECTS: EffectDef[] = [
   {
-    // A face-down Arcana Force monster loses its coin result.
+    // A face-down Arcana Force monster loses its coin result: flipped face-up again it has no effect unless it is
+    // Flip Summoned (a new toss). Face-down monsters see no events but 'flipped', and 'flipped' is emitted before the
+    // 'summoned' of a Flip Summon, so the result is dropped on the flip.
     kind: 'trigger',
-    event: 'positionChanged',
+    event: 'flipped',
     eventFilter: (ctx, ev) => {
-      if (ev.card === ctx.self && !ctx.self.faceUp) ARC.delete(ctx.self);
+      if (ev.card === ctx.self) ARC.delete(ctx.self);
       return false;
     },
   },
@@ -1535,8 +1537,9 @@ M('Batteryman Industrial Strength', {
         const [b] = await ctx.select(ctx.grave('me', (c) => c.isMonster && c.data.race === 'Thunder'), 1, 1, 'Banish 1 Thunder-Type monster from your GY.', 'cost');
         if (!b) return false;
         await ctx.banish(b, 'cost');
-        await ctx.selectTargets(ctx.monsters('both', (c) => c !== ctx.self), 1, 1, 'Target 1 monster on the field.', 'destroy');
-        await ctx.selectTargets(ctx.spellTraps('both'), 1, 1, 'Target 1 Spell/Trap on the field.', 'destroy');
+        // "1 monster ... on the field": this card itself can be the monster target (no "other" in the text).
+        await ctx.selectTargets(ctx.monsters('both'), 1, 1, 'Target 1 monster on the field.', 'destroy', { aiScore: (c) => (c.controller === ctx.opp ? cardValue(ctx.game, c) : -5000) });
+        await ctx.selectTargets(ctx.spellTraps('both'), 1, 1, 'Target 1 Spell/Trap on the field.', 'destroy', { aiScore: (c) => (c.controller === ctx.opp ? cardValue(ctx.game, c) : -5000) });
       },
       resolve: async (ctx) => {
         const t = ctx.validTargets((c) => c.onField);

@@ -12,6 +12,10 @@
 // for the opponent's report or the organiser. Reports that disagree or do not verify become a
 // dispute for the organiser: pick the winner, or have the match replayed in a fresh room.
 //
+// Names: the organiser makes every name unique in the event ("Mike", "Mike 2"). A player renames
+// with `tname` (or a re-join carrying a new name); the organiser can rename anyone. A re-join that
+// carries the name the player already asked for keeps an organiser rename.
+//
 // Every change bumps `rev`, is saved (`save`) and sent to every connected player as a `tview`.
 // DOM-free: scripts/tourney-test.ts runs it in Node.
 import { computeStandings, finalPlacements, nextTopRound, pairSwissRound, seedTopCut, topCutSeeds } from '../locals/swiss';
@@ -28,7 +32,9 @@ import {
   MAX_PLAYERS,
   MIN_PLAYERS,
   TOURNEY_PROTO,
+  cleanName,
   tourneyPeerId,
+  uniqueName,
   type MatchHow,
   type ReportGame,
   type TMatch,
@@ -50,6 +56,8 @@ export interface TPlayer {
   seed: number;
   dropped?: number;
   joinedAt: number;
+  /** The name the player last asked for (before making it unique). */
+  asked?: string;
 }
 
 interface StoredReport {
@@ -291,6 +299,19 @@ export class TourneyHost {
     this.maybeAutoPair();
   }
 
+  /** Rename a player (the organiser, or the player itself with `self`). False when the name is empty. */
+  rename(id: string, raw: string, self = false): boolean {
+    const p = this.player(id);
+    const want = cleanName(raw);
+    if (!p || !want) return false;
+    if (self) p.asked = want;
+    const name = this.uniqueFor(id, want);
+    if (name === p.name) return true;
+    p.name = name;
+    this.changed();
+    return true;
+  }
+
   /** Lobby: remove a player (they can join again). */
   kick(id: string) {
     if (this.state.phase !== 'lobby' || id === this.state.organiser) return;
@@ -424,7 +445,8 @@ export class TourneyHost {
     const s = this.state;
     switch (msg.t) {
       case 'tj': {
-        if (msg.tp !== TOURNEY_PROTO) return this.refuse(id, 'version');
+        // the hello already compares builds; a join that names another build is refused too
+        if (msg.tp !== TOURNEY_PROTO || (msg.build != null && msg.build !== this.o.build)) return this.refuse(id, 'version');
         if (msg.tid && msg.tid !== s.tid) return this.refuse(id, 'closed');
         if (s.closed) return this.refuse(id, 'closed');
         let p = this.player(id);
@@ -434,7 +456,12 @@ export class TourneyHost {
           p = { id, name: '', avatar: '', sleeve: '', deck: null, ready: false, seed: s.players.length + 1, joinedAt: Date.now() };
           s.players.push(p);
         }
-        p.name = (msg.player.name || 'Duelist').slice(0, 20);
+        // a new name (or the first one); the same name again keeps an organiser rename
+        const want = cleanName(msg.player.name) || 'Duelist';
+        if (p.asked !== want || !p.name) {
+          p.asked = want;
+          p.name = this.uniqueFor(id, want);
+        }
         p.avatar = msg.player.avatar;
         p.sleeve = msg.player.sleeve;
         if (s.phase === 'lobby') {
@@ -446,6 +473,10 @@ export class TourneyHost {
         this.changed();
         return;
       }
+      case 'tname':
+        if (msg.tid !== s.tid) return;
+        this.rename(id, msg.name, true);
+        return;
       case 'tdrop':
         if (msg.tid !== s.tid) return;
         this.dropPlayer(id);
@@ -486,6 +517,11 @@ export class TourneyHost {
         return;
       }
     }
+  }
+
+  /** `want`, made unique among the other players' names. */
+  private uniqueFor(id: string, want: string) {
+    return uniqueName(want, this.state.players.filter((x) => x.id !== id).map((x) => x.name));
   }
 
   private refuse(id: string, reason: 'started' | 'full' | 'version' | 'closed') {
@@ -676,11 +712,15 @@ export class TourneyHost {
     };
   }
 
-  private sendView(id: string) {
-    const m: Msg = { t: 'tview', tid: this.tid, view: this.viewFor(id) };
+  private sendTo(id: string, m: Msg) {
     if (id === this.state.organiser) this.local?.deliver(m);
     else this.hub.send(id, m);
   }
+
+  private sendView(id: string) {
+    this.sendTo(id, { t: 'tview', tid: this.tid, view: this.viewFor(id) });
+  }
+
 
   private save() {
     this.o.save?.(this.state);

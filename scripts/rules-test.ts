@@ -897,6 +897,18 @@ function eq(a: unknown, b: unknown, msg: string) {
   await plantSaberSamuraiAuditTests();
   await gladiatorDeepTests();
   await deckExtras3Tests();
+
+  await test('Giant Trunade: Set cards returned to the hand stay hidden; face-up ones are revealed', async () => {
+    const { g, place } = setup();
+    const gt = place(0, cardByName('Giant Trunade'), 'hand');
+    const set = place(1, cardByName('Mirror Force'), 'szone');
+    const up = place(1, cardByName('Swords of Revealing Light'), 'szone', { faceUp: true });
+    await activateCard(g, 0, gt);
+    eq(set.location, 'hand', 'Set card back in hand');
+    eq(g.isPublic(set, 0), false, 'Set card hidden from the opponent');
+    eq(up.location, 'hand', 'face-up card back in hand');
+    eq(g.isPublic(up, 0), true, 'face-up card stays known');
+  });
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })();
@@ -4103,6 +4115,122 @@ async function sdmmTests() {
     return c;
   };
 
+  // Machina Fortress: from the hand it can discard itself as part of the 8 Levels (OCG text: "if it discarded itself,
+  // it is Special Summoned from the GY"; Macro Cosmos ruling on discarding Fortress for its own effect).
+  const cog = findCard('Rules Test Cog') ?? normal('Rules Test Cog', 'EARTH', 'Machine', 1, 100, 100);
+  const bigMachine = findCard('Rules Test Big Machine') ?? normal('Rules Test Big Machine', 'EARTH', 'Machine', 8, 2800, 2000);
+  const fortAct = (g: Game, c: CardInstance) => g.getActivations(0, { open: true }).find((a) => a.card === c);
+  const fortWhy = (g: Game, c: CardInstance) => {
+    const ef = c.data.effects![0];
+    return ef.whyNot ? ef.whyNot(new Ctx(g, c, ef, c.controller)) : 'none';
+  };
+
+  await test('Machina Fortress: a lone Fortress in hand cannot Summon itself (7 < 8); the reason says so', async () => {
+    const { g, place } = setup();
+    const f = place(0, cardByName('Machina Fortress'), 'hand');
+    eq(!!fortAct(g, f), false, 'not offered');
+    eq(fortWhy(g, f), 'needs Machines with 8+ Levels to discard\nYour hand has 7, counting this card', 'why-not');
+  });
+
+  await test('Machina Fortress: two Fortresses in hand can Summon (discarding itself + the other: 14)', async () => {
+    const { g, place } = setup();
+    const f = place(0, cardByName('Machina Fortress'), 'hand');
+    const f2 = place(0, cardByName('Machina Fortress'), 'hand');
+    eq(!!fortAct(g, f), true, 'offered');
+    eq(fortWhy(g, f), null, 'no why-not');
+    await activateCard(g, 0, f);
+    eq([f, f2].filter((c) => c.location === 'mzone').length, 1, 'one Fortress Summoned');
+    eq([f, f2].filter((c) => c.location === 'grave').length, 1, 'the other discarded');
+  });
+
+  await test('Machina Fortress: discards itself + 1 Yellow Gadget in one dialog, then Summons itself from the GY', async () => {
+    const { g, c0, place } = setup();
+    const f = place(0, cardByName('Machina Fortress'), 'hand');
+    const y1 = place(0, cardByName('Yellow Gadget'), 'hand');
+    const y2 = place(0, cardByName('Yellow Gadget'), 'hand');
+    const asked: { min: number; max: number; n: number; self: boolean }[] = [];
+    c0.pick = (_g, req) => {
+      if (req.purpose === 'discard') {
+        asked.push({ min: req.min, max: req.max, n: req.candidates.length, self: req.candidates.includes(f) });
+        return [f, y1];
+      }
+      return req.candidates.slice(0, req.min);
+    };
+    await activateCard(g, 0, f);
+    eq(asked.length, 1, 'one discard dialog');
+    eq(asked[0].self, true, 'Fortress itself is offered as fodder');
+    eq(asked[0].max, 3, 'several Machines can be selected at once');
+    eq(f.location, 'mzone', 'Fortress Summoned (from the GY)');
+    eq(y1.location, 'grave', 'Yellow Gadget discarded');
+    eq(y2.location, 'hand', 'other Yellow Gadget kept');
+  });
+
+  await test('Machina Fortress: Fortress + Fortress + Level 1 Machine in hand can Summon; a short pick is asked again', async () => {
+    const { g, c0, place } = setup();
+    const f = place(0, cardByName('Machina Fortress'), 'hand');
+    const f2 = place(0, cardByName('Machina Fortress'), 'hand');
+    const k = place(0, cog, 'hand');
+    let calls = 0;
+    c0.pick = (_g, req) => {
+      if (req.purpose !== 'discard') return req.candidates.slice(0, req.min);
+      calls++;
+      return calls === 1 ? [k] : [f2];
+    };
+    await activateCard(g, 0, f);
+    eq(calls, 2, 'asked again after only 1/8');
+    eq(f.location, 'mzone', 'Fortress Summoned from the hand');
+    eq(f2.location, 'grave', 'second Fortress discarded');
+    eq(k.location, 'grave', 'Level 1 Machine discarded');
+  });
+
+  await test('Machina Fortress: from the GY with Fortress (7) + Level 1 Machine in hand', async () => {
+    const { g, place } = setup();
+    const f = place(0, cardByName('Machina Fortress'), 'grave');
+    const f2 = place(0, cardByName('Machina Fortress'), 'hand');
+    const k = place(0, cog, 'hand');
+    eq(fortWhy(g, f), null, 'no why-not');
+    await activateCard(g, 0, f);
+    eq(f.location, 'mzone', 'GY Fortress Summoned');
+    eq(f2.location, 'grave', 'hand Fortress discarded');
+    eq(k.location, 'grave', 'Level 1 Machine discarded');
+  });
+
+  await test('Machina Fortress: from the GY with one Level 8 Machine in hand; not with only a Level 1', async () => {
+    const { g, c0, place } = setup();
+    const f = place(0, cardByName('Machina Fortress'), 'grave');
+    const k = place(0, cog, 'hand');
+    eq(!!fortAct(g, f), false, 'Level 1 only: not offered');
+    eq(fortWhy(g, f), 'needs Machines with 8+ Levels to discard\nYour hand has 1', 'why-not from the GY');
+    const big = place(0, bigMachine, 'hand');
+    c0.pick = (_g, req) => (req.purpose === 'discard' ? [big] : req.candidates.slice(0, req.min));
+    await activateCard(g, 0, f);
+    eq(f.location, 'mzone', 'GY Fortress Summoned');
+    eq(big.location, 'grave', 'Level 8 Machine discarded');
+    eq(k.location, 'hand', 'Level 1 kept');
+  });
+
+  await test('Machina Fortress: the AI discards Fortress itself + 1 Gadget rather than 2 Gadgets', async () => {
+    const { g, place } = setup();
+    const f = place(0, cardByName('Machina Fortress'), 'hand');
+    const y1 = place(0, cardByName('Yellow Gadget'), 'hand');
+    const y2 = place(0, cardByName('Yellow Gadget'), 'hand');
+    g.controllers[0] = new AIController('hard', 7);
+    await activateCard(g, 0, f);
+    eq(f.location, 'mzone', 'Fortress Summoned');
+    eq([y1, y2].filter((c) => c.location === 'hand').length, 1, 'one Gadget kept');
+  });
+
+  await test('Dragon Ice: alone in hand it discards itself and is Special Summoned from the GY', async () => {
+    const { g, c0, place } = setup();
+    const ice = place(0, cardByName('Dragon Ice'), 'hand');
+    c0.pick = (_g, req) => (req.purpose === 'discard' ? [ice] : req.candidates.slice(0, req.min));
+    g.turnPlayer = 1;
+    const brute = place(1, T.brute, 'hand');
+    await g.specialSummon([brute], 1, { pos: 'atk' });
+    await g.processTriggers(true);
+    eq(ice.location, 'mzone', 'Dragon Ice Summoned from the GY');
+  });
+
   await test('SDMM: Machina Soldier Special Summons a "Machina" monster from the hand when Normal Summoned alone', async () => {
     const { g, place } = setup();
     const soldier = place(0, cardByName('Machina Soldier'), 'hand');
@@ -5084,6 +5212,21 @@ async function archetypeAuditTests() {
   };
 
   // ---- Gladiator Beasts
+  await test('War Chariot: a monster effect activated from the hand (Battle Fader) is negated and destroyed in the hand', async () => {
+    const { g, c0, c1, place } = setup();
+    const gb = place(1, cardByName('Gladiator Beast Laquari'), 'mzone');
+    const wc = place(1, cardByName('Gladiator Beast War Chariot'), 'szone');
+    const bf = place(0, cardByName('Battle Fader'), 'hand');
+    c0.respond = respondWith('Battle Fader');
+    c1.respond = respondWith('Gladiator Beast War Chariot');
+    g.turnPlayer = 1;
+    g.phase = 'battle';
+    await g.conductAttack(1, gb);
+    eq(wc.location, 'grave', 'War Chariot used');
+    eq(bf.location, 'grave', 'Battle Fader destroyed in the hand');
+    eq(g.players[0].lp, 8000 - (gb.data.atk ?? 0), 'the attack went through');
+  });
+
   await test('GB tag-out: after a real attack it shuffles itself in and tags in a different Gladiator Beast; Bestiari pops a Spell/Trap', async () => {
     const { g, c0, place } = setup();
     const best = deckCard(g, 0, 'Gladiator Beast Bestiari');
@@ -5249,7 +5392,7 @@ async function archetypeAuditTests() {
     const h = setup();
     const f2 = h.place(0, cardByName('Machina Fortress'), 'hand');
     h.place(0, cardByName('Machina Fortress'), 'grave');
-    eq(offered(h.g, 0, f2), false, 'a Fortress in the hand cannot discard itself');
+    eq(offered(h.g, 0, f2), false, 'a lone Fortress in the hand is only 7 Levels, even counting itself');
   });
 
   await test('Machina Fortress: destroyed by battle → destroy 1 card the opponent controls', async () => {

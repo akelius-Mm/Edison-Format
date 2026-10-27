@@ -222,8 +222,14 @@ export class Ctx {
   async negateAndDestroy(link: ChainLink | undefined) {
     if (!link) return;
     this.game.negateLink(link, true, this.self);
-    if (link.card.onField || link.card.location === 'hand') {
-      if (link.card.onField) await this.game.destroy([link.card], 'effect', this.player, this.self);
+    const c = link.card;
+    // only the card that activated, where it still is: a card that left (paid as its own cost, bounced and played
+    // again...) is a new card. A monster whose effect was activated from the hand (Gorz...) is destroyed in the hand.
+    if (link.moveIdAfterCost != null && c.moveId !== link.moveIdAfterCost) return;
+    if (c.onField) await this.game.destroy([c], 'effect', this.player, this.self);
+    else if (c.location === 'hand' && !this.game.isUnaffected(c, this.self, this.player)) {
+      this.game.log(`${c.name} is destroyed.`, 'action', c.controller);
+      await this.game.moveCards([c], 'grave', { reason: 'effect', reasons: ['effect', 'destroy'], reasonPlayer: this.player, reasonCard: this.self, destroyed: true });
     }
   }
 
@@ -248,8 +254,12 @@ export class Ctx {
     if (list.some((c) => c.location === 'deck') && this.game.queryPlayer(this.player, 'cannotAddFromDeck')) return [];
     const r = await this.game.toHand(list, reason, this.player, this.self);
     if (r.length && list.some((c) => c.owner === this.player)) {
-      const shown = r.filter((c) => c.location === 'hand');
-      if (shown.length) this.game.log(`${this.game.players[this.player].name} adds ${shown.map((c) => c.name).join(', ')} to their hand.`, 'action', this.player);
+      // name only the cards the opponent saw: a Set card bounced to the hand (Giant Trunade...) stays hidden
+      const inHand = r.filter((c) => c.location === 'hand');
+      const shown = inHand.filter((c) => c.revealedUntil >= this.game.turn).map((c) => c.name);
+      const hidden = inHand.length - shown.length;
+      if (hidden) shown.push(hidden === 1 ? 'a face-down card' : `${hidden} face-down cards`);
+      if (shown.length) this.game.log(`${this.game.players[this.player].name} adds ${shown.join(', ')} to their hand.`, 'action', this.player);
     }
     return r;
   }

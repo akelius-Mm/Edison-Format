@@ -76,6 +76,19 @@ function wrap(conn: DataConnection): Channel {
   return ch;
 }
 
+/**
+ * STUN finds each phone's public address; the TURN relays carry the duel when two networks can't connect directly
+ * (phone data, carrier NAT, strict Wi-Fi, Brave). ICE tries direct paths first, so a relay is only used as a fallback.
+ */
+const ICE_SERVERS: RTCIceServer[] = [
+  { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302', 'stun:stun.cloudflare.com:3478'] },
+  {
+    urls: ['turn:openrelay.metered.ca:80', 'turn:openrelay.metered.ca:443', 'turn:openrelay.metered.ca:443?transport=tcp', 'turns:openrelay.metered.ca:443?transport=tcp'],
+    username: 'openrelayproject',
+    credential: 'openrelayproject',
+  },
+];
+
 export class PeerTransport implements Transport {
   private peer: PeerT | null = null;
   private destroyed = false;
@@ -95,7 +108,7 @@ export class PeerTransport implements Transport {
     if (typeof RTCPeerConnection === 'undefined') throw new TransportError('unsupported', 'This browser cannot make direct connections (WebRTC).');
     const Peer = await loadPeer();
     if (this.destroyed) throw new TransportError('other', 'closed');
-    const opts = { host: this.cfg.host, port: this.cfg.port, path: this.cfg.path, secure: this.cfg.secure, debug: 0 };
+    const opts = { host: this.cfg.host, port: this.cfg.port, path: this.cfg.path, secure: this.cfg.secure, debug: 0, config: { iceServers: ICE_SERVERS } };
     const peer = id ? new Peer(id, opts) : new Peer(opts);
     this.peer = peer;
     peer.on('error', (err: PeerError<string>) => {

@@ -598,6 +598,8 @@ M('Shield Warrior', {
       kind: 'quick',
       range: ['grave'],
       damageStep: true,
+      // Its cost removes it from play from the GY: not usable while cards in the GY cannot be banished (Necrovalley).
+      gyBanishCost: true,
       label: 'Remove from play: your monsters are not destroyed by this battle',
       categories: ['protect'],
       condition: (ctx) => {
@@ -1385,6 +1387,7 @@ M('Kinka-byo', {
     {
       kind: 'trigger',
       event: ['normalSummoned', 'flipped'],
+      when: true,
       label: 'Special Summon a Level 1 monster from your GY',
       categories: ['specialSummon'],
       eventFilter: (ctx, ev) => {
@@ -1642,6 +1645,7 @@ M('Izanami', {
     {
       kind: 'trigger',
       event: ['normalSummoned', 'flipped'],
+      when: true,
       label: 'Discard 1: add a Spirit from your GY',
       categories: ['toHand'],
       eventFilter: (ctx, ev) => {
@@ -2135,6 +2139,8 @@ S('Battle Tuned', 'quickplay', {
     {
       kind: 'activate',
       damageStep: true,
+      // Cost: removes a Tuner from play from the GY (not payable under Necrovalley).
+      gyBanishCost: true,
       categories: ['atkChange'],
       canActivate: (ctx) => ctx.grave('me', (c) => c.isMonster && c.isTuner).length > 0 && ctx.faceUpMonsters('me', (c) => ctx.canTarget(c)).length > 0,
       activate: async (ctx) => {
@@ -3217,6 +3223,8 @@ T(TRAP_OF_DARKNESS, 'normal', {
       // APPROX: the copied effect is checked against the events of the current window; it resolves as this card's effect.
       kind: 'activate',
       damageStep: true,
+      // Cost: removes the copied Normal Trap from play from the GY (not payable under Necrovalley).
+      gyBanishCost: true,
       categories: [],
       condition: (ctx) => ctx.lp <= 3000 && ctx.lp > 1000,
       canActivate: (ctx) => darknessCopies(ctx).length > 0,

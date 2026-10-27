@@ -2982,7 +2982,8 @@ trap('Fiendish Chain', 'continuous', {
       eventFilter: (ctx, ev) => {
         const f = ctx.self.flags.chained as Mark | undefined;
         const c = evc(ev);
-        return !!f && !!c && c.uid === f.uid && ev.from === 'mzone' && ctx.self.faceUp;
+        // Only the stint it chained (moved once since): a bounced and replayed copy is a new card.
+        return !!f && !!c && c.uid === f.uid && c.moveId === f.moveId + 1 && ev.from === 'mzone' && ctx.self.faceUp;
       },
       resolve: async (ctx) => {
         if (ctx.self.onField) await ctx.destroy(ctx.self);

@@ -30,7 +30,6 @@ import {
   positionDialog,
   responseDialog,
   selectDialog,
-  visibleTo,
 } from './dialogs';
 import { HandFidget } from './fidget';
 import { FxDirector, sleep } from './fx';
@@ -196,7 +195,7 @@ class DuelScreen implements HumanUI {
     if (this.spectator) this.phaseBar.setSpectatorLabels([opts.sides[0].name, opts.sides[1].name]);
     this.chain = new ChainStack(this.me);
     this.log = new LogPanel(this.me);
-    this.preview = new PreviewPanel(this.game);
+    this.preview = new PreviewPanel(this.game, (c) => this.canSee(c));
     this.dialogs = new Dialogs(this.root, this.sfx);
 
     const left = h('div', 'duel-left');
@@ -528,8 +527,7 @@ class DuelScreen implements HumanUI {
   }
 
   private canSee(c: CardInstance) {
-    if (this.viewer === null) return c.faceUp || this.game.isPublic(c, 0) && this.game.isPublic(c, 1);
-    return visibleTo(this.game, c, this.viewer);
+    return this.game.seenBy(c, this.viewer);
   }
 
   // ------------------------------------------------------------------ run

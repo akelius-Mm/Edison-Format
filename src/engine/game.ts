@@ -59,6 +59,8 @@ export interface ChainLink {
   isCardActivation: boolean;
   /** Card was a monster on the field when the effect activated. */
   fromLocation: Location;
+  /** The card's moveId once its costs were paid ("negate and destroy" only hits that same card). */
+  moveIdAfterCost?: number;
 }
 
 interface PendingTrigger {
@@ -731,7 +733,10 @@ export class Game {
       const from = card.location;
       const fromFaceUp = card.faceUp;
       const fromCtrl = card.controller;
+      const prevMoveId = card.moveId;
       const dest = this.rawMove(card, to, { faceUp: opts.faceUp, bottom: opts.bottom });
+      // Remember that this move was a destruction (read by ruleCleanup for links that break only on destruction).
+      if (opts.destroyed) card.flags.destroyedFromMoveId = prevMoveId;
       moved.push({ card, from, to: dest, fromFaceUp, fromCtrl, wasMonster: from === 'mzone' });
     }
     if (!opts.noAnim) {
@@ -791,7 +796,13 @@ export class Game {
       }
       if (c.linkedTo != null && c.flags.linkDestroy) {
         const other = this.card(c.linkedTo);
-        if (!other || other.moveId !== c.flags.linkMoveId || !other.onField) kill.add(c);
+        if (!other || other.moveId !== c.flags.linkMoveId || !other.onField) {
+          if (c.flags.linkOnlyIfDestroyed && !(other && other.flags.destroyedFromMoveId === c.flags.linkMoveId)) {
+            // Left the field without being destroyed: the link breaks, this card stays.
+            c.linkedTo = null;
+            c.flags.linkDestroy = false;
+          } else kill.add(c);
+        }
       }
     }
     const list = [...kill].filter((c) => c.onField);
@@ -941,8 +952,11 @@ export class Game {
   }
 
   async toHand(cards: CardInstance[], reason: Reason, reasonPlayer?: PlayerId, reasonCard?: CardInstance) {
+    // a card added to the hand is shown to the opponent only if it was public: searched from the Deck, from the GY or
+    // banished face-up, or face-up on the field. A Set card bounced to the hand (Giant Trunade...) stays hidden.
+    const hidden = new Set(cards.filter((c) => (c.onField || c.location === 'banished') && !c.faceUp));
     const r = await this.moveCards(cards, 'hand', { reason, reasonPlayer, reasonCard });
-    for (const c of r) if (c.location === 'hand') c.revealedUntil = this.turn;
+    for (const c of r) if (c.location === 'hand' && !hidden.has(c)) c.revealedUntil = this.turn;
     return r;
   }
 
@@ -1123,7 +1137,7 @@ export class Game {
     card.controller = player;
     this.placeInZone(card, 'mzone', player);
     card.flags.controlChangedTurn = this.turn;
-    this.log(`${this.players[player].name} takes control of ${card.name}.`, 'action', player);
+    this.log(`${this.players[player].name} takes control of ${card.faceUp ? card.name : 'a face-down monster'}.`, 'action', player);
     this.beginBatch();
     await this.anim({ type: 'move', cards: [{ uid: card.uid, from: 'mzone', to: 'mzone', ctrl: prevCtrl }] });
     this.emit({ type: 'controlChanged', card, player });
@@ -1149,7 +1163,7 @@ export class Game {
     this.players[prev].mzone[card.seq] = null;
     card.controller = card.owner;
     this.placeInZone(card, 'mzone', card.owner);
-    this.log(`Control of ${card.name} returns to ${this.players[card.owner].name}.`, 'action');
+    this.log(`Control of ${card.faceUp ? card.name : 'a face-down monster'} returns to ${this.players[card.owner].name}.`, 'action');
     await this.anim({ type: 'move', cards: [{ uid: card.uid, from: 'mzone', to: 'mzone', ctrl: prev }] });
     this.update();
   }
@@ -1169,11 +1183,17 @@ export class Game {
     return this.allFieldCards().filter((c) => c.equippedTo === monster.uid);
   }
 
-  /** Link two cards: when `other` leaves the field, `card` is destroyed (and vice versa if mutual). */
-  link(card: CardInstance, other: CardInstance, mutual = true) {
+  /**
+   * Link two cards: when `other` leaves the field, `card` is destroyed (and vice versa if mutual).
+   * `cardOnlyIfDestroyed`: `card` is destroyed only if `other` was *destroyed* ("When that monster is destroyed, destroy
+   * this card": Call of the Haunted; "When this card is destroyed, destroy the equipped monster": Premature Burial). If
+   * `other` leaves the field another way (Tributed, Synchro Material, bounced, banished), the link just breaks.
+   */
+  link(card: CardInstance, other: CardInstance, mutual = true, opts: { cardOnlyIfDestroyed?: boolean } = {}) {
     card.linkedTo = other.uid;
     card.flags.linkDestroy = true;
     card.flags.linkMoveId = other.moveId;
+    if (opts.cardOnlyIfDestroyed) card.flags.linkOnlyIfDestroyed = true;
     if (mutual) {
       other.linkedTo = card.uid;
       other.flags.linkDestroy = true;
@@ -1292,7 +1312,7 @@ export class Game {
     mode: { open: boolean; window?: WindowKind },
   ): Ctx | null {
     if (ef.kind === 'continuous' || ef.kind === 'trigger') return null;
-    if (this.cardUser(card) !== player) return null;
+    if (this.cardUser(card) !== player && !(ef.anyPlayer && ef.kind !== 'activate' && card.onField && card.faceUp)) return null;
     const range = this.defaultRange(card, ef);
     if (!range.includes(card.location)) return null;
     const isOwnTurn = this.turnPlayer === player;
@@ -1380,6 +1400,8 @@ export class Game {
       ...this.fieldCards(player),
       ...ps.grave,
       ...ps.banished,
+      // Effects either player can use (Royal Oppression) on the opponent's face-up cards.
+      ...this.fieldCards(this.opp(player)).filter((c) => c.faceUp && (c.data.effects ?? []).some((e) => e.anyPlayer)),
     ];
     for (const card of cards) {
       const effs = card.data.effects ?? [];
@@ -1457,6 +1479,7 @@ export class Game {
       this.update();
       return null;
     }
+    link.moveIdAfterCost = card.moveId;
     this.beginBatch();
     this.emit({ type: 'cardActivated', card, player, minor: true, data: { link } });
     this.emit({ type: 'chainActivated', card, player, minor: true, data: { link } });
@@ -2185,7 +2208,7 @@ export class Game {
         if (this.canNormalSummon(p, c, true)) out.push({ type: 'set', card: c });
       } else {
         const canSet = c.data.stype === 'field' ? true : this.freeSZones(p) > 0;
-        if (canSet && !this.queryPlayer(p, 'cannotSet')) out.push({ type: 'setST', card: c });
+        if (canSet && !this.queryPlayer(p, 'cannotSet') && !this.queryPlayer(p, 'cannotSetSpellTrap')) out.push({ type: 'setST', card: c });
       }
     }
     // procs
@@ -2601,6 +2624,20 @@ export class Game {
     if (card.location === 'hand') return card.owner === viewer || card.revealedUntil >= this.turn;
     if (card.location === 'extra') return card.owner === viewer;
     return false;
+  }
+
+  /** What a seat sees of a card: the public face, plus its own hand, Deck, Extra Deck and Set cards. */
+  visibleTo(card: CardInstance, viewer: PlayerId) {
+    if (this.isPublic(card, viewer)) return true;
+    if ((card.location === 'deck' || card.location === 'hand' || card.location === 'extra') && card.owner === viewer) return true;
+    if (card.onField && card.controller === viewer) return true;
+    return false;
+  }
+
+  /** What a viewer sees; `null` is a spectator, who sees only what both players see. */
+  seenBy(card: CardInstance, viewer: PlayerId | null) {
+    if (viewer === null) return card.faceUp || (this.isPublic(card, 0) && this.isPublic(card, 1));
+    return this.visibleTo(card, viewer);
   }
 }
 

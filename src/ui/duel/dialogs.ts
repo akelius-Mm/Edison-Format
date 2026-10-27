@@ -347,10 +347,7 @@ export class Dialogs {
 }
 
 export function visibleTo(game: Game, c: CardInstance, viewer: PlayerId) {
-  if (game.isPublic(c, viewer)) return true;
-  if ((c.location === 'deck' || c.location === 'hand' || c.location === 'extra') && c.owner === viewer) return true;
-  if (c.onField && c.controller === viewer) return true;
-  return false;
+  return game.visibleTo(c, viewer);
 }
 
 export function locCaption(game: Game, c: CardInstance, viewer: PlayerId) {

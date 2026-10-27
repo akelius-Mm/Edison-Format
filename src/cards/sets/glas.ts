@@ -979,8 +979,9 @@ function gbCounter(kind: 'spell' | 'trap'): EffectDef {
     kind: 'activate',
     categories: ['negate', 'destroy'],
     condition: (ctx) => {
+      // "negate the activation of a Spell/Trap Card": only a card activation, not an effect of a face-up Spell/Trap.
       const l = ctx.prevLink();
-      return !!l && l.player !== ctx.player && (kind === 'spell' ? l.card.isSpell : l.card.isTrap);
+      return !!l && !l.negated && l.isCardActivation && l.player !== ctx.player && (kind === 'spell' ? l.card.isSpell : l.card.isTrap);
     },
     canActivate: (ctx) => ctx.hand('me', isGBCard).length > 0,
     activate: async (ctx) => {
@@ -2640,9 +2641,15 @@ M(DRAGON_ICE, {
       label: 'Discard 1: Special Summon',
       categories: ['specialSummon'],
       eventFilter: (ctx, ev) => ev.player === ctx.opp && ev.dsId === undefined && !!evc(ev) && evc(ev)!.controller === ctx.opp,
-      canActivate: (ctx) => ctx.hand('me', (c) => c !== ctx.self).length > 0 && ctx.canSummonCard(ctx.self),
+      // Ruling: from the hand, Dragon Ice can discard itself as the cost; it is then Special Summoned from the GY.
+      canActivate: (ctx) => ctx.hand('me').length > 0 && ctx.canSummonCard(ctx.self),
       activate: async (ctx) => {
-        await ctx.discardFromHand(1, undefined, 'cost', ctx.player, 'Discard 1 card.');
+        const prompt = ctx.self.location === 'hand' ? 'Discard 1 card (this card can be it: it is then Summoned from the GY).' : 'Discard 1 card.';
+        const sel = await ctx.select(ctx.hand('me'), 1, 1, prompt, 'discard', {
+          aiScore: (c) => (c === ctx.self ? 5000 : -cardValue(ctx.game, c)),
+        });
+        if (!sel.length) return false;
+        await ctx.discard(sel, 'cost');
         ctx.data.moveId = ctx.self.moveId;
       },
       resolve: async (ctx) => {
@@ -2651,7 +2658,8 @@ M(DRAGON_ICE, {
       },
       ai: {
         score: (ctx) => {
-          const worst = Math.min(...ctx.hand('me', (c) => c !== ctx.self).map((c) => cardValue(ctx.game, c)));
+          if (ctx.self.location === 'hand') return 1; // discarding itself costs nothing
+          const worst = Math.min(...ctx.hand('me').map((c) => cardValue(ctx.game, c)));
           return worst <= 1600 ? 1 : 0;
         },
       },
