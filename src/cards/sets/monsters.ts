@@ -2,7 +2,7 @@
 // See docs/CARD_SCRIPTING.md and src/cards/sets/core.ts for the patterns used here.
 // Engine limitations and their workarounds are listed in docs/engine-requests/monsters.md.
 import { monster, normal, token } from '../define';
-import { attr, bestTarget, cardValue, destroyTargets, flip, selfFieldToGrave, selfDestroysByBattle } from '../helpers';
+import { attr, bestTarget, cardValue, destroyTargets, flip, selfFieldToGrave, selfDestroysByBattle, stRemovalScore } from '../helpers';
 import type { CardInstance, EffectDef } from '../../engine/card';
 import { faceUpFlag } from '../../engine/card';
 import type { Ctx } from '../../engine/ctx';
@@ -545,10 +545,15 @@ monster('Breaker the Magical Warrior', {
       canActivate: (ctx) => (ctx.self.counters.spell ?? 0) > 0 && ctx.spellTraps('both', (c) => ctx.canTarget(c)).length > 0,
       activate: async (ctx) => {
         ctx.self.counters.spell = Math.max(0, (ctx.self.counters.spell ?? 0) - 1);
-        await ctx.selectTargets(ctx.spellTraps('both'), 1, 1, 'Target 1 Spell/Trap to destroy.', 'destroy');
+        await ctx.selectTargets(ctx.spellTraps('both'), 1, 1, 'Target 1 Spell/Trap to destroy.', 'destroy', { aiScore: (c) => stRemovalScore(ctx, c) });
       },
       resolve: destroyTargets,
-      ai: { score: (ctx) => (ctx.spellTraps('opp').length ? 50 + 5 * ctx.spellTraps('opp', (c) => !c.faceUp).length : 0) },
+      ai: {
+        score: (ctx) => {
+          const good = ctx.spellTraps('opp', (c) => ctx.canTarget(c) && stRemovalScore(ctx, c) > 0);
+          return good.length ? 50 + 5 * good.filter((c) => !c.faceUp).length : 0;
+        },
+      },
     },
   ],
 });
