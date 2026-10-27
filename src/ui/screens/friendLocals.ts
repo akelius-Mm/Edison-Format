@@ -906,6 +906,11 @@ class EventSession {
     const v = this.client.view;
     const org = !!this.host;
     const started = v && v.phase !== 'lobby' && v.phase !== 'done';
+    // already dropped (or the event is over for this phone): just leave, so a new event can be joined
+    if (!org && this.client.dropped) {
+      this.leave();
+      return;
+    }
     if (v?.phase !== 'done') {
       const ok = await confirmDialog(
         org ? (started ? 'End the tournament?' : 'Cancel the tournament?') : started ? 'Drop from the tournament?' : 'Leave the tournament?',
