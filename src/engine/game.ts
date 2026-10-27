@@ -86,6 +86,11 @@ export interface BattleState {
    * (would be destroyed), before battle-indestructibility is applied. Lives until the battle ends.
    */
   calc?: { attackerAtk: number; targetAtk: number; targetDef: number; targetPos: BattlePos | null; losers: CardInstance[] };
+  /**
+   * Monsters destroyed by battle in damage calculation, still on the field until Damage Step Substep 7: they cannot be
+   * targeted (Rulebook v7.0 p.34; Edison Format Rule #8, https://www.edisonformat.com/edison-rule-differences.html).
+   */
+  markedDestroyed?: CardInstance[];
   /** The attack target was face-down at the start of the Damage Step, before it was flipped (Ally of Justice Catastor). */
   targetFaceDownAtStart?: boolean;
 }
@@ -200,6 +205,8 @@ export class Game {
   private dataModSources: CardInstance[] = [];
   /** Re-entrancy guard for cardView: data read while working out a view is the unviewed data. */
   private viewing = 0;
+  /** The chain built by the end-of-turn hand-size discard (Edison Format Rule #11): see canActivateEffect. */
+  private endDiscardChain = false;
   /** Summon negation state. */
   pendingSummon: { cards: CardInstance[]; player: PlayerId; method: string; negated: boolean } | null = null;
 
@@ -1350,6 +1357,8 @@ export class Game {
     if (this.chain.length) {
       const top = this.chain[this.chain.length - 1];
       if (speed < 2 || speed < top.speed) return null;
+      // Edison Format Rule #11: a chain started by the end-of-turn discard takes only Spell Speed 3, or Spell Speed 2 that negates.
+      if (this.endDiscardChain && speed === 2 && !ef.categories?.includes('negate')) return null;
     } else if (speed === 1) {
       const priority = window === 'priority' && isOwnTurn && ef.kind === 'ignition' && this.priorityCards.includes(card);
       if (!priority && !(mode.open && isOwnTurn && (this.phase === 'main1' || this.phase === 'main2'))) return null;
@@ -1509,14 +1518,23 @@ export class Game {
     return link;
   }
 
+  /**
+   * Activating a Field Spell: your own old Field Spell leaves your Field Zone at once (destroyed by game mechanic while
+   * the new one is activated, so a "when destroyed" effect of it misses the timing: Geartown). The opponent's face-up Field
+   * Spell is destroyed only when the new one resolves (destroyOpponentFieldSpell); if the new one is negated or destroyed
+   * in the chain first, it stays. Edison Format Rule #2, https://www.edisonformat.com/edison-rule-differences.html
+   * ("Mountain" / "Umi" / "Dust Tornado" examples); Rulebook v7.0 p.21.
+   */
   private async replaceFieldSpell(player: PlayerId, except?: CardInstance) {
-    // Master Rule 2: only one face-up Field Spell on the whole field.
-    const olds = [this.players[0].fzone, this.players[1].fzone].filter(
-      (c): c is CardInstance => !!c && c !== except && (c.faceUp || c.controller === player),
-    );
-    const toRemove = olds.filter((c) => c.faceUp || c.controller === player);
+    const old = this.players[player].fzone;
     // reasonPlayer: whose new Field Spell destroyed it (Geartown cannot activate when its controller replaced it).
-    if (toRemove.length) await this.moveCards(toRemove, 'grave', { reason: 'rule', destroyed: true, reasonPlayer: player });
+    if (old && old !== except) await this.moveCards([old], 'grave', { reason: 'rule', reasons: ['rule', 'destroy'], destroyed: true, reasonPlayer: player });
+  }
+
+  /** A Field Spell's activation resolves: the opponent's face-up Field Spell is destroyed (see replaceFieldSpell). */
+  private async destroyOpponentFieldSpell(card: CardInstance) {
+    const old = this.players[this.opp(card.controller)].fzone;
+    if (old && old.faceUp) await this.moveCards([old], 'grave', { reason: 'rule', reasons: ['rule', 'destroy'], destroyed: true, reasonPlayer: card.controller, reasonCard: card });
   }
 
   /** Run the chain: response windows then resolution. */
@@ -1631,6 +1649,7 @@ export class Game {
         this.log(`${card.name} is no longer on the field; its effect does not resolve.`, 'chain');
         return;
       }
+      if (card.isSpell && card.data.stype === 'field' && card.location === 'fzone') await this.destroyOpponentFieldSpell(card);
       if ((card.isTrap && this.queryPlayer(link.player, 'cannotActivateTraps') && card.onField) || this.isNegated(card) || (link.fromLocation !== 'grave' && this.trapStunned(card))) {
         this.log(`${card.name}'s effect is negated.`, 'chain');
         return;
@@ -2239,8 +2258,18 @@ export class Game {
     if (hand.length > HAND_LIMIT) {
       const n = hand.length - HAND_LIMIT;
       const disc = await this.select(tp, hand, n, n, `Discard ${n} card(s) for hand size limit.`, 'discard');
+      // Edison Format Rule #11 (https://www.edisonformat.com/edison-rule-differences.html): nobody can respond to the
+      // end-of-turn discard, and Optional Trigger Effects of the discarded cards cannot be activated. A Mandatory one
+      // still starts a chain, to which only Spell Speed 3 effects or Spell Speed 2 effects that negate can be chained.
+      const before = this.pending.length;
       await this.discard(disc, 'rule', tp);
-      await this.processTriggers(false);
+      this.pending = this.pending.filter((t, i) => i < before || t.effect.mandatory);
+      this.endDiscardChain = true;
+      try {
+        await this.processTriggers(false);
+      } finally {
+        this.endDiscardChain = false;
+      }
     }
     // expire temp mods
     for (const c of this.allCards) {
@@ -2354,9 +2383,16 @@ export class Game {
       }
       case 'setST': {
         const c = a.card;
+        let setOverField = false;
         if (c.data.stype === 'field') {
+          // Setting over your own Field Spell destroys it by game mechanic without a chain, so its "when destroyed" effect
+          // can activate (no reasonPlayer: Geartown's filter only excludes an activation over it). The opponent's Field
+          // Spell is not touched. Edison Format Rule #2, https://www.edisonformat.com/edison-rule-differences.html
           const old = this.players[p].fzone;
-          if (old) await this.moveCards([old], 'grave', { reason: 'rule' });
+          if (old) {
+            await this.moveCards([old], 'grave', { reason: 'rule', reasons: ['rule', 'destroy'], destroyed: true });
+            setOverField = true;
+          }
           this.rawMove(c, 'fzone', { controller: p, faceUp: false });
         } else {
           this.rawMove(c, 'szone', { controller: p, faceUp: false });
@@ -2365,6 +2401,7 @@ export class Game {
         this.log(`${this.players[p].name} Sets a card in the Spell & Trap Zone.`, 'action', p);
         await this.anim({ type: 'move', cards: [{ uid: c.uid, from: 'hand', to: c.location, ctrl: p }], set: true });
         this.update();
+        if (setOverField) await this.processTriggers(false);
         return;
       }
       case 'activate': {
@@ -2579,17 +2616,22 @@ export class Game {
     this.beginBatch();
     await this.responseLoop('damage', p);
     if (this.chain.length) await this.resolveChain();
-    this.pending.push(...flipPending);
-    if (b.negated) {
+    // Flip Effects of a monster flipped by the attack wait for Substep 6 (after damage calculation); if the battle ends
+    // before damage calculation, they activate now.
+    const stopEarly = async () => {
+      this.pending.unshift(...flipPending);
       await this.processTriggers(false);
+    };
+    if (b.negated) {
+      await stopEarly();
       return;
     }
     if (attacker.location !== 'mzone' || attacker.moveId !== b.attackerMoveId || attacker.pos !== 'atk') {
-      await this.processTriggers(false);
+      await stopEarly();
       return;
     }
     if (target && (target.location !== 'mzone' || target.moveId !== b.targetMoveId)) {
-      await this.processTriggers(false);
+      await stopEarly();
       return;
     }
     // "Before damage calculation" triggers (Ehren, Lightsworn Monk), after a Set target was flipped face-up. A monster
@@ -2603,7 +2645,7 @@ export class Game {
       this.pending = [...held, ...this.pending];
       const attackerGone = attacker.location !== 'mzone' || attacker.moveId !== b.attackerMoveId || attacker.pos !== 'atk';
       if (b.negated || attackerGone || target.location !== 'mzone' || target.moveId !== b.targetMoveId) {
-        await this.processTriggers(false);
+        await stopEarly();
         return;
       }
     }
@@ -2625,7 +2667,9 @@ export class Game {
       } else if (atkA < atkT) {
         losers.push({ card: attacker, by: target });
         dmg = { player: p, amount: atkT - atkA };
-      } else if (atkA > 0) {
+      } else {
+        // Equal ATK: both destroyed, even at 0 ATK (overturned only in 2011 by Rulebook v7.2). Edison Format Rule #13,
+        // https://www.edisonformat.com/edison-rule-differences.html; Rulebook v7.0 p.35 (TIE: "both monsters are destroyed").
         losers.push({ card: target, by: attacker }, { card: attacker, by: target });
       }
     } else {
@@ -2665,15 +2709,20 @@ export class Game {
         this.turnData.battleDamageTo[dmg.player] = true;
       }
     }
-    // "After damage calculation" triggers (Ehren) resolve before battle-destroyed monsters leave the field.
+    b.markedDestroyed = losers.map((l) => l.card).filter((c) => c.location === 'mzone' && this.canDestroy(c, 'battle'));
+    // Edison Damage Step substeps 5-7 (Edison Format Rule #8, https://www.edisonformat.com/edison-rule-differences.html;
+    // Rulebook v7.0 p.34): monsters destroyed by battle stay on the field until Substep 7.
+    // Substep 5: effects that trigger on battle damage get their own chain.
+    if (this.pending.length) await this.processTriggers(true);
+    // Substep 6: Flip Effects (of the monster flipped by the attack) and "after damage calculation" effects (Ehren) form
+    // one chain, before battle-destroyed monsters leave the field.
+    this.pending.push(...flipPending);
     if (target) {
-      const held = this.pending;
-      this.pending = [];
       this.beginBatch();
       this.emit({ type: 'damageCalculated', card: attacker, other: target, player: p, minor: true });
-      if (this.pending.length) await this.processTriggers(true);
-      this.pending = [...held, ...this.pending];
     }
+    if (this.pending.length) await this.processTriggers(true);
+    // Substep 7: battle-destroyed monsters are sent to the GY and "destroyed by battle" effects activate.
     // Destroy losers
     let destroyGroup = losers.filter((l) => l.card.location === 'mzone' && this.canDestroy(l.card, 'battle'));
     // ANPR + ABPF: destruction replacement effects also apply to battle destruction.

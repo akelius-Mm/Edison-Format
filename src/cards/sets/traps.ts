@@ -282,7 +282,7 @@ defTrap('Solemn Warning', 'counter', {
       label: 'Negate Summon',
       negateSummon: true,
       categories: ['negateSummon'],
-      condition: (ctx) => !!ctx.game.pendingSummon && ctx.game.pendingSummon.player === ctx.opp && ctx.lp >= 2000,
+      condition: (ctx) => !!ctx.game.pendingSummon && ctx.game.pendingSummon.player === ctx.opp && ctx.lp > 2000, // Edison Format Rule #10: an LP cost can't drop you to 0 (https://www.edisonformat.com/edison-rule-differences.html)
       activate: async (ctx) => {
         await ctx.payLp(2000);
       },
@@ -304,7 +304,7 @@ defTrap('Solemn Warning', 'counter', {
       categories: ['negate', 'destroy'],
       condition: (ctx) => {
         const l = ctx.prevLink();
-        return !!l && !l.negated && l.player === ctx.opp && (l.effect.categories ?? []).includes('specialSummon') && ctx.lp >= 2000;
+        return !!l && !l.negated && l.player === ctx.opp && (l.effect.categories ?? []).includes('specialSummon') && ctx.lp > 2000; // Edison Format Rule #10
       },
       activate: async (ctx) => {
         ctx.data.link = ctx.prevLink();
@@ -584,7 +584,7 @@ defTrap('Seven Tools of the Bandit', 'counter', {
       categories: ['negate', 'destroy'],
       condition: (ctx) => {
         const l = ctx.prevLink();
-        return !!l && !l.negated && l.isCardActivation && l.card.isTrap && l.player === ctx.opp && ctx.lp >= 1000;
+        return !!l && !l.negated && l.isCardActivation && l.card.isTrap && l.player === ctx.opp && ctx.lp > 1000; // Edison Format Rule #10: an LP cost can't drop you to 0 (https://www.edisonformat.com/edison-rule-differences.html)
       },
       activate: async (ctx) => {
         ctx.data.link = ctx.prevLink();
@@ -908,7 +908,7 @@ defTrap('Skill Drain', 'continuous', {
     {
       kind: 'activate',
       categories: ['negate', 'lockdown'],
-      canActivate: (ctx) => ctx.lp >= 1000,
+      canActivate: (ctx) => ctx.lp > 1000, // Edison Format Rule #10: an LP cost can't drop you to 0 (https://www.edisonformat.com/edison-rule-differences.html)
       activate: async (ctx) => {
         await ctx.payLp(1000);
       },
