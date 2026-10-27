@@ -281,7 +281,11 @@ export class PreviewPanel {
   private current: { data: CardData; inst?: CardInstance } | null = null;
   private sig = '';
 
-  constructor(private game: Game) {
+  /** `canSee`: whether the viewer may see this card now; a shown card that turns hidden (bounced, Set, shuffled) is cleared. */
+  constructor(
+    private game: Game,
+    private canSee: (c: CardInstance) => boolean = () => true,
+  ) {
     this.el = h('div', 'preview');
     this.cardHost = h('div', 'preview-card');
     this.details = h('div', 'preview-details');
@@ -322,6 +326,13 @@ export class PreviewPanel {
   refresh() {
     if (!this.current) return;
     const { data, inst } = this.current;
+    if (inst && !this.canSee(inst)) {
+      // it left the viewer's sight: following it would show where it went and its live stats there
+      this.current = null;
+      this.sig = '';
+      this.showEmpty();
+      return;
+    }
     const g = this.game;
     const s = data.kind === 'monster' ? liveStats(data, inst, g) : null;
     const neg = inst && inst.onField && inst.faceUp ? safe(() => g.isNegated(inst), false) : false;

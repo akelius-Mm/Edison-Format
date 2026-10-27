@@ -1135,7 +1135,7 @@ export class Game {
     card.controller = player;
     this.placeInZone(card, 'mzone', player);
     card.flags.controlChangedTurn = this.turn;
-    this.log(`${this.players[player].name} takes control of ${card.name}.`, 'action', player);
+    this.log(`${this.players[player].name} takes control of ${card.faceUp ? card.name : 'a face-down monster'}.`, 'action', player);
     this.beginBatch();
     await this.anim({ type: 'move', cards: [{ uid: card.uid, from: 'mzone', to: 'mzone', ctrl: prevCtrl }] });
     this.emit({ type: 'controlChanged', card, player });
@@ -1161,7 +1161,7 @@ export class Game {
     this.players[prev].mzone[card.seq] = null;
     card.controller = card.owner;
     this.placeInZone(card, 'mzone', card.owner);
-    this.log(`Control of ${card.name} returns to ${this.players[card.owner].name}.`, 'action');
+    this.log(`Control of ${card.faceUp ? card.name : 'a face-down monster'} returns to ${this.players[card.owner].name}.`, 'action');
     await this.anim({ type: 'move', cards: [{ uid: card.uid, from: 'mzone', to: 'mzone', ctrl: prev }] });
     this.update();
   }
@@ -2621,6 +2621,20 @@ export class Game {
     if (card.location === 'hand') return card.owner === viewer || card.revealedUntil >= this.turn;
     if (card.location === 'extra') return card.owner === viewer;
     return false;
+  }
+
+  /** What a seat sees of a card: the public face, plus its own hand, Deck, Extra Deck and Set cards. */
+  visibleTo(card: CardInstance, viewer: PlayerId) {
+    if (this.isPublic(card, viewer)) return true;
+    if ((card.location === 'deck' || card.location === 'hand' || card.location === 'extra') && card.owner === viewer) return true;
+    if (card.onField && card.controller === viewer) return true;
+    return false;
+  }
+
+  /** What a viewer sees; `null` is a spectator, who sees only what both players see. */
+  seenBy(card: CardInstance, viewer: PlayerId | null) {
+    if (viewer === null) return card.faceUp || (this.isPublic(card, 0) && this.isPublic(card, 1));
+    return this.visibleTo(card, viewer);
   }
 }
 

@@ -422,6 +422,8 @@ export class CardInstance {
     this.summonMethod = null;
     this.setTurn = -1;
     this.flags = {};
+    // a reveal lasts only while the card stays in the hand: once it moves, it is a new card to the opponent
+    this.revealedUntil = -1;
     if (this.controller !== this.owner) this.controller = this.owner;
   }
 
