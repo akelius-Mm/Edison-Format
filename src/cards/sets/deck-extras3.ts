@@ -137,10 +137,13 @@ monster('Volcanic Shell', {
       label: 'Pay 500 LP: add a "Volcanic Shell"',
       categories: ['search'],
       canActivate: (ctx) => ctx.lp > 500 && ctx.deck('me', (c) => c.name === 'Volcanic Shell').length > 0,
+      // https://edisonrul.ing/cards/v/volcanic-shell.html — if this card left the GY before resolution, nothing is added.
       activate: async (ctx) => {
+        ctx.data.mid = ctx.self.moveId;
         await ctx.payLp(500);
       },
       resolve: async (ctx) => {
+        if (ctx.self.location !== 'grave' || ctx.self.moveId !== ctx.data.mid) return;
         await ctx.search((c) => c.name === 'Volcanic Shell', 1, 'Add 1 "Volcanic Shell" from your Deck to your hand.');
       },
       // discard fodder for Quickdraw Synchron, Lightning Vortex... worth 500 LP while LP are healthy

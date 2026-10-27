@@ -1457,10 +1457,15 @@ M('Unifrog', {
       categories: ['destroy'],
       eventFilter: (ctx, ev) => ev.reasonCard === ctx.self && ev.player === ctx.opp && !!ctx.battle && !ctx.battle.target,
       canActivate: (ctx) =>
-        ctx.faceUpMonsters('me', (c) => c !== ctx.self && isFrog(c) && c.name !== 'Frog the Jam' && c.name !== 'Unifrog').length > 0 && ctx.spellTraps('opp').length > 0,
+        ctx.faceUpMonsters('me', (c) => c !== ctx.self && isFrog(c) && c.name !== 'Frog the Jam' && c.name !== 'Unifrog').length > 0 &&
+        ctx.spellTraps('opp', (c) => ctx.canTarget(c)).length > 0,
+      // https://edisonrul.ing/cards/u/unifrog.html — it targets 1 Spell / Trap Card your opponent controls.
+      activate: async (ctx) => {
+        await ctx.selectTargets(ctx.spellTraps('opp'), 1, 1, 'Target 1 Spell/Trap your opponent controls.', 'destroy', { aiScore: (c) => cardValue(ctx.game, c) });
+      },
       resolve: async (ctx) => {
-        const [t] = await ctx.select(ctx.spellTraps('opp'), 1, 1, 'Destroy 1 Spell/Trap your opponent controls.', 'destroy');
-        if (t) await ctx.destroy(t);
+        const t = ctx.validTargets((c) => c.onField);
+        if (t.length) await ctx.destroy(t);
       },
     },
   ],

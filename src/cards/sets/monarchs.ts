@@ -1,7 +1,7 @@
 // Card definitions: Monarchs and Frogs (Frog Monarchs). Treeborn Frog lives in core.ts.
 import { monster } from '../define';
 import { attr, bestTarget, cardValue, destroyTargets, flip, selfFieldToGrave, selfSummoned } from '../helpers';
-import type { CardInstance, EffectDef } from '../../engine/card';
+import { faceUpFlag, type CardInstance, type EffectDef } from '../../engine/card';
 import type { Ctx } from '../../engine/ctx';
 
 // ------------------------------------------------------------------ helpers
@@ -9,6 +9,9 @@ import type { Ctx } from '../../engine/ctx';
 /** A "Frog" monster (Frog the Jam is not part of the archetype). */
 const isFrog = (c: CardInstance) => c.isMonster && c.inSet('frog');
 const isMonarch = (c: CardInstance) => c.inSet('monarch');
+/** Swap Frog's extra Normal Summon (2010 text): a "Frog" monster except "Swap Frog" / "Frog the Jam". */
+const swapSummonable = (c: CardInstance) => isFrog(c) && c.name !== 'Swap Frog' && !c.isExtra;
+faceUpFlag('swapBounceUsed');
 const isLowAquaWater = (c: CardInstance) => c.isMonster && c.data.attribute === 'WATER' && c.data.race === 'Aqua' && (c.data.level ?? 0) <= 2 && !c.isExtra;
 
 /** "When this card is Tribute Summoned" trigger used by every Monarch. */
@@ -174,7 +177,8 @@ monster('Thestalos the Firestorm Monarch', {
       mandatory: true,
       label: 'Random discard',
       categories: ['discard', 'damage'],
-      canActivate: (ctx) => ctx.hand('opp').length > 0,
+      // https://edisonrul.ing/cards/t/thestalos-the-firestorm-monarch.html — it always activates when Tribute
+      // Summoned, even if the opponent has no cards in hand.
       resolve: async (ctx) => {
         const hand = ctx.hand('opp');
         if (!hand.length) return;
@@ -245,7 +249,8 @@ monster('Swap Frog', {
   def: 500,
   sets: ['frog'],
   aiValue: 500,
-  text: 'You can Special Summon this card from your hand by sending 1 other WATER monster from your hand to the GY. When this card is Summoned: You can send 1 Level 2 or lower WATER Aqua monster from your Deck to the GY. Once per turn: You can return 1 monster you control to the hand; this turn, you can Normal Summon 1 Level 2 or lower WATER Aqua-Type monster in addition to your Normal Summon or Set.',
+  // https://edisonrul.ing/cards/s/swap-frog.html (2010 TCG text and rulings).
+  text: 'You can discard 1 WATER monster to Special Summon this card from your hand. When this card is Summoned, you can select and send 1 Level 2 or lower Aqua-Type WATER monster from your Deck or your side of the field to the Graveyard. Once per turn, you can return 1 monster you control to the hand to Normal Summon 1 "Frog" monster, except "Swap Frog" or "Frog the Jam", in addition to your Normal Summon or Set this turn.',
   effects: [
     {
       kind: 'proc',
@@ -277,24 +282,28 @@ monster('Swap Frog', {
       categories: ['mill'],
       // Rulings audit: "When this card is Summoned" (OCG 召喚・反転召喚・特殊召喚): a Flip Summon triggers it too.
       eventFilter: selfSummoned(),
-      canActivate: (ctx) => ctx.deck('me', isLowAquaWater).length > 0,
+      // 2010 text: from your Deck OR your side of the field (it does not target).
+      canActivate: (ctx) => ctx.deck('me', isLowAquaWater).length > 0 || ctx.monsters('me', isLowAquaWater).length > 0,
       resolve: async (ctx) => {
-        const cands = ctx.deck('me', isLowAquaWater);
-        const sel = await ctx.select(cands, 1, 1, 'Send 1 Level 2 or lower WATER Aqua monster from your Deck to the GY.', 'toGrave', {
-          aiScore: (c) => frogPriority(ctx, c, 'grave'),
+        const cands = [...ctx.deck('me', isLowAquaWater), ...ctx.monsters('me', isLowAquaWater)];
+        if (!cands.length) return;
+        const sel = await ctx.select(cands, 1, 1, 'Send 1 Level 2 or lower WATER Aqua monster from your Deck or your side of the field to the GY.', 'toGrave', {
+          aiScore: (c) => frogPriority(ctx, c, 'grave') - (c.location === 'mzone' ? 5000 : 0),
         });
         if (sel.length) await ctx.sendToGrave(sel);
         ctx.game.shuffleDeck(ctx.player);
       },
     },
     {
+      // Rulings: usable once while each copy is face-up (again if it left the field and came back), and it can be
+      // activated again even after the extra Normal Summon was used, but only 1 extra Normal Summon is gained per turn.
       kind: 'ignition',
-      opt: true,
       label: 'Bounce a monster: extra Normal Summon',
       categories: ['toHand'],
-      canActivate: (ctx) => !ctx.usedThisTurn('swapFrogExtraSummon') && ctx.monsters('me').length > 0,
+      canActivate: (ctx) => !ctx.self.flags.swapBounceUsed && ctx.monsters('me', (c) => !c.isExtra && !c.isToken).length > 0,
       activate: async (ctx) => {
-        const sel = await ctx.select(ctx.monsters('me'), 1, 1, 'Return 1 monster you control to the hand.', 'cost', {
+        ctx.self.flags.swapBounceUsed = true;
+        const sel = await ctx.select(ctx.monsters('me', (c) => !c.isExtra && !c.isToken), 1, 1, 'Return 1 monster you control to the hand.', 'cost', {
           aiScore: (c) => (c === ctx.self ? 1000 : c.isToken ? 800 : c.name === 'Swap Frog' ? 900 : -cardValue(ctx.game, c)),
         });
         if (!sel.length) return false;
@@ -303,9 +312,9 @@ monster('Swap Frog', {
       resolve: async (ctx) => {
         if (ctx.usedThisTurn('swapFrogExtraSummon')) return;
         ctx.markUsed('swapFrogExtraSummon');
-        // Only for a Level 2 or lower WATER Aqua monster, and only a Normal Summon (not a Set).
-        ctx.gainRestrictedNormalSummon((c, set) => !set && isLowAquaWater(c));
-        ctx.log('You may Normal Summon 1 additional Level 2 or lower WATER Aqua-Type monster this turn.');
+        // Only for a "Frog" monster except "Swap Frog" (Frog the Jam is not a "Frog"), and only a Normal Summon (not a Set).
+        ctx.gainRestrictedNormalSummon((c, set) => !set && swapSummonable(c));
+        ctx.log('You may Normal Summon 1 additional "Frog" monster this turn.');
       },
       ai: {
         score: (ctx) => {
@@ -315,7 +324,7 @@ monster('Swap Frog', {
           // and use the extra Normal Summon on a Level 2 or lower WATER Aqua (Frogs: Tribute fodder for a Monarch).
           const water = ctx.hand('me', (c) => attr('WATER')(c) && !isMonarch(c));
           const deckFodder = ctx.deck('me', isLowAquaWater).length;
-          if (water.length && deckFodder && ctx.hand('me', isLowAquaWater).length) return 48;
+          if (water.length && deckFodder && ctx.hand('me', swapSummonable).length) return 48;
           return 0;
         },
       },
@@ -331,8 +340,9 @@ monster('Substitoad', {
   def: 2000,
   sets: ['frog'],
   aiValue: 500,
-  // LODT: no once-per-turn clause and the battle protection covers every "Frog" monster (YGOJSON).
-  text: 'You can Tribute 1 monster; Special Summon 1 "Frog" monster from your Deck, except "Substitoad". "Frog" monsters, except "Substitoad", cannot be destroyed by battle.',
+  // https://edisonrul.ing/cards/s/substitoad.html — the 2010 TCG text excludes "Frog the Jam" (not a "Frog" here, see
+  // isFrog), not "Substitoad": it can Summon another Substitoad and protects itself. No once-per-turn.
+  text: 'You can Tribute 1 monster to Special Summon 1 "Frog" monster from your Deck, except "Frog the Jam". "Frog" monsters, except "Frog the Jam", cannot be destroyed by battle.',
   effects: [
     {
       kind: 'ignition',
@@ -340,7 +350,7 @@ monster('Substitoad', {
       categories: ['specialSummon'],
       canActivate: (ctx) =>
         ctx.monsters('me', (c) => canTribute(ctx, c)).length > 0 &&
-        ctx.deck('me', (c) => isFrog(c) && c.name !== 'Substitoad').length > 0 &&
+        ctx.deck('me', (c) => isFrog(c)).length > 0 &&
         !ctx.game.queryPlayer(ctx.player, 'cannotSpecialSummon'),
       activate: async (ctx) => {
         const sel = await ctx.select(ctx.monsters('me', (c) => canTribute(ctx, c)), 1, 1, 'Tribute 1 monster.', 'tribute', {
@@ -351,7 +361,7 @@ monster('Substitoad', {
       },
       resolve: async (ctx) => {
         if (!ctx.canSpecialSummon()) return;
-        const cands = ctx.deck('me', (c) => isFrog(c) && c.name !== 'Substitoad');
+        const cands = ctx.deck('me', (c) => isFrog(c));
         const sel = await ctx.select(cands, 1, 1, 'Special Summon 1 "Frog" monster from your Deck.', 'specialSummon', {
           aiScore: (c) => frogPriority(ctx, c, 'field'),
         });
@@ -374,7 +384,7 @@ monster('Substitoad', {
         {
           q: 'indestructibleBattle',
           to: 'cards',
-          filter: (_ctx, c) => c.location === 'mzone' && c.faceUp && isFrog(c) && c.name !== 'Substitoad',
+          filter: (_ctx, c) => c.location === 'mzone' && c.faceUp && isFrog(c),
         },
       ],
     },

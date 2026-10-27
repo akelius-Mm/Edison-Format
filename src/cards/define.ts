@@ -56,6 +56,8 @@ interface MonsterOpts {
   attackLpCost?: number;
   noSpecialFrom?: CardData['noSpecialFrom'];
   synchroLevel?: number;
+  /** Its effects cannot be negated by Necrovalley's GY lock (CardData.ignoresGyLock). */
+  ignoresGyLock?: boolean;
 }
 
 /** Define an effect / normal / extra deck monster. */
@@ -88,6 +90,7 @@ export function monster(name: string, o: MonsterOpts): CardData {
     attackLpCost: o.attackLpCost,
     noSpecialFrom: o.noSpecialFrom,
     synchroLevel: o.synchroLevel,
+    ignoresGyLock: o.ignoresGyLock,
   });
 }
 

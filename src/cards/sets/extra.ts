@@ -227,11 +227,13 @@ monster('Red Dragon Archfiend', {
       mandatory: true,
       label: 'Destroy idle monsters',
       categories: ['destroy'],
+      // https://edisonrul.ing/cards/r/red-dragon-archfiend.html — this mandatory effect activates in each of your End
+      // Phases, even if all your monsters declared an attack.
       eventFilter: (ctx, ev) => ev.phase === 'end' && ctx.isMyTurn,
-      condition: (ctx) => ctx.monsters('me', (c) => c !== ctx.self && c.attacksThisTurn === 0).length > 0,
       resolve: async (ctx) => {
         if (ctx.self.location !== 'mzone' || !ctx.self.faceUp) return;
-        await ctx.destroy(ctx.monsters('me', (c) => c !== ctx.self && c.attacksThisTurn === 0));
+        const idle = ctx.monsters('me', (c) => c !== ctx.self && c.attacksThisTurn === 0);
+        if (idle.length) await ctx.destroy(idle);
       },
     },
   ],
@@ -304,8 +306,11 @@ monster('Thought Ruler Archfiend', {
       condition: (ctx) => {
         const l = ctx.prevLink();
         if (!l || l.negated || !l.isCardActivation || !(l.card.isSpell || l.card.isTrap)) return false;
+        // https://edisonrul.ing/cards/t/thought-ruler-archfiend.html — exactly 1 target, a Psychic-Type monster on the
+        // field, in the Graveyard or removed from play.
         const t = l.ctx.targets;
-        return t.length === 1 && t[0].location === 'mzone' && t[0].faceUp && t[0].data.race === 'Psychic' && ctx.lp > 1000;
+        const psychic = t.length === 1 && t[0].isMonster && t[0].data.race === 'Psychic' && (t[0].location === 'mzone' ? t[0].faceUp : t[0].location === 'grave' || (t[0].location === 'banished' && t[0].faceUp));
+        return psychic && ctx.lp > 1000;
       },
       activate: async (ctx) => {
         await ctx.payLp(1000);

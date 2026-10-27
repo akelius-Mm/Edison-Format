@@ -218,6 +218,18 @@ export class Ctx {
     if (!link) return;
     this.game.negateLink(link, destroyCard, this.self);
   }
+  /** Starlight Road: negate the EFFECT (not the activation) of `link`, then destroy that card. Returns whether it was destroyed. */
+  async negateEffectAndDestroy(link: ChainLink | undefined): Promise<boolean> {
+    if (!link) return false;
+    const was = link.negated;
+    link.effectOnly = was ? link.effectOnly : true;
+    this.game.negateLink(link, false, this.self);
+    const c = link.card;
+    if (link.moveIdAfterCost != null && c.moveId !== link.moveIdAfterCost) return false;
+    if (!c.onField) return false;
+    const d = await this.game.destroy([c], 'effect', this.player, this.self);
+    return d.includes(c) && !c.onField;
+  }
   /** Negate the activation of `link` and destroy the card if it is still around. */
   async negateAndDestroy(link: ChainLink | undefined) {
     if (!link) return;

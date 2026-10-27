@@ -696,30 +696,34 @@ monster('Rescue Cat', {
   level: 4,
   atk: 300,
   def: 100,
-  text: 'You can send this face-up card to the GY; Special Summon 2 Level 3 or lower Beast monsters from your Deck. Destroy them during the End Phase.',
+  text: 'You can send this face-up card to the Graveyard to Special Summon 2 Level 3 or lower Beast-Type monsters from your Deck. Those monsters are destroyed during the End Phase.',
   aiValue: 800,
   effects: [
     {
       kind: 'ignition',
       label: 'Send: summon 2 Beasts',
       categories: ['specialSummon'],
+      // https://edisonrul.ing/cards/r/rescue-cat.html — it Special Summons 2 monsters at once: it cannot be activated to
+      // Summon only 1 (2 eligible Beasts and 2 free zones, counting the one Rescue Cat frees), and a Summoned monster
+      // that is flipped face-down is not destroyed in the End Phase.
       canActivate: (ctx) =>
         !ctx.game.queryPlayer(ctx.player, 'cannotSpecialSummon') &&
-        ctx.deck('me', (c) => c.isMonster && c.data.race === 'Beast' && (c.data.level ?? 0) <= 3 && !c.data.nomi).length > 0,
+        ctx.freeMZones() + 1 >= 2 &&
+        ctx.deck('me', (c) => c.isMonster && c.data.race === 'Beast' && (c.data.level ?? 0) <= 3 && !c.data.nomi && ctx.canSummonCard(c)).length >= 2,
       activate: async (ctx) => {
         await ctx.sendToGrave(ctx.self, 'cost');
       },
       resolve: async (ctx) => {
-        const cands = ctx.deck('me', (c) => c.isMonster && c.data.race === 'Beast' && (c.data.level ?? 0) <= 3 && !c.data.nomi);
-        const n = Math.min(2, ctx.freeMZones());
-        if (n <= 0 || !cands.length) return;
-        const sel = await ctx.select(cands, Math.min(n, cands.length), n, 'Special Summon up to 2 Level 3 or lower Beast monsters.', 'specialSummon');
+        const cands = ctx.deck('me', (c) => c.isMonster && c.data.race === 'Beast' && (c.data.level ?? 0) <= 3 && !c.data.nomi && ctx.canSummonCard(c));
+        if (ctx.freeMZones() < 2 || cands.length < 2 || !ctx.canSpecialSummon()) return;
+        const sel = await ctx.select(cands, 2, 2, 'Special Summon 2 Level 3 or lower Beast monsters.', 'specialSummon');
         const r = await ctx.specialSummon(sel, { pos: 'choose' });
         ctx.game.shuffleDeck(ctx.player);
         for (const m of r) {
           const id = m.moveId;
+          const fid = m.faceUpId;
           ctx.later('end', async () => {
-            if (m.location === 'mzone' && m.moveId === id) await ctx.game.destroy([m], 'effect', ctx.player, ctx.self);
+            if (m.location === 'mzone' && m.moveId === id && m.faceUpId === fid && m.faceUp) await ctx.game.destroy([m], 'effect', ctx.player, ctx.self);
           });
         }
       },

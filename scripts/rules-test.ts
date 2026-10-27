@@ -3914,7 +3914,9 @@ async function fuzzRegressionTests() {
     eq(inGy.location, 'grave', 'stays in the GY');
   });
 
-  await test('Swap Frog: the extra Normal Summon is only for a Level 2 or lower WATER Aqua monster', async () => {
+  // Renamed (sourced sweep, group 3): the 2010 text allows a "Frog" monster except "Swap Frog" / "Frog the Jam"
+  // (https://edisonrul.ing/cards/s/swap-frog.html); every assertion below still holds.
+  await test('Swap Frog: the extra Normal Summon is only for a "Frog" monster other than Swap Frog', async () => {
     const { g, c0, place } = setup();
     const frog = place(0, cardByName('Swap Frog'), 'mzone');
     place(0, T.brute, 'mzone');
@@ -4707,12 +4709,14 @@ async function locationRulesTests() {
     eq(b.location, 'hand', 'Guard added');
   });
 
-  await test('Necrovalley: non-targeting effects that move cards out of the GY are negated (Rekindling); cards in the GY cannot be banished (Kycoo)', async () => {
+  // Updated (sourced sweep, group 3): Rekindling does not target and is NOT negated by Necrovalley (2010 rulings:
+  // https://edisonrul.ing/cards/r/rekindling.html and https://edisonrul.ing/cards/n/necrovalley.html).
+  await test('Necrovalley: Rekindling (does not target) is not negated; cards in the GY cannot be banished (Kycoo)', async () => {
     const { g, place } = setup();
     live(place(1, cardByName('Necrovalley'), 'fzone'));
     const fire = place(0, cardByName('Flamvell Firedog'), 'grave');
     await activateCard(g, 0, place(0, cardByName('Rekindling'), 'hand'));
-    eq(fire.location, 'grave', 'Rekindling cannot take it out of the GY');
+    eq(fire.location, 'mzone', 'Rekindling still Special Summons it');
     const k = setup();
     live(k.place(1, cardByName('Necrovalley'), 'fzone'));
     const kycoo = k.place(0, cardByName('Kycoo the Ghost Destroyer'), 'mzone');
@@ -5166,7 +5170,7 @@ async function extraDeckTests() {
     eq(offered(g, 0, dad), false, "but its banish-from-GY effect can't be paid");
     const qd = place(0, cardByName('Quickdraw Synchron'), 'hand');
     place(0, T.wall, 'hand');
-    eq(procOffered(g, 0, qd), true, 'a hand cost (Quickdraw Synchron) still works');
+    eq(offered(g, 0, qd), true, 'a hand send (Quickdraw Synchron) still works');
     const inGy = place(0, T.brute, 'grave');
     await g.moveCards([inGy], 'deck', { reason: 'cost', reasonPlayer: 0, reasonCard: qd });
     eq(inGy.location, 'deck', 'a cost that returns a GY card to the Deck is paid');
@@ -5293,7 +5297,9 @@ async function archetypeAuditTests() {
     eq(laq2.location, 'deck', 'negated: nothing tagged in');
   });
 
-  await test("GB tag-out: Vanity's Fiend stops it (the Beast stays); Royal Oppression cannot negate the tag-out but can negate a contact fusion", async () => {
+  // Updated (sourced sweep, group 3): Royal Oppression CAN negate the tag-out effect; the returned Gladiator Beast stays
+  // in the Deck (https://edisonrul.ing/cards/g/gladiator-beast-bestiari.html, .../r/royal-oppression.html).
+  await test("GB tag-out: Vanity's Fiend stops it (the Beast stays); Royal Oppression negates the tag-out and a contact fusion", async () => {
     const { g, place } = setup();
     const laq = deckCard(g, 0, 'Gladiator Beast Laquari');
     const best = place(0, cardByName('Gladiator Beast Bestiari'), 'mzone');
@@ -5309,8 +5315,9 @@ async function archetypeAuditTests() {
     r.c1.respond = respondWith('Royal Oppression');
     b2.attackedThisTurnOrWasAttacked = true;
     await battleEnd(r.g);
-    eq(laq2.location, 'mzone', 'tag-out Special Summon is not negatable by Royal Oppression');
-    eq(r.g.players[1].lp, 8000, 'no LP paid');
+    eq(laq2.location, 'deck', 'tag-out effect negated by Royal Oppression: nothing Special Summoned');
+    eq(b2.location, 'deck', 'Bestiari was returned to the Deck as the cost (not destroyed)');
+    eq(r.g.players[1].lp, 7200, '800 LP paid');
     const f = setup();
     f.place(0, cardByName('Gladiator Beast Bestiari'), 'mzone');
     f.place(0, cardByName('Gladiator Beast Darius'), 'mzone');
@@ -5532,7 +5539,9 @@ async function archetypeAuditTests() {
     eq(st.location, 'deck', 'Raiza spun the Set trap');
   });
 
-  await test("Treeborn Frog: only one copy revives (not while a face-up Treeborn Frog is on your field); any Spell/Trap you control (Set card, Field Spell) stops it; not on the opponent's Standby; Necrovalley stops it", async () => {
+  // Updated (sourced sweep, group 3): Treeborn Frog is NOT negated by Necrovalley (2010 TCG ruling,
+  // https://edisonrul.ing/cards/t/treeborn-frog.html); the opponent's Necrovalley no longer stops it.
+  await test("Treeborn Frog: only one copy revives (not while a face-up Treeborn Frog is on your field); any Spell/Trap you control (Set card, Field Spell) stops it; not on the opponent's Standby; the opponent's Necrovalley does not stop it", async () => {
     const { g, place } = setup();
     const f1 = place(0, cardByName('Treeborn Frog'), 'grave');
     const f2 = place(0, cardByName('Treeborn Frog'), 'grave');
@@ -5561,7 +5570,7 @@ async function archetypeAuditTests() {
     const f5 = nv.place(0, cardByName('Treeborn Frog'), 'grave');
     live(nv.place(1, cardByName('Necrovalley'), 'fzone'));
     await standby(nv.g, 0);
-    eq(f5.location, 'grave', "opponent's Necrovalley blocks it");
+    eq(f5.location, 'mzone', "opponent's Necrovalley does not negate it");
   });
 
   await test('Frogs: Substitoad Tributes for a Frog from the Deck; Dupe Frog sent from the field adds a Frog', async () => {
@@ -5570,6 +5579,8 @@ async function archetypeAuditTests() {
     const fodder = place(0, T.wall, 'mzone');
     const swap = deckCard(g, 0, 'Swap Frog');
     pickOnly(c0, [fodder, swap]);
+    // Swap Frog's 2010 text can also send a monster from the field (itself included): decline its optional trigger here.
+    (c0 as any).confirmTrigger = async () => false;
     await activateCard(g, 0, sub);
     eq(fodder.location, 'grave', 'Tributed');
     eq(swap.location, 'mzone', 'Swap Frog Special Summoned');
@@ -6733,13 +6744,15 @@ async function plantSaberSamuraiAuditTests() {
   };
 
   // ---- Quickdraw Plant / Dandywarrior
+  // Updated (sourced sweep, group 3): its Special Summon is an Ignition Effect that sends the monster on resolution
+  // (https://edisonrul.ing/cards/q/quickdraw-synchron.html), not a Summon procedure with a cost.
   await test('Quickdraw Synchron: Special Summon needs a monster sent from the hand (not a Spell); the monster goes to the GY', async () => {
     const { g, place } = setup();
     const qd = place(0, cardByName('Quickdraw Synchron'), 'hand');
     place(0, cardByName('Mystical Space Typhoon'), 'hand');
-    eq(procOffered(g, 0, qd), false, 'only a Spell in hand: no Summon');
+    eq(offered(g, 0, qd), false, 'only a Spell in hand: no Summon');
     const dandy = place(0, cardByName('Dandylion'), 'hand');
-    await doProc(g, 0, qd);
+    await activateCard(g, 0, qd);
     eq(qd.location, 'mzone', 'Quickdraw Special Summoned');
     eq(dandy.location, 'grave', 'Dandylion sent as the cost');
     eq(g.monsters(0).filter((m) => m.name === 'Fluff Token').length, 2, 'Dandylion triggered: 2 Fluff Tokens');

@@ -998,14 +998,18 @@ monster('Zeman the Ape King', {
         const b = ctx.battle;
         return !ctx.isMyTurn && !!b && !b.negated && !b.inDamageStep && b.attacker.controller === ctx.opp && ctx.self.faceUp;
       },
-      canActivate: (ctx) => ctx.cards('me', ['hand', 'mzone'], (c) => c.isMonster && c !== ctx.self).length > 0,
+      // https://edisonrul.ing/cards/z/zeman-the-ape-king.html — the effect that negates an attack targets the attacking
+      // monster; sending a (face-up / face-down) monster is a cost.
+      canActivate: (ctx) => ctx.cards('me', ['hand', 'mzone'], (c) => c.isMonster && c !== ctx.self).length > 0 && !!ctx.battle && ctx.canTarget(ctx.battle.attacker),
       activate: async (ctx) => {
         const cost = await ctx.select(ctx.cards('me', ['hand', 'mzone'], (c) => c.isMonster && c !== ctx.self), 1, 1, 'Send 1 monster from your hand or field to the GY.', 'cost');
         if (!cost.length) return false;
         await ctx.sendToGrave(cost, 'cost');
+        if (ctx.battle) ctx.addTargets([ctx.battle.attacker]);
       },
       resolve: async (ctx) => {
-        if (ctx.battle && !ctx.battle.negated) ctx.negateAttack();
+        const b = ctx.battle;
+        if (b && !b.negated && ctx.validTargets((c) => c.location === 'mzone').includes(b.attacker)) ctx.negateAttack();
       },
       ai: {
         score: (ctx) => {
@@ -1145,7 +1149,9 @@ spell('Soul Taker', 'normal', {
 
 const rekindlable = (ctx: Ctx) => ctx.grave('me', (c) => c.isMonster && !c.isExtra && c.data.attribute === 'FIRE' && c.data.def === 200 && ctx.canSummonCard(c));
 spell('Rekindling', 'normal', {
-  text: 'Special Summon as many FIRE monsters with 200 DEF from your GY as possible. Banish them during the End Phase.',
+  text: 'Special Summon from your Graveyard as many FIRE monsters as possible with 200 DEF. During the End Phase, remove from play all monsters that were Special Summoned by this effect.',
+  // https://edisonrul.ing/cards/r/rekindling.html — it does not target and is not negated by "Necrovalley".
+  ignoresGyLock: true,
   effects: [
     {
       kind: 'activate',
@@ -1158,10 +1164,12 @@ spell('Rekindling', 'normal', {
         const sel = n === cands.length ? cands : await ctx.select(cands, n, n, `Special Summon ${n} FIRE monster(s) with 200 DEF.`, 'specialSummon');
         const r = await ctx.specialSummon(sel);
         const game = ctx.game;
+        // https://edisonrul.ing/cards/r/rekindling.html — a Summoned monster flipped face-down is not banished.
         for (const m of r) {
           const id = m.moveId;
+          const fid = m.faceUpId;
           ctx.later('end', async () => {
-            if (m.location === 'mzone' && m.moveId === id) await game.banish([m], 'effect', ctx.player, ctx.self);
+            if (m.location === 'mzone' && m.moveId === id && m.faceUpId === fid && m.faceUp) await game.banish([m], 'effect', ctx.player, ctx.self);
           });
         }
       },
@@ -1172,13 +1180,33 @@ spell('Rekindling', 'normal', {
 
 /** Prohibition: name declared by this copy (stored on the card while it stays face-up). */
 const prohibited = (ctx: Ctx): string | undefined => (stActive(ctx) ? (ctx.self.flags.prohibitedName as string | undefined) : undefined);
+/**
+ * https://edisonrul.ing/cards/p/prohibition.html — "Cards on the field before this card was activated are not affected
+ * (including face-down cards)": such a card stays usable while it remains on the field, and its effects in the GY /
+ * removed from play can still activate; once it is Summoned again it is affected.
+ */
+const prohibitionExempt = (ctx: Ctx, c: C) => {
+  const snap = ctx.self.flags.prohibitionExempt as Record<number, number> | undefined;
+  return !!snap && snap[c.uid] !== undefined && (!c.onField || c.moveId === snap[c.uid]);
+};
+/** The declared name, for a card that is not exempt. */
+const prohibitedFor = (ctx: Ctx, c: C) => {
+  const n = prohibited(ctx);
+  return !!n && c.data.name === n && !prohibitionExempt(ctx, c);
+};
 spell('Prohibition', 'continuous', {
-  text: 'Declare 1 card name. Cards with that name, and their effects, cannot be used.',
+  text: 'When you activate this card, declare 1 card name. Cards with that name and their effects cannot be used. Cards on the field before this card was activated are not affected (including face-down cards).',
   effects: [
     {
       kind: 'activate',
       categories: ['lockdown'],
+      activate: async (ctx) => {
+        const snap: Record<number, number> = {};
+        for (const c of ctx.game.allFieldCards()) if (c !== ctx.self) snap[c.uid] = c.moveId;
+        ctx.data.exempt = snap;
+      },
       resolve: async (ctx) => {
+        ctx.self.flags.prohibitionExempt = ctx.data.exempt ?? {};
         // Candidates: every card name in the opponent's Deck list (main + Extra), most valuable first.
         const seen = new Map<string, number>();
         for (const c of ctx.cards('opp', ['deck', 'hand', 'mzone', 'szone', 'fzone', 'grave', 'banished', 'extra'] as Location[])) {
@@ -1199,13 +1227,12 @@ spell('Prohibition', 'continuous', {
       event: 'chainActivated',
       label: 'Prohibition (negate)',
       eventFilter: (ctx, ev) => {
-        const n = prohibited(ctx);
         const link = ev.data?.link as ChainLink | undefined;
-        if (n && link && !link.negated && link.card.data.name === n) ctx.game.negateLink(link, false, ctx.self);
+        if (link && !link.negated && prohibitedFor(ctx, link.card)) ctx.game.negateLink(link, false, ctx.self);
         return false;
       },
     },
-    { kind: 'continuous', mods: [{ q: 'cannotAttack', to: 'cards', filter: (ctx, c: C) => !!prohibited(ctx) && c.data.name === prohibited(ctx) }] },
+    { kind: 'continuous', mods: [{ q: 'cannotAttack', to: 'cards', filter: (ctx, c: C) => prohibitedFor(ctx, c) }] },
     summonLock('Prohibition (no Summon)', (ctx, c) => c.data.name === prohibited(ctx)),
   ],
 });
