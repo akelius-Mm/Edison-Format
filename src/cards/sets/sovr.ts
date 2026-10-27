@@ -2509,7 +2509,8 @@ spell('Spider Web', 'field', {
     },
     {
       kind: 'continuous',
-      mods: [{ q: 'cannotChangePos', to: 'cards', filter: (ctx, c: C) => c.location === 'mzone' && (c.flags.sovrSpiderWebUntil ?? -1) >= ctx.game.turn }],
+      // 2010 ruling: a monster flipped face-down is no longer affected. https://edisonrul.ing/cards/s/spider-web.html
+      mods: [{ q: 'cannotChangePos', to: 'cards', filter: (ctx, c: C) => c.location === 'mzone' && c.faceUp && (c.flags.sovrSpiderWebUntil ?? -1) >= ctx.game.turn }],
     },
   ],
 });
@@ -3487,11 +3488,13 @@ trap('Spider Egg', 'normal', {
       event: 'attackDeclared',
       categories: ['negateAttack', 'specialSummon'],
       eventFilter: (ctx, ev) => evc(ev)?.controller === ctx.opp && !ev.other,
-      condition: (ctx) => !!ctx.battle && !ctx.battle.target && !ctx.battle.inDamageStep && ctx.grave('me', (c) => raceIs(c, 'Insect')).length >= 3,
+      // 2010 rulings: cannot be activated without 3 free Monster Card Zones; if there are not enough zones on resolution,
+      // the attack is not negated and no Tokens are Summoned. https://edisonrul.ing/cards/s/spider-egg.html
+      condition: (ctx) => !!ctx.battle && !ctx.battle.target && !ctx.battle.inDamageStep && ctx.grave('me', (c) => raceIs(c, 'Insect')).length >= 3 && ctx.freeMZones() >= 3,
       resolve: async (ctx) => {
-        if (!ctx.battle || ctx.battle.negated) return;
+        if (!ctx.battle || ctx.battle.negated || ctx.freeMZones() < 3) return;
         ctx.negateAttack();
-        if (ctx.canSpecialSummon() && ctx.freeMZones() > 0) await ctx.createTokens(spiderToken, 3, 'atk');
+        if (ctx.canSpecialSummon()) await ctx.createTokens(spiderToken, 3, 'atk');
       },
       ai: { score: (ctx) => (ctx.battle && ctx.atk(ctx.battle.attacker) >= 1000 ? 65 : 0) },
     },
@@ -3509,9 +3512,9 @@ trap("Wolf in Sheep's Clothing", 'normal', {
       canActivate: (ctx) =>
         ctx.canSpecialSummon() &&
         ctx.freeMZones() >= 2 &&
-        ctx.hand('me', (c) => c.isMonster && lvl(c) === 1 && ctx.canSummonCard(c) && ctx.deck('me', (d) => d.name === c.name).length > 0).length > 0,
+        ctx.hand('me', (c) => c.isMonster && ctx.level(c) === 1 && ctx.canSummonCard(c) && ctx.deck('me', (d) => d.name === c.name).length > 0).length > 0,
       activate: async (ctx) => {
-        const cands = ctx.hand('me', (c) => c.isMonster && lvl(c) === 1 && ctx.canSummonCard(c) && ctx.deck('me', (d) => d.name === c.name).length > 0);
+        const cands = ctx.hand('me', (c) => c.isMonster && ctx.level(c) === 1 && ctx.canSummonCard(c) && ctx.deck('me', (d) => d.name === c.name).length > 0);
         const [c] = await ctx.select(cands, 1, 1, 'Reveal 1 Level 1 monster in your hand.', 'specialSummon', { aiScore: reviveScore });
         if (!c) return false;
         c.revealedUntil = ctx.turn;
@@ -3522,8 +3525,17 @@ trap("Wolf in Sheep's Clothing", 'normal', {
         const c = ctx.data.c as C;
         if (!c || c.location !== 'hand' || !ctx.canSpecialSummon()) return;
         const twin = ctx.deck('me', (d) => d.name === c.name)[0];
-        const list = twin && ctx.freeMZones() >= 2 ? [c, twin] : [c];
-        await ctx.specialSummon(list, { pos: 'choose' });
+        // 2010 ruling: with only 1 free Monster Card Zone, choose which of the two to Special Summon; the other goes to
+        // the GY. https://edisonrul.ing/cards/w/wolf-in-sheeps-clothing.html
+        if (twin && ctx.freeMZones() === 1) {
+          const [keep] = await ctx.select([c, twin], 1, 1, 'Only 1 free Monster Card Zone: choose the monster to Special Summon (the other goes to the GY).', 'specialSummon');
+          const other = keep === c ? twin : c;
+          if (keep) await ctx.specialSummon(keep, { pos: 'choose' });
+          await ctx.sendToGrave(other);
+        } else {
+          const list = twin && ctx.freeMZones() >= 2 ? [c, twin] : [c];
+          await ctx.specialSummon(list, { pos: 'choose' });
+        }
         ctx.game.shuffleDeck(ctx.player);
       },
       ai: { score: () => 50 },

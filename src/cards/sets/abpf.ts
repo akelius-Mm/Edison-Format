@@ -713,7 +713,11 @@ monster('Sword Master', {
         const a = evc(ev);
         const t = evo(ev);
         const b = ctx.battle;
-        return !!a && !!t && !!b && ev.player === ctx.player && isRace(a, 'Warrior') && t.location === 'mzone' && t.moveId === b.targetMoveId && t.controller === ctx.opp;
+        // 2010 ruling: a monster destroyed by a card effect during the battle was still "not destroyed by battle".
+        // https://edisonrul.ing/cards/s/sword-master.html
+        if (!a || !t || !b || ev.player !== ctx.player || !isRace(a, 'Warrior')) return false;
+        if (ctx.game.eventLog.some((e) => e.type === 'battleDestroyed' && e.card === t && e.dsId === ev.dsId)) return false;
+        return t.location !== 'mzone' || t.moveId !== b.targetMoveId || t.controller === ctx.opp;
       },
       condition: (ctx) => ctx.canSummonSelf() && ctx.canSummonCard(ctx.self),
       resolve: async (ctx) => {
@@ -1744,6 +1748,8 @@ monster('Majestic Red Dragon', {
   ],
 });
 
+/** Turn in which each Sun Dragon Inti on the field was destroyed (kept wherever the card goes next). */
+const intiDestroyedTurn = new WeakMap<C, number>();
 monster('Sun Dragon Inti', {
   attribute: 'LIGHT',
   race: 'Dragon',
@@ -1781,15 +1787,18 @@ monster('Sun Dragon Inti', {
       event: 'destroyed',
       label: '(destroyed)',
       eventFilter: (ctx, ev) => {
-        if (ev.card === ctx.self && ev.from === 'mzone') ctx.self.flags.intiDestroyedTurn = ctx.turn;
+        if (ev.card === ctx.self && ev.from === 'mzone') intiDestroyedTurn.set(ctx.self, ctx.turn);
         return false;
       },
     },
+    // 2010 rulings: this effect "does not activate in any specific place": it activates as long as a "Moon Dragon Quilla"
+    // is in the GY, even if Sun Dragon Inti is no longer in the GY (on the field, in the Extra Deck...).
+    // https://edisonrul.ing/cards/s/sun-dragon-inti.html
     reviveFromGrave('Revive Moon Dragon Quilla', named('Moon Dragon Quilla'), {
       event: 'phaseStart',
-      range: ['grave'],
+      range: ALL_LOCS,
       opt: true,
-      eventFilter: (ctx, ev) => ev.phase === 'standby' && ctx.self.flags.intiDestroyedTurn === ctx.turn - 1,
+      eventFilter: (ctx, ev) => ev.phase === 'standby' && intiDestroyedTurn.get(ctx.self) === ctx.turn - 1,
     }),
   ],
 });
@@ -2159,10 +2168,14 @@ monster('Viser Des', {
         const g = ctx.game;
         const p = ctx.player;
         const self = ctx.self;
+        const selfMid = self.moveId;
         ctx.log(`${t.name} will be destroyed during the third Standby Phase.`);
+        // 2010 rulings: nothing is destroyed if Viser Des left the field (even temporarily) or is controlled by the
+        // opponent before then. https://edisonrul.ing/cards/v/viser-des.html
         ctx.later(
           'standby',
           async () => {
+            if (self.location !== 'mzone' || self.moveId !== selfMid || self.controller !== p) return;
             if (t.location === 'mzone' && t.moveId === mid) await g.destroy([t], 'effect', p, self);
           },
           6,
@@ -2603,7 +2616,8 @@ spell("Spiders' Lair", 'continuous', {
         }
       },
     },
-    { kind: 'continuous', mods: [{ q: 'cannotChangePos', to: 'cards', filter: (ctx, c: C) => marked(ctx.self.flags.lairLocked, c) }] },
+    // 2010 ruling: a monster flipped face-down (Book of Moon) is no longer affected. https://edisonrul.ing/cards/s/spiders-lair.html
+    { kind: 'continuous', mods: [{ q: 'cannotChangePos', to: 'cards', filter: (ctx, c: C) => c.faceUp && marked(ctx.self.flags.lairLocked, c) }] },
   ],
 });
 

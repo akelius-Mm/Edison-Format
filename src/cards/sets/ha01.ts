@@ -601,7 +601,9 @@ spell('Wrath of Neos', 'normal', {
         await ctx.selectTargets(ctx.monsters('me', isNeos), 1, 1, 'Target 1 "Elemental HERO Neos" you control.', 'toDeck', { aiScore: () => 1 });
       },
       resolve: async (ctx) => {
-        const t = ctx.validTargets((c) => isNeos(c) && c.controller === ctx.player);
+        // 2010 ruling: if the opponent gains control of the targeted Neos first, it still returns to the Deck and all
+        // cards are destroyed. https://edisonrul.ing/cards/w/wrath-of-neos.html
+        const t = ctx.validTargets((c) => isNeos(c));
         if (!t.length) return;
         const moved = await ctx.toDeck(t[0], 'shuffle');
         if (!moved.length || (t[0].location !== 'deck' && t[0].location !== 'extra')) return;

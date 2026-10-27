@@ -1695,7 +1695,9 @@ M(STEALTH_UNION, {
           value: (ctx) =>
             ctx.game.equipsOf(ctx.self).some((e) => e.isMonster && e.flags.glasEquipBy === ctx.self.uid) ? Math.max(0, ctx.game.monsters(ctx.opp).length - 1 + ctx.self.attacksThisTurn) : 0,
         },
-        { q: 'atk', value: (ctx) => (ctx.battle?.inDamageStep && ctx.battle.attacker === ctx.self ? -Math.floor(ctx.game.baseAtk(ctx.self) / 2) : 0) },
+        // 2010 ruling: the halving applies from the attack declaration until the end of the Damage Step.
+        // https://edisonrul.ing/cards/s/super-vehicroid-stealth-union.html
+        { q: 'atk', value: (ctx) => (ctx.battle && ctx.battle.attacker === ctx.self ? -Math.floor(ctx.game.baseAtk(ctx.self) / 2) : 0) },
         { q: 'piercing' },
       ],
     },
@@ -2220,8 +2222,10 @@ S('Super Double Summon', 'quickplay', {
         if (!t) return;
         makeGeminiActive(ctx, t);
         const moveId = t.moveId;
+        const fid = t.faceUpId;
         ctx.later('end', async () => {
-          if (t.location === 'mzone' && t.moveId === moveId) {
+          // 2010 ruling: not returned if it was flipped face-down. https://edisonrul.ing/cards/s/super-double-summon.html
+          if (t.location === 'mzone' && t.moveId === moveId && t.faceUpId === fid) {
             ctx.game.log(`${t.name} returns to the hand (Super Double Summon).`, 'action', ctx.player);
             await ctx.game.toHand([t], 'effect', ctx.player, ctx.self);
           }
@@ -2890,8 +2894,11 @@ S('Swing of Memories', 'normal', {
         const r = await ctx.specialSummon(t);
         if (!r.length) return;
         const moveId = t.moveId;
+        const fid = t.faceUpId;
+        // 2010 ruling: once it is flipped face-down it is not destroyed, even if flipped face-up again this turn.
+        // https://edisonrul.ing/cards/s/swing-of-memories.html
         ctx.later('end', async () => {
-          if (t.location === 'mzone' && t.moveId === moveId) await ctx.game.destroy([t], 'effect', ctx.player, ctx.self);
+          if (t.location === 'mzone' && t.moveId === moveId && t.faceUpId === fid) await ctx.game.destroy([t], 'effect', ctx.player, ctx.self);
         });
       },
       ai: { score: (ctx) => (ctx.phase === 'main1' && ctx.grave('me', (c) => isNormalLike(c) && (c.data.atk ?? 0) >= 1800).length ? 35 : 0) },
@@ -2956,13 +2963,21 @@ S('Veil of Darkness', 'continuous', {
         return stActive(ctx) && ev.player === ctx.player && ctx.isMyTurn && ctx.phase === 'draw' && !!c && c.isMonster && c.data.attribute === 'DARK';
       },
       canActivate: (ctx) => evc(ctx.event!)?.location === 'hand',
+      // 2010 rulings: the DARK monster is revealed on activation and sent to the GY on resolution; you draw only if it
+      // was sent (not with a second copy, not if Macro Cosmos banishes it), and drawing is optional.
+      // https://edisonrul.ing/cards/v/veil-of-darkness.html
       activate: async (ctx) => {
         const c = evc(ctx.event!)!;
         await reveal(ctx, [c]);
-        await ctx.sendToGrave(c, 'cost');
+        ctx.data.c = c;
+        ctx.data.mid = c.moveId;
       },
       resolve: async (ctx) => {
-        await ctx.draw(1);
+        const c = ctx.data.c as C;
+        if (!c || c.location !== 'hand' || c.moveId !== ctx.data.mid) return;
+        await ctx.sendToGrave(c);
+        if ((c.location as string) !== 'grave') return;
+        if (await ctx.confirm('Veil of Darkness: draw 1 card?', true)) await ctx.draw(1);
       },
       ai: { score: () => 1 },
     },

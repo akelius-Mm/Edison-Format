@@ -2183,8 +2183,11 @@ async function ptdnTests() {
     const tb = place(0, cardByName('Transmigration Break'), 'szone', { faceUp: true });
     tb.activeOnField = true;
     const mons = [0, 1, 2, 3, 4].map(() => place(0, T.wall, 'grave'));
+    // 2010 ruling (https://edisonrul.ing/cards/t/transmigration-break.html): Pot of Avarice cannot be activated while
+    // Transmigration Break is active, so the GY-to-Deck move is checked directly.
     const pot = place(0, cardByName('Pot of Avarice'), 'hand');
-    await activateCard(g, 0, pot);
+    eq(g.getActivations(0, { open: true }).some((a) => a.card === pot), false, 'Pot of Avarice cannot be activated');
+    await g.moveCards(mons, 'deck', { reason: 'effect', reasonPlayer: 0 });
     eq(mons.every((c) => c.location === 'banished'), true, 'banished instead of shuffled into the Deck');
   });
 

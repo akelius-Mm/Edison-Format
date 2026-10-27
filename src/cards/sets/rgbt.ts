@@ -2407,8 +2407,10 @@ spell('Thorn of Malice', 'equip', {
           q: 'indestructibleBattle',
           to: 'cards',
           filter: (ctx, c: C) => {
+            // 2010 rulings: only your opponent's monsters, battling the equipped monster you control.
+            // https://edisonrul.ing/cards/t/thorn-of-malice.html
             const eq = ctx.equipTarget;
-            return !!eq && c !== eq && c.controller !== eq.controller && battleOpponent(ctx, eq) === c;
+            return !!eq && c !== eq && eq.controller === ctx.player && c.controller === ctx.opp && battleOpponent(ctx, eq) === c;
           },
         },
       ],
@@ -2822,6 +2824,9 @@ spell('Supremacy Berry', 'normal', {
     {
       kind: 'activate',
       categories: ['recover'],
+      // 2010 ruling: cannot be activated while both players' Life Points are the same.
+      // https://edisonrul.ing/cards/s/supremacy-berry.html
+      canActivate: (ctx) => ctx.lp !== ctx.oppLp,
       activate: async (ctx) => {
         ctx.data.cmp = Math.sign(ctx.lp - ctx.oppLp);
       },
@@ -3098,16 +3103,15 @@ trap('Tuner Capture', 'normal', {
         const uids = ((s?.flags.materials ?? []) as { uid: number }[]).map((m) => m.uid);
         return ctx.canSpecialSummon() && ctx.grave('opp', (c) => uids.includes(c.uid) && c.isTuner && ctx.canSummonCard(c)).length > 0;
       },
+      // 2010 ruling: it targets the Tuner in the opponent's GY. https://edisonrul.ing/cards/t/tuner-capture.html
       activate: async (ctx) => {
         const s = evc(ctx.event!)!;
-        ctx.data.uids = ((s.flags.materials ?? []) as { uid: number }[]).map((m) => m.uid);
+        const uids = ((s.flags.materials ?? []) as { uid: number }[]).map((m) => m.uid);
+        await ctx.selectTargets(ctx.grave('opp', (c) => uids.includes(c.uid) && c.isTuner && ctx.canSummonCard(c)), 1, 1, 'Target 1 Tuner used for that Synchro Summon.', 'specialSummon');
       },
       resolve: async (ctx) => {
-        const uids = ctx.data.uids as number[];
-        const cands = ctx.grave('opp', (c) => uids.includes(c.uid) && c.isTuner && ctx.canSummonCard(c));
-        if (!cands.length || !ctx.canSpecialSummon()) return;
-        const [c] = await ctx.select(cands, 1, 1, 'Special Summon 1 Tuner used for that Synchro Summon.', 'specialSummon');
-        if (c) await ctx.specialSummon(c, { pos: aiPos(ctx, c) });
+        const [c] = ctx.validTargets((x) => x.location === 'grave' && x.isTuner && ctx.canSummonCard(x));
+        if (c && ctx.canSpecialSummon()) await ctx.specialSummon(c, { pos: aiPos(ctx, c) });
       },
       ai: { score: () => 50 },
     },

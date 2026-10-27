@@ -1087,14 +1087,18 @@ monster('Tribe-Infecting Virus', {
       kind: 'ignition',
       label: 'Discard: destroy a Type',
       categories: ['destroy', 'destroyMulti', 'discard'],
-      canActivate: (ctx) => ctx.hand().length > 0,
+      // 2010 ruling: you cannot declare a Type that is not face-up on the field (either side is fine).
+      // https://edisonrul.ing/cards/t/tribe-infecting-virus.html
+      canActivate: (ctx) => ctx.hand().length > 0 && ctx.faceUpMonsters('both').length > 0,
       activate: async (ctx) => {
         const d = await ctx.select(ctx.hand(), 1, 1, 'Discard 1 card.', 'discard');
         if (!d.length) return false;
         await ctx.discard(d, 'cost');
-        const i = await ctx.option('Declare a Monster Type.', RACES, (k) => raceSwing(ctx, RACES[k]));
-        ctx.data.race = RACES[i];
-        ctx.log(`Declares ${RACES[i]}.`);
+        const onField = RACES.filter((r) => ctx.faceUpMonsters('both', (c) => c.data.race === r).length > 0);
+        const races = onField.length ? onField : RACES;
+        const i = await ctx.option('Declare a Monster Type.', races, (k) => raceSwing(ctx, races[k]));
+        ctx.data.race = races[i];
+        ctx.log(`Declares ${races[i]}.`);
       },
       resolve: async (ctx) => {
         await ctx.destroy(ctx.faceUpMonsters('both', (c) => c.data.race === ctx.data.race));
@@ -1461,7 +1465,7 @@ monster('Totem Dragon', {
   level: 2,
   atk: 400,
   def: 200,
-  text: 'Can be treated as 2 Tributes for the Tribute Summon of a Dragon monster. Once per turn, during your Standby Phase, if this card is in your GY, all monsters in your GY are Dragons, and you control no monsters: You can Special Summon this card in Attack Position, but banish it when it leaves the field.',
+  text: 'This card can be treated as 2 Tributes for the Tribute Summon of a Dragon-Type monster. If this card is in your Graveyard during your Standby Phase and you control no monsters, you can Special Summon this card in Attack Position. You cannot activate this effect if there are any monsters in your Graveyard that are not Dragon-Type. If this card is Special Summoned with this effect, remove it from play when it is removed from the field.',
   aiValue: 200,
   effects: [
     // CRMS: "Can be treated as 2 Tributes for the Tribute Summon of a Dragon monster" (ABPF altTribute hook).
@@ -1470,7 +1474,8 @@ monster('Totem Dragon', {
       kind: 'trigger',
       event: 'phaseStart',
       range: ['grave'],
-      opt: true,
+      // 2010 text/ruling: no once-per-turn (it can be used again if first negated by Royal Oppression).
+      // https://edisonrul.ing/cards/t/totem-dragon.html
       label: 'Revive',
       categories: ['specialSummon'],
       eventFilter: (ctx, ev) => ev.phase === 'standby' && ctx.isMyTurn,
@@ -1683,7 +1688,9 @@ monster('Witch of the Black Forest', {
       mandatory: true,
       label: 'Search',
       categories: ['search'],
-      eventFilter: selfFieldToGrave,
+      // 2010 ruling: no effect if its Summon is negated (Horn of Heaven, Solemn Judgment).
+      // https://edisonrul.ing/cards/w/witch-of-the-black-forest.html
+      eventFilter: (ctx, ev) => selfFieldToGrave(ctx, ev) && !(ctx.game.pendingSummon?.negated && ctx.game.pendingSummon.cards.includes(ctx.self)),
       resolve: async (ctx) => {
         await ctx.search((c) => c.isMonster && (c.data.def ?? 0) <= 1500, 1, 'Add 1 monster with 1500 or less DEF to your hand.');
       },
