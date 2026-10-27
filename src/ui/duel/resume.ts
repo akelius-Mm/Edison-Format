@@ -21,6 +21,8 @@ import type { GameResult } from '../../tournament/types';
 import type { DuelSide } from './api';
 
 export const ACTIVE_DUEL_KEY = 'edison.duel.active.v1';
+/** Set while a saved game is being replayed; still set on the next launch = that restore killed the app. */
+export const RESTORING_KEY = 'edison.duel.restoring.v1';
 
 export type ResumeKind = 'vsai' | 'locals' | 'events' | 'draft' | 'tournament' | 'friend' | 'friend-locals';
 
@@ -105,6 +107,8 @@ export interface SavedDuel {
   game: SavedGame | null;
   /** The duel screen was open when this was saved (the app was closed mid-duel, not left). */
   live?: boolean;
+  /** The app version that saved it (missing in records saved before this was kept). */
+  build?: string;
 }
 
 export function loadActiveDuel(): SavedDuel | null {
@@ -136,6 +140,56 @@ export function clearActiveDuel() {
   } catch {
     /* ignore */
   }
+}
+
+// ------------------------------------------------------------------ restore guard
+//
+// Replaying a saved game runs the whole game again in one go. If that ever goes wrong in a way the
+// replay cannot catch (the browser kills the page: iOS shows "A problem repeatedly occurred"), the
+// next resume must not try the same replay again, or the app crashes every time it is opened. So a
+// mark is left while a replay runs and cleared once it is over (the first new decision, the end of
+// the game, or the app going to the background). A mark that is still there when the same game is
+// resumed means the last restore never finished: that game starts over instead.
+
+interface RestoringMark {
+  key: string;
+  index: number;
+  seed: number;
+  at: number;
+}
+
+const sameGame = (m: RestoringMark | null, d: SavedDuel) => !!m && !!d.game && m.key === d.tag.key && m.index === d.game.index && m.seed === d.game.seed;
+
+function loadRestoring(): RestoringMark | null {
+  try {
+    const m = JSON.parse(localStorage.getItem(RESTORING_KEY) || 'null') as RestoringMark | null;
+    return m && typeof m.key === 'string' ? m : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Before replaying `d.game`: remember that a restore is under way. */
+export function markRestoring(d: SavedDuel) {
+  if (!d.game) return;
+  try {
+    localStorage.setItem(RESTORING_KEY, JSON.stringify({ key: d.tag.key, index: d.game.index, seed: d.game.seed, at: Date.now() } satisfies RestoringMark));
+  } catch {
+    /* storage full: no guard, the replay still runs */
+  }
+}
+
+export function clearRestoring() {
+  try {
+    localStorage.removeItem(RESTORING_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
+/** The last attempt to restore this very game never finished (the app was killed during it). */
+export function restoreInterrupted(d: SavedDuel): boolean {
+  return sameGame(loadRestoring(), d);
 }
 
 /** The saved duel for this match, if any. */

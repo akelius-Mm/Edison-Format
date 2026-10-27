@@ -102,9 +102,46 @@ export function loadActiveEvent(): EventRun | null {
   if (!r || r.version !== 1 || !(r.kind in EVENT_SPECS) || !Array.isArray(r.entrants) || !Array.isArray(r.rounds)) return null;
   r.rated ??= [];
   r.ratingDelta ??= 0;
+  r.revealed ??= [];
+  r.top ??= [];
   return r;
 }
 export const saveEvent = (r: EventRun) => save(KEYS.activeEvent, r);
+
+/**
+ * What is wrong with a saved event that the live screen cannot work with, or null when it is sound.
+ * Checked before the event opens, so a damaged save (an older build, a write cut short) shows a
+ * clear choice to try again or abandon it instead of breaking the screen.
+ */
+export function validateEvent(r: EventRun): string | null {
+  if (!r || typeof r !== 'object') return 'no event data';
+  if (!Array.isArray(r.entrants) || r.entrants.length < 2) return 'the player list is missing';
+  if (!Array.isArray(r.rounds) || !Array.isArray(r.top)) return 'the rounds are missing';
+  if (!Array.isArray(r.revealed)) return 'the table list is missing';
+  const ids = new Set<string>();
+  for (const e of r.entrants) {
+    if (!e || typeof e.id !== 'string' || !e.deck || !Array.isArray(e.deck.main)) return 'a player entry is damaged';
+    ids.add(e.id);
+  }
+  if (!ids.has(r.humanId)) return 'you are not in the player list';
+  if (!['swiss', 'top', 'done'].includes(r.phase)) return `unknown phase "${String(r.phase)}"`;
+  if (!['pairings', 'results', 'standings'].includes(r.step)) return `unknown step "${String(r.step)}"`;
+  const cut = r.topCut;
+  if (!Number.isInteger(cut) || cut < 2 || cut > 1024 || (cut & (cut - 1)) !== 0 || cut > r.entrants.length) return `a Top ${String(cut)} cut is not possible`;
+  if (!Number.isInteger(r.swissRounds) || r.swissRounds < 1 || r.swissRounds > 20 || r.rounds.length > r.swissRounds) return 'the Swiss round count is wrong';
+  if (r.top.length > Math.log2(cut)) return 'the top cut has too many rounds';
+  if (r.phase === 'swiss' && !r.rounds.length) return 'no Swiss round has been paired';
+  if (r.phase !== 'swiss' && !r.top.length) return 'the top cut has not been paired';
+  for (const round of [...r.rounds, ...r.top]) {
+    if (!Array.isArray(round) || !round.length) return 'a round is empty';
+    for (const m of round) {
+      if (!m || typeof m.id !== 'string' || !Array.isArray(m.games)) return 'a match is damaged';
+      if (!ids.has(m.a) || (m.b != null && !ids.has(m.b))) return `match ${m.id} has a player who is not in the event`;
+    }
+  }
+  if (!Number.isFinite(r.roundMinutes) || !Number.isFinite(r.roundStartedAt)) return 'the round clock is damaged';
+  return null;
+}
 export const clearActiveEvent = () => remove(KEYS.activeEvent);
 
 export function loadEventHistory(): EventHistoryEntry[] {

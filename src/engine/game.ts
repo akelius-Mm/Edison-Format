@@ -18,6 +18,14 @@ import type {
   Reason,
 } from './types';
 
+/**
+ * Safety limit: log lines plus animation steps in one turn. A real turn uses a few hundred; a card loop
+ * that never ends (or a replay that drifts into one) would otherwise allocate until the browser kills
+ * the page (iOS: "A problem repeatedly occurred"). Past the limit the duel ends as a draw.
+ */
+export const MAX_TURN_WORK = 20000;
+export const RUNAWAY_REASON = 'Duel stopped: a turn never ended (safety limit)';
+
 export class GameOver extends Error {
   constructor(
     public winner: PlayerId | null,
@@ -199,6 +207,9 @@ export class Game {
   /** Cards sent to graveyard this turn etc. Track per-turn data for card scripts. */
   turnData: Record<string, any> = {};
   private actionCounter = 0;
+  /** Log lines + animation steps this turn (MAX_TURN_WORK). */
+  private turnWork = 0;
+  private stopping = false;
   /** Depth guard for continuous queries. */
   private queryDepth = 0;
   /** Cards with a `dataMod` effect (Zombie World, Proto-Cyber Dragon), wherever they are. See cardView. */
@@ -313,9 +324,30 @@ export class Game {
     const e: LogEntry = { text, kind, player, turn: this.turn };
     this.logEntries.push(e);
     this.hooks.log?.(e);
+    this.work();
   }
 
-  async anim(a: AnimEvent) {
+  /** Count one unit of turn work; past MAX_TURN_WORK the duel stops (and keeps stopping if a caller swallows it). */
+  private work() {
+    if (++this.turnWork <= MAX_TURN_WORK || this.stopping) return;
+    if (!this.over) {
+      this.stopping = true;
+      try {
+        this.endGame(null, RUNAWAY_REASON);
+      } finally {
+        this.stopping = false;
+      }
+    }
+    throw new GameOver(this.winner, this.winReason || RUNAWAY_REASON);
+  }
+
+  /** Throws synchronously at the safety limit, so even a fire-and-forget call stops a runaway turn. */
+  anim(a: AnimEvent): Promise<void> {
+    this.work();
+    return this.animStep(a);
+  }
+
+  private async animStep(a: AnimEvent) {
     // hidden information shown to the players (a revealed card, a coin toss, a draw): see engine/undo.ts
     if (a.type === 'reveal' || a.type === 'coin' || a.type === 'draw' || a.type === 'shuffle') this.revealSeq++;
     this.hooks.update?.();
@@ -2364,6 +2396,7 @@ export class Game {
     this.players[tp].normalSummonsLeft = 1;
     this.players[tp].restrictedSummons = [];
     this.actionCounter = 0;
+    this.turnWork = 0;
     for (const c of this.allCards) {
       c.attacksThisTurn = 0;
       c.attackedThisTurnOrWasAttacked = false;

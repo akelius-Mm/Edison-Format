@@ -8,7 +8,22 @@ import { matchOutcome } from '../../tournament/simulate';
 import type { GameResult } from '../../tournament/types';
 import type { DuelResult, DuelSide } from '../duel/api';
 import { startDuel } from '../duel/duelScreen';
-import { activeDuelFor, clearActiveDuel, deckFromIds, deckToIds, fromSavedSide, saveActiveDuel, toSavedSide, type PlayedGame, type ResumeTag, type SavedDuel } from '../duel/resume';
+import {
+  activeDuelFor,
+  clearActiveDuel,
+  clearRestoring,
+  deckFromIds,
+  deckToIds,
+  fromSavedSide,
+  markRestoring,
+  restoreInterrupted,
+  saveActiveDuel,
+  toSavedSide,
+  type PlayedGame,
+  type ResumeTag,
+  type SavedDuel,
+} from '../duel/resume';
+import { BUILD } from '../diag';
 import { sidingScreen } from './siding';
 import { getSettings } from '../settings';
 import { button, h, icon, toast, type ICONS } from './dom';
@@ -60,11 +75,14 @@ export async function runMatch(setup: MatchSetup): Promise<MatchOutcome> {
   // ---- resume: a saved duel for this very match continues where it was left
   const saving = !!setup.resume && setup.sides.some(isHuman);
   let rec: SavedDuel | null = null;
+  /** The saved duel was written by another version of the app (its moves may not replay the same). */
+  let otherBuild = false;
   if (saving) {
     const saved = activeDuelFor(setup.resume!.key);
     const restored = saved && setupFromSaved(saved);
     if (saved && restored) {
       rec = saved;
+      otherBuild = saved.build !== BUILD;
       setup = { ...restored, resume: { ...saved.tag, ...setup.resume } };
       rec.tag = setup.resume!;
     } else {
@@ -87,12 +105,14 @@ export async function runMatch(setup: MatchSetup): Promise<MatchOutcome> {
         },
         games: [],
         game: null,
+        build: BUILD,
       };
     }
   }
   const persist = () => {
     if (!rec) return;
     rec.savedAt = Date.now();
+    rec.build = BUILD;
     saveActiveDuel(rec);
   };
   if (rec) {
@@ -124,6 +144,10 @@ export async function runMatch(setup: MatchSetup): Promise<MatchOutcome> {
   };
   let conceded = false;
   let left = false;
+  // the app going to the background (or closing normally) is not a crash: drop the restore mark
+  const onHidden = () => document.visibilityState === 'hidden' && clearRestoring();
+  document.addEventListener('visibilitychange', onHidden);
+  window.addEventListener('pagehide', clearRestoring);
   try {
     for (let guard = 0; guard < 12; guard++) {
       const out = matchOutcome(games, setup.bestOf, setup.requireWinner);
@@ -179,6 +203,20 @@ export async function runMatch(setup: MatchSetup): Promise<MatchOutcome> {
           persist();
         }
       }
+      // Resuming a game in progress replays its moves. If the last attempt to do that never finished
+      // (the app was killed during it), don't try again: start the game over (resume.ts).
+      if (rec && cur.log.length) {
+        if (restoreInterrupted(rec)) {
+          clearRestoring();
+          await restoreFailed(host, setup, cur.index, playmat, 'interrupted');
+          cur.seed = newSeed();
+          cur.log = [];
+          cur.turn = 0;
+          persist();
+          continue;
+        }
+        markRestoring(rec);
+      }
       host.replaceChildren();
       const game = cur;
       const gameSides: [DuelSide, DuelSide] = [0, 1].map((i) => {
@@ -188,6 +226,7 @@ export async function runMatch(setup: MatchSetup): Promise<MatchOutcome> {
       let decided = false;
       const onGameOver = (r: DuelResult) => {
         decided = true;
+        clearRestoring();
         const g: GameResult = { winner: (r.winner ?? null) as 0 | 1 | null, turns: r.turns, reason: r.surrendered ? 'Surrender' : r.reason, how: 'human' };
         games.push(g);
         played[game.index] = { decks: game.decks ?? original, ...(r.seen ? { seen: r.seen } : {}) };
@@ -216,6 +255,8 @@ export async function runMatch(setup: MatchSetup): Promise<MatchOutcome> {
           replay: game.log.length ? game.log : undefined,
           onDecision: rec
             ? (log, g) => {
+                // a new move: the restore (if any) is behind us
+                clearRestoring();
                 game.log = log.slice();
                 game.turn = g.turn;
                 persist();
@@ -226,12 +267,13 @@ export async function runMatch(setup: MatchSetup): Promise<MatchOutcome> {
       } catch (e) {
         console.error('duel failed', e);
       }
+      clearRestoring();
       if (r?.left) {
         left = true;
         return new Promise<MatchOutcome>(() => {});
       }
       if (r?.restoreFailed) {
-        await restoreFailed(host, setup, game.index, playmat);
+        await restoreFailed(host, setup, game.index, playmat, otherBuild ? 'older' : 'mismatch');
         game.seed = newSeed();
         game.log = [];
         game.turn = 0;
@@ -243,6 +285,8 @@ export async function runMatch(setup: MatchSetup): Promise<MatchOutcome> {
     finish();
     return { games, result: 'draw', conceded };
   } finally {
+    document.removeEventListener('visibilitychange', onHidden);
+    window.removeEventListener('pagehide', clearRestoring);
     host.classList.add('closing');
     setTimeout(() => host.remove(), 300);
     document.body.classList.remove('in-duel');
@@ -258,8 +302,15 @@ export async function runMatch(setup: MatchSetup): Promise<MatchOutcome> {
   }
 }
 
-/** Replaying a saved game did not reproduce it: say so and start that game again. */
-function restoreFailed(host: HTMLElement, setup: MatchSetup, index: number, playmat: string): Promise<void> {
+const RESTORE_MSG = {
+  mismatch: ['Couldn’t restore this duel exactly', 'The saved moves no longer line up with the game, so this game starts again from the beginning. Earlier games of the match still count.'],
+  older: ['Saved by an older version', 'This duel was saved by an earlier version of the app and its moves no longer line up with the game, so this game starts again from the beginning. Earlier games of the match still count.'],
+  interrupted: ['Couldn’t restore this duel', 'The app closed while this duel was being restored, so instead of trying again this game starts from the beginning. Earlier games of the match still count.'],
+} as const;
+
+/** Replaying a saved game did not reproduce it (or could not finish): say so and start that game again. */
+function restoreFailed(host: HTMLElement, setup: MatchSetup, index: number, playmat: string, why: keyof typeof RESTORE_MSG = 'mismatch'): Promise<void> {
+  const [title, msg] = RESTORE_MSG[why];
   return new Promise((resolve) => {
     host.replaceChildren();
     const bg = h('div', { class: 'inter-bg' });
@@ -272,8 +323,8 @@ function restoreFailed(host: HTMLElement, setup: MatchSetup, index: number, play
         { class: 'inter inter--restore' },
         h('div', { class: 'inter-caption' }, setup.caption),
         h('div', { class: 'inter-title' }, `Game ${index + 1}`),
-        h('div', { class: 'inter-result' }, 'Couldn’t restore this duel exactly'),
-        h('p', { class: 'inter-msg' }, 'The saved moves no longer line up with the game, so this game starts again from the beginning. Earlier games of the match still count.'),
+        h('div', { class: 'inter-result' }, title),
+        h('p', { class: 'inter-msg', dataset: { restore: why } }, msg),
         actions,
       ),
     );
