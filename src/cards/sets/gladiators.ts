@@ -513,6 +513,7 @@ spell('Gladiator Proving Ground', 'normal', {
   ],
 });
 
+const respiteCard = (c: CardInstance) => c.inSet('gladiator') || c.name.includes('Gladiator Beast');
 spell("Gladiator Beast's Respite", 'normal', {
   sets: GB,
   text: 'Shuffle 2 "Gladiator Beast" cards from your hand into the Deck; draw 3 cards.',
@@ -520,11 +521,13 @@ spell("Gladiator Beast's Respite", 'normal', {
     {
       kind: 'activate',
       categories: ['draw', 'toDeck'],
-      canActivate: (ctx) => ctx.hand('me', (c) => c !== ctx.self && c.inSet('gladiator')).length >= 2,
+      // 2010 ruling: any card with "Gladiator Beast" in its name can be returned (e.g. the Battle Equip Spells).
+      // https://edisonrul.ing/cards/g/gladiator-beasts-respite.html
+      canActivate: (ctx) => ctx.hand('me', (c) => c !== ctx.self && respiteCard(c)).length >= 2,
       // Rulings audit: shuffling the 2 cards is part of the effect, not a cost (done on resolution). If you cannot
       // return 2 "Gladiator Beast" cards then, nothing happens (no draw).
       resolve: async (ctx) => {
-        const cands = ctx.hand('me', (c) => c !== ctx.self && c.inSet('gladiator'));
+        const cands = ctx.hand('me', (c) => c !== ctx.self && respiteCard(c));
         if (cands.length < 2) return;
         const sel = await ctx.select(cands, 2, 2, 'Shuffle 2 "Gladiator Beast" cards from your hand into the Deck.', 'toDeck');
         if (sel.length < 2) return;
@@ -532,7 +535,7 @@ spell("Gladiator Beast's Respite", 'normal', {
         if (back.length < 2) return;
         await ctx.draw(3);
       },
-      ai: { score: (ctx) => (ctx.hand('me', (c) => c !== ctx.self && c.inSet('gladiator')).length >= 3 || ctx.game.players[ctx.player].normalSummonsLeft === 0 ? 55 : 30) },
+      ai: { score: (ctx) => (ctx.hand('me', (c) => c !== ctx.self && respiteCard(c)).length >= 3 || ctx.game.players[ctx.player].normalSummonsLeft === 0 ? 55 : 30) },
     },
   ],
 });

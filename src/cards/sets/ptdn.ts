@@ -309,8 +309,8 @@ export function ensurePtdnPatches(g: Game) {
 
   // Earth / Wind Effigy: also usable as 2 Tributes while face-down.
   const origAlt = g.altTributeCandidates.bind(g);
-  anyG.altTributeCandidates = (p: PlayerId, card: C) => {
-    const r = origAlt(p, card);
+  anyG.altTributeCandidates = (p: PlayerId, card: C, set = false) => {
+    const r = origAlt(p, card, set);
     if (g.tributesNeeded(card) < 2) return r;
     const more = g.monsters(p).filter((c) => !c.faceUp && !r.includes(c) && effigyFor(c, card) && !g.queryCard(c, 'cannotBeTributed'));
     return more.length ? [...r, ...more] : r;
@@ -3115,13 +3115,17 @@ trap('Hate Buster', 'normal', {
         ctx.addTargets([a, t].filter((c) => ctx.canTarget(c)));
         ctx.data.att = a;
       },
+      // 2010 rulings: no damage unless your Fiend-Type monster is destroyed too; the damage is the destroyed monster's
+      // original ATK, so a Monster Token or a Trap Card treated as a monster inflicts none.
+      // https://edisonrul.ing/cards/h/hate-buster.html
       resolve: async (ctx) => {
         const a = ctx.data.att as C;
         const t = ctx.validTargets((c) => c.location === 'mzone');
         if (t.length < 2) return;
+        const mine = t.find((c) => c !== a)!;
         const atk = a.data.atk ?? 0;
         await ctx.destroy(t);
-        if (a.location !== 'mzone') await ctx.damage(ctx.opp, atk);
+        if (a.location !== 'mzone' && mine.location !== 'mzone' && !a.isToken && a.isMonster) await ctx.damage(ctx.opp, atk);
       },
       ai: {
         score: (ctx) => {

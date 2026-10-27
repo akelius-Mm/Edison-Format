@@ -1143,17 +1143,18 @@ monster(SKY_FIRE, {
       opt: true,
       label: 'Discard: destroy 1 card',
       categories: ['destroy'],
-      canActivate: (ctx) => ctx.hand('me').length > 0 && ctx.field('opp').length > 0,
+      // 2010 ruling: sending 1 card from the hand is the cost, and the card to destroy is targeted on activation.
+      // https://edisonrul.ing/cards/f/flying-fortress-sky-fire.html
+      canActivate: (ctx) => ctx.hand('me').length > 0 && ctx.field('opp', (c) => ctx.canTarget(c)).length > 0,
       activate: async (ctx) => {
         const sel = await ctx.select(ctx.hand('me'), 1, 1, 'Send 1 card from your hand to the GY.', 'discard');
         if (!sel.length) return false;
         await ctx.sendToGrave(sel, 'cost');
+        await ctx.selectTargets(ctx.field('opp'), 1, 1, 'Target 1 card your opponent controls to destroy.', 'destroy', { aiScore: (c) => cardValue(ctx.game, c) });
       },
       resolve: async (ctx) => {
-        const f = ctx.field('opp');
-        if (!f.length) return;
-        const sel = await ctx.select(f, 1, 1, 'Destroy 1 card your opponent controls.', 'destroy');
-        if (sel.length) await ctx.destroy(sel);
+        const t = ctx.validTargets((c) => c.onField);
+        if (t.length) await ctx.destroy(t);
       },
       ai: { score: (ctx) => (bestTarget(ctx.game, ctx.field('opp')) && cardValue(ctx.game, bestTarget(ctx.game, ctx.field('opp'))) >= 1200 ? 55 : 0) },
     },
@@ -1169,12 +1170,18 @@ monster(SKY_FIRE, {
       condition: skyFireOk,
       activate: async (ctx) => {
         ctx.self.flags.skyFireTurn = ctx.turn;
-        ctx.data.card = evc(ctx.event!);
-        ctx.data.mid = (ctx.data.card as C).moveId;
+        // 2010 ruling: monsters Summoned at the same time are all destroyed. https://edisonrul.ing/cards/f/flying-fortress-sky-fire.html
+        const ev = ctx.event!;
+        const same = ctx.game.recentEvents
+          .filter((e) => e.type === 'summoned' && e.batch === ev.batch && e.player === ctx.opp && e.method !== 'flip')
+          .map((e) => e.card as C)
+          .filter((c) => !!c && c.location === 'mzone' && c.controller === ctx.opp);
+        const list = [...new Set([evc(ev)!, ...same])];
+        ctx.data.cards = list.map((c) => ({ c, mid: c.moveId }));
       },
       resolve: async (ctx) => {
-        const c = ctx.data.card as C;
-        if (c.location === 'mzone' && c.moveId === ctx.data.mid) await ctx.destroy(c);
+        const list = ((ctx.data.cards ?? []) as { c: C; mid: number }[]).filter((x) => x.c.location === 'mzone' && x.c.moveId === x.mid).map((x) => x.c);
+        if (list.length) await ctx.destroy(list);
         await ctx.damage(ctx.opp, 800);
       },
       ai: { score: (ctx) => (ctx.event && cardValue(ctx.game, evc(ctx.event)!) >= 1500 ? 70 : 35) },
@@ -2114,7 +2121,7 @@ monster(IDO, {
   atk: 2200,
   def: 800,
   aiValue: 300,
-  text: 'You cannot Summon or Normal Set monsters. You can only control 1 "Ido the Supreme Magical Force". Once per turn, during the Standby Phase of the next turn after this card was destroyed by card effect and sent to the GY: Special Summon this card from the GY, and if you do, destroy all other monsters you control.',
+  text: 'You cannot Summon or Normal Set monsters. You can only control 1 "Ido the Supreme Magical Force". During your next Standby Phase after this card was destroyed by a card effect and sent to the GY: Special Summon this card from the GY, and if you do, destroy all other monsters you control.',
   effects: [
     PATCH_LISTENER,
     { kind: 'continuous', mods: [{ q: 'cannotSpecialSummon', to: 'players', filter: (ctx, p) => p === ctx.player }] },
@@ -2124,7 +2131,8 @@ monster(IDO, {
       event: 'sentToGrave',
       eventFilter: (ctx, ev) => {
         const r = reasonsOf(ev);
-        if (ev.card === ctx.self && ev.from === 'mzone' && r.includes('destroy') && r.includes('effect')) idoDestroyed.set(ctx.self, { turn: ctx.turn, moveId: ctx.self.moveId });
+        if (ev.card === ctx.self && ev.from === 'mzone' && r.includes('destroy') && r.includes('effect'))
+          idoDestroyed.set(ctx.self, { turn: ctx.turn, turnPlayer: ctx.game.turnPlayer, moveId: ctx.self.moveId });
         return false;
       },
     },
@@ -2136,9 +2144,11 @@ monster(IDO, {
       opt: true,
       label: 'Revive',
       categories: ['specialSummon', 'destroy'],
+      // 2010 ruling: during YOUR next Standby Phase; if that Standby Phase is skipped, the chance is missed.
+      // https://edisonrul.ing/cards/i/ido-the-supreme-magical-force.html
       eventFilter: (ctx, ev) => {
         const d = idoDestroyed.get(ctx.self);
-        return ev.phase === 'standby' && !!d && d.moveId === ctx.self.moveId && ctx.turn === d.turn + 1;
+        return ev.phase === 'standby' && !!d && d.moveId === ctx.self.moveId && ctx.isMyTurn && ctx.turn === d.turn + (d.turnPlayer === ctx.player ? 2 : 1);
       },
       condition: (ctx) => ctx.canSummonSelf(),
       resolve: async (ctx) => {
@@ -2151,7 +2161,7 @@ monster(IDO, {
     },
   ],
 });
-const idoDestroyed = new WeakMap<C, { turn: number; moveId: number }>();
+const idoDestroyed = new WeakMap<C, { turn: number; turnPlayer: PlayerId; moveId: number }>();
 
 monster('Violet Witch', {
   attribute: 'DARK',

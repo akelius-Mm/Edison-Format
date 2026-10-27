@@ -405,7 +405,18 @@ export function ensureCsocPatches(g: Game) {
 
   // ---- Summon legality
   const origCanNS = g.canNormalSummon.bind(g);
-  anyG.canNormalSummon = (p: PlayerId, card: C, set = false) => origCanNS(p, card, set) && !(!set && summonBlocked(g, card, p, true) && card.name !== OVERDRIVE);
+  anyG.canNormalSummon = (p: PlayerId, card: C, set = false) => {
+    if (!origCanNS(p, card, set)) return false;
+    if (set || card.name === OVERDRIVE || !summonBlocked(g, card, p, true)) return true;
+    if (summonBlocked(g, card, p, true, true)) return false;
+    // Gozen Match, 2010 ruling: you can Tribute Summon a monster of any Attribute by Tributing your face-up monster(s)
+    // of the other Attribute. https://edisonrul.ing/cards/g/gozen-match.html
+    const need = g.tributesNeeded(card);
+    if (need <= 0) return false;
+    const trib = g.tributeCandidates(p, card);
+    const others = g.faceUpMonsters(p).filter((m) => m.data.attribute !== card.data.attribute);
+    return trib.length >= need && others.length <= need && others.every((m) => trib.includes(m));
+  };
   const origSS = g.specialSummon.bind(g);
   anyG.specialSummon = async (cards: C[], player: PlayerId, opts: Parameters<Game['specialSummon']>[2] = {}) => {
     const ctrl = opts?.controller ?? player;
@@ -940,15 +951,16 @@ M('Gadget Hauler', {
       label: 'Send Morphtronic monsters: +800 ATK each',
       categories: ['atkChange'],
       canActivate: (ctx) => ctx.hand('me', isMorphMon).length > 0,
-      activate: async (ctx) => {
-        const cands = ctx.hand('me', isMorphMon);
-        const sel = await ctx.select(cands, 1, cands.length, 'Send any number of "Morphtronic" monsters from your hand to the Graveyard.', 'cost');
-        if (!sel.length) return false;
-        ctx.data.n = sel.length;
-        await ctx.sendToGrave(sel, 'cost');
-      },
+      // 2010 rulings: sending the "Morphtronic" monsters is NOT a cost (done on resolution); a monster that is removed
+      // from play instead ("Banisher of the Radiance") gives no ATK. https://edisonrul.ing/cards/g/gadget-hauler.html
       resolve: async (ctx) => {
-        if (faceUpOn(ctx.self)) ctx.addTempMod(ctx.self, 'atk', 800 * (ctx.data.n ?? 0), 'field');
+        const cands = ctx.hand('me', isMorphMon);
+        if (!cands.length) return;
+        const sel = await ctx.select(cands, 1, cands.length, 'Send any number of "Morphtronic" monsters from your hand to the Graveyard.', 'toGrave');
+        if (!sel.length) return;
+        const sent = await ctx.sendToGrave(sel);
+        const n = sent.filter((c) => c.location === 'grave').length;
+        if (n && faceUpOn(ctx.self)) ctx.addTempMod(ctx.self, 'atk', 800 * n, 'field');
       },
       ai: { score: (ctx) => (ctx.phase === 'main1' && ctx.self.pos === 'atk' && ctx.hand('me', isMorphMon).length >= 2 ? 25 : 0) },
     },
@@ -3360,7 +3372,7 @@ T('DNA Checkup', 'normal', {
 });
 
 T(GOZEN, 'continuous', {
-  text: 'Each player can only control 1 Attribute of monster. Send all other face-up monsters they control to the Graveyard.',
+  text: 'Each player sends monsters they control to the Graveyard until they each control monsters of only 1 Attribute. Each player cannot control monsters with different Attributes.',
   // The Attribute rule is a state check and a Summon restriction (ensureCsocPatches).
   // APPROX: Flip Summons of another Attribute are allowed (the monster is then sent by the state check).
   effects: [

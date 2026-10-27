@@ -1758,9 +1758,11 @@ M('Golden Ladybug', {
       categories: ['recover'],
       eventFilter: (ctx, ev) => ev.phase === 'standby' && ctx.isMyTurn && ctx.self.location === 'hand',
       condition: (ctx) => ctx.self.location === 'hand',
-      resolve: async (ctx) => {
-        if (ctx.self.location !== 'hand') return;
+      // 2010 ruling: revealing this card in your hand is the cost. https://edisonrul.ing/cards/g/golden-ladybug.html
+      activate: async (ctx) => {
         await reveal(ctx, [ctx.self]);
+      },
+      resolve: async (ctx) => {
         await ctx.recover(ctx.player, 500);
       },
     },

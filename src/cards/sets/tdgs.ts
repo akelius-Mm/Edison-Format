@@ -575,12 +575,16 @@ M('Ghost Gardna', {
       label: '1 opponent monster loses 1000 ATK',
       categories: ['atkChange'],
       eventFilter: (ctx, ev) => ev.card === ctx.self && ctx.self.location === 'grave',
-      condition: (ctx) => ctx.faceUpMonsters('opp').length > 0,
-      resolve: async (ctx) => {
-        const [t] = await ctx.select(ctx.faceUpMonsters('opp'), 1, 1, '1 face-up monster your opponent controls loses 1000 ATK.', 'target', {
+      // 2010 ruling: this effect targets 1 of your opponent's monsters. https://edisonrul.ing/cards/g/ghost-gardna.html
+      condition: (ctx) => ctx.faceUpMonsters('opp', (c) => ctx.canTarget(c)).length > 0,
+      activate: async (ctx) => {
+        await ctx.selectTargets(ctx.faceUpMonsters('opp'), 1, 1, 'Target 1 face-up monster your opponent controls (it loses 1000 ATK).', 'target', {
           aiScore: (c) => ctx.atk(c),
         });
-        if (t && faceUpOn(t)) ctx.addTempMod(t, 'atk', -1000, 'turn');
+      },
+      resolve: async (ctx) => {
+        const [t] = ctx.validTargets(faceUpOn);
+        if (t) ctx.addTempMod(t, 'atk', -1000, 'turn');
       },
     },
   ],
@@ -3071,18 +3075,20 @@ T('Judgment of Thunder', 'normal', {
 });
 
 T('Fish Depth Charge', 'normal', {
-  text: 'Tribute 1 Fish-Type monster to destroy 1 card on the field. Then draw 1 card.',
+  text: 'Tribute 1 Fish-Type monster to select and destroy 1 card your opponent controls. Then draw 1 card.',
   effects: [
     {
+      // 2010 ruling: it targets 1 card your opponent controls; no draw if that card is not destroyed.
+      // https://edisonrul.ing/cards/f/fish-depth-charge.html
       kind: 'activate',
       categories: ['destroy', 'draw'],
-      canActivate: (ctx) => tributable(ctx, (c) => raceIs(c, 'Fish')).length > 0 && ctx.field('both', (c) => c !== ctx.self && ctx.canTarget(c)).length > 0,
+      canActivate: (ctx) => tributable(ctx, (c) => raceIs(c, 'Fish')).length > 0 && ctx.field('opp', (c) => ctx.canTarget(c)).length > 0,
       activate: async (ctx) => {
         const sel = await ctx.select(tributable(ctx, (c) => raceIs(c, 'Fish')), 1, 1, 'Tribute 1 Fish-Type monster.', 'tribute', { aiScore: (c) => -cardValue(ctx.game, c) });
         if (!sel.length) return false;
         await tributeCost(ctx, sel);
-        await ctx.selectTargets(ctx.field('both', (c) => c !== ctx.self), 1, 1, 'Target 1 card on the field.', 'destroy', {
-          aiScore: (c) => (c.controller === ctx.opp ? cardValue(ctx.game, c) : -5000),
+        await ctx.selectTargets(ctx.field('opp'), 1, 1, 'Target 1 card your opponent controls.', 'destroy', {
+          aiScore: (c) => cardValue(ctx.game, c),
         });
       },
       resolve: async (ctx) => {

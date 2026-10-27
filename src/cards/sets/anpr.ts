@@ -2104,7 +2104,7 @@ monster('Gaap the Divine Soldier', {
   atk: 2200,
   def: 2000,
   aiValue: 300,
-  text: 'All monsters are changed to Attack Position, also their battle positions cannot be changed. (Flip Effects are not activated.) Once per turn: You can reveal any number of Fiend monsters in your hand; this card gains 300 ATK for each, until the end of this turn.',
+  text: 'All monsters are changed to face-up Attack Position, and their battle positions cannot be changed. (Flip Effects are not activated at this time.) Once per turn, you can reveal any number of Fiend-Type monsters in your hand to give this card 300 ATK for each revealed card, until the End Phase.',
   effects: [
     { kind: 'continuous', mods: [{ q: 'cannotChangePos', to: 'cards', filter: (_ctx, c) => c.location === 'mzone' }] },
     {
@@ -2131,11 +2131,18 @@ monster('Gaap the Divine Soldier', {
       label: 'Reveal Fiends',
       categories: ['atkChange'],
       canActivate: (ctx) => ctx.hand('me', isRace('Fiend')).length > 0,
-      resolve: async (ctx) => {
+      // 2010 ruling: revealing the Fiend-Type monsters is a cost (done on activation).
+      // https://edisonrul.ing/cards/g/gaap-the-divine-soldier.html
+      activate: async (ctx) => {
         const fiends = ctx.hand('me', isRace('Fiend'));
-        const sel = await ctx.select(fiends, 1, fiends.length, 'Reveal any number of Fiend monsters in your hand.', 'buff');
+        const sel = await ctx.select(fiends, 1, fiends.length, 'Reveal any number of Fiend monsters in your hand.', 'cost');
+        if (!sel.length) return false;
         for (const c of sel) reveal(ctx, c);
-        if (faceUpOn(ctx.self) && sel.length) ctx.addTempMod(ctx.self, 'atk', 300 * sel.length, 'turn');
+        ctx.data.n = sel.length;
+      },
+      resolve: async (ctx) => {
+        const n = (ctx.data.n as number | undefined) ?? 0;
+        if (faceUpOn(ctx.self) && n) ctx.addTempMod(ctx.self, 'atk', 300 * n, 'turn');
       },
       ai: { score: (ctx) => (ctx.phase === 'main1' && ctx.game.turn > 1 ? 30 : 0) },
     },
@@ -2508,18 +2515,23 @@ spell('Ancient Forest', 'field', {
 });
 
 spell('Emergency Assistance', 'normal', {
-  text: 'Activate during your Main Phase 2, to Special Summon 1 Level 4 monster from your Graveyard that was destroyed by a card effect and sent to the Graveyard this turn.',
+  text: 'Activate only during your Main Phase 2. Select and Special Summon 1 Level 4 monster from your Graveyard that was destroyed by a card effect and sent to the Graveyard this turn.',
   effects: [
     {
       kind: 'activate',
       categories: ['specialSummon'],
       condition: (ctx) => ctx.phase === 'main2' && ctx.isMyTurn,
-      canActivate: (ctx) => ctx.canSpecialSummon() && emergencyCands(ctx).length > 0,
+      canActivate: (ctx) => ctx.canSpecialSummon() && emergencyCands(ctx).some((c) => ctx.canTarget(c)),
+      // 2010 ruling: this effect targets 1 monster (chosen on activation).
+      // https://edisonrul.ing/cards/e/emergency-assistance.html
+      activate: async (ctx) => {
+        await ctx.selectTargets(emergencyCands(ctx), 1, 1, 'Target 1 Level 4 monster in your GY destroyed by a card effect this turn.', 'specialSummon', {
+          aiScore: (c) => (c.data.atk ?? 0) + (c.data.aiValue ?? 0),
+        });
+      },
       resolve: async (ctx) => {
-        const cands = emergencyCands(ctx);
-        if (!cands.length || !ctx.canSpecialSummon()) return;
-        const sel = await ctx.select(cands, 1, 1, 'Special Summon 1 Level 4 monster destroyed by a card effect this turn.', 'specialSummon');
-        if (sel.length) await ctx.specialSummon(sel[0]);
+        const [t] = ctx.validTargets((c) => c.location === 'grave');
+        if (t && ctx.canSpecialSummon() && ctx.canSummonCard(t)) await ctx.specialSummon(t);
       },
       ai: { score: (ctx) => (Math.max(0, ...emergencyCands(ctx).map((c) => c.data.atk ?? 0)) >= 1400 ? 50 : 0) },
     },
@@ -2597,7 +2609,7 @@ spell('Spirit Burner', 'equip', {
 });
 
 spell('Future Visions', 'field', {
-  text: 'Each time a monster is Normal Summoned: Target that monster; banish it. During the next Standby Phase of the player who controlled that monster: Return it to the field in face-up Attack Position.',
+  text: 'When a monster is Normal Summoned, remove from play that monster. During the next Standby Phase of the controller who Summoned that monster, return it to the field in face-up Attack Position.',
   effects: [
     { kind: 'activate', categories: ['banish'], ai: { score: (ctx) => (!ctx.hand('me', (c) => c.isMonster).length && ctx.hand('opp').length >= 3 ? 15 : 0) } },
     {
@@ -2612,17 +2624,22 @@ spell('Future Visions', 'field', {
         const c = evc(ctx.event!)!;
         if (ctx.canTarget(c)) ctx.addTargets([c]);
       },
+      // 2010 rulings: this card must remain face-up on the field to activate and resolve both effects.
+      // https://edisonrul.ing/cards/f/future-visions.html
       resolve: async (ctx) => {
         const [t] = ctx.validTargets((c) => c.location === 'mzone');
-        if (!t) return;
+        if (!t || !stActive(ctx)) return;
         const ctrl = t.controller;
         const r = await ctx.banish(t);
         if (!r.length || t.location !== 'banished') return;
         const id = t.moveId;
         const g = ctx.game;
+        const fv = ctx.self;
+        const fvMid = fv.moveId;
         g.addDelayed(
           'standby',
           async () => {
+            if (fv.location !== 'fzone' || fv.moveId !== fvMid || !fv.faceUp || g.isNegated(fv)) return;
             if (t.location === 'banished' && t.moveId === id) await returnToField(g, t, t.owner === ctrl ? ctrl : t.owner, 'atk');
           },
           g.turnPlayer === ctrl ? 2 : 1,
@@ -3140,7 +3157,7 @@ trap('Fairy Wind', 'normal', {
 });
 
 trap('Imperial Custom', 'continuous', {
-  text: 'Face-up Continuous Traps cannot be destroyed by battle or card effect, except "Imperial Custom". You can only control 1 "Imperial Custom".',
+  text: 'Face-up Continuous Trap Cards cannot be destroyed, except "Imperial Custom". You can only control 1 "Imperial Custom".',
   effects: [
     {
       kind: 'activate',
@@ -3157,7 +3174,9 @@ trap('Imperial Custom', 'continuous', {
     },
   ],
 });
-const imperialProtected = (c: C) => c.location === 'szone' && c.faceUp && c.isTrap && c.data.ttype === 'continuous' && c.name !== 'Imperial Custom';
+// 2010 ruling: Trap Monsters (Continuous Traps on the Monster Card Zone, e.g. "Zoma the Spirit") are protected too.
+// https://edisonrul.ing/cards/i/imperial-custom.html
+const imperialProtected = (c: C) => (c.location === 'szone' || c.location === 'mzone') && c.faceUp && c.isTrap && c.data.ttype === 'continuous' && c.name !== 'Imperial Custom';
 
 trap('Discord', 'continuous', {
   text: 'Neither player can Synchro Summon. Send this card to the Graveyard during your 3rd End Phase after activation.',

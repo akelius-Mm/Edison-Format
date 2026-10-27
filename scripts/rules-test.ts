@@ -1586,8 +1586,10 @@ async function crmsTests() {
     eq(g.legalMainActions(0).some((a) => a.type === 'set'), false, 'cannot Set a monster');
     await g.destroy([ido], 'effect', 1);
     const other = place(0, T.dark, 'mzone');
-    g.turn = 3;
-    g.turnPlayer = 1;
+    // 2010 ruling: during YOUR next Standby Phase (destroyed on your turn 2: your turn 4).
+    // https://edisonrul.ing/cards/i/ido-the-supreme-magical-force.html
+    g.turn = 4;
+    g.turnPlayer = 0;
     await (g as any).setPhase('standby');
     eq(ido.location, 'mzone', 'Ido revived');
     eq(other.location, 'grave', 'other monster destroyed');
@@ -3174,6 +3176,7 @@ async function glasTests() {
     await g.processTriggers(true);
     eq(st.location, 'grave', 'face-down Spell/Trap destroyed');
     oct.attackedThisTurnOrWasAttacked = true;
+    oct.flags.gbCalcTurn = g.turn; // it was involved in damage calculation (2010 Gladiator Beast rulings)
     await battleEnd(g);
     eq(oct.location, 'deck', 'no card to discard: shuffled into the Deck');
   });
@@ -3202,6 +3205,7 @@ async function glasTests() {
     const col = live(place(0, cardByName('Colosseum - Cage of the Gladiator Beasts'), 'fzone', { faceUp: true }));
     place(1, cardByName('Witch Doctor of Sparta'), 'mzone');
     dim.attackedThisTurnOrWasAttacked = true;
+    dim.flags.gbCalcTurn = g.turn; // it was involved in damage calculation (2010 Gladiator Beast rulings)
     await battleEnd(g);
     eq(dim.location, 'deck', 'Dimacari returned');
     eq(alex.location, 'mzone', 'Alexander Special Summoned from the Deck');
