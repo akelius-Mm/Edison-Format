@@ -498,7 +498,9 @@ monster('The Big Saturn', {
 // ============================================================ Spells
 
 spell('Machina Armored Unit', 'continuous', {
-  text: 'Once per turn, when a Machine-Type monster you control is destroyed by battle and sent to the Graveyard, you can Special Summon 1 Machine-Type monster from your Deck with the same Attribute and less ATK than the destroyed monster.',
+  // 2010 text and rulings: "sent to your Graveyard" (whoever controlled it); the destroyed monster must still be in the
+  // GY when the effect resolves. https://edisonrul.ing/cards/m/machina-armored-unit.html
+  text: 'Once per turn, when a Machine-Type monster is destroyed by battle and sent to your Graveyard, you can Special Summon 1 Machine-Type monster from your Deck that has the same Attribute and less ATK than the destroyed monster.',
   effects: [
     { kind: 'activate', categories: [], ai: { score: (ctx) => (ctx.cards('me', ['hand', 'mzone', 'deck'], isMachine).length >= 4 ? 30 : 5) } },
     {
@@ -510,15 +512,18 @@ spell('Machina Armored Unit', 'continuous', {
       categories: ['specialSummon'],
       eventFilter: (ctx, ev) => {
         const d = evc(ev);
-        return !!d && stActive(ctx) && isMachine(d) && ev.fromController === ctx.player && d.owner === ctx.player && d.location === 'grave';
+        return !!d && stActive(ctx) && isMachine(d) && d.owner === ctx.player && d.location === 'grave';
       },
       canActivate: (ctx) => {
         const d = evc(ctx.event!);
         return !!d && ctx.canSpecialSummon() && ctx.deck('me', (c) => isMachine(c) && c.data.attribute === d.data.attribute && (c.data.atk ?? 0) < (d.data.atk ?? 0) && ctx.canSummonCard(c)).length > 0;
       },
+      activate: async (ctx) => {
+        ctx.data.dMoveId = evc(ctx.event!)?.moveId;
+      },
       resolve: async (ctx) => {
         const d = evc(ctx.event!);
-        if (!d || !ctx.canSpecialSummon()) return;
+        if (!d || d.location !== 'grave' || d.moveId !== ctx.data.dMoveId || !ctx.canSpecialSummon()) return;
         const cands = ctx.deck('me', (c) => isMachine(c) && c.data.attribute === d.data.attribute && (c.data.atk ?? 0) < (d.data.atk ?? 0) && ctx.canSummonCard(c));
         if (!cands.length) return;
         const [c] = await ctx.select(cands, 1, 1, `Special Summon 1 ${d.data.attribute} Machine-Type monster with less than ${d.data.atk ?? 0} ATK from your Deck.`, 'specialSummon', {
@@ -566,7 +571,9 @@ spell('Inferno Reckless Summon', 'quickplay', {
       // Edison ruling: only when exactly 1 monster was Special Summoned (to your field) by that Summon.
       eventFilter: (ctx, ev) => {
         const c = evc(ev);
-        if (!c || c.location !== 'mzone' || !c.faceUp || c.controller !== ctx.player || ctx.atk(c) > 1500) return false;
+        // 2010 ruling: not when a monster Token is Special Summoned, and the opponent cannot choose a Token.
+        // https://edisonrul.ing/cards/i/inferno-reckless-summon.html
+        if (!c || c.isToken || c.location !== 'mzone' || !c.faceUp || c.controller !== ctx.player || ctx.atk(c) > 1500) return false;
         const same = ctx.game.recentEvents.filter((e) => e.type === 'specialSummoned' && e.batch === ev.batch);
         return same.length === 1;
       },
@@ -585,7 +592,7 @@ spell('Inferno Reckless Summon', 'quickplay', {
         }
         // Their side: they pick 1 face-up monster they control and Summon every copy of it.
         const opp = ctx.opp;
-        const faceUps = ctx.faceUpMonsters('opp');
+        const faceUps = ctx.faceUpMonsters('opp', (c) => !c.isToken);
         if (!faceUps.length || g.queryPlayer(opp, 'cannotSpecialSummon') || g.freeMZones(opp) <= 0) return;
         const theirCopies = (n: string) =>
           ctx.cards('opp', ['hand', 'deck', 'grave'], (c) => {

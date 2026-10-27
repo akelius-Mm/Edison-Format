@@ -49,6 +49,8 @@ export type QueryKey =
   | 'cannotAttack'
   | 'cannotBeAttacked'
   | 'directAttack'
+  // card subject: this monster cannot attack directly (Magical Scientist's Fusion Monster). Checked in Game.attackTargets.
+  | 'cannotDirectAttack'
   | 'piercing'
   | 'negated'
   | 'cannotChangePos'

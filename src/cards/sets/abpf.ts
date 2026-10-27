@@ -602,7 +602,11 @@ monster('Magic Hole Golem', {
       },
       resolve: async (ctx) => {
         const t = ctx.validTargets((c) => c.location === 'mzone' && c.faceUp && c.controller === ctx.player)[0];
-        ctx.game.turnData[`abpfGolem:${ctx.player}`] = t ? { uid: t.uid, moveId: t.moveId } : { uid: -1, moveId: -1 };
+        // 2010 ruling: with 2 "Magic Hole Golem" targeting different monsters, neither monster can attack (each
+        // activation only lets its own target attack). https://edisonrul.ing/cards/m/magic-hole-golem.html
+        const key = `abpfGolem:${ctx.player}`;
+        const prev = (ctx.game.turnData[key] ?? []) as { uid: number; moveId: number }[];
+        ctx.game.turnData[key] = [...prev, t ? { uid: t.uid, moveId: t.moveId } : { uid: -1, moveId: -1 }];
         if (!t) return;
         const a = ctx.atk(t);
         ctx.addTempMod(t, 'atk', -(a - Math.floor(a / 2)), 'turn');
@@ -627,8 +631,8 @@ monster('Magic Hole Golem', {
           q: 'cannotAttack',
           to: 'cards',
           filter: (ctx, c: C) => {
-            const g = ctx.game.turnData[`abpfGolem:${ctx.player}`] as { uid: number; moveId: number } | undefined;
-            return !!g && c.location === 'mzone' && c.controller === ctx.player && !(c.uid === g.uid && c.moveId === g.moveId);
+            const gs = ctx.game.turnData[`abpfGolem:${ctx.player}`] as { uid: number; moveId: number }[] | undefined;
+            return !!gs && gs.length > 0 && c.location === 'mzone' && c.controller === ctx.player && !gs.every((g) => c.uid === g.uid && c.moveId === g.moveId);
           },
         },
       ],
@@ -1195,10 +1199,16 @@ monster('Informer Spider', {
       categories: ['control'],
       eventFilter: (ctx, ev) => ev.card === ctx.self && ev.from === 'mzone' && byCardEffect(ev),
       condition: (ctx) => ctx.monsters('opp', (c) => c.pos === 'def').length > 0,
+      // 2010 rulings: targets 1 Defense Position monster; with no open Monster Card Zone the target is destroyed
+      // because you cannot take control of it. https://edisonrul.ing/cards/i/informer-spider.html
+      activate: async (ctx) => {
+        await ctx.selectTargets(ctx.monsters('opp', (c) => c.pos === 'def'), 1, 1, 'Target 1 Defense Position monster your opponent controls.', 'control');
+      },
       resolve: async (ctx) => {
-        const cands = ctx.monsters('opp', (c) => c.pos === 'def');
-        const [t] = await ctx.select(cands, 1, 1, 'Take control of 1 Defense Position monster your opponent controls.', 'control');
-        if (t) await ctx.takeControl(t, false);
+        const [t] = ctx.validTargets((c) => c.location === 'mzone' && c.controller === ctx.opp);
+        if (!t) return;
+        if (ctx.freeMZones() <= 0) await ctx.destroy(t);
+        else await ctx.takeControl(t, false);
       },
     },
   ],
@@ -1692,8 +1702,10 @@ monster('Majestic Red Dragon', {
   effects: [
     { kind: 'continuous', mods: [{ q: 'indestructibleEffect' }] },
     {
+      // 2010 ruling: activates after damage calculation, even if this card would be destroyed in that damage
+      // calculation. https://edisonrul.ing/cards/m/majestic-red-dragon.html
       kind: 'trigger',
-      event: 'damageStepEnd',
+      event: 'damageCalculated',
       mandatory: true,
       label: 'Destroy Defense Position monsters',
       categories: ['destroy', 'destroyMulti'],
@@ -1708,15 +1720,20 @@ monster('Majestic Red Dragon', {
       opt: true,
       label: 'Negate & absorb ATK',
       categories: ['negate', 'atkChange'],
-      canActivate: (ctx) => ctx.faceUpMonsters('opp', (c) => ctx.canTarget(c)).length > 0,
+      // 2010 rulings: cannot target a non-Effect Monster; the ATK gained is the target's ATK once its effects are
+      // negated (other cards' bonuses still count). https://edisonrul.ing/cards/m/majestic-red-dragon.html
+      canActivate: (ctx) => ctx.faceUpMonsters('opp', (c) => c.hasType('effect') && ctx.canTarget(c)).length > 0,
       activate: async (ctx) => {
-        await ctx.selectTargets(ctx.faceUpMonsters('opp'), 1, 1, 'Target 1 face-up monster your opponent controls.', 'negate', { aiScore: (c) => ctx.atk(c) + cardValue(ctx.game, c) });
+        await ctx.selectTargets(ctx.faceUpMonsters('opp', (c) => c.hasType('effect')), 1, 1, 'Target 1 face-up Effect Monster your opponent controls.', 'negate', {
+          aiScore: (c) => ctx.atk(c) + cardValue(ctx.game, c),
+        });
       },
       resolve: async (ctx) => {
         const t = ctx.validTargets((c) => c.location === 'mzone' && c.faceUp)[0];
         if (!t) return;
-        const a = ctx.atk(t);
         ctx.negateEffects(t, 'turn');
+        ctx.game.update();
+        const a = ctx.atk(t);
         if (monActive(ctx)) ctx.addTempMod(ctx.self, 'atk', a, 'turn');
       },
       ai: { score: (ctx) => (ctx.phase === 'main1' ? 55 : 0) },
@@ -1812,7 +1829,8 @@ monster('Moon Dragon Quilla', {
       eventFilter: (ctx, ev) => ev.other === ctx.self && monActive(ctx),
       resolve: async (ctx) => {
         const a = evc(ctx.event!);
-        if (a) await ctx.recover(ctx.player, Math.floor(ctx.atk(a) / 2));
+        // 2010 ruling: no LP if the attacking monster is no longer face-up on the field. https://edisonrul.ing/cards/m/moon-dragon-quilla.html
+        if (a && a.location === 'mzone' && a.faceUp) await ctx.recover(ctx.player, Math.floor(ctx.atk(a) / 2));
       },
     },
     reviveFromGrave('Revive Sun Dragon Inti', named('Sun Dragon Inti'), {
@@ -2609,8 +2627,13 @@ spell('Iron Core Specimen Lab', 'field', {
       resolve: async (ctx) => {
         const batch = ctx.event!.batch;
         const victims = ctx.game.eventLog.filter((e) => e.type === 'destroyed' && e.batch === batch && e.from === 'mzone' && isKoaki(e.card as C)).map((e) => e.card as C);
+        // 2010 ruling: 2 of your "Koa'ki Meiru" destroyed at the same time still give you only 1 search (each player
+        // whose monster was destroyed searches once). https://edisonrul.ing/cards/i/iron-core-specimen-lab.html
+        const owners = new Set<PlayerId>();
         for (const v of victims) {
           const owner = v.owner;
+          if (owners.has(owner)) continue;
+          owners.add(owner);
           if (ctx.game.queryPlayer(owner, 'cannotAddFromDeck')) continue;
           const cands = ctx.game.zone(owner, 'deck').filter(isKoaki);
           if (!cands.length) continue;

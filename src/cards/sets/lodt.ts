@@ -583,6 +583,9 @@ async function arcanaToss(ctx: Ctx, forName: string): Promise<Coin> {
   for (const lc of liveCards(g, LUCKY_CHANCE)) {
     if (chainKey && lc.flags.lcChain === chainKey) continue;
     lc.flags.lcChain = chainKey;
+    // 2010 ruling: with 2 or more face-up "Lucky Chance" you call the toss only once and draw only 1 card.
+    // https://edisonrul.ing/cards/l/lucky-chance.html
+    if (calls.some((c) => c.p === lc.controller)) continue;
     const guess = g.rng.int(2);
     const i = await g.option(lc.controller, 'Lucky Chance: call the coin toss.', ['Heads', 'Tails'], lc, (k) => (k === guess ? 1 : 0));
     calls.push({ p: lc.controller, call: i === 0 ? 'H' : 'T' });
@@ -1102,14 +1105,17 @@ M(FLIPPER, {
       kind: 'trigger',
       event: 'battleDestroyed',
       eventFilter: (ctx, ev) => {
-        if (ev.card === ctx.self && ctx.self.location === 'grave') ctx.self.flags.flipperBattle = { turn: ctx.turn, fromCtrl: ev.fromController ?? ctx.self.owner };
+        // 2010 ruling: also when it is removed from play as it is destroyed by battle.
+        // https://edisonrul.ing/cards/m/miracle-flipper.html
+        if (ev.card === ctx.self && (ctx.self.location === 'grave' || ctx.self.location === 'banished'))
+          ctx.self.flags.flipperBattle = { turn: ctx.turn, fromCtrl: ev.fromController ?? ctx.self.owner };
         return false;
       },
     },
     {
       kind: 'trigger',
       event: 'battleEnd',
-      range: ['grave'],
+      range: ['grave', 'banished'],
       mandatory: true,
       label: "Special Summon to the opponent's field",
       categories: ['specialSummon'],
@@ -1117,7 +1123,7 @@ M(FLIPPER, {
       resolve: async (ctx) => {
         const rec = ctx.self.flags.flipperBattle as { turn: number; fromCtrl: PlayerId } | undefined;
         delete ctx.self.flags.flipperBattle;
-        if (!rec || ctx.self.location !== 'grave') return;
+        if (!rec || (ctx.self.location !== 'grave' && ctx.self.location !== 'banished')) return;
         await ctx.specialSummon(ctx.self, { pos: 'choose', controller: ctx.game.opp(rec.fromCtrl) });
       },
     },
@@ -1131,12 +1137,20 @@ M(FLIPPER, {
         const rc = ev.reasonCard as C | undefined;
         return ev.card === ctx.self && ev.from === 'mzone' && reasonsOf(ev).includes('effect') && !!rc && (rc.isSpell || rc.isTrap);
       },
-      resolve: async (ctx) => {
+      // 2010 ruling: this effect targets the monster to be destroyed (also when destroyed face-down).
+      // https://edisonrul.ing/cards/m/miracle-flipper.html
+      activate: async (ctx) => {
         const g = ctx.game;
         const ctrl = ctx.event?.fromController ?? ctx.player;
-        const victims = g.monsters(g.opp(ctrl));
-        const [v] = await ctx.select(victims, 1, 1, 'Destroy 1 monster your opponent controls.', 'destroy', { player: ctrl });
-        if (v) await g.destroy([v], 'effect', ctrl, ctx.self);
+        ctx.data.ctrl = ctrl;
+        const victims = g.monsters(g.opp(ctrl)).filter((c) => ctx.canTarget(c));
+        if (!victims.length) return;
+        const sel = await ctx.select(victims, 1, 1, 'Target 1 monster your opponent controls to destroy.', 'destroy', { player: ctrl });
+        ctx.addTargets(sel);
+      },
+      resolve: async (ctx) => {
+        const [v] = ctx.validTargets((c) => c.location === 'mzone');
+        if (v) await ctx.game.destroy([v], 'effect', (ctx.data.ctrl ?? ctx.player) as PlayerId, ctx.self);
       },
     },
   ],
@@ -1296,8 +1310,10 @@ M('Jinzo - Returner', {
         const r = await ctx.specialSummon(t, { pos: 'choose' });
         if (!r.length) return;
         const mid = t.moveId;
+        const fid = t.faceUpId;
+        // 2010 ruling: a "Jinzo" flipped face-down is not destroyed in the End Phase. https://edisonrul.ing/cards/j/jinzo-returner.html
         laterOnMyEnd(ctx, async () => {
-          if (t.location === 'mzone' && t.moveId === mid) await ctx.game.destroy([t], 'effect', ctx.player, ctx.self);
+          if (t.location === 'mzone' && t.moveId === mid && t.faceUpId === fid && t.faceUp) await ctx.game.destroy([t], 'effect', ctx.player, ctx.self);
         });
       },
     },
@@ -1679,8 +1695,25 @@ M('Interplanetary Invader "A"', {
         const me = ctx.self;
         const a = evc(ev);
         if (a && ev.other === me && faceUpOn(me) && me.pos === 'atk' && !ctx.game.isNegated(me)) {
-          const list = (ctx.game.turnData['lodt:invader'] ??= []) as InvaderRecord[];
+          const list = (ctx.game.turnData['lodt:invaderPending'] ??= []) as InvaderRecord[];
           list.push({ inv: me.uid, ctrl: me.controller, att: a, mid: a.moveId });
+        }
+        return false;
+      },
+    },
+    {
+      // 2010 ruling: the effect activates at the end of the Damage Step, so it does not activate when the attack is
+      // negated or when this card is destroyed before damage calculation; it does activate if this card is destroyed
+      // by the battle. https://edisonrul.ing/cards/i/interplanetary-invader-a.html
+      kind: 'trigger',
+      event: 'damageStepEnd',
+      range: ALL_LOCS,
+      eventFilter: (ctx, ev) => {
+        const pending = (ctx.game.turnData['lodt:invaderPending'] ?? []) as InvaderRecord[];
+        const r = pending.find((x) => x.inv === ctx.self.uid && ev.other === ctx.self && x.att === evc(ev));
+        if (r) {
+          ctx.game.turnData['lodt:invaderPending'] = pending.filter((x) => x !== r);
+          ((ctx.game.turnData['lodt:invader'] ??= []) as InvaderRecord[]).push(r);
         }
         return false;
       },
@@ -1699,7 +1732,10 @@ M('Interplanetary Invader "A"', {
         const mine = all.filter((r) => r.inv === ctx.self.uid);
         g.turnData['lodt:invader'] = all.filter((r) => r.inv !== ctx.self.uid);
         for (const r of mine) {
-          if (r.att.location === 'mzone' && r.att.moveId === r.mid && r.att.controller !== r.ctrl) await g.takeControl(r.att, r.ctrl, false);
+          if (r.att.location !== 'mzone' || r.att.moveId !== r.mid || r.att.controller === r.ctrl) continue;
+          // No open Monster Card Zone: the monster is destroyed instead (2010 ruling, same page).
+          if (g.freeMZones(r.ctrl) <= 0) await g.destroy([r.att], 'effect', r.ctrl, ctx.self);
+          else await g.takeControl(r.att, r.ctrl, false);
         }
       },
     },
@@ -2825,6 +2861,9 @@ S(MCOL, 'continuous', {
     {
       kind: 'activate',
       categories: [],
+      // 2010 ruling: cannot be activated without a Spell & Trap Card Zone to make unusable.
+      // https://edisonrul.ing/cards/m/mystical-cards-of-light.html
+      canActivate: (ctx) => ctx.freeSZones() >= (ctx.self.location === 'szone' ? 1 : 2),
       ai: { score: (ctx) => (ctx.spellTraps('me', (c) => c.name === MCOL && c !== ctx.self && c.faceUp).length ? 45 : ctx.hand('me', (c) => c.name === MCOL && c !== ctx.self).length ? 15 : 0) },
     },
   ],

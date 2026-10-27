@@ -215,6 +215,8 @@ interface Bound {
   mid: number;
   kind: 'control' | 'banish';
   player: PlayerId;
+  /** Source's faceUpId when the link was made (Kinka-byo). */
+  fid?: number;
 }
 async function boundCheck(g: Game) {
   const s = gs(g);
@@ -225,8 +227,11 @@ async function boundCheck(g: Game) {
       const b = c.flags.tdgsBound as Bound | undefined;
       if (!b) continue;
       const src = g.card(b.uid);
-      if (src && src.location === 'mzone' && src.faceUp && src.moveId === b.mid) continue;
+      if (src && src.location === 'mzone' && src.faceUp && src.moveId === b.mid && (b.fid === undefined || src.faceUpId === b.fid)) continue;
       delete c.flags.tdgsBound;
+      // Kinka-byo flipped face-down: its effect disappears, the monster stays (2010 ruling,
+      // https://edisonrul.ing/cards/k/kinka-byo.html).
+      if (b.kind === 'banish' && b.fid !== undefined && src && src.location === 'mzone' && src.moveId === b.mid) continue;
       if (b.kind === 'control') await g.returnControl(c);
       else {
         g.log(`${c.name} is removed from play.`, 'action', b.player);
@@ -824,7 +829,7 @@ M('Handcuffs Dragon', {
   ],
 });
 
-const montageAtk = new WeakMap<C, { moveId: number; atk: number }>();
+const montageAtk = new WeakMap<C, { moveId: number; fid: number; atk: number }>();
 M('Montage Dragon', {
   attribute: 'EARTH',
   race: 'Dragon',
@@ -846,7 +851,7 @@ M('Montage Dragon', {
           aiScore: (c) => lvl(c) * 300 - cardValue(ctx.game, c) / 2,
         });
         if (sel.length < 3) return false;
-        montageAtk.set(ctx.self, { moveId: ctx.self.moveId + 1, atk: sel.reduce((a, c) => a + lvl(c), 0) * 300 });
+        montageAtk.set(ctx.self, { moveId: ctx.self.moveId + 1, fid: ctx.self.faceUpId, atk: sel.reduce((a, c) => a + lvl(c), 0) * 300 });
         await ctx.sendToGrave(sel, 'cost');
         return true;
       },
@@ -868,8 +873,9 @@ M('Montage Dragon', {
         {
           q: 'atk',
           value: (ctx) => {
+            // 2010 ruling: flipped face-down and back face-up, its ATK is 0. https://edisonrul.ing/cards/m/montage-dragon.html
             const m = montageAtk.get(ctx.self);
-            return m && m.moveId === ctx.self.moveId ? m.atk : 0;
+            return m && m.moveId === ctx.self.moveId && m.fid === ctx.self.faceUpId ? m.atk : 0;
           },
         },
       ],
@@ -1292,7 +1298,9 @@ M('Kunoichi', {
       eventFilter: (ctx, ev) => ev.card === ctx.self && faceUpOn(ctx.self),
       condition: (ctx) => ctx.hand().length > 0,
       resolve: async (ctx) => {
-        const p = ctx.self.controller;
+        // 2010 rulings: if it leaves the field in response its new controller still discards; if control went straight
+        // back (Remove Brainwashing), its current controller discards. https://edisonrul.ing/cards/k/kunoichi.html
+        const p = ctx.self.location === 'mzone' ? ctx.self.controller : ctx.player;
         const hand = ctx.game.players[p].hand;
         if (!hand.length) return;
         const c = hand[ctx.game.rng.int(hand.length)];
@@ -1405,7 +1413,7 @@ M('Kinka-byo', {
         if (!t || !ctx.canSummonCard(t)) return;
         const r = await ctx.specialSummon(t, { pos: 'choose' });
         if (r.length) {
-          r[0].flags.tdgsBound = { uid: ctx.self.uid, mid: ctx.self.moveId, kind: 'banish', player: ctx.player } satisfies Bound;
+          r[0].flags.tdgsBound = { uid: ctx.self.uid, mid: ctx.self.moveId, kind: 'banish', player: ctx.player, fid: ctx.self.faceUpId } satisfies Bound;
           await boundCheck(ctx.game);
         }
       },
@@ -2980,12 +2988,17 @@ T('Lightsworn Barrier', 'continuous', {
         const t = evo(ev);
         return !!t && t.location === 'mzone' && t.controller === ctx.player && t.faceUp && t.inSet('lightsworn') && stActive(ctx);
       },
-      canActivate: (ctx) => ctx.deck().length >= 2 && !!ctx.battle && !ctx.battle.negated,
+      // 2010 rulings: it targets the attacking monster, and sending the top 2 cards is a cost.
+      // https://edisonrul.ing/cards/l/lightsworn-barrier.html
+      canActivate: (ctx) => ctx.deck().length >= 2 && !!ctx.battle && !ctx.battle.negated && ctx.canTarget(ctx.battle.attacker),
       activate: async (ctx) => {
-        await ctx.mill(2);
+        await ctx.game.mill(ctx.player, 2, 'cost', ctx.self);
+        ctx.data.attacker = ctx.battle!.attacker;
+        ctx.addTargets([ctx.battle!.attacker]);
       },
       resolve: async (ctx) => {
-        if (ctx.battle && !ctx.battle.negated) ctx.negateAttack();
+        const a = ctx.data.attacker as C;
+        if (ctx.battle && !ctx.battle.negated && ctx.battle.attacker === a && ctx.validTargets().includes(a)) ctx.negateAttack();
       },
       ai: { score: (ctx) => (ctx.deck().length > 10 ? 1 : 0) },
     },

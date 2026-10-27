@@ -498,7 +498,9 @@ monster('Morphtronic Magnen Bar', {
       label: 'Gain combined ATK',
       categories: ['atkChange'],
       condition: (ctx) => {
-        if (ctx.self.pos !== 'atk') return false;
+        // 2010 ruling: the Attack Position effect cannot be activated in Main Phase 2.
+        // https://edisonrul.ing/cards/m/morphtronic-magnen-bar.html
+        if (ctx.self.pos !== 'atk' || ctx.phase === 'main2') return false;
         const others = ctx.monsters('me', (c) => c !== ctx.self);
         return others.length === 2 && others.every((c) => c.faceUp && c.pos === 'atk');
       },
@@ -557,7 +559,8 @@ monster('Jester Confit', {
   def: 0,
   sets: ['jester'],
   aiValue: 300,
-  text: 'You can only control 1 "Jester Confit". You can Special Summon this card (from your hand) in Attack Position. If Summoned this way, during your opponent\'s next End Phase: Target 1 face-up monster your opponent controls; return both that target and this face-up card to the hand.',
+  // 2010 card text: https://edisonrul.ing/cards/j/jester-confit.html
+  text: 'You can Special Summon this card from your hand in face-up Attack Position. If you do, return this card and 1 face-up monster your opponent controls to the hand during the End Phase of your opponent\'s next turn. You can only control 1 face-up "Jester Confit".',
   effects: [
     PATCH_LISTENER,
     {
@@ -600,15 +603,17 @@ monster('Jester Confit', {
       categories: ['toHand'],
       eventFilter: (ctx, ev) =>
         ev.phase === 'end' && !ctx.isMyTurn && faceUpOn(ctx.self) && ctx.self.flags.confitTurn !== undefined && !ctx.self.flags.confitDone,
-      canActivate: (ctx) => ctx.faceUpMonsters('opp', (c) => ctx.canTarget(c)).length > 0,
+      // 2010 rulings: it activates even if your opponent has no face-up monster (then nothing returns), and if either
+      // this card or the target is not face-up on the field, neither is returned. https://edisonrul.ing/cards/j/jester-confit.html
       activate: async (ctx) => {
         ctx.self.flags.confitDone = true;
-        await ctx.selectTargets(ctx.faceUpMonsters('opp'), 1, 1, 'Target 1 face-up monster your opponent controls.', 'bounce');
+        const opp = ctx.faceUpMonsters('opp', (c) => ctx.canTarget(c));
+        if (opp.length) await ctx.selectTargets(opp, 1, 1, 'Target 1 face-up monster your opponent controls.', 'bounce');
       },
       resolve: async (ctx) => {
-        const t = ctx.validTargets(faceUpOn);
-        const both = [...t, ...(faceUpOn(ctx.self) ? [ctx.self] : [])];
-        if (both.length) await ctx.toHand(both);
+        const [t] = ctx.validTargets(faceUpOn);
+        if (!t || !faceUpOn(ctx.self)) return;
+        await ctx.toHand([t, ctx.self]);
       },
     },
     {
@@ -1010,18 +1015,32 @@ monster("Koa'ki Meiru Tornado", {
       activate: async (ctx) => {
         await ctx.toDeck(ctx.hand('me', isIronCore)[0], 'top', 'cost');
       },
+      // 2010 ruling: Special Summoned monsters are destroyed even if face-down (Special Summoned face-down, or flipped
+      // face-down by "Book of Moon" in response). https://edisonrul.ing/cards/k/koaki-meiru-tornado.html
       resolve: async (ctx) => {
-        await ctx.destroy(ctx.monsters('opp', (c) => c.faceUp && isSpecialSummoned(c)));
+        await ctx.destroy(ctx.monsters('opp', (c) => isSpecialSummoned(c)));
       },
       ai: {
         score: (ctx) => {
-          const v = ctx.monsters('opp', (c) => c.faceUp && isSpecialSummoned(c)).reduce((a, c) => a + cardValue(ctx.game, c), 0);
+          const v = ctx.monsters('opp', (c) => isSpecialSummoned(c)).reduce((a, c) => a + cardValue(ctx.game, c), 0);
           return v >= 1800 ? 50 + v / 200 : 0;
         },
       },
     },
   ],
 });
+
+interface HydroWindow {
+  src: C;
+  added: { c: C; mid: number; m: unknown }[];
+  done: boolean;
+}
+const hydroWindows = new WeakMap<Game, HydroWindow[]>();
+function hydroNegate(ctx: Ctx, win: HydroWindow, c: C) {
+  if (ctx.game.isUnaffected(c, win.src, ctx.player)) return;
+  ctx.game.addTempMod(c, 'negated', true, 'field', win.src);
+  win.added.push({ c, mid: c.moveId, m: c.tempMods[c.tempMods.length - 1] });
+}
 
 monster("Koa'ki Meiru Hydro Barrier", {
   attribute: 'WATER',
@@ -1043,18 +1062,19 @@ monster("Koa'ki Meiru Hydro Barrier", {
       },
       resolve: async (ctx) => {
         const victims = ctx.faceUpMonsters('both', (c) => c.hasType('effect') && !isKoakiMonster(c));
-        const added: { c: C; m: unknown }[] = [];
-        for (const c of victims) {
-          if (ctx.game.isUnaffected(c, ctx.self, ctx.player)) continue;
-          ctx.negateEffects(c, 'field');
-          added.push({ c, m: c.tempMods[c.tempMods.length - 1] });
-        }
-        if (!added.length) return;
-        ctx.log(`The effects of ${added.map((a) => a.c.name).join(', ')} are negated.`);
+        // 2010 rulings: the negation keeps applying if this card leaves the field or is flipped face-down, and also
+        // hits monsters Summoned while it applies. https://edisonrul.ing/cards/k/koaki-meiru-hydro-barrier.html
+        const win: HydroWindow = { src: ctx.self, added: [], done: false };
+        for (const c of victims) hydroNegate(ctx, win, c);
+        if (win.added.length) ctx.log(`The effects of ${win.added.map((a) => a.c.name).join(', ')} are negated.`);
+        let list = hydroWindows.get(ctx.game);
+        if (!list) hydroWindows.set(ctx.game, (list = []));
+        list.push(win);
         ctx.later(
           'standby',
           async () => {
-            for (const a of added) a.c.tempMods = a.c.tempMods.filter((m) => m !== a.m);
+            win.done = true;
+            for (const a of win.added) a.c.tempMods = a.c.tempMods.filter((m) => m !== a.m);
             ctx.game.update();
           },
           ctx.isMyTurn ? 2 : 1,
@@ -1065,6 +1085,18 @@ monster("Koa'ki Meiru Hydro Barrier", {
           const v = ctx.faceUpMonsters('opp', (c) => c.hasType('effect') && !isKoakiMonster(c)).reduce((a, c) => a + (c.data.aiValue ?? 300), 0);
           return v >= 800 ? 45 : 0;
         },
+      },
+    },
+    {
+      // Bookkeeping (never activates): Effect Monsters that become face-up while a negation window is open.
+      kind: 'trigger',
+      event: ['summoned', 'flipped'],
+      range: ALL_LOCS,
+      eventFilter: (ctx, ev) => {
+        const c = ev.card as C | undefined;
+        if (!c || c.location !== 'mzone' || !c.faceUp || !c.hasType('effect') || isKoakiMonster(c)) return false;
+        for (const w of hydroWindows.get(ctx.game) ?? []) if (!w.done && w.src === ctx.self && !w.added.some((a) => a.c === c && a.mid === c.moveId)) hydroNegate(ctx, w, c);
+        return false;
       },
     },
   ],
@@ -1428,9 +1460,13 @@ monster('Magicat', {
       categories: ['toDeck'],
       eventFilter: (ctx, ev) =>
         ev.card === ctx.self && ev.reason === 'synchro' && ctx.self.location === 'grave' && (ev.reasonCard as C | undefined)?.data.race === 'Spellcaster',
-      canActivate: (ctx) => ctx.grave('me', (c) => c.isSpell).length > 0,
+      // 2010 ruling: this effect targets the Spell Card in your GY. https://edisonrul.ing/cards/m/magicat.html
+      canActivate: (ctx) => ctx.grave('me', (c) => c.isSpell && ctx.canTarget(c)).length > 0,
+      activate: async (ctx) => {
+        await ctx.selectTargets(ctx.grave('me', (c) => c.isSpell), 1, 1, 'Target 1 Spell Card in your GY to return to the top of your Deck.', 'toDeck');
+      },
       resolve: async (ctx) => {
-        const sel = await ctx.select(ctx.grave('me', (c) => c.isSpell), 1, 1, 'Return 1 Spell Card from your GY to the top of your Deck.', 'toHand');
+        const sel = ctx.validTargets((c) => c.location === 'grave');
         if (sel.length) await ctx.toDeck(sel, 'top');
       },
     },

@@ -2475,12 +2475,14 @@ spell('Morphtronic Map', 'field', {
       label: 'Special Summon a Morphtronic',
       categories: ['specialSummon'],
       eventFilter: (ctx, ev) => ev.card === ctx.self && ev.from === 'fzone' && reasonsOf(ev).includes('destroy'),
-      canActivate: (ctx) => ctx.canSpecialSummon() && ctx.grave('me', (c) => isMorphMon(c) && ctx.canSummonCard(c)).length > 0,
+      // 2010 ruling: the Special Summon starts a Chain and targets. https://edisonrul.ing/cards/m/morphtronic-map.html
+      canActivate: (ctx) => ctx.canSpecialSummon() && ctx.grave('me', (c) => isMorphMon(c) && c !== ctx.self && ctx.canSummonCard(c) && ctx.canTarget(c)).length > 0,
+      activate: async (ctx) => {
+        await ctx.selectTargets(ctx.grave('me', (c) => isMorphMon(c) && c !== ctx.self && ctx.canSummonCard(c)), 1, 1, 'Target 1 "Morphtronic" monster in your GY.', 'specialSummon');
+      },
       resolve: async (ctx) => {
-        const cands = ctx.grave('me', (c) => isMorphMon(c) && ctx.canSummonCard(c));
-        if (!cands.length || !ctx.canSpecialSummon()) return;
-        const sel = await ctx.select(cands, 1, 1, 'Special Summon 1 "Morphtronic" monster from your GY.', 'specialSummon');
-        if (sel.length) await ctx.specialSummon(sel[0], { pos: 'choose' });
+        const [t] = ctx.validTargets((c) => c.location === 'grave');
+        if (t && ctx.canSpecialSummon() && ctx.canSummonCard(t)) await ctx.specialSummon(t, { pos: 'choose' });
       },
     },
   ],
@@ -2750,13 +2752,20 @@ spell('Mysterious Triangle', 'quickplay', {
     {
       kind: 'activate',
       categories: ['destroy', 'specialSummon'],
-      canActivate: (ctx) => ctx.monsters('both', (c) => aCount(c) > 0).length > 0,
+      // 2010 ruling: targets the monster it destroys; if the target loses its A-Counter in response (e.g. flipped
+      // face-down) or is not destroyed, nothing is destroyed and no "Alien" is Special Summoned.
+      // https://edisonrul.ing/cards/m/mysterious-triangle.html
+      canActivate: (ctx) => ctx.monsters('both', (c) => aCount(c) > 0 && ctx.canTarget(c)).length > 0,
+      activate: async (ctx) => {
+        await ctx.selectTargets(ctx.monsters('both', (c) => aCount(c) > 0), 1, 1, 'Target 1 monster with an A-Counter.', 'destroy', {
+          aiScore: (c) => (c.controller === ctx.opp ? cardValue(ctx.game, c) : -cardValue(ctx.game, c)),
+        });
+      },
       resolve: async (ctx) => {
-        const cands = ctx.monsters('both', (c) => aCount(c) > 0);
-        if (!cands.length) return;
-        const sel = await ctx.select(cands, 1, 1, 'Destroy 1 monster with an A-Counter.', 'destroy');
+        const sel = ctx.validTargets((c) => c.location === 'mzone' && aCount(c) > 0);
         if (!sel.length) return;
-        await ctx.destroy(sel);
+        const destroyed = await ctx.destroy(sel);
+        if (!destroyed.length) return;
         if (!ctx.canSpecialSummon() || !ctx.deck('me', (c) => isAlien(c) && lvl(c) === 4).length) return;
         if (!(await ctx.confirm('Special Summon 1 Level 4 "Alien" monster from your Deck?'))) return;
         const r = await summonFromDeck(ctx, (c) => isAlien(c) && lvl(c) === 4, 'Special Summon 1 Level 4 "Alien" monster from your Deck.');
@@ -2870,7 +2879,9 @@ spell('Makiu, the Magical Mist', 'normal', {
     {
       kind: 'activate',
       categories: ['destroy', 'destroyMulti'],
-      condition: (ctx) => ctx.phase === 'main1' && !ctx.game.queryPlayer(ctx.player, 'cannotDeclareAttack'),
+      // 2010 rulings: not in Main Phase 2, but several copies (and "Soul Exchange") can be activated in the same turn,
+      // even if your Battle Phase will be skipped. https://edisonrul.ing/cards/m/makiu-the-magical-mist.html
+      condition: (ctx) => ctx.phase === 'main1',
       canActivate: (ctx) => ctx.faceUpMonsters('me', (c) => (c.name === 'Summoned Skull' || raceIs(c, 'Thunder')) && ctx.canTarget(c)).length > 0,
       activate: async (ctx) => {
         await ctx.selectTargets(ctx.faceUpMonsters('me', (c) => c.name === 'Summoned Skull' || raceIs(c, 'Thunder')), 1, 1, 'Target 1 "Summoned Skull" or Thunder monster you control.', 'buff', {

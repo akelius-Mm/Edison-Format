@@ -1608,17 +1608,20 @@ defTrap('Imperial Order', 'continuous', {
 });
 
 defTrap('Last Turn', 'normal', {
-  text: "Activate only during your opponent's turn while your LP are 1000 or less. Choose 1 monster you control; send all other cards on the field and in both hands to the GY. Then your opponent Special Summons 1 monster from their Deck in Attack Position and it battles your monster. At the End Phase, the player who is the only one controlling a monster wins the Duel.",
+  text: "Activate only during your opponent's turn while your LP are 1000 or less. Choose 1 monster you control; send all other cards on the field and in both hands to the GY. Then your opponent Special Summons 1 monster from their Deck in Attack Position and it battles your monster (Battle Damage from that battle is 0). At the End Phase, the player who is the only one controlling a monster wins the Duel.",
   effects: [
     {
       kind: 'activate',
       categories: ['specialSummon'],
-      condition: (ctx) => !ctx.isMyTurn && ctx.lp <= 1000 && ctx.phase !== 'end' && ctx.monsters('me').length > 0,
+      // 2010 rulings (https://edisonrul.ing/cards/l/last-turn.html): it can be activated in any part of the opponent's
+      // turn except the Damage Step, End Phase included; if the activating player controls no monster when it resolves,
+      // it is not negated (the opponent still Special Summons, no special battle, the End Phase check still applies);
+      // Battle Damage in the special battle is 0.
+      condition: (ctx) => !ctx.isMyTurn && ctx.lp <= 1000 && ctx.monsters('me').length > 0,
       resolve: async (ctx) => {
         const g = ctx.game;
-        const mineSel = await ctx.select(ctx.monsters('me'), 1, 1, 'Choose 1 monster you control to keep.', 'buff');
-        if (!mineSel.length) return;
-        const mine = mineSel[0];
+        const mineSel = ctx.monsters('me').length ? await ctx.select(ctx.monsters('me'), 1, 1, 'Choose 1 monster you control to keep.', 'buff') : [];
+        const mine = mineSel[0] as CardInstance | undefined;
         const rest = [...g.allFieldCards(), ...g.players[0].hand, ...g.players[1].hand].filter((c) => c !== mine && c !== ctx.self);
         if (rest.length) await g.moveCards(rest, 'grave', { reason: 'effect', reasonPlayer: ctx.player, reasonCard: ctx.self });
         const deckMons = g.players[ctx.opp].deck.filter((c) => c.isMonster && !c.data.nomi);
@@ -1631,34 +1634,32 @@ defTrap('Last Turn', 'normal', {
           }
           g.shuffleDeck(ctx.opp);
         }
-        if (theirs && mine.location === 'mzone' && theirs.location === 'mzone') {
-          // The turn player's monster attacks.
+        if (theirs && mine && mine.location === 'mzone' && theirs.location === 'mzone') {
+          // The turn player's monster attacks (no Battle Damage).
           const atkA = g.getAtk(theirs);
           g.log(`Last Turn: ${theirs.name} battles ${mine.name}.`, 'battle');
           const losers: CardInstance[] = [];
           if (mine.pos === 'atk') {
             const atkM = g.getAtk(mine);
-            if (atkA > atkM) {
-              losers.push(mine);
-              await g.damage(ctx.player, atkA - atkM, 'battle', theirs, ctx.opp);
-            } else if (atkA < atkM) {
-              losers.push(theirs);
-              await g.damage(ctx.opp, atkM - atkA, 'battle', mine, ctx.player);
-            } else if (atkA > 0) losers.push(mine, theirs);
+            if (atkA > atkM) losers.push(mine);
+            else if (atkA < atkM) losers.push(theirs);
+            else if (atkA > 0) losers.push(mine, theirs);
           } else {
             const defM = g.getDef(mine);
             if (!mine.faceUp) await g.changePosition(mine, 'def', true);
             if (atkA > defM) losers.push(mine);
-            else if (atkA < defM) await g.damage(ctx.opp, defM - atkA, 'battle', mine, ctx.player);
           }
           if (losers.length) await g.destroy(losers, 'battle');
         }
-        ctx.later('end', async () => {
+        const check = async () => {
           const m0 = g.monsters(0).length;
           const m1 = g.monsters(1).length;
           if (m0 > 0 && m1 === 0) g.endGame(0, 'Last Turn');
           if (m1 > 0 && m0 === 0) g.endGame(1, 'Last Turn');
-        });
+        };
+        // Activated during the End Phase: the check applies in this End Phase.
+        if (ctx.phase === 'end') await check();
+        else ctx.later('end', check);
       },
       ai: {
         score: (ctx) => {
