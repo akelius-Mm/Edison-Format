@@ -255,6 +255,9 @@ monster('Pyramid Turtle', {
       event: 'battleDestroyed',
       label: 'Summon a Zombie from Deck',
       categories: ['specialSummon'],
+      // "When ... you can": an optional trigger that can miss the timing
+      // (https://edisonrul.ing/cards/misc/battle-tutors-mystic-tomato-shining-angel-ufo-turtle-mother-grizzly-flying-kaminari-1-giant-rat-pyramid-turtle-etc.html).
+      when: true,
       eventFilter: (ctx, ev) => ev.card === ctx.self && ctx.self.location === 'grave',
       condition: (ctx) => ctx.canSpecialSummon() && ctx.deck('me', (c) => c.isMonster && c.data.race === 'Zombie' && (c.data.def ?? 0) <= 2000 && !c.data.nomi).length > 0,
       resolve: async (ctx) => {
@@ -395,7 +398,6 @@ monster('Vampire Lord', {
   def: 1500,
   text: 'If this card inflicts battle damage to your opponent: Declare 1 card type (Monster, Spell or Trap); your opponent sends 1 card of that type from their Deck to the GY. If this card is destroyed by your opponent\'s card effect and sent to your GY: Special Summon it during your next Standby Phase.',
   aiValue: 300,
-  ignoresGyLock: true,
   effects: [
     {
       kind: 'trigger',
@@ -423,7 +425,7 @@ monster('Vampire Lord', {
       label: 'Return next Standby Phase',
       categories: ['specialSummon'],
       // https://edisonrul.ing/cards/v/vampire-lord.html — also when destroyed in the hand or Deck by the opponent's card
-      // effect; it is Special Summoned even under "Necrovalley" (ignoresGyLock).
+      // effect; it is Special Summoned even under "Necrovalley" (it does not target).
       eventFilter: (ctx, ev) =>
         ev.card === ctx.self &&
         (ev.from === 'mzone' || ev.from === 'hand' || ev.from === 'deck') &&
@@ -561,7 +563,8 @@ spell('Book of Life', 'quickplay', {
 spell('Zombie World', 'field', {
   text: 'All monsters on the field and in the GYs become Zombie-Type monsters. Neither player can Tribute Summon monsters, except Zombie-Type monsters.',
   aiValue: 200,
-  // The Type change is a dataMod: every check that reads `data.race` sees it (not in the GY under Necrovalley).
+  // The Type change is a dataMod: every check that reads `data.race` sees it (also in the GY under Necrovalley: non-targeting Type
+  // changes apply, https://edisonrul.ing/cards/n/necrovalley.html).
   // Monsters in the hand keep their Type, so only Zombies can be Tribute Summoned (Tribute Sets are allowed).
   effects: [
     {

@@ -391,7 +391,7 @@ monster("Gravekeeper's Priestess", {
   text: `While there is no face-up Field Spell, the field is treated as "Necrovalley". All "Gravekeeper's" monsters on the field gain 200 ATK/DEF.`,
   effects: [
     {
-      // Necrovalley's "+500 ATK/DEF to Gravekeeper's monsters" and its GY lock (src/cards/necrovalley.ts) apply while
+      // Necrovalley's "+500 ATK/DEF to Gravekeeper's monsters" and its 2010 effects (src/cards/necrovalley.ts) apply while
       // there is no face-up Field Spell.
       kind: 'continuous',
       mods: [
@@ -3288,6 +3288,7 @@ trap('Machine King - 3000 B.C.', 'continuous', {
         if (r.length) {
           me.flags.staysOnField = true;
           me.flags.mkSummoned = true;
+          me.flags.trapMonster = true;
         }
         ctx.addPlayerMod(ctx.player, 'cannotNormalSummon');
         ctx.addPlayerMod(ctx.player, 'cannotSpecialSummon');

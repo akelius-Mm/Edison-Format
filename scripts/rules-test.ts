@@ -804,8 +804,9 @@ function eq(a: unknown, b: unknown, msg: string) {
     const sd = place(0, cardByName('Stardust Dragon'), 'extra');
     eq(tm.isTuner, false, 'not a Tuner yet');
     eq(g.canSynchro(0, sd), false, 'no Synchro yet');
-    const gem = g.getActivations(0, { open: true }).find((a) => a.card === tm)!;
-    await g.performAction(0, { type: 'activate', card: tm, act: gem });
+    // The Gemini Summon is a Normal Summon (main action, no chain), not an activated effect.
+    const gem = g.legalMainActions(0).find((a) => a.type === 'proc' && a.card === tm)!;
+    await g.performAction(0, gem);
     eq(g.players[0].normalSummonsLeft, 0, 'uses the Normal Summon');
     eq(tm.isTuner, true, 'now a Tuner');
     eq(g.canSynchro(0, sd), true, 'Tuned Magician + Level 4 = Stardust Dragon');
@@ -4608,14 +4609,16 @@ async function locationRulesTests() {
     eq(theirs.location, 'banished', 'and banished the other target');
   });
 
-  await test('Zombie World + Necrovalley: the Type change does not apply in the GY, still on the field', async () => {
+  // Updated (Necrovalley 2010 text): a Type change that does not target still applies in the GY
+  // (https://edisonrul.ing/cards/n/necrovalley.html, historical rulings).
+  await test('Zombie World + Necrovalley: the Type change applies on the field and in the GY', async () => {
     const { place } = setup();
     const onField = place(0, T.brute, 'mzone');
     const inGy = place(0, T.brute, 'grave');
     live(place(0, cardByName('Zombie World'), 'fzone'));
     live(place(1, cardByName('Necrovalley'), 'fzone'));
     eq(onField.data.race, 'Zombie', 'field');
-    eq(inGy.data.race, 'Warrior', 'GY: negated by Necrovalley');
+    eq(inGy.data.race, 'Zombie', 'GY: not negated by Necrovalley (does not target)');
   });
 
   // 2. "name becomes" cards
@@ -5041,7 +5044,8 @@ async function extraDeckTests() {
     const sd = place(0, cardByName('Stardust Dragon'), 'extra');
     eq(g.canSynchro(0, sd), false, 'not a Tuner before the Gemini Summon');
     eq(tm.hasType('tuner'), false, 'no Tuner type yet');
-    await activateCard(g, 0, tm, 'Gemini Summon (Normal Summon again)');
+    eq(g.canGeminiSummon(0, tm), true, 'can be Gemini Summoned');
+    await g.geminiSummon(0, tm);
     eq(tm.isTuner, true, 'Tuner once Gemini Summoned');
     eq(g.canSynchro(0, sd), true, 'usable as the Tuner (4 + 4)');
     const sk = place(1, cardByName('Skill Drain'), 'szone', { faceUp: true });
@@ -5163,7 +5167,7 @@ async function extraDeckTests() {
   });
 
   // Costs that move cards out of a GY under Necrovalley
-  await test('Necrovalley: GY-banish costs cannot be paid (Chaos Sorcerer, DAD effect); DAD itself and hand costs still work; a cost move out of the GY is not dropped like an effect', async () => {
+  await test('Necrovalley: GY-banish costs cannot be paid (Chaos Sorcerer, DAD effect); DAD itself and hand costs still work; a non-targeting move out of the GY is not stopped', async () => {
     const { g, place } = setup();
     live(place(1, cardByName('Necrovalley'), 'fzone'));
     for (let i = 0; i < 3; i++) place(0, T.dark, 'grave');
@@ -5183,7 +5187,9 @@ async function extraDeckTests() {
     eq(inGy.location, 'deck', 'a cost that returns a GY card to the Deck is paid');
     const inGy2 = place(0, T.brute, 'grave');
     await g.moveCards([inGy2], 'deck', { reason: 'effect', reasonPlayer: 0, reasonCard: qd });
-    eq(inGy2.location, 'grave', 'the same move by an effect is negated');
+    // Updated (Necrovalley 2010 text, https://edisonrul.ing/cards/n/necrovalley.html): only effects that target a GY
+    // card are negated, so a non-targeting effect move out of the GY happens.
+    eq(inGy2.location, 'deck', 'the same move by a non-targeting effect also happens');
   });
 }
 

@@ -88,6 +88,8 @@ function recruiter(a: Attribute): EffectDef {
     event: 'sentToGrave',
     label: `Recruit ${a}`,
     categories: ['specialSummon'],
+    // "When ... you can": an optional trigger that can miss the timing (https://edisonrul.ing/cards/misc/battle-tutors-mystic-tomato-shining-angel-ufo-turtle-mother-grizzly-flying-kaminari-1-giant-rat-pyramid-turtle-etc.html).
+    when: true,
     eventFilter: (ctx, ev) => ev.card === ctx.self && ev.from === 'mzone' && reasonsOf(ev).includes('battle'),
     condition: (ctx) => ctx.canSpecialSummon() && ctx.deck('me', ok(ctx)).length > 0,
     resolve: async (ctx) => {

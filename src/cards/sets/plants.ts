@@ -67,27 +67,11 @@ export function bestSynchroValue(ctx: Ctx, add: { card: CardInstance; level?: nu
 }
 
 /**
- * Gemini support: the engine has no Gemini Summon action, so a Gemini monster gets an
- * ignition effect that uses the player's Normal Summon to become an Effect Monster
- * (approximation: it starts a chain instead of being a summon).
+ * The Gemini Summon of a Gemini monster: a Normal Summon of the face-up monster that does not start a chain
+ * (Game.geminiSummon). https://edisonrul.ing/cards/misc/gemini-monsters-gigaplant-elemental-hero-neos-alius-etc.html
  */
-export function geminiSummonEffect(): EffectDef {
-  return {
-    kind: 'ignition',
-    label: 'Gemini Summon (Normal Summon again)',
-    categories: [],
-    condition: (ctx) => !ctx.self.flags.geminiSummoned && ctx.game.players[ctx.player].normalSummonsLeft > 0 && !ctx.game.queryPlayer(ctx.player, 'cannotNormalSummon'),
-    activate: async (ctx) => {
-      ctx.game.players[ctx.player].normalSummonsLeft--;
-    },
-    resolve: async (ctx) => {
-      if (ctx.self.location === 'mzone' && ctx.self.faceUp) {
-        ctx.self.flags.geminiSummoned = true;
-        ctx.log(`${ctx.self.name} is Gemini Summoned and becomes an Effect Monster.`);
-      }
-    },
-    ai: { score: () => 58 },
-  };
+export function geminiSummonEffect(score: (ctx: Ctx) => number = () => 58): EffectDef {
+  return { kind: 'proc', geminiSummon: true, range: ['mzone'], label: 'Gemini Summon (Normal Summon again)', categories: [], ai: { score } };
 }
 export const isGeminiActive = (ctx: Ctx) => !!ctx.self.flags.geminiSummoned;
 

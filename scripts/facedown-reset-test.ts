@@ -125,8 +125,6 @@ function eq(a: unknown, b: unknown, msg: string) {
   if (a !== b) throw new Error(`${msg}: expected ${String(b)}, got ${String(a)}`);
 }
 
-const GEMINI = 'Gemini Summon (Normal Summon again)';
-
 (async () => {
   console.log('Face-down reset tests');
 
@@ -164,7 +162,7 @@ const GEMINI = 'Gemini Summon (Normal Summon again)';
     const gp = place(0, cardByName('Gigaplant'), 'mzone');
     g.players[0].normalSummonsLeft = 1;
     eq(gp.hasType('normal'), true, 'Normal Monster before the Gemini Summon');
-    await activateCard(g, 0, gp, GEMINI);
+    await g.geminiSummon(0, gp);
     eq(gp.hasType('effect'), true, 'Effect Monster after the Gemini Summon');
     eq(gp.hasType('normal'), false, 'no longer Normal');
     await downAndUp(g, gp);
@@ -172,14 +170,14 @@ const GEMINI = 'Gemini Summon (Normal Summon again)';
     eq(gp.hasType('effect'), false, 'not an Effect Monster');
     eq(!!gp.flags.geminiSummoned, false, 'Gemini status lost');
     g.players[0].normalSummonsLeft = 1;
-    eq(canActivate(g, 0, gp, GEMINI), true, 'can be Gemini Summoned again');
+    eq(g.canGeminiSummon(0, gp), true, 'can be Gemini Summoned again');
   });
 
   await test('Dark Valkyria: Spell Counter and "once while face-up" both reset when turned face-down', async () => {
     const { g, place } = setup();
     const dv = place(0, cardByName('Dark Valkyria'), 'mzone');
     g.players[0].normalSummonsLeft = 1;
-    await activateCard(g, 0, dv, GEMINI);
+    await g.geminiSummon(0, dv);
     await activateCard(g, 0, dv, 'Place 1 Spell Counter');
     eq(dv.counters.spell ?? 0, 1, 'Spell Counter placed');
     eq(g.getAtk(dv), 2100, '1800 + 300');
@@ -189,7 +187,7 @@ const GEMINI = 'Gemini Summon (Normal Summon again)';
     eq(g.getAtk(dv), 1800, 'ATK back to 1800');
     eq(canActivate(g, 0, dv, 'Place 1 Spell Counter'), false, 'a Normal Monster again: no effect');
     g.players[0].normalSummonsLeft = 1;
-    await activateCard(g, 0, dv, GEMINI);
+    await g.geminiSummon(0, dv);
     eq(canActivate(g, 0, dv, 'Place 1 Spell Counter'), true, 'Gemini Summoned again: can place a counter again');
   });
 

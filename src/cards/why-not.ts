@@ -24,7 +24,6 @@ const isAttr = (a: string) => (c: CardInstance) => c.isMonster && c.data.attribu
 
 // ------------------------------------------------------------------ shared checks
 
-const NECROVALLEY = 'Necrovalley stops it';
 const SS_LOCKED = 'a card stops Special Summons';
 const ZONES_FULL = 'your Monster Zones are full';
 
@@ -46,11 +45,6 @@ function cantSummonSelf(ctx: Ctx): string | null {
   if (p) return p;
   if (ctx.game.queryCard(ctx.self, 'cannotBeSummoned') || ctx.self.data.noSpecialFrom?.includes(ctx.self.location)) return 'a card stops it being Summoned';
   return null;
-}
-
-/** For a GY effect of this card that moves it: Necrovalley negates it. */
-function gyLock(ctx: Ctx): string | null {
-  return ctx.game.gyLocked() ? NECROVALLEY : null;
 }
 
 /** Why none of the monsters in `pool` can be revived (Monster Reborn, Call of the Haunted, Premature Burial...). */
@@ -224,13 +218,12 @@ export const WHY_NOT: [string, number, Why][] = [
   [
     'Plaguespreader Zombie',
     0,
-    (ctx) => gyLock(ctx) ?? cantSummonSelf(ctx) ?? (ctx.hand().length ? null : 'needs a card in hand to put on the Deck'),
+    (ctx) => cantSummonSelf(ctx) ?? (ctx.hand().length ? null : 'needs a card in hand to put on the Deck'),
   ],
   [
     'Treeborn Frog',
     0,
     (ctx) =>
-      gyLock(ctx) ??
       (ctx.spellTraps('me').length
         ? 'you control a Spell/Trap\nSet cards and Field Spells count'
         : ctx.faceUpMonsters('me', (c) => c.name === 'Treeborn Frog').length
@@ -274,8 +267,6 @@ export function genericWhyNot(ctx: Ctx, ef: EffectDef): string | null {
   // a contact fusion (Gladiator Beasts...): the materials must be face-up on the field
   if (ef.kind === 'proc' && c.location === 'extra' && c.data.fusion?.noPoly && c.data.fusion.desc)
     return `needs its materials face-up\n${c.data.fusion.desc}, shuffled into the Deck`;
-  // a Graveyard effect that moves cards out of the Graveyard
-  if (c.location === 'grave' && (ef.categories ?? []).some((k) => k === 'specialSummon' || k === 'toHand' || k === 'toDeck') && ctx.game.gyLocked() && !c.data.ignoresGyLock) return NECROVALLEY;
   if ((ef.categories ?? []).includes('specialSummon') && ctx.game.queryPlayer(ctx.player, 'cannotSpecialSummon')) return SS_LOCKED;
   // a Set Trap waiting for its moment
   if (ef.kind === 'activate' && c.location === 'szone' && ef.event) {

@@ -104,23 +104,15 @@ function makeGeminiActive(ctx: Ctx, c: C) {
   ctx.game.update();
 }
 
-/**
- * Gemini Summon. APPROX (same as plants.ts): the engine has no Gemini Summon action, so it is an
- * Ignition effect that uses the turn's Normal Summon; it starts a chain instead of being a Summon.
- */
+/** Gemini Summon: a Normal Summon of the face-up Gemini monster (Game.geminiSummon, no chain). */
 function geminiSummon(score: (ctx: Ctx) => number = () => 40): EffectDef {
   return {
-    kind: 'ignition',
+    // The Gemini Summon is a Normal Summon, not an effect (Game.geminiSummon; no chain).
+    kind: 'proc',
+    geminiSummon: true,
+    range: ['mzone'],
     label: 'Gemini Summon (Normal Summon again)',
     categories: [],
-    condition: (ctx) =>
-      ctx.self.faceUp && !ctx.self.flags.geminiSummoned && ctx.game.players[ctx.player].normalSummonsLeft > 0 && !ctx.game.queryPlayer(ctx.player, 'cannotNormalSummon'),
-    activate: async (ctx) => {
-      ctx.game.players[ctx.player].normalSummonsLeft--;
-    },
-    resolve: async (ctx) => {
-      makeGeminiActive(ctx, ctx.self);
-    },
     ai: {
       score: (ctx) => {
         // Don't spend the Normal Summon if a better monster in hand still wants it (main phase 1).
@@ -341,7 +333,9 @@ function ritualPool(ctx: Ctx, ritual: C): C[] {
   return [
     ...ctx.hand('me', (c) => c.isMonster && c !== ritual),
     ...ctx.monsters('me', (c) => !ctx.query(c, 'cannotBeTributed')),
-    ...ctx.grave('me', isDjinn),
+    // https://edisonrul.ing/cards/d/djinn-releaser-of-rituals.html — not while "Necrovalley" is active (GY cards cannot
+    // be removed from play).
+    ...(ctx.game.gyBanishLocked(ctx.player) ? [] : ctx.grave('me', isDjinn)),
   ];
 }
 const levelSum = (cs: C[], ctx: Ctx) => cs.reduce((a, c) => a + (c.location === 'mzone' ? ctx.level(c) : lvl(c)), 0);
