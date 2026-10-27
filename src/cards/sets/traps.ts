@@ -517,22 +517,24 @@ function wouldDestroyTwoOfMine(ctx: Ctx, l: ChainLink): boolean {
   return pool.length >= 2;
 }
 
-defTrap('Starlight Road', 'counter', {
-  text: 'When a card or effect is activated that would destroy 2 or more cards you control: Negate the activation, and if you do, destroy that card. Then, you can Special Summon 1 "Stardust Dragon" from your Extra Deck.',
+defTrap('Starlight Road', 'normal', {
+  text: 'Activate only when an effect is activated that would destroy 2 or more cards you control. Negate the effect and destroy that card. Then, you can Special Summon 1 "Stardust Dragon" from your Extra Deck.',
   aiValue: 400,
   effects: [
     {
+      // https://edisonrul.ing/cards/s/starlight-road.html — it negates the EFFECT (not the activation), cannot be
+      // activated in the Damage Step, and "Stardust Dragon" can only be Summoned if Starlight Road destroyed that card.
       kind: 'activate',
       categories: ['negate', 'destroy', 'specialSummon'],
       condition: (ctx) => {
         const l = ctx.prevLink();
-        return !!l && !l.negated && l.card !== ctx.self && wouldDestroyTwoOfMine(ctx, l);
+        return !ctx.battle?.inDamageStep && !!l && !l.negated && l.card !== ctx.self && wouldDestroyTwoOfMine(ctx, l);
       },
       activate: async (ctx) => {
         ctx.data.link = ctx.prevLink();
       },
       resolve: async (ctx) => {
-        await ctx.negateAndDestroy(ctx.data.link as ChainLink);
+        if (!(await ctx.negateEffectAndDestroy(ctx.data.link as ChainLink))) return;
         const sd = ctx.extra('me', (c) => c.name === 'Stardust Dragon' && ctx.canSummonCard(c));
         if (sd.length && ctx.canSpecialSummon() && (await ctx.confirm('Special Summon "Stardust Dragon" from your Extra Deck?'))) {
           await ctx.specialSummon(sd[0]);
@@ -544,17 +546,17 @@ defTrap('Starlight Road', 'counter', {
 });
 
 defTrap('Trap Stun', 'normal', {
-  text: 'Negate all other Trap effects on the field this turn.',
+  text: 'Negate the effects of all other Trap Cards on the field during this turn.',
   effects: [
     {
       kind: 'activate',
       categories: ['negate'],
+      // https://edisonrul.ing/cards/t/trap-stun.html — Traps can still be activated; every other Trap's effect on the
+      // field is negated for the rest of the turn, even one that leaves the field during its chain (Game.trapStunned).
       resolve: async (ctx) => {
         const g = ctx.game;
-        for (const c of ctx.spellTraps('both', (x) => x.isTrap && x.faceUp && x !== ctx.self)) ctx.addTempMod(c, 'negated', true, 'turn');
-        // Traps activated later this turn would be negated; approximate by forbidding their activation.
-        ctx.addPlayerMod(ctx.player, 'cannotActivateTraps');
-        ctx.addPlayerMod(ctx.opp, 'cannotActivateTraps');
+        g.turnData.trapStunUid = ctx.self.uid;
+        g.update();
         g.log('All other Trap effects on the field are negated this turn.', 'action', ctx.player);
       },
       ai: {
@@ -784,6 +786,8 @@ defTrap('Threatening Roar', 'normal', {
     {
       kind: 'activate',
       categories: ['protect'],
+      // https://edisonrul.ing/cards/t/threatening-roar.html — it cannot be activated during your own turn.
+      condition: (ctx) => !ctx.isMyTurn,
       resolve: async (ctx) => {
         ctx.addPlayerMod(ctx.opp, 'cannotDeclareAttack');
         ctx.log(`${ctx.game.players[ctx.opp].name} cannot declare an attack this turn.`);
@@ -977,8 +981,9 @@ defTrap('Trap Hole', 'normal', {
         if (!c || c.location !== 'mzone') return false;
         ctx.addTargets([c]);
       },
+      // https://edisonrul.ing/cards/t/trap-hole.html — the Summoned monster must still be face-up to be destroyed.
       resolve: async (ctx) => {
-        const t = ctx.validTargets((c) => c.location === 'mzone');
+        const t = ctx.validTargets((c) => c.location === 'mzone' && c.faceUp);
         if (t.length) await ctx.destroy(t);
       },
       ai: {
@@ -1041,6 +1046,9 @@ defTrap('Dark Bribe', 'counter', {
         const l = ctx.prevLink();
         return !!l && !l.negated && l.isCardActivation && (l.card.isSpell || l.card.isTrap) && l.player === ctx.opp;
       },
+      // 2010 ruling: it cannot be activated if your opponent has no cards in their Deck.
+      // https://edisonrul.ing/cards/d/dark-bribe.html
+      canActivate: (ctx) => ctx.deck('opp').length > 0,
       activate: async (ctx) => {
         ctx.data.link = ctx.prevLink();
       },
@@ -1176,9 +1184,10 @@ defTrap('Return from the Different Dimension', 'normal', {
         if (!n || !ctx.canSpecialSummon()) return;
         const sel = await ctx.select(cands, n, n, `Special Summon ${n} banished monster(s).`, 'specialSummon');
         const done = await ctx.specialSummon(sel);
-        const ids = done.map((c) => [c, c.moveId] as const);
+        // https://edisonrul.ing/cards/r/return-from-the-different-dimension.html — not a monster flipped face-down.
+        const ids = done.map((c) => [c, c.moveId, c.faceUpId] as const);
         ctx.later('end', async () => {
-          const still = ids.filter(([c, id]) => c.location === 'mzone' && c.moveId === id).map(([c]) => c);
+          const still = ids.filter(([c, id, fid]) => c.location === 'mzone' && c.moveId === id && c.faceUpId === fid && c.faceUp).map(([c]) => c);
           if (still.length) await ctx.game.banish(still, 'effect', ctx.player, ctx.self);
         });
       },

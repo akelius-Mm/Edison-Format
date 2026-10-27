@@ -625,18 +625,20 @@ heroFusion(
   700,
 );
 
-heroFusion(
+// 2010 text and rulings: 1 "Elemental Hero" (not "Destiny Hero" / "Evil Hero") + 1 EARTH monster, and the Fusion
+// Summon trigger is mandatory (it targets). https://edisonrul.ing/cards/e/elemental-hero-gaia.html
+const gaia = heroFusion(
   'Elemental Hero Gaia',
   'EARTH',
   'Warrior',
   2200,
   2600,
-  'When this card is Fusion Summoned: You can target 1 face-up monster your opponent controls; until the end of this turn, its ATK is halved and this card gains that much ATK.',
+  'When this card is Fusion Summoned, select 1 face-up monster your opponent controls. Until the end of this turn, that monster\'s ATK is halved and this card gains the same amount of ATK.',
   [
     {
       kind: 'trigger',
       event: 'fusionSummoned',
-      when: true,
+      mandatory: true,
       label: 'Halve 1 monster\'s ATK and steal it',
       categories: ['atkChange'],
       eventFilter: selfSummoned('fusion'),
@@ -657,6 +659,9 @@ heroFusion(
   ],
   500,
 );
+
+gaia.fusion = { materials: [isEHero, attr('EARTH')], desc: '1 "Elemental Hero" monster + 1 EARTH monster' };
+gaia.text = gaia.text.replace('1 "HERO" monster + 1 EARTH monster', '1 "Elemental Hero" monster + 1 EARTH monster');
 
 heroFusion(
   'Elemental Hero The Shining',

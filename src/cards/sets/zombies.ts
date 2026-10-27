@@ -355,7 +355,7 @@ monster('Doomkaiser Dragon', {
   atk: 2400,
   def: 1500,
   types: ['synchro'],
-  text: '"Plaguespreader Zombie" + 1 or more non-Tuner Zombie-Type monsters\nWhen this card is Synchro Summoned: You can target 1 Zombie-Type monster in your opponent\'s GY; Special Summon it to your side of the field.',
+  text: '"Plaguespreader Zombie" + 1 or more non-Tuner Zombie-Type monsters\nWhen this card is Special Summoned, you can select 1 Zombie-Type monster in your opponent\'s Graveyard and Special Summon it to your side of the field in Attack Position. Destroy it when this card is removed from the field.',
   synchro: {
     tuner: (c) => c.name === 'Plaguespreader Zombie',
     nonTuner: (c) => c.data.race === 'Zombie',
@@ -364,8 +364,10 @@ monster('Doomkaiser Dragon', {
   aiValue: 700,
   effects: [
     {
+      // 2010 text: on any Special Summon (not only a Synchro Summon), in Attack Position, and that monster is destroyed
+      // (no Chain) when this card leaves the field. https://edisonrul.ing/cards/d/doomkaiser-dragon.html
       kind: 'trigger',
-      event: 'synchroSummoned',
+      event: 'specialSummoned',
       label: 'Steal a Zombie from the opponent\'s GY',
       categories: ['specialSummon'],
       eventFilter: (ctx, ev) => ev.card === ctx.self,
@@ -377,7 +379,9 @@ monster('Doomkaiser Dragon', {
       },
       resolve: async (ctx) => {
         const t = ctx.validTargets((c) => c.location === 'grave');
-        if (t.length) await ctx.specialSummon(t[0]);
+        if (!t.length) return;
+        const r = await ctx.specialSummon(t[0], { pos: 'atk' });
+        if (r.length && ctx.self.location === 'mzone' && ctx.self.faceUp) ctx.game.link(r[0], ctx.self, false);
       },
     },
   ],
@@ -391,6 +395,7 @@ monster('Vampire Lord', {
   def: 1500,
   text: 'If this card inflicts battle damage to your opponent: Declare 1 card type (Monster, Spell or Trap); your opponent sends 1 card of that type from their Deck to the GY. If this card is destroyed by your opponent\'s card effect and sent to your GY: Special Summon it during your next Standby Phase.',
   aiValue: 300,
+  ignoresGyLock: true,
   effects: [
     {
       kind: 'trigger',
@@ -417,8 +422,15 @@ monster('Vampire Lord', {
       mandatory: true,
       label: 'Return next Standby Phase',
       categories: ['specialSummon'],
+      // https://edisonrul.ing/cards/v/vampire-lord.html — also when destroyed in the hand or Deck by the opponent's card
+      // effect; it is Special Summoned even under "Necrovalley" (ignoresGyLock).
       eventFilter: (ctx, ev) =>
-        ev.card === ctx.self && ev.from === 'mzone' && ctx.self.location === 'grave' && (ev.reasons ?? []).includes('effect') && ev.reasonPlayer === ctx.opp,
+        ev.card === ctx.self &&
+        (ev.from === 'mzone' || ev.from === 'hand' || ev.from === 'deck') &&
+        (ev.from !== 'mzone' || ev.fromController === ctx.self.owner) &&
+        ctx.self.location === 'grave' &&
+        (ev.reasons ?? []).includes('effect') &&
+        ev.reasonPlayer === ctx.opp,
       resolve: async (ctx) => {
         const self = ctx.self;
         const id = self.moveId;
@@ -443,7 +455,7 @@ monster('Ryu Kokki', {
   level: 6,
   atk: 2400,
   def: 2200,
-  text: 'At the end of the Damage Step, if this card battled a Warrior-Type or Spellcaster-Type monster: Destroy that monster.',
+  text: 'If this card battles a Warrior or Spellcaster-Type monster, destroy that monster at the end of the Damage Step.',
   aiValue: 200,
   effects: [
     {
@@ -452,8 +464,10 @@ monster('Ryu Kokki', {
       mandatory: true,
       label: 'Destroy the Warrior/Spellcaster',
       categories: ['destroy'],
+      // https://edisonrul.ing/cards/r/ryu-kokki.html — it still activates if Ryu Kokki was destroyed by that battle; the
+      // monster's current Type must be Warrior / Spellcaster.
       eventFilter: (ctx, ev) => {
-        if (ctx.self.location !== 'mzone') return false;
+        if (ctx.self.location !== 'mzone' && ctx.self.location !== 'grave') return false;
         const other = ev.card === ctx.self ? (ev.other as CardInstance | undefined) : ev.other === ctx.self ? (ev.card as CardInstance) : undefined;
         return !!other && other.location === 'mzone' && other.faceUp && (other.data.race === 'Warrior' || other.data.race === 'Spellcaster');
       },

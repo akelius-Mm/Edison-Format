@@ -17,6 +17,7 @@ import {
 } from '../helpers';
 import type { CardInstance } from '../../engine/card';
 import type { Ctx } from '../../engine/ctx';
+import type { ChainLink } from '../../engine/game';
 
 // ============================================================ SPELLS
 
@@ -242,7 +243,16 @@ spell('Scapegoat', 'quickplay', {
     {
       kind: 'activate',
       categories: ['specialSummon', 'protect'],
-      canActivate: (ctx) => ctx.freeMZones() >= 4 && ctx.canSpecialSummon(),
+      // https://edisonrul.ing/cards/s/scapegoat.html — not if you already Summoned a monster this turn (even by the
+      // opponent's Cyber Jar); if its ACTIVATION is negated (Magic Jammer) you may still Summon that turn, if only its
+      // effect is negated (Imperial Order) you may not.
+      canActivate: (ctx) => ctx.freeMZones() >= 4 && ctx.canSpecialSummon() && !ctx.game.turnData.summonedBy?.[ctx.player],
+      onActivationNegated: (ctx) => {
+        const g = ctx.game;
+        const lock = (ctx.data.lock ?? []) as typeof g.playerMods;
+        g.playerMods = g.playerMods.filter((m) => !lock.includes(m));
+        g.update();
+      },
       activate: async (ctx) => {
         // "You cannot Summon other monsters the turn you activate this card": applies from activation (even if this card
         // is negated). Setting is not a Summon and stays legal. The Sheep Tokens themselves are exempt (see resolve).
@@ -425,7 +435,7 @@ trap('Call of the Haunted', 'continuous', {
 });
 
 trap('Royal Oppression', 'continuous', {
-  text: 'Any player can pay 800 LP to negate the Special Summon of a monster(s), and destroy that monster(s).',
+  text: 'Either player can pay 800 Life Points to negate the Special Summon of a monster(s), and/or an effect that Special Summons a monster(s), and destroy those cards.',
   effects: [
     { kind: 'activate', categories: ['lockdown'], ai: { score: (ctx) => (ctx.isMyTurn ? 0 : 20) } },
     {
@@ -450,6 +460,34 @@ trap('Royal Oppression', 'continuous', {
           if (!ps || ps.player === ctx.player) return 0;
           const v = Math.max(0, ...ps.cards.map((c) => cardValue(ctx.game, c)));
           return v >= 1800 && ctx.lp > 2000 ? 60 : 0;
+        },
+      },
+    },
+    {
+      // https://edisonrul.ing/cards/r/royal-oppression.html — "...negate the Special Summon of a monster(s), and/or an
+      // effect that Special Summons a monster(s), and destroy those cards": it can also respond to the activation of a
+      // card / effect that would (or might) Special Summon (Debris Dragon, Call of the Haunted, Starlight Road...).
+      // Not in the Damage Step (no damageStep flag).
+      kind: 'quick',
+      label: 'Pay 800: negate an effect that Special Summons',
+      anyPlayer: true,
+      categories: ['negate', 'destroy'],
+      condition: (ctx) => {
+        const l = ctx.prevLink();
+        return !!l && !l.negated && l.card !== ctx.self && (l.effect.categories ?? []).includes('specialSummon') && ctx.lp > 800;
+      },
+      activate: async (ctx) => {
+        ctx.data.link = ctx.prevLink();
+        await ctx.payLp(800);
+      },
+      resolve: async (ctx) => {
+        await ctx.negateEffectAndDestroy(ctx.data.link as ChainLink);
+      },
+      ai: {
+        score: (ctx) => {
+          const l = ctx.prevLink();
+          if (!l || l.player === ctx.player || ctx.lp <= 2000) return 0;
+          return cardValue(ctx.game, l.card) >= 1500 || (l.card.data.aiValue ?? 0) >= 500 ? 55 : 0;
         },
       },
     },
@@ -498,7 +536,7 @@ monster('Card Trooper', {
   level: 3,
   atk: 400,
   def: 400,
-  text: 'Once per turn: You can send up to 3 cards from the top of your Deck to the GY; this card gains 500 ATK for each card sent, until the end of this turn. When this card is destroyed and sent to the GY: Draw 1 card.',
+  text: 'Once per turn, you can send up to 3 cards from the top of your Deck to the Graveyard. This card gains 500 ATK for each card sent to the Graveyard until the End Phase. When this card you control is destroyed and sent to the Graveyard, draw 1 card.',
   aiValue: 400,
   effects: [
     {
@@ -510,11 +548,12 @@ monster('Card Trooper', {
       activate: async (ctx) => {
         const max = Math.min(3, ctx.deck().length - 1);
         const opts = Array.from({ length: max }, (_, i) => `${i + 1} card(s)`);
-        ctx.data.n = (await ctx.option('Send how many cards?', opts, (i) => i)) + 1;
+        const n = (await ctx.option('Send how many cards?', opts, (i) => i)) + 1;
+        // 2010 ruling: sending the cards is the cost. https://edisonrul.ing/cards/c/card-trooper.html
+        ctx.data.n = (await ctx.game.mill(ctx.player, n, 'cost', ctx.self)).length;
       },
       resolve: async (ctx) => {
-        const milled = await ctx.mill(ctx.data.n);
-        if (ctx.self.location === 'mzone' && ctx.self.faceUp) ctx.addTempMod(ctx.self, 'atk', 500 * milled.length, 'turn');
+        if (ctx.self.location === 'mzone' && ctx.self.faceUp) ctx.addTempMod(ctx.self, 'atk', 500 * (ctx.data.n as number), 'turn');
       },
       ai: { score: () => 55 },
     },
@@ -524,7 +563,9 @@ monster('Card Trooper', {
       mandatory: true,
       label: 'Draw 1',
       categories: ['draw'],
-      eventFilter: (ctx, ev) => ev.card === ctx.self && (ev.reasons ?? []).includes('destroy') && ev.from === 'mzone',
+      // 2010 ruling: only if destroyed while you control it (not under the opponent's control); also as an Equip Card.
+      eventFilter: (ctx, ev) =>
+        ev.card === ctx.self && (ev.reasons ?? []).includes('destroy') && (ev.from === 'mzone' || ev.from === 'szone') && (ev.fromController ?? ctx.self.owner) === ctx.self.owner,
       resolve: async (ctx) => {
         await ctx.draw(1);
       },
@@ -613,20 +654,24 @@ monster('Treeborn Frog', {
   atk: 100,
   def: 100,
   sets: ['frog'],
-  text: 'During your Standby Phase, if this card is in your Graveyard and you do not control any Spell or Trap Cards, you can Special Summon this card. This effect cannot be activated if there is a face-up "Treeborn Frog" on your side of the field.',
+  text: 'If this card is in your Graveyard during your Standby Phase and you control no Spell or Trap Cards, you can Special Summon it. This effect cannot be activated if you control a face-up "Treeborn Frog".',
   aiValue: 200,
+  // https://edisonrul.ing/cards/t/treeborn-frog.html — it does not target and is not negated by "Necrovalley".
+  ignoresGyLock: true,
   effects: [
     {
+      // Same source: no once-per-turn (it can activate several times in the same Standby Phase), but two copies
+      // cannot be activated in the same chain.
       kind: 'trigger',
       event: 'phaseStart',
       range: ['grave'],
-      opt: true,
       label: 'Revive',
       categories: ['specialSummon'],
       eventFilter: (ctx, ev) => ev.phase === 'standby' && ctx.isMyTurn,
       // Edison text: not while you control a face-up "Treeborn Frog", so only one comes back per Standby Phase (checked
       // again on resolution, when two were chained together)
       condition: (ctx) => ctx.spellTraps('me').length === 0 && !faceUpTreeborn(ctx) && ctx.canSummonSelf(),
+      canActivate: (ctx) => !ctx.game.chain.some((l) => l.card !== ctx.self && l.card.name === 'Treeborn Frog' && !l.isCardActivation),
       resolve: async (ctx) => {
         if (ctx.self.location === 'grave' && ctx.spellTraps('me').length === 0 && !faceUpTreeborn(ctx)) await ctx.specialSummon(ctx.self);
       },
@@ -728,14 +773,14 @@ monster('Brionac, Dragon of the Ice Barrier', {
   atk: 2300,
   def: 1400,
   types: ['synchro'],
-  text: '1 Tuner + 1 or more non-Tuner monsters\nYou can discard any number of cards to select the same number of cards on the field, and return those cards to the hand. This effect can only be used once per turn.',
+  text: '1 Tuner + 1 or more non-Tuner monsters\nYou can discard any number of cards to select the same number of cards on the field, and return those cards to the hand.',
   synchro: { desc: '1 Tuner + 1+ non-Tuner monsters' },
   aiValue: 800,
   effects: [
     {
       kind: 'ignition',
-      // Edison text: "This effect can only be used once per turn" (per copy); the hard once per turn by name is later errata.
-      opt: true,
+      // 2010 ruling: no once-per-turn limit, it can be activated multiple times per turn
+      // https://edisonrul.ing/cards/b/brionac-dragon-of-the-ice-barrier.html
       label: 'Discard & bounce',
       categories: ['toHand'],
       canActivate: (ctx) => ctx.hand().length > 0 && ctx.field('both', (c) => c !== ctx.self && ctx.canTarget(c)).length > 0,

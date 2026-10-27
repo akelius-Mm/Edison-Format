@@ -1,7 +1,7 @@
 // Card definitions: generic Spells (see docs/CARD_ALLOCATION.md).
 import { spell } from '../define';
 import { attr, bestTarget, cardValue, isMonster } from '../helpers';
-import type { AiHints, CardInstance, EffectDef } from '../../engine/card';
+import { faceUpFlag, type AiHints, type CardInstance, type EffectDef } from '../../engine/card';
 import type { Ctx } from '../../engine/ctx';
 import type { Category, Location, PlayerId } from '../../engine/types';
 
@@ -1066,12 +1066,15 @@ spell('Overload Fusion', 'normal', {
 });
 
 spell('Future Fusion', 'continuous', {
-  text: 'Reveal 1 Fusion Monster in your Extra Deck and send the Fusion Materials listed on it from your Deck to the GY. During your 2nd Standby Phase after this card\'s activation, Special Summon that Fusion Monster (treated as a Fusion Summon). When this card is destroyed, destroy that monster.',
+  text: 'Reveal 1 Fusion Monster in your Extra Deck and send the Fusion Materials listed on it from your Deck to the GY. During your 2nd Standby Phase after this card\'s activation, Special Summon that Fusion Monster (treated as a Fusion Summon). When this card is removed from the field, destroy that monster. When the monster is destroyed, destroy this card.',
   effects: [
     {
       kind: 'activate',
       categories: ['mill', 'specialSummon'],
+      // SJC Edison (May 2010) ruling: it performs a Special Summon (in the future) when activated, so it cannot be
+      // activated while you cannot Special Summon. https://edisonrul.ing/cards/f/future-fusion.html
       canActivate: (ctx) => {
+        if (!ctx.canSpecialSummon()) return false;
         const deckMons = ctx.deck('me', isMonster);
         return ctx.extra('me', (c) => c.hasType('fusion') && !!c.data.fusion && ctx.game.fusionMaterialSets(c, deckMons).length > 0).length > 0;
       },
@@ -1122,8 +1125,10 @@ spell('Future Fusion', 'continuous', {
         ctx.self.flags.ffFusion = null;
         if (!f || f.location !== 'extra') return;
         const r = await ctx.specialSummon(f, { method: 'fusion', proper: true, pos: 'choose' });
-        // "When this card is destroyed, destroy that monster" (not when it leaves the field another way).
-        if (r.length && ctx.self.onField) ctx.game.link(r[0], ctx.self, false, { cardOnlyIfDestroyed: true });
+        // 2010 text: "When this card is removed from the field, destroy that monster. When the monster is destroyed,
+        // destroy this card" (no Chain; a bounced monster leaves this card on the field).
+        // https://edisonrul.ing/cards/f/future-fusion.html
+        if (r.length && ctx.self.onField) ctx.game.link(ctx.self, r[0], true, { cardOnlyIfDestroyed: true });
       },
     },
   ],
@@ -1348,9 +1353,18 @@ spell('Soul Exchange', 'normal', {
       categories: ['control'],
       condition: (ctx) => ctx.phase === 'main1',
       canActivate: (ctx) => ctx.monsters('opp', (c) => ctx.canTarget(c)).length > 0,
+      // https://edisonrul.ing/cards/s/soul-exchange.html — if its ACTIVATION is negated (Dark Bribe) you can conduct your
+      // Battle Phase; if only its effect is negated (Imperial Order) you still cannot.
+      onActivationNegated: (ctx) => {
+        const g = ctx.game;
+        const lock = (ctx.data.lock ?? []) as typeof g.playerMods;
+        g.playerMods = g.playerMods.filter((m) => !lock.includes(m));
+        g.update();
+      },
       activate: async (ctx) => {
-        // Activation condition: no Battle Phase this turn (applies even if negated).
+        // Activation condition: no Battle Phase this turn (applies even if its effect is negated).
         ctx.addPlayerMod(ctx.player, 'cannotDeclareAttack');
+        ctx.data.lock = ctx.game.playerMods.slice(-1);
         const plan = soulExchangePlan(ctx);
         await ctx.selectTargets(ctx.monsters('opp'), 1, 1, 'Target 1 monster your opponent controls to Tribute this turn.', 'control', {
           aiScore: (c) => (plan && c === plan.target ? 100000 : cardValue(ctx.game, c)),
@@ -1536,8 +1550,10 @@ spell('Emergency Provisions', 'quickplay', {
 // Quick-play stat changes
 // ======================================================================
 
+// Shrink's "already halved" mark ends when the monster is turned face-down (its effect stops applying then).
+faceUpFlag('shrunkTurn');
 spell('Shrink', 'quickplay', {
-  text: 'Target 1 face-up monster on the field; its original ATK is halved until the end of this turn.',
+  text: 'Select 1 face-up monster on the field. The original ATK of that monster is halved until the end of this turn.',
   effects: [
     {
       kind: 'activate',
@@ -1553,6 +1569,10 @@ spell('Shrink', 'quickplay', {
       resolve: async (ctx) => {
         const t = ctx.validTargets((c) => c.location === 'mzone' && c.faceUp);
         if (!t.length) return;
+        // https://edisonrul.ing/cards/s/shrink.html — it halves the ORIGINAL ATK: a second "Shrink" on the same monster
+        // achieves nothing.
+        if (t[0].flags.shrunkTurn === ctx.turn) return;
+        t[0].flags.shrunkTurn = ctx.turn;
         const base = ctx.game.baseAtk(t[0]);
         ctx.addTempMod(t[0], 'atk', -Math.floor(base / 2), 'turn');
       },

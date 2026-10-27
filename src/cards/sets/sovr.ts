@@ -703,7 +703,9 @@ monster('Fortune Lady Wind', {
       when: true,
       label: 'Destroy Spells/Traps',
       categories: ['destroy'],
-      canActivate: (ctx) => ctx.spellTraps('opp').length > 0,
+      // 2010 ruling: it cannot be activated if your opponent controls fewer Spell/Trap Cards than the "Fortune Lady"
+      // monsters you control (counted again when it resolves). https://edisonrul.ing/cards/f/fortune-lady-wind.html
+      canActivate: (ctx) => ctx.spellTraps('opp').length > 0 && ctx.spellTraps('opp').length >= ctx.faceUpMonsters('me', isFortuneLady).length,
       resolve: async (ctx) => {
         const n = ctx.faceUpMonsters('me', isFortuneLady).length;
         const st = ctx.spellTraps('opp');
@@ -814,12 +816,13 @@ monster('Solitaire Magician', {
       opt: true,
       label: 'Lower a Fortune Lady: destroy 1 monster',
       categories: ['destroy'],
+      // https://edisonrul.ing/cards/s/solitaire-magician.html — a "Fortune Lady" whose Level is less than 3 cannot be chosen.
       canActivate: (ctx) => {
-        const fl = ctx.faceUpMonsters('me', (c) => isFortuneLady(c) && ctx.canTarget(c));
+        const fl = ctx.faceUpMonsters('me', (c) => isFortuneLady(c) && ctx.level(c) >= 3 && ctx.canTarget(c));
         return fl.length > 0 && ctx.faceUpMonsters('both', (c) => ctx.canTarget(c) && fl.some((f) => f !== c)).length > 0;
       },
       activate: async (ctx) => {
-        const [fl] = await ctx.selectTargets(ctx.faceUpMonsters('me', isFortuneLady), 1, 1, 'Select 1 face-up "Fortune Lady" monster you control.', 'target', {
+        const [fl] = await ctx.selectTargets(ctx.faceUpMonsters('me', (c) => isFortuneLady(c) && ctx.level(c) >= 3), 1, 1, 'Select 1 face-up "Fortune Lady" monster you control.', 'target', {
           aiScore: (c) => ctx.level(c),
         });
         ctx.data.fl = fl;

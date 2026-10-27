@@ -7,7 +7,8 @@
 //  - 'gyLock': Game.moveCards / Game.specialSummon do not move GY cards for a card effect, and Game.cardView does not
 //    apply Type changes (Zombie World) in the GY.
 // On top of that, `necrovalleyNegates` negates on activation an effect that targets a card in a GY, or that is
-// activated in the GY to move the card itself (Plaguespreader Zombie, Treeborn Frog, Wulf...).
+// activated in the GY to move the card itself (Plaguespreader Zombie, Wulf...). Treeborn Frog is not negated (2010 TCG
+// ruling, CardData.ignoresGyLock).
 import type { Ctx } from '../engine/ctx';
 import type { ChainLink } from '../engine/game';
 import type { GameEvent } from '../engine/types';

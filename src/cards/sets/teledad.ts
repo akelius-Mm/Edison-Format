@@ -190,7 +190,9 @@ monster('Krebons', {
   ],
 });
 
-const commanderUsed = new WeakSet<BattleState>();
+// https://edisonrul.ing/cards/p/psychic-commander.html — once per Damage Step for EACH copy of Psychic Commander
+// (not once per battle for all copies), and the effect targets the opponent's monster.
+const commanderUsed = new WeakMap<BattleState, Set<number>>();
 /** Battling pair for Psychic Commander: my Psychic and the opponent's monster. */
 function commanderPair(ctx: Ctx): { mine: CardInstance; theirs: CardInstance } | null {
   const b = ctx.battle;
@@ -236,11 +238,14 @@ monster('Psychic Commander', {
       categories: ['atkChange'],
       condition: (ctx) => {
         const pair = commanderPair(ctx);
-        return !!pair && !commanderUsed.has(ctx.battle!) && ctx.lp > 100;
+        return !!pair && !commanderUsed.get(ctx.battle!)?.has(ctx.self.uid) && ctx.lp > 100 && ctx.canTarget(pair.theirs);
       },
       activate: async (ctx) => {
         const pair = commanderPair(ctx)!;
-        commanderUsed.add(ctx.battle!);
+        const used = commanderUsed.get(ctx.battle!) ?? new Set<number>();
+        used.add(ctx.self.uid);
+        commanderUsed.set(ctx.battle!, used);
+        ctx.addTargets([pair.theirs]);
         const max = Math.min(5, Math.floor((ctx.lp - 1) / 100));
         const opts = Array.from({ length: max }, (_, i) => `${(i + 1) * 100} LP`);
         const need = commanderNeed(ctx, pair.mine, pair.theirs);
@@ -252,7 +257,7 @@ monster('Psychic Commander', {
       },
       resolve: async (ctx) => {
         const t = ctx.data.theirs as CardInstance;
-        if (t.location !== 'mzone' || t.moveId !== ctx.data.moveId || !t.faceUp) return;
+        if (t.location !== 'mzone' || t.moveId !== ctx.data.moveId || !t.faceUp || !ctx.validTargets().includes(t)) return;
         ctx.addTempMod(t, 'atk', -ctx.data.amount, 'turn');
         ctx.addTempMod(t, 'def', -ctx.data.amount, 'turn');
       },

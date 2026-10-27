@@ -106,8 +106,8 @@ async function activate(g: Game, p: PlayerId, card: CardInstance, effectIndex?: 
 (async () => {
   console.log('Edison text: staples');
 
-  // Brionac (HA01): "This effect can only be used once per turn." — per copy, not the later hard once per turn by name.
-  await test('Brionac: each copy can use its effect once per turn (no once-per-turn-by-name)', async () => {
+  // Brionac, 2010 ruling: can be activated multiple times per turn (https://edisonrul.ing/cards/b/brionac-dragon-of-the-ice-barrier.html)
+  await test('Brionac: no once-per-turn limit (2010 ruling)', async () => {
     const { g, c0, place } = setup();
     c0.pick = (_g, req) => {
       const opp = req.candidates.filter((c) => c.controller === 1);
@@ -121,9 +121,10 @@ async function activate(g: Game, p: PlayerId, card: CardInstance, effectIndex?: 
     place(1, T.wall, 'mzone');
     await activate(g, 0, b1);
     eq(g.monsters(1).length, 1, 'first Brionac bounced 1');
-    eq(g.getActivations(0, { open: true }).some((a) => a.card === b1), false, 'first copy used');
-    await activate(g, 0, b2);
-    eq(g.monsters(1).length, 0, 'second Brionac bounced the other');
+    eq(g.getActivations(0, { open: true }).some((a) => a.card === b1), true, 'the same copy can activate again');
+    await activate(g, 0, b1);
+    eq(g.monsters(1).length, 0, 'the same Brionac bounced the other');
+    void b2;
   });
 
   // Drill Warrior: "Once per turn" on each effect is per copy, not shared by name.

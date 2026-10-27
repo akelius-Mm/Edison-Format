@@ -144,8 +144,9 @@ monster('Dandylion', {
       mandatory: true,
       label: 'Summon 2 Fluff Tokens',
       categories: ['specialSummon'],
+      // 2010 ruling: this mandatory effect always activates, even if you cannot Special Summon (then no Token is
+      // Summoned: 2 or none). https://edisonrul.ing/cards/d/dandylion.html
       eventFilter: (ctx, ev) => ev.card === ctx.self && ev.to === 'grave',
-      condition: (ctx) => ctx.canSpecialSummon() && ctx.freeMZones() >= 2,
       resolve: async (ctx) => {
         if (!ctx.canSpecialSummon() || ctx.freeMZones() < 2) return;
         const toks = await ctx.createTokens(fluff, 2, 'def');
@@ -286,20 +287,26 @@ const quickdraw = monster('Quickdraw Synchron', {
   def: 1400,
   types: ['tuner'],
   sets: ['synchron'],
-  text: 'You can Special Summon this card (from your hand) by sending 1 monster from your hand to the GY. This card can be used as a substitute for any 1 "Synchron" Tuner for a Synchro Summon. Cannot be used as Synchro Material, except for the Synchro Summon of a monster that lists a "Synchron" Tuner as material.',
+  text: 'You can send 1 monster from your hand to the Graveyard and Special Summon this card from your hand. You can substitute this card for any 1 "Synchron" Tuner monster for a Synchro Summon. This card cannot be used as a Synchro Material Monster, except for the Synchro Summon of a monster that lists a "Synchron" monster as a Tuner monster.',
   aiValue: 500,
   effects: [
     {
-      kind: 'proc',
+      // https://edisonrul.ing/cards/q/quickdraw-synchron.html — the Special Summon starts a chain (an Ignition Effect);
+      // sending the monster is not a cost: it happens with the Summon on resolution, and not at all if the effect is
+      // negated or Quickdraw cannot be Summoned.
+      kind: 'ignition',
+      range: ['hand'],
       label: 'Special Summon (send 1 monster from hand)',
       categories: ['specialSummon'],
-      condition: (ctx) => ctx.freeMZones() > 0 && ctx.hand('me', (c) => c.isMonster && c !== ctx.self).length > 0,
-      perform: async (ctx) => {
+      canActivate: (ctx) => ctx.freeMZones() > 0 && ctx.canSummonSelf() && ctx.hand('me', (c) => c.isMonster && c !== ctx.self).length > 0,
+      resolve: async (ctx) => {
+        if (ctx.self.location !== 'hand' || ctx.freeMZones() <= 0 || !ctx.canSummonSelf()) return;
         const cands = ctx.hand('me', (c) => c.isMonster && c !== ctx.self);
-        const sel = await ctx.select(cands, 1, 1, 'Send 1 monster from your hand to the GY.', 'cost', { cancelable: true, aiScore: (c) => quickdrawCostScore(ctx, c) });
-        if (!sel.length) return false;
-        await ctx.sendToGrave(sel, 'cost');
-        return true;
+        if (!cands.length) return;
+        const sel = await ctx.select(cands, 1, 1, 'Send 1 monster from your hand to the GY.', 'toGrave', { aiScore: (c) => quickdrawCostScore(ctx, c) });
+        if (!sel.length) return;
+        await ctx.sendToGrave(sel);
+        if (ctx.self.location === 'hand') await ctx.specialSummon(ctx.self);
       },
       ai: {
         score: (ctx) => {
@@ -454,7 +461,7 @@ monster('Tytannial, Princess of Camellias', {
   level: 8,
   atk: 2800,
   def: 2600,
-  text: 'When a card or effect is activated that targets a face-up Plant-Type monster(s) on the field: You can Tribute 1 face-up Plant-Type monster; negate the activation, and if you do, destroy that card.',
+  text: "You can Tribute 1 face-up Plant-Type monster you control to negate the activation of a Spell, Trap, or Effect Monster's effect that targets a card(s) on the field and destroy it.",
   aiValue: 600,
   effects: [
     {
@@ -465,11 +472,14 @@ monster('Tytannial, Princess of Camellias', {
       condition: (ctx) => {
         const l = ctx.prevLink();
         if (!l || l.card === ctx.self) return false;
-        return l.ctx.targets.some((t) => t.location === 'mzone' && t.faceUp && isPlant(t));
+        // https://edisonrul.ing/cards/t/tytannial-princess-of-camellias.html — a card / effect that targets a card(s) on
+        // the field (any card, not only a Plant); not one that does not target.
+        return l.ctx.targets.some((t) => t.onField);
       },
-      canActivate: (ctx) => tributable(ctx, (c) => c.faceUp && isPlant(c)).length > 0,
+      canActivate: (ctx) => tributable(ctx, (c) => c.faceUp && isPlant(c) && c.controller === ctx.player).length > 0,
       activate: async (ctx) => {
-        const sel = await ctx.select(tributable(ctx, (c) => c.faceUp && isPlant(c)), 1, 1, 'Tribute 1 face-up Plant-Type monster.', 'tribute', {
+        ctx.data.link = ctx.prevLink();
+        const sel = await ctx.select(tributable(ctx, (c) => c.faceUp && isPlant(c) && c.controller === ctx.player), 1, 1, 'Tribute 1 face-up Plant-Type monster.', 'tribute', {
           aiScore: (c) => (c === ctx.self ? -3000 : -cardValue(ctx.game, c)),
         });
         if (!sel.length) return false;

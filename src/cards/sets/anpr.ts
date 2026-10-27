@@ -633,7 +633,7 @@ monster('Fortune Lady Light', {
   def: 0,
   sets: ['fortune-lady'],
   aiValue: 700,
-  text: "This card's ATK/DEF become its Level x 200. Once per turn, during your Standby Phase: Increase this card's Level by 1 (max. 12). When this face-up card leaves the field by card effect: You can Special Summon 1 \"Fortune Lady\" monster from your Deck.",
+  text: "This card's ATK/DEF become its Level x 200. Once per turn, during your Standby Phase: Increase this card's Level by 1 (max. 12). When this card is removed from the field by a card effect, you can Special Summon 1 \"Fortune Lady\" monster from your Deck.",
   effects: [
     ...fortuneLadyCore(),
     {
@@ -642,7 +642,9 @@ monster('Fortune Lady Light', {
       when: true,
       label: 'Summon a Fortune Lady',
       categories: ['specialSummon'],
-      eventFilter: (ctx, ev) => ev.card === ctx.self && ev.from === 'mzone' && !!ev.fromFaceUp && reasonsOf(ev).includes('effect') && !reasonsOf(ev).includes('cost'),
+      // 2010 text: "When this card is removed from the field by a card effect" (face-down too, e.g. returned to the hand).
+      // https://edisonrul.ing/cards/f/fortune-lady-light.html
+      eventFilter: (ctx, ev) => ev.card === ctx.self && ev.from === 'mzone' && reasonsOf(ev).includes('effect') && !reasonsOf(ev).includes('cost'),
       canActivate: (ctx) => ctx.canSpecialSummon() && ctx.deck('me', (c) => isFortuneLady(c) && ctx.canSummonCard(c)).length > 0,
       resolve: async (ctx) => {
         const cands = ctx.deck('me', (c) => isFortuneLady(c) && ctx.canSummonCard(c));
@@ -1555,10 +1557,14 @@ monster('XX-Saber Ragigura', {
       label: 'Add X-Saber from GY',
       categories: ['toHand'],
       eventFilter: (ctx, ev) => ev.card === ctx.self && ev.method !== 'flip',
-      canActivate: (ctx) => ctx.grave('me', isXSaber).length > 0,
+      // https://edisonrul.ing/cards/x/xx-saber-ragigura.html — it targets 1 "X-Saber" monster in your Graveyard.
+      canActivate: (ctx) => ctx.grave('me', (c) => isXSaber(c) && ctx.canTarget(c)).length > 0,
+      activate: async (ctx) => {
+        await ctx.selectTargets(ctx.grave('me', isXSaber), 1, 1, 'Target 1 "X-Saber" monster in your GY.', 'toHand');
+      },
       resolve: async (ctx) => {
-        const sel = await ctx.select(ctx.grave('me', isXSaber), 1, 1, 'Add 1 "X-Saber" monster from your GY to your hand.', 'toHand');
-        if (sel.length) await ctx.toHand(sel);
+        const t = ctx.validTargets((c) => c.location === 'grave');
+        if (t.length) await ctx.toHand(t);
       },
     },
   ],
@@ -1681,7 +1687,10 @@ monster('XX-Saber Fulhelmknight', {
       event: 'battleDestroyed',
       label: 'Revive X-Saber',
       categories: ['specialSummon'],
-      eventFilter: (ctx, ev) => selfDestroysByBattle(ctx, ev) && evc(ev)?.pos === 'def',
+      // https://edisonrul.ing/cards/x/xx-saber-fulhelmknight.html — it activates & resolves even if Fulhelmknight left
+      // the field (e.g. destroyed by a flipped Ryko) before the end of the Damage Step.
+      eventFilter: (ctx, ev) =>
+        ev.type === 'battleDestroyed' && ev.other === ctx.self && (evc(ev) as CardInstance).owner !== ctx.player && evc(ev)?.pos === 'def',
       canActivate: (ctx) => ctx.canSpecialSummon() && ctx.grave('me', (c) => isXSaber(c) && lvl(c) <= 4 && ctx.canSummonCard(c)).length > 0,
       activate: async (ctx) => {
         await ctx.selectTargets(ctx.grave('me', (c) => isXSaber(c) && lvl(c) <= 4 && ctx.canSummonCard(c)), 1, 1, 'Target 1 Level 4 or lower "X-Saber" in your GY.', 'specialSummon');
@@ -2674,8 +2683,10 @@ spell('Solidarity', 'continuous', {
     },
   ],
 });
+// https://edisonrul.ing/cards/s/solidarity.html — the GY is checked by ORIGINAL (printed) Types (Zombie World does not
+// make them all Zombies); the monsters on the field by their current Type (DNA Surgery counts).
 function solidarityRace(ctx: Ctx): Race | undefined {
-  const races = new Set(ctx.grave('me', (c) => c.isMonster).map((c) => c.data.race));
+  const races = new Set(ctx.grave('me', (c) => c.isMonster).map((c) => c.printedData.race));
   return races.size === 1 ? [...races][0] : undefined;
 }
 

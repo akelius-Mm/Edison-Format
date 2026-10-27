@@ -6,8 +6,12 @@ Cards play as they did in the TCG on 2010-04-24 (SJC Edison), under the March 20
   later errata or Problem-Solving Card Text rewordings. Examples of 2010 behaviour that later errata changed: Treeborn
   Frog can't revive while you control a face-up Treeborn Frog; Brain Control can take any face-up monster; Sangan and
   Witch of the Black Forest have no once-per-turn.
-- **Rulings:** TCG rulings in force in 2010 (Konami TCG FAQs / rulings of that era). Use OCG rulings only when no TCG
-  ruling exists, and say so in a code comment.
+- **Rulings:** TCG rulings in force in 2010. Primary source: https://edisonrul.ing (source files:
+  https://github.com/vivaria/edisonrul.ing, `docs/source/cards/<letter>/<slug>.md`). Use each page's
+  "Edisonformat.com (Historical, Pre-UTW Rulings)" section first — the 2010 Upper Deck FAQ and Konami set rulings — and
+  the "Edisonformat.net (Revised)" section only where the historical one is silent (say so in a comment). The
+  `misc/` pages cover card groups (Gemini, Spirit, Trap Monsters, battle tutors...). Use OCG rulings only when neither
+  section covers it, and say so in a code comment.
 - **Cite the source** (URL) in a comment next to any card behaviour that depends on a ruling. If no solid 2010 TCG
   source is found, leave the behaviour unchanged and flag it instead of guessing.
 - Every rules fix gets a regression test (scripts/rules-test.ts or a scripts/*-test.ts wired into `npm test`).

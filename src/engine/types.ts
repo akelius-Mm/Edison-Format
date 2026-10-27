@@ -115,7 +115,9 @@ export type EventType =
   | 'phaseEnd'
   | 'battleEnd'
   | 'damageStepEnd'
-  /** After damage calculation, before battle-destroyed monsters leave the field (Ehren, Lightsworn Monk). */
+  /** Before damage calculation, after a Set attack target was flipped face-up (Ehren, Lightsworn Monk). */
+  | 'beforeDamageCalc'
+  /** After damage calculation, before battle-destroyed monsters leave the field (D.D. Warrior Lady). */
   | 'damageCalculated'
   | 'chainActivated'
   | 'chainResolved'

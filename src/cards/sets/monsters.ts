@@ -724,30 +724,34 @@ monster('Rescue Cat', {
   level: 4,
   atk: 300,
   def: 100,
-  text: 'You can send this face-up card to the GY; Special Summon 2 Level 3 or lower Beast monsters from your Deck. Destroy them during the End Phase.',
+  text: 'You can send this face-up card to the Graveyard to Special Summon 2 Level 3 or lower Beast-Type monsters from your Deck. Those monsters are destroyed during the End Phase.',
   aiValue: 800,
   effects: [
     {
       kind: 'ignition',
       label: 'Send: summon 2 Beasts',
       categories: ['specialSummon'],
+      // https://edisonrul.ing/cards/r/rescue-cat.html — it Special Summons 2 monsters at once: it cannot be activated to
+      // Summon only 1 (2 eligible Beasts and 2 free zones, counting the one Rescue Cat frees), and a Summoned monster
+      // that is flipped face-down is not destroyed in the End Phase.
       canActivate: (ctx) =>
         !ctx.game.queryPlayer(ctx.player, 'cannotSpecialSummon') &&
-        ctx.deck('me', (c) => c.isMonster && c.data.race === 'Beast' && (c.data.level ?? 0) <= 3 && !c.data.nomi).length > 0,
+        ctx.freeMZones() + 1 >= 2 &&
+        ctx.deck('me', (c) => c.isMonster && c.data.race === 'Beast' && (c.data.level ?? 0) <= 3 && !c.data.nomi && ctx.canSummonCard(c)).length >= 2,
       activate: async (ctx) => {
         await ctx.sendToGrave(ctx.self, 'cost');
       },
       resolve: async (ctx) => {
-        const cands = ctx.deck('me', (c) => c.isMonster && c.data.race === 'Beast' && (c.data.level ?? 0) <= 3 && !c.data.nomi);
-        const n = Math.min(2, ctx.freeMZones());
-        if (n <= 0 || !cands.length) return;
-        const sel = await ctx.select(cands, Math.min(n, cands.length), n, 'Special Summon up to 2 Level 3 or lower Beast monsters.', 'specialSummon');
+        const cands = ctx.deck('me', (c) => c.isMonster && c.data.race === 'Beast' && (c.data.level ?? 0) <= 3 && !c.data.nomi && ctx.canSummonCard(c));
+        if (ctx.freeMZones() < 2 || cands.length < 2 || !ctx.canSpecialSummon()) return;
+        const sel = await ctx.select(cands, 2, 2, 'Special Summon 2 Level 3 or lower Beast monsters.', 'specialSummon');
         const r = await ctx.specialSummon(sel, { pos: 'choose' });
         ctx.game.shuffleDeck(ctx.player);
         for (const m of r) {
           const id = m.moveId;
+          const fid = m.faceUpId;
           ctx.later('end', async () => {
-            if (m.location === 'mzone' && m.moveId === id) await ctx.game.destroy([m], 'effect', ctx.player, ctx.self);
+            if (m.location === 'mzone' && m.moveId === id && m.faceUpId === fid && m.faceUp) await ctx.game.destroy([m], 'effect', ctx.player, ctx.self);
           });
         }
       },
@@ -1204,7 +1208,7 @@ monster('Cyber Valley', {
   level: 1,
   atk: 0,
   def: 0,
-  text: 'You can activate 1 of these effects: ● When this card is targeted for an attack: Banish this card; draw 1 card, then end the Battle Phase. ● Target 1 other face-up monster you control: Banish it and this card, then draw 2 cards. ● Target 1 card in your GY: Banish this card from your hand, and place that target on top of your Deck.',
+  text: 'You can use 1 of the following 3 effects: ● When this card is selected as an attack target by an opponent\'s monster, you can remove this card from play to draw 1 card and end the Battle Phase. ● You can remove from play this card and 1 face-up monster you control, then draw 2 cards. ● You can remove from play this card and 1 card from your hand, and place 1 card from your Graveyard on top of your Deck.',
   aiValue: 600,
   effects: [
     {
@@ -1233,7 +1237,9 @@ monster('Cyber Valley', {
       },
       resolve: async (ctx) => {
         const t = ctx.validTargets((c) => c.location === 'mzone');
-        if (t.length < 2) return;
+        // 2010 rulings: the other target must still be face-up (Cyber Valley itself may be face-down).
+        // https://edisonrul.ing/cards/c/cyber-valley.html
+        if (t.length < 2 || t.some((c) => c !== ctx.self && !c.faceUp)) return;
         await ctx.banish(t);
         await ctx.draw(2);
       },
@@ -1245,16 +1251,20 @@ monster('Cyber Valley', {
       },
     },
     {
+      // 2010 text and rulings: an Ignition Effect of this card on the field that targets 1 card in your GY; this card
+      // and 1 card from your hand are banished when it resolves (if this card left the field, nothing happens).
+      // https://edisonrul.ing/cards/c/cyber-valley.html
       kind: 'ignition',
-      range: ['hand'],
-      label: 'Banish from hand: card to top of Deck',
-      categories: ['toDeck'],
-      canActivate: (ctx) => ctx.grave('me').length > 0,
+      label: 'Banish this and 1 hand card: GY card to top of Deck',
+      categories: ['toDeck', 'banish'],
+      canActivate: (ctx) => ctx.grave('me', (c) => ctx.canTarget(c)).length > 0 && ctx.hand().length > 0,
       activate: async (ctx) => {
-        await ctx.selectTargets(ctx.grave('me'), 1, 1, 'Target 1 card in your GY to place on top of your Deck.', 'toHand');
-        await ctx.banish(ctx.self, 'cost');
+        await ctx.selectTargets(ctx.grave('me'), 1, 1, 'Target 1 card in your GY to place on top of your Deck.', 'toDeck');
       },
       resolve: async (ctx) => {
+        if (ctx.self.location !== 'mzone') return;
+        const [h] = await ctx.select(ctx.hand(), 1, 1, 'Banish 1 card from your hand.', 'banish', { aiScore: (c) => -cardValue(ctx.game, c) });
+        await ctx.banish(h ? [ctx.self, h] : [ctx.self]);
         const t = ctx.validTargets((c) => c.location === 'grave');
         if (t.length) await ctx.toDeck(t, 'top');
       },

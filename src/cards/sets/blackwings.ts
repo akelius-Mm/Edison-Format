@@ -391,7 +391,7 @@ monster('Blackwing - Mistral the Silver Shield', {
 
 spell('Black Whirlwind', 'continuous', {
   sets: BW,
-  text: 'When a "Blackwing" monster is Normal Summoned to your field: You can add 1 "Blackwing" monster with less ATK than that monster from your Deck to your hand.',
+  text: 'When a "Blackwing" monster is Normal Summoned to your side of the field, you can add 1 "Blackwing" monster from your Deck to your hand that has less ATK than that monster.',
   aiValue: 400,
   effects: [
     {
@@ -423,12 +423,18 @@ spell('Black Whirlwind', 'continuous', {
         const lim = c ? (c.location === 'mzone' && c.faceUp ? ctx.atk(c) : c.data.atk ?? 0) : 0;
         return ctx.deck('me', (d) => isBW(d) && (d.data.atk ?? 0) < lim).length > 0;
       },
+      // 2010 rulings: Black Whirlwind and the Summoned "Blackwing" must both be face-up on the field when this
+      // resolves, and that monster's ATK (with modifiers) is checked then (control may have changed).
+      // https://edisonrul.ing/cards/b/black-whirlwind.html
       activate: async (ctx) => {
         const c = ctx.event!.card as CardInstance;
-        ctx.data.lim = c.location === 'mzone' && c.faceUp ? ctx.atk(c) : c.data.atk ?? 0;
+        ctx.data.bw = c;
+        ctx.data.bwMove = c.moveId;
       },
       resolve: async (ctx) => {
-        const lim = ctx.data.lim as number;
+        const c = ctx.data.bw as CardInstance;
+        if (!ctx.self.onField || !ctx.self.faceUp || c.location !== 'mzone' || !c.faceUp || c.moveId !== ctx.data.bwMove) return;
+        const lim = ctx.atk(c);
         await ctx.search((d) => isBW(d) && (d.data.atk ?? 0) < lim, 1, `Add 1 "Blackwing" monster with less than ${lim} ATK to your hand.`);
       },
     },
@@ -541,15 +547,17 @@ monster('Blackwing Armor Master', {
   types: ['synchro'],
   sets: BW,
   aiValue: 1000,
-  text: '"Blackwing" Tuner + 1 or more non-Tuner monsters\nCannot be destroyed by battle. You take no battle damage from battles involving this card. At the end of the Damage Step, if this card attacked a monster: place 1 Wedge Counter on that monster (max. 1). You can remove all Wedge Counters on the field; the ATK and DEF of each monster that had a Wedge Counter become 0 until the End Phase.',
+  text: '"Blackwing" Tuner + 1 or more non-Tuner monsters\nThis card cannot be destroyed by battle, and you take no Battle Damage from battles involving this card. If this card attacks a monster, you can place 1 Wedge Counter on that monster at the end of the Damage Step (max. 1). You can remove all Wedge Counters from your opponent\'s monsters to reduce the ATK and DEF of each monster that had a Wedge Counter to 0, until the End Phase.',
   synchro: { tuner: bwTuner, desc: '"Blackwing" Tuner + 1+ non-Tuner monsters' },
+  // 2010 rulings: placing the Wedge Counter is optional ("you can"); removing the counters is an Ignition Effect
+  // whose cost removes the Wedge Counters from your opponent's monsters. https://edisonrul.ing/cards/b/blackwing-armor-master.html
   effects: [
     { kind: 'continuous', mods: [{ q: 'indestructibleBattle' }, { q: 'noBattleDamageFrom' }] },
     {
       kind: 'trigger',
       event: 'damageStepEnd',
-      mandatory: true,
       label: 'Place Wedge Counter',
+      ai: { score: () => 60 },
       eventFilter: (ctx, ev) => {
         if (ctx.self.location !== 'mzone' || !ctx.self.faceUp) return false;
         // Audit: only a monster this card attacked gets a Wedge Counter (ev.card is the attacker), not one that attacked it.
@@ -570,15 +578,19 @@ monster('Blackwing Armor Master', {
       },
     },
     {
-      kind: 'quick',
+      kind: 'ignition',
       label: 'Remove Wedge Counters',
       categories: ['atkChange'],
-      canActivate: (ctx) => ctx.monsters('both', (c) => c.counters.wedge > 0).length > 0,
+      canActivate: (ctx) => ctx.monsters('opp', (c) => c.counters.wedge > 0).length > 0,
+      activate: async (ctx) => {
+        const hit = ctx.monsters('opp', (c) => c.counters.wedge > 0);
+        for (const c of hit) c.counters.wedge = 0;
+        ctx.data.hit = hit.map((c) => ({ c, mid: c.moveId }));
+        ctx.game.update();
+      },
       resolve: async (ctx) => {
-        const hit = ctx.monsters('both', (c) => c.counters.wedge > 0);
-        for (const c of hit) {
-          c.counters.wedge = 0;
-          if (!c.faceUp) continue;
+        for (const { c, mid } of ctx.data.hit as { c: CardInstance; mid: number }[]) {
+          if (c.location !== 'mzone' || !c.faceUp || c.moveId !== mid) continue;
           ctx.addTempMod(c, 'atk', -ctx.atk(c), 'turn');
           ctx.addTempMod(c, 'def', -ctx.def(c), 'turn');
         }
@@ -588,8 +600,7 @@ monster('Blackwing Armor Master', {
           const hit = ctx.monsters('opp', (c) => c.counters.wedge > 0 && c.faceUp);
           if (!hit.length) return 0;
           const b = ctx.battle;
-          if (b && !b.inDamageStep && b.attacker.controller === ctx.opp && hit.includes(b.attacker)) return 75;
-          if (ctx.isMyTurn && (ctx.phase === 'battle' || ctx.phase === 'main1') && !b && !ctx.chainTop()) {
+          if (ctx.isMyTurn && ctx.phase === 'main1' && !b && !ctx.chainTop()) {
             // Clear the way for my attackers.
             const myBest = Math.max(0, ...ctx.monsters('me', (c) => ctx.game.canAttack(c)).map((c) => ctx.atk(c)));
             const blocks = hit.some((c) => (c.pos === 'atk' ? ctx.atk(c) : ctx.def(c)) >= myBest);
@@ -610,14 +621,22 @@ monster('Blackwing Armed Wing', {
   def: 1000,
   types: ['synchro'],
   sets: BW,
-  text: '"Blackwing" Tuner + 1 or more non-Tuner monsters\nIf this card attacks, it gains 500 ATK during the Damage Step only. If this card attacks a Defense Position monster, inflict piercing battle damage.',
+  text: '"Blackwing" Tuner + 1 or more non-Tuner monsters\nIf this card attacks a Defense Position monster, it gains 500 ATK during the Damage Step only, and inflicts piercing battle damage.',
   synchro: { tuner: bwTuner, desc: '"Blackwing" Tuner + 1+ non-Tuner monsters' },
   effects: [
     {
+      // 2010 ruling: no 500 ATK if the attacked monster is changed to Attack Position before the Damage Step (the
+      // boost is only for attacking a Defense Position monster). https://edisonrul.ing/cards/b/blackwing-armed-wing.html
       kind: 'continuous',
       mods: [
         { q: 'piercing' },
-        { q: 'atk', value: (ctx) => (ctx.battle && ctx.battle.inDamageStep && ctx.battle.attacker === ctx.self ? 500 : 0) },
+        {
+          q: 'atk',
+          value: (ctx) => {
+            const b = ctx.battle;
+            return b && b.inDamageStep && b.attacker === ctx.self && b.target && b.target.pos === 'def' ? 500 : 0;
+          },
+        },
       ],
     },
   ],
@@ -632,23 +651,49 @@ monster('Blackwing - Silverwind the Ascendant', {
   types: ['synchro'],
   sets: BW,
   aiValue: 600,
-  text: '"Blackwing" Tuner + 2 or more non-Tuner "Blackwing" monsters\nOnce per turn, during your Main Phase 1: You can target up to 2 face-up monsters your opponent controls with DEF lower than this card\'s ATK; destroy them.',
+  // 2010 TCG text (RGBT): a Synchro Summon trigger that can destroy face-up monsters on either side, plus a one-time
+  // battle protection for your "Blackwing" monsters during the opponent's turn (the once per turn Main Phase 1
+  // ignition effect is the later OCG-matching text). https://edisonrul.ing/cards/b/blackwing-silverwind-the-ascendant.html
+  text: '"Blackwing" Tuner + 2 or more non-Tuner "Blackwing" monsters\nWhen this card is Synchro Summoned, you can select and destroy up to 2 face-up monsters on the field with DEF lower than this card\'s ATK. You cannot conduct your Battle Phase the turn you activate this effect. The next time a "Blackwing" monster you control would be destroyed by battle during your opponent\'s turn, it is not destroyed, this effect only happens once.',
   synchro: { tuner: bwTuner, nonTuner: (c) => c.inSet('blackwing'), minNonTuners: 2, desc: '"Blackwing" Tuner + 2+ non-Tuner "Blackwing" monsters' },
   effects: [
     {
-      kind: 'ignition',
-      opt: true,
+      kind: 'trigger',
+      event: 'synchroSummoned',
       label: 'Destroy up to 2',
       categories: ['destroy'],
-      condition: (ctx) => ctx.phase === 'main1',
-      canActivate: (ctx) => ctx.faceUpMonsters('opp', (c) => ctx.def(c) < ctx.atk(ctx.self) && ctx.canTarget(c)).length > 0,
+      eventFilter: (ctx, ev) => ev.card === ctx.self,
+      canActivate: (ctx) => ctx.faceUpMonsters('both', (c) => ctx.def(c) < ctx.atk(ctx.self) && ctx.canTarget(c)).length > 0,
       activate: async (ctx) => {
-        await ctx.selectTargets(ctx.faceUpMonsters('opp', (c) => ctx.def(c) < ctx.atk(ctx.self)), 1, 2, 'Target up to 2 face-up monsters with lower DEF.', 'destroy');
+        // "You cannot conduct your Battle Phase the turn you activate this effect" (applies even if it is negated).
+        ctx.addPlayerMod(ctx.player, 'cannotDeclareAttack');
+        await ctx.selectTargets(ctx.faceUpMonsters('both', (c) => ctx.def(c) < ctx.atk(ctx.self)), 1, 2, "Target up to 2 face-up monsters with DEF lower than this card's ATK.", 'destroy', {
+          aiScore: (c) => (c.controller === ctx.opp ? 1000 + cardValue(ctx.game, c) : -5000),
+        });
       },
       resolve: async (ctx) => {
-        await ctx.destroy(ctx.validTargets((c) => c.location === 'mzone' && c.faceUp));
+        // Face-down Silverwind: its ATK cannot be checked, nothing is destroyed.
+        if (ctx.self.location !== 'mzone' || !ctx.self.faceUp) return;
+        await ctx.destroy(ctx.validTargets((c) => c.location === 'mzone' && c.faceUp && ctx.def(c) < ctx.atk(ctx.self)));
       },
-      ai: { score: (ctx) => 60 + Math.min(20, cardValue(ctx.game, bestTarget(ctx.game, ctx.faceUpMonsters('opp')) ?? ctx.self) / 150) },
+      ai: {
+        score: (ctx) => {
+          const opp = ctx.faceUpMonsters('opp', (c) => ctx.def(c) < ctx.atk(ctx.self) && ctx.canTarget(c));
+          return opp.length ? 60 + Math.min(20, cardValue(ctx.game, bestTarget(ctx.game, opp) ?? ctx.self) / 150) : 0;
+        },
+      },
+    },
+    {
+      // Applied automatically (no Chain), once while this card is on the field.
+      kind: 'continuous',
+      replaceDestroy: async (ctx, cards, reason) => {
+        if (reason !== 'battle' || ctx.game.turnPlayer === ctx.player || ctx.self.flags.silverwindUsed === ctx.self.moveId) return [];
+        const c = cards.find((m) => m.location === 'mzone' && m.controller === ctx.player && isBW(m));
+        if (!c) return [];
+        ctx.self.flags.silverwindUsed = ctx.self.moveId;
+        ctx.game.log(`${c.name} is not destroyed (${ctx.self.name}).`, 'action', ctx.player);
+        return [c];
+      },
     },
   ],
 });

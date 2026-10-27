@@ -194,6 +194,11 @@ export interface EffectDef {
    * viewer before the generic "condition not met" text. Must only read the game state. Most are set in src/cards/why-not.ts.
    */
   whyNot?: (ctx: Ctx) => string | null;
+  /**
+   * Called when this effect's chain link resolves with its ACTIVATION negated (Magic Jammer, Dark Bribe), not when only
+   * its effect is negated (Imperial Order, Starlight Road): undoes what applied from activation (Scapegoat, Soul Exchange).
+   */
+  onActivationNegated?: (ctx: Ctx) => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -206,6 +211,8 @@ export interface SynchroReq {
   minNonTuners?: number;
   maxNonTuners?: number;
   desc?: string;
+  /** "1 Tuner + 1 or more EARTH monsters" (XX-Saber Gottoms): the other materials may be Tuners too. */
+  tunersAsNonTuners?: boolean;
   /** ABPF: whole-combination check (e.g. "Majestic Dragon" + "Red Dragon Archfiend" + 1 non-Tuner). */
   check?: (materials: CardInstance[]) => boolean;
 }
@@ -380,6 +387,10 @@ export class CardInstance {
   }
   set data(d: CardData) {
     this.baseData = d;
+  }
+  /** The printed data, before patches and rule views ("original Type": Solidarity vs Zombie World). */
+  get printedData(): CardData {
+    return this.baseData;
   }
   /** Add a per-instance data override (Reptilianne Rage, Cyber Dragon Zwei, Trap Monsters...). Patches compose in order. */
   addDataPatch(fn: DataPatch) {

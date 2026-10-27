@@ -59,7 +59,8 @@ function turnEvents(g: Game): GameEvent[] {
 
 /** Did player `p` Normal Summon or Set a monster this turn? */
 function normalSummonedThisTurn(g: Game, p: PlayerId) {
-  return turnEvents(g).some((e) => (e.type === 'normalSummoned' || e.type === 'monsterSet') && e.player === p);
+  // https://edisonrul.ing/cards/r/red-eyes-wyvern.html — a Normal Summon negated by "Solemn Judgment" still counts.
+  return !!g.turnData.normalSummonedOrSet?.[p] || turnEvents(g).some((e) => (e.type === 'normalSummoned' || e.type === 'monsterSet') && e.player === p);
 }
 
 /** The face-up, non-negated Six Samurai monster `self` needs: one with a different name that its controller controls. */
@@ -224,7 +225,9 @@ function samuraiSpellKiller(faceUp: boolean): EffectDef {
     opt: true,
     label: faceUp ? 'Destroy 1 face-up Spell/Trap' : 'Destroy 1 Set Spell/Trap',
     categories: ['destroy'],
-    condition: (ctx) => otherSamurai(ctx),
+    // https://edisonrul.ing/cards/t/the-six-samurai-kamon.html (and -yaichi): "This monster cannot declare an attack during
+    // the turn this effect is used" — not usable once it has attacked this turn (even if it was flipped face-down since).
+    condition: (ctx) => otherSamurai(ctx) && ctx.self.attacksThisTurn === 0,
     canActivate: (ctx) => cands(ctx).some((c) => ctx.canTarget(c)),
     activate: async (ctx) => {
       ctx.self.flags.cannotAttackTurn = ctx.turn;
@@ -483,6 +486,9 @@ M(REDMD, {
   def: 2400,
   aiValue: 900,
   text: 'You can remove from play 1 face-up Dragon-Type monster you control to Special Summon this card from your hand. Once per turn, during your Main Phase, you can Special Summon 1 Dragon-Type monster from your hand or Graveyard, except "Red-Eyes Darkness Metal Dragon".',
+  // https://edisonrul.ing/cards/r/red-eyes-darkness-metal-dragon.html — its effect does not target a card in the GY
+  // and is not negated by "Necrovalley".
+  ignoresGyLock: true,
   effects: [
     {
       kind: 'proc',

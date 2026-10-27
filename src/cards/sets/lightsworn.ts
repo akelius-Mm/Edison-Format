@@ -217,20 +217,21 @@ monster('Ehren, Lightsworn Monk', {
   atk: 1600,
   def: 1000,
   sets: LS,
-  text: 'If this card attacks a Defense Position monster, return that monster to the Deck after damage calculation. During each of your End Phases: Send the top 3 cards of your Deck to the GY.',
+  text: "If this card attacks a Defense Position monster, return that monster to its owner's Deck before damage calculation. During each of your End Phases, send the top 3 cards of your Deck to the Graveyard.",
   aiValue: 200,
-  // Resolves right after damage calculation, before a monster it destroys by battle leaves the field, so that
-  // monster goes back to the Deck instead of the GY (no "destroyed" / "sent to the GY" effects). It does not target.
+  // 2010 ruling: activates before damage calculation (after a Set monster is flipped face-up), and damage
+  // calculation does not happen. It does not target.
+  // https://edisonrul.ing/cards/e/ehren-lightsworn-monk.html
   effects: [
     {
       kind: 'trigger',
-      event: 'damageCalculated',
+      event: 'beforeDamageCalc',
       mandatory: true,
       label: 'Shuffle the attacked monster into the Deck',
       categories: ['toDeck'],
       eventFilter: (ctx, ev) => {
         const t = ev.other as CardInstance | undefined;
-        return ev.card === ctx.self && ctx.self.location === 'mzone' && !!t && t.location === 'mzone' && ctx.game.battle?.calc?.targetPos === 'def';
+        return ev.card === ctx.self && ctx.self.location === 'mzone' && !!t && t.location === 'mzone' && t.pos === 'def';
       },
       resolve: async (ctx) => {
         const t = ctx.event!.other as CardInstance;
@@ -333,7 +334,15 @@ monster('Aurkus, Lightsworn Druid', {
   effects: [
     {
       kind: 'continuous',
-      mods: [{ q: 'untargetableByAll', to: 'cards', filter: (_ctx, c: CardInstance) => c.faceUpMonster && c.inSet('lightsworn') }],
+      // 2010 ruling: "Lightsworn" monsters on either field, in either GY and banished cannot be targeted.
+      // https://edisonrul.ing/cards/a/aurkus-lightsworn-druid.html
+      mods: [
+        {
+          q: 'untargetableByAll',
+          to: 'cards',
+          filter: (_ctx, c: CardInstance) => c.isMonster && c.inSet('lightsworn') && (c.faceUpMonster || c.location === 'grave' || (c.location === 'banished' && c.faceUp)),
+        },
+      ],
     },
     endPhaseMill(2),
   ],
@@ -452,7 +461,8 @@ spell('Solar Recharge', 'normal', {
     {
       kind: 'activate',
       categories: ['draw', 'mill', 'discard'],
-      canActivate: (ctx) => ctx.hand('me', (c) => c !== ctx.self && isLS(c)).length > 0 && ctx.deck().length >= 2,
+      // https://edisonrul.ing/cards/s/solar-recharge.html — cannot be activated with 3 or fewer cards left in the Deck.
+      canActivate: (ctx) => ctx.hand('me', (c) => c !== ctx.self && isLS(c)).length > 0 && ctx.deck().length >= 4,
       activate: async (ctx) => {
         const sel = await ctx.select(ctx.hand('me', (c) => c !== ctx.self && isLS(c)), 1, 1, 'Discard 1 "Lightsworn" monster.', 'discard', { aiScore: (c) => lsDumpScore(ctx, c) });
         if (!sel.length) return false;

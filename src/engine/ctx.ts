@@ -136,7 +136,7 @@ export class Ctx {
   /** Can the opponent's cards be affected/targeted by this effect. */
   canTarget(c: CardInstance) {
     if (c.onField && c.controller !== this.player && this.game.queryCard(c, 'untargetable')) return false;
-    if (c.onField && this.game.queryCard(c, 'untargetableByAll')) return false;
+    if ((c.onField || c.location === 'grave' || c.location === 'banished') && this.game.queryCard(c, 'untargetableByAll')) return false;
     if (c.onField && c.faceUp && c.data.targetImmunity && !this.game.isNegated(c) && c.data.targetImmunity(c, this.self, this)) return false;
     if (this.game.isUnaffected(c, this.self, this.player)) return false;
     return true;
@@ -217,6 +217,18 @@ export class Ctx {
   negate(link: ChainLink | undefined, destroyCard = false) {
     if (!link) return;
     this.game.negateLink(link, destroyCard, this.self);
+  }
+  /** Starlight Road: negate the EFFECT (not the activation) of `link`, then destroy that card. Returns whether it was destroyed. */
+  async negateEffectAndDestroy(link: ChainLink | undefined): Promise<boolean> {
+    if (!link) return false;
+    const was = link.negated;
+    link.effectOnly = was ? link.effectOnly : true;
+    this.game.negateLink(link, false, this.self);
+    const c = link.card;
+    if (link.moveIdAfterCost != null && c.moveId !== link.moveIdAfterCost) return false;
+    if (!c.onField) return false;
+    const d = await this.game.destroy([c], 'effect', this.player, this.self);
+    return d.includes(c) && !c.onField;
   }
   /** Negate the activation of `link` and destroy the card if it is still around. */
   async negateAndDestroy(link: ChainLink | undefined) {
