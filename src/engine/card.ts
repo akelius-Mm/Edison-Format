@@ -208,10 +208,27 @@ export interface EffectDef {
    */
   onActivationNegated?: (ctx: Ctx) => void;
   /**
-   * Mandatory 'trigger' that does not start a chain: `resolve` runs at once when the trigger is processed (rulings say
-   * "does not start a Chain": Nightmare Archfiends' damage, Phoenixian Cluster Amaryllis' self-destruction, ...).
+   * 'trigger' that does not start a chain (rulings say "does not start a Chain" / "does not activate": Nightmare
+   * Archfiends' damage, Phoenixian Cluster Amaryllis' self-destruction, Spider Web, ...). `resolve` runs at once when
+   * the trigger is processed (Game.buildTriggerChain, before any chain link of the same batch is built), or right after
+   * the current chain link resolves when it happens during a chain (Game.applyChainless), so no player can respond.
+   * Mandatory, or optional (not `mandatory`): the controller is asked with confirmTrigger, still without a chain link.
+   * `opt` is used up as for an activation. A "when this card leaves the field" one (event card === this card) does not
+   * apply if this card's effects were negated when it left (GameEvent.fromNegated: Il Blud under Skill Drain).
    */
   noChain?: boolean;
+  /**
+   * A maintenance cost ("pay / reveal ... or destroy this card": Koa'ki Meiru, Mind Protector): not an effect, so it is
+   * applied like `noChain` and is not skipped while this monster's effects are negated ("Maintenance costs (ex: 'Armor
+   * Exe') must still be paid", https://edisonrul.ing/cards/s/skill-drain.html).
+   */
+  maintenance?: boolean;
+  /**
+   * For kind 'continuous': LP the player must pay to Normal Summon or Special Summon `card` from the hand while this
+   * effect applies (Queen of Thorns). Paid as a cost at the Summon (Game.summonLpCost); a player who cannot pay it
+   * cannot perform that Summon.
+   */
+  summonLpCost?: (ctx: Ctx, card: CardInstance, player: PlayerId) => number;
 }
 
 // ---------------------------------------------------------------------------

@@ -482,6 +482,33 @@ export class Game {
     return this.queryPlayer(0, 'gyLock') || this.queryPlayer(1, 'gyLock');
   }
 
+  /**
+   * LP `player` must pay to Normal or Special Summon `card` from the hand (EffectDef.summonLpCost on active continuous
+   * effects: Queen of Thorns, 2 copies = 2000). 0 when the card is not in the hand.
+   */
+  summonLpCost(player: PlayerId, card: CardInstance): number {
+    if (card.location !== 'hand') return 0;
+    let total = 0;
+    for (const src of this.continuousSources) {
+      for (const ef of src.data.effects ?? []) {
+        if (ef.kind !== 'continuous' || !ef.summonLpCost) continue;
+        if (!this.sourceActive(src, ef, 'negated')) continue;
+        if (src.onField && this.isNegated(src)) continue;
+        try {
+          total += ef.summonLpCost(this.effectCtx(src, ef), card, player);
+        } catch (e) {
+          console.error('summonLpCost error', src.name, e);
+        }
+      }
+    }
+    return total;
+  }
+
+  /** A cost of `amount` LP can be paid (it must leave the player above 0: Imprisoned Queen Archfiend / Queen of Thorns rulings). */
+  canPayLp(p: PlayerId, amount: number): boolean {
+    return amount <= 0 || this.players[p].lp > amount;
+  }
+
   isNegated(card: CardInstance): boolean {
     if (!card.onField) return false;
     if (card.flags.negatedTurn === this.turn) return true;
@@ -743,7 +770,9 @@ export class Game {
   ): Promise<CardInstance[]> {
     if (!cards.length) return [];
     this.beginBatch();
-    const moved: { card: CardInstance; from: Location; to: Location; fromFaceUp: boolean; fromCtrl: PlayerId; wasMonster: boolean }[] = [];
+    const moved: { card: CardInstance; from: Location; to: Location; fromFaceUp: boolean; fromCtrl: PlayerId; wasMonster: boolean; fromNegated: boolean }[] = [];
+    // Snapshot before anything moves: whose effects were negated while on the field (EffectDef.noChain leave-field effects).
+    const negatedBefore = new Set(cards.filter((c) => c.onField && c.faceUp && this.isNegated(c)));
     for (const card of cards) {
       const from = card.location;
       const fromFaceUp = card.faceUp;
@@ -752,7 +781,7 @@ export class Game {
       const dest = this.rawMove(card, to, { faceUp: opts.faceUp, bottom: opts.bottom });
       // Remember that this move was a destruction (read by ruleCleanup for links that break only on destruction).
       if (opts.destroyed) card.flags.destroyedFromMoveId = prevMoveId;
-      moved.push({ card, from, to: dest, fromFaceUp, fromCtrl, wasMonster: from === 'mzone' });
+      moved.push({ card, from, to: dest, fromFaceUp, fromCtrl, wasMonster: from === 'mzone', fromNegated: negatedBefore.has(card) });
     }
     if (!opts.noAnim) {
       await this.anim({
@@ -775,7 +804,7 @@ export class Game {
       minor: opts.minor,
     };
     for (const m of moved) {
-      const common = { ...base, card: m.card, from: m.from, to: m.to, fromFaceUp: m.fromFaceUp, fromController: m.fromCtrl };
+      const common = { ...base, card: m.card, from: m.from, to: m.to, fromFaceUp: m.fromFaceUp, fromController: m.fromCtrl, fromNegated: m.fromNegated || undefined };
       const wasField = m.from === 'mzone' || m.from === 'szone' || m.from === 'fzone';
       if (wasField && !(m.to === 'mzone' || m.to === 'szone' || m.to === 'fzone')) this.emit({ type: 'leftField', ...common });
       if (opts.destroyed) this.emit({ type: 'destroyed', ...common });
@@ -1091,14 +1120,21 @@ export class Game {
     const ctrl = opts.controller ?? player;
     if (this.queryPlayer(player, 'cannotSpecialSummon')) return [];
     const list: CardInstance[] = [];
+    let lpCost = 0;
     for (const c of cards) {
       if (this.freeMZones(ctrl) - list.length <= 0) break;
       if (!opts.ignoreConditions && c.data.nomi && !c.properlySummoned && (c.location === 'grave' || c.location === 'banished')) continue;
       if (!opts.faceDown && this.queryCard(c, 'cannotBeSummoned')) continue;
       if (!opts.ignoreConditions && c.data.noSpecialFrom?.includes(c.location)) continue;
+      // Queen of Thorns: paid while the effect resolves; a monster whose cost cannot be paid is not Summoned
+      // (https://edisonrul.ing/cards/q/queen-of-thorns.html, "Celestial Transformation" example).
+      const cost = this.summonLpCost(player, c);
+      if (cost > 0 && !this.canPayLp(player, lpCost + cost)) continue;
+      lpCost += cost;
       list.push(c);
     }
     if (!list.length) return [];
+    if (lpCost > 0) await this.payLp(player, lpCost);
     const positions: BattlePos[] = [];
     for (const c of list) {
       let pos: BattlePos = 'atk';
@@ -1612,6 +1648,8 @@ export class Game {
         }
         this.chain.pop();
         resolved.push(link);
+        // Chainless effects caused by this link apply before the next link resolves (EffectDef.noChain).
+        if (this.pending.length) await this.applyChainless();
       }
     } finally {
       this.resolvingLink = null;
@@ -1723,10 +1761,8 @@ export class Game {
     }
   }
 
-  private async buildTriggerChain(): Promise<boolean> {
-    if (!this.pending.length) return false;
-    const pend = this.pending;
-    this.pending = [];
+  /** The pending triggers that can still be used now, each with its Ctx (missed timing, once per turn, negation...). */
+  private validTriggers(pend: PendingTrigger[]): (PendingTrigger & { ctx: Ctx })[] {
     const valid: (PendingTrigger & { ctx: Ctx })[] = [];
     for (const t of pend) {
       const { card, effect: ef, effectIndex: idx } = t;
@@ -1735,9 +1771,12 @@ export class Game {
       const player = t.player;
       if (ef.opt && this.isOptUsed(this.optKey(card, ef, idx, player))) continue;
       if (ef.gyBanishCost && this.gyBanishLocked(player)) continue;
-      // monster on field must still be face-up and not negated
+      // monster on field must still be face-up and not negated (a maintenance cost is not an effect: Skill Drain does not stop it)
       if (card.location === 'mzone' && !card.faceUp && t.event.type !== 'flipped') continue;
-      if (card.location === 'mzone' && this.isNegated(card)) continue;
+      if (card.location === 'mzone' && !ef.maintenance && this.isNegated(card)) continue;
+      // A chainless "when this card leaves the field" effect does not apply if the card was negated when it left
+      // (Il Blud under Skill Drain: https://edisonrul.ing/cards/i/il-blud.html).
+      if (ef.noChain && !ef.maintenance && t.event.card === card && t.event.fromNegated) continue;
       // a rule forbids activating it (G.B. Hunter: tag-outs): never offered, never asked
       if (!this.canActivateTrigger(player, card, ef, idx)) continue;
       const ctx = new Ctx(this, card, ef, player);
@@ -1754,24 +1793,76 @@ export class Game {
       if (valid.some((v) => v.card === card && v.effectIndex === idx)) continue;
       valid.push({ ...t, ctx });
     }
-    if (!valid.length) return false;
+    return valid;
+  }
+
+  /** Turn player's mandatory, opponent's mandatory, turn player's optional, opponent's optional (SEGOC order). */
+  private segocOrder<T extends PendingTrigger>(valid: T[]): T[] {
     const tp = this.turnPlayer;
     const ntp = this.opp(tp);
-    const order = [
-      ...valid.filter((v) => v.player === tp && v.effect.mandatory),
-      ...valid.filter((v) => v.player === ntp && v.effect.mandatory),
-      ...valid.filter((v) => v.player === tp && !v.effect.mandatory),
-      ...valid.filter((v) => v.player === ntp && !v.effect.mandatory),
+    const mand = (v: T) => !!(v.effect.mandatory || v.effect.maintenance);
+    return [
+      ...valid.filter((v) => v.player === tp && mand(v)),
+      ...valid.filter((v) => v.player === ntp && mand(v)),
+      ...valid.filter((v) => v.player === tp && !mand(v)),
+      ...valid.filter((v) => v.player === ntp && !mand(v)),
     ];
+  }
+
+  /**
+   * Apply a chainless trigger (EffectDef.noChain / maintenance): no chain link, nobody can respond. An optional one is
+   * confirmed by its controller first. Returns true if it was applied.
+   */
+  private async applyNoChain(t: PendingTrigger & { ctx: Ctx }): Promise<boolean> {
+    const ef = t.effect;
+    if (!ef.mandatory && !ef.maintenance) {
+      if (ef.canActivate && !ef.canActivate(t.ctx)) return false;
+      const act: Activation = { card: t.card, effect: ef, effectIndex: t.effectIndex, label: ef.label ?? 'Trigger', event: t.event };
+      if (!(await this.controllers[t.player].confirmTrigger(this, t.player, act))) return false;
+    }
+    if (ef.opt) this.useOpt(this.optKey(t.card, ef, t.effectIndex, t.player));
+    try {
+      await ef.resolve?.(t.ctx);
+    } catch (e) {
+      if (e instanceof GameOver) throw e;
+      console.error('resolve error', t.card.name, e);
+      this.log(`[engine] Error resolving ${t.card.name}: ${(e as Error).message}`, 'system');
+    }
+    this.update();
+    return true;
+  }
+
+  /**
+   * During a chain: apply the chainless triggers (EffectDef.noChain) that became pending, right after the chain link that
+   * caused them, before the next link resolves ("If Il Blud leaves the field while resolving a Chain, destroy all
+   * Zombie-Type monsters it Special Summoned before resolving the next effect in the chain",
+   * https://edisonrul.ing/cards/i/il-blud.html). Other pending triggers wait for the end of the chain as usual.
+   */
+  private async applyChainless() {
+    for (let loops = 0; loops < 20; loops++) {
+      const now = this.pending.filter((t) => t.effect.noChain || t.effect.maintenance);
+      if (!now.length) return;
+      this.pending = this.pending.filter((t) => !now.includes(t));
+      for (const t of this.segocOrder(this.validTriggers(now))) await this.applyNoChain(t);
+    }
+  }
+
+  private async buildTriggerChain(): Promise<boolean> {
+    if (!this.pending.length) return false;
+    const pend = this.pending;
+    this.pending = [];
+    const valid = this.validTriggers(pend);
+    if (!valid.length) return false;
+    const order = this.segocOrder(valid);
     let any = false;
+    // Chainless ones first: they are applied, not activated, so they never become chain links under the others.
     for (const t of order) {
+      if (!(t.effect.noChain || t.effect.maintenance)) continue;
+      if (await this.applyNoChain(t)) any = true;
+    }
+    for (const t of order) {
+      if (t.effect.noChain || t.effect.maintenance) continue;
       const act: Activation = { card: t.card, effect: t.effect, effectIndex: t.effectIndex, label: t.effect.label ?? 'Trigger', event: t.event };
-      if (t.effect.noChain) {
-        // Applied at once, without a chain link (EffectDef.noChain).
-        await t.effect.resolve?.(t.ctx);
-        any = true;
-        continue;
-      }
       if (!t.effect.mandatory) {
         // re-check cost availability now (things may have changed while building)
         if (t.effect.canActivate && !t.effect.canActivate(t.ctx)) continue;
@@ -1829,6 +1920,7 @@ export class Game {
     if (!set && this.queryPlayer(p, 'cannotNormalSummon')) return false;
     if (!set && this.queryCard(card, 'cannotBeSummoned')) return false;
     if (set && this.queryPlayer(p, 'cannotSet')) return false;
+    if (!set && !this.canPayLp(p, this.summonLpCost(p, card))) return false;
     const need = this.tributesNeeded(card);
     if (need === 0) return this.freeMZones(p) > 0;
     if (!set && this.queryCard(card, 'cannotTributeSummon')) return false;
@@ -1849,6 +1941,9 @@ export class Game {
    */
   async normalSummon(p: PlayerId, card: CardInstance, set: boolean, opts: { byEffect?: boolean } = {}) {
     const need = this.tributesNeeded(card);
+    // Queen of Thorns: an LP cost to Normal Summon from the hand, fixed before Tributing (Tributing the Queen still costs).
+    const lpCost = set ? 0 : this.summonLpCost(p, card);
+    if (!this.canPayLp(p, lpCost)) return;
     let tributes: CardInstance[] = [];
     if (need > 0) {
       // ABPF: alternative 1-Tribute rule (EffectDef.altTribute). Without one, this is the plain N-Tribute selection.
@@ -1868,6 +1963,7 @@ export class Game {
       this.log(`${this.players[p].name} Tributes ${tributes.map((t) => t.name).join(', ')}.`, 'action', p);
       await this.moveCards(tributes, 'grave', { reason: 'tribute', reasons: ['tribute', 'cost'], reasonPlayer: p, reasonCard: card });
     }
+    if (lpCost > 0) await this.payLp(p, lpCost);
     this.players[p].normalSummonsLeft--;
     // Red-Eyes Wyvern: a Normal Summon / Set counts even if it is negated afterwards (Solemn Judgment).
     (this.turnData.normalSummonedOrSet ??= {})[p] = true;
@@ -2352,6 +2448,7 @@ export class Game {
       return false;
     }
     if (this.cardUser(c) !== p) return false;
+    if (!this.canPayLp(p, this.summonLpCost(p, c))) return false;
     if (ef.opt && this.isOptUsed(this.optKey(c, ef, idx, p))) return false;
     const ctx = new Ctx(this, c, ef, p);
     ctx.effectIndex = idx;
@@ -2424,12 +2521,18 @@ export class Game {
         const ctx = new Ctx(this, card, ef, p);
         ctx.effectIndex = idx;
         if (ef.opt) this.useOpt(this.optKey(card, ef, idx, p));
+        // Queen of Thorns: the LP cost of a Special Summon from the hand, fixed before the procedure's own cost is paid.
+        const lpCost = this.summonLpCost(p, card);
         const ok = ef.perform ? await ef.perform(ctx) : true;
         if (!ok) {
           if (ef.opt) this.clearOpt(this.optKey(card, ef, idx, p));
           return;
         }
         if (this.freeMZones(p) <= 0) return;
+        if (lpCost > 0) {
+          if (!this.canPayLp(p, lpCost)) return;
+          await this.payLp(p, lpCost);
+        }
         const pos = ef.procPositions && ef.procPositions.length === 1 ? ef.procPositions[0] : 'choose';
         const method = card.hasType('fusion') ? 'fusion' : card.hasType('synchro') ? 'synchro' : 'special';
         await this.inherentSpecialSummon(p, card, method === 'synchro' ? 'special' : method, pos, {}, true);
@@ -2736,15 +2839,15 @@ export class Game {
     }
     if (destroyGroup.length) {
       this.beginBatch();
-      const moved: { card: CardInstance; by: CardInstance; from: Location; ctrl: PlayerId }[] = [];
+      const moved: { card: CardInstance; by: CardInstance; from: Location; ctrl: PlayerId; negated: boolean }[] = [];
       for (const l of destroyGroup) {
-        moved.push({ card: l.card, by: l.by, from: l.card.location, ctrl: l.card.controller });
+        moved.push({ card: l.card, by: l.by, from: l.card.location, ctrl: l.card.controller, negated: l.card.faceUp && this.isNegated(l.card) });
         this.log(`${l.card.name} is destroyed by battle.`, 'battle', l.card.controller);
       }
       for (const m of moved) this.rawMove(m.card, 'grave');
       await this.anim({ type: 'destroy', cards: moved.map((m) => ({ uid: m.card.uid, from: m.from, to: m.card.location, ctrl: m.ctrl })), reason: 'battle' });
       for (const m of moved) {
-        const common = { card: m.card, from: m.from as Location, to: m.card.location, fromController: m.ctrl, fromFaceUp: true, reason: 'battle' as Reason, reasons: ['battle', 'destroy'] as Reason[], reasonCard: m.by, reasonPlayer: m.by.controller, other: m.by };
+        const common = { card: m.card, from: m.from as Location, to: m.card.location, fromController: m.ctrl, fromFaceUp: true, reason: 'battle' as Reason, reasons: ['battle', 'destroy'] as Reason[], reasonCard: m.by, reasonPlayer: m.by.controller, other: m.by, fromNegated: m.negated || undefined };
         this.emit({ type: 'leftField', ...common });
         this.emit({ type: 'destroyed', ...common });
         this.emit({ type: 'battleDestroyed', ...common });

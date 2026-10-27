@@ -26,7 +26,7 @@ import { faceUpFlag } from '../../engine/card';
 import type { Ctx } from '../../engine/ctx';
 import type { Action, PlayerController } from '../../engine/controller';
 import type { ChainLink, Game } from '../../engine/game';
-import type { Attribute, BattlePos, GameEvent, Location, Phase, PlayerId, Race, Reason } from '../../engine/types';
+import type { Attribute, BattlePos, GameEvent, Location, PlayerId, Race, Reason } from '../../engine/types';
 import { QUESTION_ATK } from './sovr';
 
 type C = CardInstance;
@@ -122,29 +122,6 @@ async function tokensTo(ctx: Ctx, data: CardData, n: number, pos: BattlePos, con
   return ctx.game.createTokens(ctx.player, data, n, pos, controller);
 }
 
-/** Run `fn` at the start of the n-th `phase` of `ctx.player`'s own turns from now (n = 1: the next one). */
-function onMyNthPhase(ctx: Ctx, phase: Phase, n: number, fn: () => Promise<void>) {
-  const g = ctx.game;
-  const p = ctx.player;
-  let left = n;
-  const run = async () => {
-    if (g.turnPlayer !== p) {
-      g.addDelayed(phase, run, 1);
-      return;
-    }
-    left--;
-    if (left > 0) {
-      g.addDelayed(phase, run, 2);
-      return;
-    }
-    await fn();
-  };
-  // Phases already passed this turn are not counted.
-  const order: Phase[] = ['draw', 'standby', 'main1', 'battle', 'main2', 'end'];
-  const passed = g.turnPlayer === p && order.indexOf(g.phase) >= order.indexOf(phase);
-  g.addDelayed(phase, run, g.turnPlayer === p ? (passed ? 2 : 0) : 1);
-}
-
 /** Cards of `name` face-up and applying on the field. */
 function liveCards(g: Game, name: string, p?: PlayerId): C[] {
   return g
@@ -204,6 +181,8 @@ const IVY_TOKEN_EFFECT: EffectDef = {
   mandatory: true,
   label: 'Ivy Token: 300 damage',
   categories: ['damage'],
+  // https://edisonrul.ing/cards/w/wall-of-ivy.html — "'Ivy Token's' effect to inflict damage does not start a Chain."
+  noChain: true,
   resolve: async (ctx) => {
     await ctx.game.damage(ctx.player, 300, 'effect', ctx.self, ctx.player);
   },
@@ -213,6 +192,9 @@ const HORSEY_TOKEN_EFFECT: EffectDef = {
   mandatory: true,
   label: 'Horseytail Token: send 1 card from the hand',
   categories: ['discard'],
+  // https://edisonrul.ing/cards/h/horseytail.html — "Sending 1 card from your hand to the Graveyard when 'Horseytail
+  // Token' is destroyed by battle with a Plant-Type monster does not start a Chain."
+  noChain: true,
   resolve: async (ctx) => {
     const hand = ctx.hand('me');
     if (!hand.length) return;
@@ -1727,26 +1709,14 @@ M('Queen of Thorns', {
   types: ['synchro'],
   aiValue: 400,
   synchro: { nonTuner: isPlant, desc: '1 Tuner + 1 or more non-Tuner Plant-Type monsters' },
-  text: '1 Tuner + 1 or more non-Tuner Plant-Type monsters\nEach player must pay 1000 Life Points for each monster Normal Summoned or Special Summoned from the hand, except for Plant-Type monsters.',
+  text: '1 Tuner + 1 or more non-Tuner Plant-Type monsters\nEach player must pay 1000 Life Points to Normal Summon or Special Summon a non-Plant-Type monster from their hand.',
   effects: [
     {
-      // APPROX: the payment is a mandatory trigger (it starts a Chain) rather than an instant cost.
-      kind: 'trigger',
-      event: 'summoned',
-      mandatory: true,
-      label: 'Pay 1000 LP',
-      eventFilter: (ctx, ev) => {
-        const c = evc(ev);
-        return !!c && c !== ctx.self && ev.from === 'hand' && ev.method !== 'flip' && !isPlant(c) && monActive(ctx);
-      },
-      resolve: async (ctx) => {
-        const evs = ctx.game.eventLog.filter((e) => e.batch === ctx.event!.batch && e.type === 'summoned' && e.from === 'hand' && !isPlant(evc(e)!) && evc(e) !== ctx.self);
-        for (const e of evs) {
-          const p = (e.player ?? evc(e)!.controller) as PlayerId;
-          ctx.game.log(`${ctx.game.players[p].name} pays 1000 LP (Queen of Thorns).`, 'action', p);
-          await ctx.game.payLp(p, 1000);
-        }
-      },
+      // https://edisonrul.ing/cards/q/queen-of-thorns.html — a Continuous Effect that does not activate: the 1000 LP are
+      // paid as a cost when the Summon is performed (Lava Golem), or while an effect that Summons resolves; a player who
+      // cannot pay cannot Summon. Tributing a face-up Queen still costs 1000; 2 face-up Queens cost 2000 (Game.summonLpCost).
+      kind: 'continuous',
+      summonLpCost: (ctx, card) => (card.isMonster && !isPlant(card) && monActive(ctx) ? 1000 : 0),
     },
   ],
 });
@@ -2579,18 +2549,36 @@ S('Morphtronic Engine', 'equip', {
       (_ctx, c) => isMorphMon(c) && lvl(c) === 3,
       (ctx) => (ctx.phase === 'main1' && ctx.faceUpMonsters('me', (c) => isMorphMon(c) && lvl(c) === 3 && c.pos === 'atk').length ? 30 : 0),
       async (ctx) => {
-        const self = ctx.self;
-        const mid = self.moveId;
-        onMyNthPhase(ctx, 'standby', 2, async () => {
-          if (!self.onField || self.moveId !== mid) return;
-          const host = self.equippedTo != null ? ctx.game.card(self.equippedTo) : undefined;
-          const dmg = host?.data.atk ?? 0;
-          ctx.game.log(`${self.name}: its time is up.`, 'action', self.controller);
-          await ctx.game.destroy([self], 'effect', self.controller, self);
-          await ctx.game.damage(self.controller, dmg, 'effect', self, self.controller);
-        });
+        // Counted by the Standby Phase trigger below.
+        ctx.self.flags.morphEngine = { mid: ctx.self.moveId, standbys: 0, player: ctx.player };
       },
     ),
+    {
+      // https://edisonrul.ing/cards/m/morphtronic-engine.html — "The effect to destroy the equipped 'Morphtronic' monster
+      // during your second Standby Phase after activating 'Morphtronic Engine' starts a Chain." A skipped Standby Phase
+      // does not count; if this card cannot be destroyed it stays equipped.
+      kind: 'trigger',
+      event: 'phaseStart',
+      range: ['szone'],
+      mandatory: true,
+      label: 'Second Standby Phase: destroy this card and take damage',
+      categories: ['destroy', 'damage'],
+      eventFilter: (ctx, ev) => {
+        const m = ctx.self.flags.morphEngine as { mid: number; standbys: number; player: PlayerId } | undefined;
+        if (ev.phase !== 'standby' || !m || m.mid !== ctx.self.moveId || ctx.game.turnPlayer !== m.player) return false;
+        m.standbys++;
+        return m.standbys === 2;
+      },
+      resolve: async (ctx) => {
+        const self = ctx.self;
+        if (!self.onField) return;
+        const host = self.equippedTo != null ? ctx.game.card(self.equippedTo) : undefined;
+        const dmg = host?.data.atk ?? 0;
+        ctx.game.log(`${self.name}: its time is up.`, 'action', self.controller);
+        await ctx.game.destroy([self], 'effect', self.controller, self);
+        await ctx.game.damage(self.controller, dmg, 'effect', self, self.controller);
+      },
+    },
     // 2010 ruling: extra copies on the same monster are redundant (only the first one doubles its original ATK).
     // https://edisonrul.ing/cards/m/morphtronic-engine.html
     {

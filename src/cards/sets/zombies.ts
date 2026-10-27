@@ -315,6 +315,10 @@ monster('Il Blud', {
       mandatory: true,
       label: 'Destroy the monsters it summoned',
       categories: ['destroy'],
+      // https://edisonrul.ing/cards/i/il-blud.html — "The ② Continuous Effect does not start a chain": if Il Blud leaves
+      // the field while a Chain resolves, the Zombies are destroyed before the next link resolves (Game.applyChainless);
+      // if it leaves while its effects are negated (Skill Drain), they are not destroyed (GameEvent.fromNegated).
+      noChain: true,
       eventFilter: (ctx, ev) => ev.card === ctx.self && ev.from === 'mzone',
       condition: (ctx) => ctx.monsters('both', (c) => c.flags.ilBludSource === ctx.self.uid).length > 0,
       resolve: async (ctx) => {

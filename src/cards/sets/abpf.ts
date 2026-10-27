@@ -239,6 +239,9 @@ function koakiMaintenance(alt?: { filter: (c: C) => boolean; what: string }, sel
     kind: 'trigger',
     event: 'phaseStart',
     mandatory: true,
+    // https://edisonrul.ing/cards/k/koaki-meiru-drago.html — "The Maintenance Cost is not an effect. It cannot be negated.
+    // Revealing ... does not start a chain." (also Koa'ki Meiru Doom / Guardian / Ice / Powerhand / Valafar pages)
+    maintenance: true,
     range: self === 'monster' ? ['mzone'] : ['fzone'],
     label: 'Maintenance',
     categories: ['destroy'],
@@ -1629,6 +1632,8 @@ monster('Djinn Prognosticator of Rituals', {
       mandatory: true,
       label: 'Opponent discards 1',
       categories: ['discard'],
+      // https://edisonrul.ing/cards/d/djinn-prognosticator-of-rituals.html — "The effect to force your opponent to discard does not start a Chain."
+      noChain: true,
       eventFilter: (ctx, ev) => {
         const r = ev.reasonCard as C | undefined;
         return ev.player === ctx.opp && !!r && r.controller === ctx.player && ritualUsing(ctx.game, ctx.self) === r;
@@ -2623,10 +2628,15 @@ spell("Spiders' Lair", 'continuous', {
       mandatory: true,
       label: 'Change to Defense Position',
       categories: ['position'],
+      // https://edisonrul.ing/cards/s/spiders-lair.html — "Changing your opponent's monster to Defense Position does not
+      // start a Chain." FLAG: the same page says it "is applied after damage calculation"; the printed text says "at the
+      // end of the Battle Phase", which is kept until that conflict is settled.
+      noChain: true,
       eventFilter: (ctx) => stActive(ctx) && !!(ctx.self.flags.lairPending as unknown[] | undefined)?.length,
       resolve: async (ctx) => {
         const pending = (ctx.self.flags.lairPending ?? []) as (Mark & { c: C })[];
         ctx.self.flags.lairPending = [];
+        if (!stActive(ctx)) return;
         for (const v of pending) {
           if (v.c.location !== 'mzone' || v.c.moveId !== v.moveId || !ctx.self.onField) continue;
           if (v.c.pos !== 'def' || !v.c.faceUp) await ctx.changePos(v.c, 'def', true);
@@ -3550,6 +3560,9 @@ trap('Widespread Dud', 'continuous', {
       mandatory: true,
       label: 'Destroy this card',
       categories: ['destroy'],
+      // https://edisonrul.ing/cards/w/widespread-dud.html — "when one of the targeted monsters is removed from the field
+      // Widespread Dud is destroyed and the other monster is destroyed": applied without a Chain, like the destruction below.
+      noChain: true,
       eventFilter: (ctx, ev) => {
         const s = dudStates.get(ctx.self);
         const c = evc(ev);
@@ -3565,6 +3578,8 @@ trap('Widespread Dud', 'continuous', {
       mandatory: true,
       label: 'Destroy the selected monsters',
       categories: ['destroy', 'destroyMulti'],
+      // https://edisonrul.ing/cards/w/widespread-dud.html — "The effect to destroy the targeted monsters does not start a Chain."
+      noChain: true,
       eventFilter: (ctx, ev) => {
         const s = dudStates.get(ctx.self);
         return ev.card === ctx.self && ev.from === 'szone' && !!s && s.stint === ctx.self.moveId - 1;

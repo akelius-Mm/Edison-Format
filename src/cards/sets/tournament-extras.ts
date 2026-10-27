@@ -747,25 +747,8 @@ monster('Drill Warrior', {
         if (me.location !== 'mzone') return;
         const r = await ctx.banish(me);
         if (!r.length || (me.location as Location) !== 'banished') return;
-        const mid = me.moveId;
-        const owner = ctx.player;
-        const game = ctx.game;
-        ctx.later(
-          'standby',
-          async () => {
-            if (me.location !== 'banished' || me.moveId !== mid || game.turnPlayer !== owner) return;
-            const back = await game.specialSummon([me], owner, { pos: 'atk', ignoreConditions: true, reasonCard: me });
-            // 2010 text: "Then, add 1 Monster Card from your Graveyard to your hand" (not optional), only after the
-            // Special Summon. https://edisonrul.ing/cards/d/drill-warrior.html
-            if (!back.length) return;
-            const g = game.zone(owner, 'grave').filter((c) => c.isMonster);
-            if (g.length) {
-              const sel = await game.select(owner, g, 1, 1, 'Add 1 monster from your GY to your hand.', 'toHand', { source: me });
-              if (sel.length) await game.toHand(sel, 'effect', owner, me);
-            }
-          },
-          2,
-        );
+        // ③ is a mandatory Trigger Effect in the banished zone at its owner's next Standby Phase (below).
+        me.flags.drillReturn = { mid: me.moveId, turn: ctx.game.turn };
       },
       ai: {
         score: (ctx) => {
@@ -774,6 +757,44 @@ monster('Drill Warrior', {
           const worstHand = Math.min(...ctx.hand().map((c) => cardValue(ctx.game, c)));
           return best >= 1500 && worstHand < best ? 35 : 0;
         },
+      },
+    },
+    {
+      // https://edisonrul.ing/cards/d/drill-warrior.html — the ③ mandatory Trigger Effect activates & resolves in the
+      // banished zone and "will start a chain at any point during the Standby Phase" (not a chainless return): it is not
+      // negated by Skill Drain, but "If this effect is negated (by 'Royal Oppression'), 'Drill Warrior' remains removed
+      // from play and cannot activate this effect again". With all Monster Zones full it is sent to the GY instead and no
+      // monster is added. FIRST Special Summon, THEN add 1 monster from the GY (not optional).
+      kind: 'trigger',
+      event: 'phaseStart',
+      range: ['banished'],
+      mandatory: true,
+      label: 'Return and add 1 monster from the GY',
+      categories: ['specialSummon', 'toHand'],
+      eventFilter: (ctx, ev) => {
+        const d = ctx.self.flags.drillReturn as { mid: number; turn: number } | undefined;
+        return ev.phase === 'standby' && !!d && d.mid === ctx.self.moveId && ctx.game.turnPlayer === ctx.self.owner && ctx.game.turn > d.turn;
+      },
+      activate: async (ctx) => {
+        // Activated once: a negated activation does not try again.
+        delete ctx.self.flags.drillReturn;
+      },
+      resolve: async (ctx) => {
+        const me = ctx.self;
+        const owner = me.owner;
+        const game = ctx.game;
+        if (me.location !== 'banished') return;
+        if (game.freeMZones(owner) <= 0) {
+          await game.sendToGrave([me], 'rule', owner, me);
+          return;
+        }
+        const back = await game.specialSummon([me], owner, { pos: 'atk', ignoreConditions: true, reasonCard: me });
+        if (!back.length) return;
+        const g = game.zone(owner, 'grave').filter((c) => c.isMonster);
+        if (g.length) {
+          const sel = await game.select(owner, g, 1, 1, 'Add 1 monster from your GY to your hand.', 'toHand', { source: me });
+          if (sel.length) await game.toHand(sel, 'effect', owner, me);
+        }
       },
     },
   ],
@@ -1558,6 +1579,10 @@ trap('Pole Position', 'continuous', {
       mandatory: true,
       label: 'Destroy the highest-ATK monster',
       categories: ['destroy'],
+      // https://edisonrul.ing/cards/p/pole-position.html — "The ② Continuous-like Effect does NOT start a chain. The monster
+      // is destroyed simultaneously with 'Pole Position' being removed from the field." Applied at once, also mid-Chain
+      // (Game.applyChainless); not if Pole Position's effects were negated when it left (GameEvent.fromNegated).
+      noChain: true,
       eventFilter: (ctx, ev) => ev.card === ctx.self && ev.from === 'szone' && ev.fromFaceUp !== false && ctx.faceUpMonsters('both').length > 0,
       resolve: async (ctx) => {
         const top = highestAtk(ctx);

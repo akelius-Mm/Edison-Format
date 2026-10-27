@@ -1007,11 +1007,14 @@ M('Mind Protector', {
       event: 'phaseStart',
       mandatory: true,
       label: 'Pay 500 LP or destroy this card',
+      // https://edisonrul.ing/cards/m/mind-protector.html — "Paying 500 Life Points is a maintenance cost": not an
+      // effect, applied without a Chain.
+      maintenance: true,
       eventFilter: (ctx, ev) => ev.phase === 'standby' && ctx.isMyTurn && faceUpOn(ctx.self),
       resolve: async (ctx) => {
         if (!faceUpOn(ctx.self)) return;
-        // APPROX: pays only while that leaves the player above 0 LP.
-        if (ctx.lp > 500) await ctx.payLp(500);
+        // Pays only while that leaves the player above 0 LP (Imprisoned Queen Archfiend ruling, same kind of cost).
+        if (ctx.game.canPayLp(ctx.player, 500)) await ctx.payLp(500);
         else await ctx.destroy(ctx.self);
       },
     },

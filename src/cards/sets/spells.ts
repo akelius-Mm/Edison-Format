@@ -1126,6 +1126,9 @@ spell('Future Fusion', 'continuous', {
       mandatory: true,
       label: 'Future Fusion countdown',
       categories: ['specialSummon'],
+      // https://edisonrul.ing/cards/f/future-fusion.html — "The ③ Lingering Effect applies during your second Standby Phase
+      // without starting a chain."
+      noChain: true,
       eventFilter: (ctx, ev) => ev.phase === 'standby' && ctx.isMyTurn && ctx.self.flags.ffFusion != null,
       condition: activeST,
       resolve: async (ctx) => {
@@ -1838,6 +1841,9 @@ spell('Messenger of Peace', 'continuous', {
       mandatory: true,
       label: 'Maintenance',
       categories: ['destroy'],
+      // https://edisonrul.ing/cards/m/messenger-of-peace.html — "The maintenance cost is optional, you may chose not to pay
+      // 100 Life Points and 'Messenger of Peace' will be destroyed": a maintenance cost, applied without a Chain.
+      maintenance: true,
       eventFilter: (ctx, ev) => ev.phase === 'standby' && ctx.isMyTurn,
       condition: activeST,
       resolve: async (ctx) => {
@@ -1888,6 +1894,9 @@ spell('Level Limit - Area B', 'continuous', {
       mandatory: true,
       label: 'Change to Defense Position',
       categories: ['position'],
+      // https://edisonrul.ing/cards/l/level-limit-area-b.html — "The effect of 'Level Limit - Area B' does not use the
+      // chain, it is a continuous effect."
+      noChain: true,
       eventFilter: (ctx) => activeST(ctx) && llVictims(ctx).length > 0,
       condition: (ctx) => activeST(ctx) && llVictims(ctx).length > 0,
       resolve: llApply,
