@@ -915,8 +915,8 @@ spell('Premature Burial', 'equip', {
         const r = await ctx.specialSummon(t[0], { pos: 'atk' });
         if (!r.length || !ctx.self.onField) return;
         ctx.equip(r[0]);
-        // When this card leaves the field, the monster is destroyed.
-        ctx.game.link(r[0], ctx.self, false);
+        // "When this card is destroyed, destroy the equipped monster" (not when it is returned to the hand: Giant Trunade).
+        ctx.game.link(r[0], ctx.self, false, { cardOnlyIfDestroyed: true });
       },
       ai: {
         score: (ctx) => {
@@ -1122,7 +1122,8 @@ spell('Future Fusion', 'continuous', {
         ctx.self.flags.ffFusion = null;
         if (!f || f.location !== 'extra') return;
         const r = await ctx.specialSummon(f, { method: 'fusion', proper: true, pos: 'choose' });
-        if (r.length && ctx.self.onField) ctx.game.link(r[0], ctx.self, false);
+        // "When this card is destroyed, destroy that monster" (not when it leaves the field another way).
+        if (r.length && ctx.self.onField) ctx.game.link(r[0], ctx.self, false, { cardOnlyIfDestroyed: true });
       },
     },
   ],
@@ -1889,8 +1890,9 @@ spell('Cold Wave', 'normal', {
         for (const p of [ctx.player, ctx.opp]) {
           ctx.addPlayerMod(p, 'cannotActivateSpells', true, 'nextTurnEnd');
           ctx.addPlayerMod(p, 'cannotActivateTraps', true, 'nextTurnEnd');
+          ctx.addPlayerMod(p, 'cannotSetSpellTrap', true, 'nextTurnEnd');
         }
-        ctx.log('Cold Wave: no Spells/Traps can be activated until the next turn.');
+        ctx.log('Cold Wave: no Spells/Traps can be activated or Set until the next turn.');
       },
       ai: {
         score: (ctx) => {

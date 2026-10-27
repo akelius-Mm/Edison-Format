@@ -612,6 +612,8 @@ monster('Power Tool Dragon', {
   ],
 });
 
+/** Armory Arm: equipping and unequipping share one "once per turn" (per copy). */
+const armoryKey = (ctx: Ctx) => `armory:${ctx.self.uid}`;
 monster('Armory Arm', {
   attribute: 'LIGHT',
   race: 'Machine',
@@ -619,7 +621,7 @@ monster('Armory Arm', {
   atk: 1800,
   def: 1200,
   types: ['synchro'],
-  text: '1 Tuner + 1 or more non-Tuner monsters\nOnce per turn: You can target 1 monster on the field; equip this card to it. It gains 1000 ATK. When the equipped monster destroys a monster by battle and sends it to the GY: inflict damage to your opponent equal to that monster\'s original ATK.',
+  text: '1 Tuner + 1 or more non-Tuner monsters\nOnce per turn, you can either: Target 1 monster on the field; equip this card to it, OR: Unequip this card and Special Summon it in face-up Attack Position. While equipped by this effect, the equipped monster gains 1000 ATK. When the equipped monster destroys a monster by battle and sends it to the GY: inflict damage to your opponent equal to that monster\'s original ATK.',
   synchro: { desc: '1 Tuner + 1+ non-Tuner monsters' },
   aiValue: 500,
   effects: [
@@ -628,8 +630,10 @@ monster('Armory Arm', {
       opt: true,
       label: 'Equip to a monster',
       categories: ['atkChange'],
+      condition: (ctx) => !ctx.usedThisTurn(armoryKey(ctx)),
       canActivate: (ctx) => ctx.freeSZones() > 0 && ctx.faceUpMonsters('both', (c) => c !== ctx.self && ctx.canTarget(c)).length > 0,
       activate: async (ctx) => {
+        ctx.markUsed(armoryKey(ctx));
         await ctx.selectTargets(ctx.faceUpMonsters('both', (c) => c !== ctx.self), 1, 1, 'Target 1 monster to equip Armory Arm to.', 'equip', {
           aiScore: (c) => (c.controller === ctx.player ? ctx.atk(c) : -5000),
         });
@@ -637,8 +641,11 @@ monster('Armory Arm', {
       resolve: async (ctx) => {
         const t = ctx.validTargets((c) => c.location === 'mzone' && c.faceUp)[0];
         if (!t || ctx.self.location !== 'mzone' || !ctx.self.faceUp || ctx.freeSZones() <= 0) return;
+        const proper = ctx.self.properlySummoned;
         await ctx.game.moveCards([ctx.self], 'szone', { reason: 'effect', reasonPlayer: ctx.player, reasonCard: ctx.self, minor: true });
         if ((ctx.self.location as string) !== 'szone') return;
+        // Still the properly Synchro Summoned card: it can be revived later from the GY.
+        ctx.self.properlySummoned = proper;
         ctx.equip(t);
         ctx.log(`${ctx.self.name} is equipped to ${t.name}.`);
       },
@@ -673,6 +680,28 @@ monster('Armory Arm', {
       resolve: async (ctx) => {
         const c = ctx.event!.card as C;
         await ctx.damage(ctx.opp, c.data.atk ?? 0);
+      },
+    },
+    {
+      // "...or unequip it to Special Summon this card in face-up Attack Position" (shares the once per turn).
+      kind: 'ignition',
+      range: ['szone'],
+      label: 'Unequip: Special Summon',
+      categories: ['specialSummon'],
+      condition: (ctx) => ctx.self.location === 'szone' && ctx.equipTarget !== undefined && !ctx.usedThisTurn(armoryKey(ctx)) && ctx.canSummonSelf(),
+      activate: async (ctx) => {
+        ctx.markUsed(armoryKey(ctx));
+      },
+      resolve: async (ctx) => {
+        if (ctx.self.location !== 'szone' || !ctx.canSpecialSummon()) return;
+        await ctx.specialSummon(ctx.self, { pos: 'atk', ignoreConditions: true, proper: ctx.self.properlySummoned });
+      },
+      ai: {
+        // Come back as a monster when the equipped monster is now the opponent's.
+        score: (ctx) => {
+          const h = ctx.equipTarget;
+          return h && h.controller !== ctx.player ? 30 : 0;
+        },
       },
     },
   ],

@@ -1536,14 +1536,26 @@ monster('Dark Magician of Chaos', {
   aiValue: 1500,
   effects: [
     {
+      // Bookkeeping: "If this face-up card would leave the field, banish it instead" (however it got face-up).
       kind: 'trigger',
-      event: 'summoned',
+      event: ['summoned', 'flipped', 'positionChanged'],
+      label: 'Banish when leaving the field',
+      categories: [],
+      eventFilter: (ctx, ev) => {
+        if (ev.card === ctx.self && ctx.self.location === 'mzone') ctx.self.banishOnLeave = ctx.self.faceUp;
+        return false;
+      },
+    },
+    {
+      // "When this card is Normal or Special Summoned" (a Flip Summon does not count).
+      kind: 'trigger',
+      event: ['normalSummoned', 'specialSummoned'],
       when: true,
       label: 'Recover a Spell (End Phase)',
       categories: ['toHand'],
       eventFilter: (ctx, ev) => {
         if (ev.card !== ctx.self || ctx.self.location !== 'mzone') return false;
-        ctx.self.banishOnLeave = true;
+        if (ctx.self.faceUp) ctx.self.banishOnLeave = true;
         return true;
       },
       canActivate: (ctx) => ctx.grave('me', (c) => c.isSpell).length > 0,

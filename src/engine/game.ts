@@ -731,7 +731,10 @@ export class Game {
       const from = card.location;
       const fromFaceUp = card.faceUp;
       const fromCtrl = card.controller;
+      const prevMoveId = card.moveId;
       const dest = this.rawMove(card, to, { faceUp: opts.faceUp, bottom: opts.bottom });
+      // Remember that this move was a destruction (read by ruleCleanup for links that break only on destruction).
+      if (opts.destroyed) card.flags.destroyedFromMoveId = prevMoveId;
       moved.push({ card, from, to: dest, fromFaceUp, fromCtrl, wasMonster: from === 'mzone' });
     }
     if (!opts.noAnim) {
@@ -791,7 +794,13 @@ export class Game {
       }
       if (c.linkedTo != null && c.flags.linkDestroy) {
         const other = this.card(c.linkedTo);
-        if (!other || other.moveId !== c.flags.linkMoveId || !other.onField) kill.add(c);
+        if (!other || other.moveId !== c.flags.linkMoveId || !other.onField) {
+          if (c.flags.linkOnlyIfDestroyed && !(other && other.flags.destroyedFromMoveId === c.flags.linkMoveId)) {
+            // Left the field without being destroyed: the link breaks, this card stays.
+            c.linkedTo = null;
+            c.flags.linkDestroy = false;
+          } else kill.add(c);
+        }
       }
     }
     const list = [...kill].filter((c) => c.onField);
@@ -1169,11 +1178,17 @@ export class Game {
     return this.allFieldCards().filter((c) => c.equippedTo === monster.uid);
   }
 
-  /** Link two cards: when `other` leaves the field, `card` is destroyed (and vice versa if mutual). */
-  link(card: CardInstance, other: CardInstance, mutual = true) {
+  /**
+   * Link two cards: when `other` leaves the field, `card` is destroyed (and vice versa if mutual).
+   * `cardOnlyIfDestroyed`: `card` is destroyed only if `other` was *destroyed* ("When that monster is destroyed, destroy
+   * this card": Call of the Haunted; "When this card is destroyed, destroy the equipped monster": Premature Burial). If
+   * `other` leaves the field another way (Tributed, Synchro Material, bounced, banished), the link just breaks.
+   */
+  link(card: CardInstance, other: CardInstance, mutual = true, opts: { cardOnlyIfDestroyed?: boolean } = {}) {
     card.linkedTo = other.uid;
     card.flags.linkDestroy = true;
     card.flags.linkMoveId = other.moveId;
+    if (opts.cardOnlyIfDestroyed) card.flags.linkOnlyIfDestroyed = true;
     if (mutual) {
       other.linkedTo = card.uid;
       other.flags.linkDestroy = true;
@@ -1292,7 +1307,7 @@ export class Game {
     mode: { open: boolean; window?: WindowKind },
   ): Ctx | null {
     if (ef.kind === 'continuous' || ef.kind === 'trigger') return null;
-    if (this.cardUser(card) !== player) return null;
+    if (this.cardUser(card) !== player && !(ef.anyPlayer && ef.kind !== 'activate' && card.onField && card.faceUp)) return null;
     const range = this.defaultRange(card, ef);
     if (!range.includes(card.location)) return null;
     const isOwnTurn = this.turnPlayer === player;
@@ -1380,6 +1395,8 @@ export class Game {
       ...this.fieldCards(player),
       ...ps.grave,
       ...ps.banished,
+      // Effects either player can use (Royal Oppression) on the opponent's face-up cards.
+      ...this.fieldCards(this.opp(player)).filter((c) => c.faceUp && (c.data.effects ?? []).some((e) => e.anyPlayer)),
     ];
     for (const card of cards) {
       const effs = card.data.effects ?? [];
@@ -2185,7 +2202,7 @@ export class Game {
         if (this.canNormalSummon(p, c, true)) out.push({ type: 'set', card: c });
       } else {
         const canSet = c.data.stype === 'field' ? true : this.freeSZones(p) > 0;
-        if (canSet && !this.queryPlayer(p, 'cannotSet')) out.push({ type: 'setST', card: c });
+        if (canSet && !this.queryPlayer(p, 'cannotSet') && !this.queryPlayer(p, 'cannotSetSpellTrap')) out.push({ type: 'setST', card: c });
       }
     }
     // procs
