@@ -128,7 +128,7 @@ monster('Light and Darkness Dragon', {
   // Cannot be Special Summoned: nomi blocks every Special Summon from hand/Deck/GY (it is never "properly" summoned).
   nomi: true,
   aiValue: 1200,
-  text: 'Cannot be Special Summoned. While face-up on the field, this card is also DARK. Once per Chain, when a Spell/Trap Card or monster effect is activated: this card loses exactly 500 ATK and DEF, and if it does, negate that activation. When this card is destroyed and sent to the GY: You can target 1 monster in your GY; destroy all cards you control, then Special Summon that target.',
+  text: 'Cannot be Special Summoned. While face-up on the field, this card is also DARK. Once per Chain, when a Spell/Trap Card or monster effect is activated: this card loses exactly 500 ATK and DEF, and if it does, negate that activation. When this card is destroyed and sent to the GY: Target 1 monster in your GY (if possible); destroy all cards you control, then Special Summon that target.',
   effects: [
     {
       // Installs the per-game hook below (an inert listener from every location, like the sets' rule listeners).
@@ -165,14 +165,19 @@ monster('Light and Darkness Dragon', {
       },
     },
     {
+      // Rulings audit: mandatory (Edison text: "select 1 monster in your Graveyard. Destroy all cards on your side of
+      // the field, then Special Summon the selected monster"). It targets a monster if there is one, and still
+      // destroys your field when there is none.
       kind: 'trigger',
       event: 'sentToGrave',
+      mandatory: true,
       label: 'Destroy your field, revive 1 monster',
       categories: ['destroy', 'destroyMulti', 'specialSummon'],
       eventFilter: (ctx, ev) => ev.card === ctx.self && ev.from === 'mzone' && (ev.reasons ?? []).includes('destroy'),
-      canActivate: (ctx) => ctx.grave('me', (c) => c.isMonster && c !== ctx.self).length > 0,
       activate: async (ctx) => {
-        await ctx.selectTargets(ctx.grave('me', (c) => c.isMonster && c !== ctx.self), 1, 1, 'Target 1 monster in your GY.', 'specialSummon', {
+        const cands = ctx.grave('me', (c) => c.isMonster && c !== ctx.self && ctx.canTarget(c));
+        if (!cands.length) return;
+        await ctx.selectTargets(cands, 1, 1, 'Target 1 monster in your GY.', 'specialSummon', {
           aiScore: (c) => (ctx.canSummonCard(c) ? (c.data.atk ?? 0) + (c.data.aiValue ?? 0) : -5000),
         });
       },
@@ -181,13 +186,6 @@ monster('Light and Darkness Dragon', {
         if (mine.length) await ctx.destroy(mine);
         const t = ctx.validTargets((c) => c.location === 'grave');
         if (t.length && ctx.canSummonCard(t[0])) await ctx.specialSummon(t[0]);
-      },
-      ai: {
-        score: (ctx) => {
-          const best = Math.max(0, ...ctx.grave('me', (c) => c.isMonster && c !== ctx.self && ctx.canSummonCard(c)).map((c) => (c.data.atk ?? 0) + (c.data.aiValue ?? 0)));
-          const lose = ctx.field('me').reduce((a, c) => a + cardValue(ctx.game, c), 0);
-          return best >= 1800 && best > lose ? 1 : 0;
-        },
       },
     },
   ],
@@ -1120,8 +1118,10 @@ spell('Soul Taker', 'normal', {
         await ctx.selectTargets(ctx.faceUpMonsters('opp'), 1, 1, 'Target 1 face-up monster your opponent controls.', 'destroy');
       },
       resolve: async (ctx) => {
+        // Rulings audit: if the only target is gone (or no longer face-up), the effect does nothing (no LP gain).
         const t = ctx.validTargets((c) => c.location === 'mzone' && c.faceUp);
-        if (t.length) await ctx.destroy(t);
+        if (!t.length) return;
+        await ctx.destroy(t);
         await ctx.recover(ctx.opp, 1000);
       },
       ai: {
