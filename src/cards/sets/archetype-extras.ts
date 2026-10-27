@@ -197,6 +197,8 @@ M(GRANDMASTER, {
       range: ['grave'],
       label: 'Add a Six Samurai from the GY',
       categories: ['toHand'],
+      // Rulings audit: "When ... you can" (Edison text): misses the timing if it is not the last thing to happen.
+      when: true,
       eventFilter: (ctx, ev) =>
         ev.card === ctx.self && ev.from === 'mzone' && !!ev.fromFaceUp && ev.to === 'grave' && ev.reason === 'effect' && ev.reasonPlayer !== undefined && ev.reasonPlayer !== ctx.player,
       canActivate: (ctx) => ctx.grave('me', (c) => c !== ctx.self && isSixSamurai(c)).length > 0,
@@ -613,25 +615,28 @@ M(PHANTOM, {
   atk: 0,
   def: 0,
   aiValue: 500,
-  text: 'Once per turn, you can select 1 Effect Monster in your Graveyard and remove it from play. Until the End Phase, this card\'s name is treated as the removed monster\'s name, and this card has the same original ATK and effects as that monster. Any Battle Damage your opponent takes from attacks involving this card becomes 0.',
+  text: 'Once per turn, you can select 1 Effect Monster in your Graveyard and remove it from play (the banish is not a cost). Until the End Phase, this card\'s name is treated as the removed monster\'s name, and this card has the same original ATK and effects as that monster. Any Battle Damage your opponent takes from attacks involving this card becomes 0.',
   effects: [
     {
       kind: 'ignition',
       opt: true,
       label: 'Banish an Effect Monster: copy it',
       categories: ['atkChange'],
-      canActivate: (ctx) => ctx.grave('me', (c) => c.hasType('effect')).length > 0,
+      // Rulings audit: the Effect Monster is targeted on activation and banished on resolution (not a cost), so
+      // D.D. Crow / Necrovalley in response stop the copy; the copy happens only if it was banished.
+      canActivate: (ctx) => ctx.grave('me', (c) => c.hasType('effect') && ctx.canTarget(c)).length > 0,
       activate: async (ctx) => {
-        const [c] = await ctx.select(ctx.grave('me', (x) => x.hasType('effect')), 1, 1, 'Remove from play 1 Effect Monster in your Graveyard.', 'cost', {
+        const [c] = await ctx.selectTargets(ctx.grave('me', (x) => x.hasType('effect')), 1, 1, 'Target 1 Effect Monster in your Graveyard.', 'banish', {
           aiScore: (x) => phantomValue(x),
         });
         if (!c) return false;
-        await ctx.banish(c, 'cost');
-        ctx.data.src = c;
       },
       resolve: async (ctx) => {
-        const src = ctx.data.src as C | undefined;
-        if (!src || !faceUpOn(ctx.self)) return;
+        if (!faceUpOn(ctx.self)) return;
+        const [src] = ctx.validTargets((c) => c.location === 'grave');
+        if (!src) return;
+        const r = await ctx.banish(src);
+        if (!r.length || src.location !== 'banished') return;
         copyInto(ctx.game, ctx.self, src);
         ctx.log(`${PHANTOM} becomes "${src.name}" (${src.data.atk ?? 0} ATK) until the End Phase.`);
       },
