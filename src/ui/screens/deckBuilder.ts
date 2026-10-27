@@ -333,6 +333,7 @@ export function deckBuilderScreen(params: Params): Screen {
       tool('Test hand', testHand, 'hand'),
       tool('Import', importDeck, 'upload'),
       tool('Export', exportDeck, 'download'),
+      tool('Cover', chooseCover, 'cards'),
       tool('Duplicate', duplicateDeck, 'copy'),
       tool('Clear', () => void clearDeck(), 'refresh'),
       tool('Delete', () => void deleteDeck(), 'trash', true),
@@ -547,6 +548,30 @@ export function deckBuilderScreen(params: Params): Screen {
     deleteCustomDeck(cur.id);
     toast('Deck deleted.');
     open(listCustomDecks()[0] ?? null);
+  }
+  /** Pick the card shown as this deck's cover in every deck picker (or go back to automatic). */
+  function chooseCover() {
+    if (!cur) return;
+    const d = cur;
+    const names = [...new Set([...d.main, ...d.extra, ...d.side].map(([n]) => n))].filter((n) => findCard(n));
+    if (!names.length) return toast('Add some cards first.', 'error');
+    let m: ReturnType<typeof modal>;
+    const set = (name: string | undefined) => {
+      if (name) d.cover = name;
+      else delete d.cover;
+      commit();
+      m.close();
+      toast(name ? `Cover: ${name}` : 'Cover: automatic', 'success');
+    };
+    const row = (label: string, on: boolean, fn: () => void) =>
+      h('button', { type: 'button', class: ['cover-opt', on && 'on'], onclick: fn }, h('span', null, label), on ? icon('check') : null);
+    const body = h(
+      'div',
+      { class: 'cover-list' },
+      row('Automatic', !d.cover, () => set(undefined)),
+      ...names.map((n) => row(n, d.cover === n, () => set(n))),
+    );
+    m = modal('Deck cover', h('div', null, h('p', { class: 'muted' }, 'Choose the card shown on this deck in every deck picker.'), body), [{ label: 'Cancel' }]);
   }
   function duplicateDeck() {
     if (!cur) return;

@@ -16,6 +16,8 @@ export interface SavedDeck {
   updated: number;
   /** Premade deck this one was copied from. */
   basedOn?: string;
+  /** Card shown as the deck's cover (chosen in the Deck Builder); automatic when unset. */
+  cover?: string;
   /** Draft and Sealed decks are built from opened packs: copy limits and the banlist don't apply. */
   format?: 'draft';
 }
@@ -42,6 +44,8 @@ export interface DeckInfo {
   extra: Entry[];
   side: Entry[];
   problems: string[];
+  /** Chosen cover card (custom decks). */
+  cover?: string;
 }
 
 const DECKS_KEY = 'edison.decks.v1';
@@ -137,6 +141,7 @@ export function customInfo(d: SavedDeck): DeckInfo {
     extra: d.extra,
     side: d.side,
     problems: deckProblems(d),
+    cover: d.cover,
   };
 }
 
@@ -183,7 +188,9 @@ export function deckCount(entries: Entry[]) {
 }
 
 /** The card shown on a deck box: the deck's most-played archetype monster. */
-export function coverCard(d: Pick<DeckInfo, 'main' | 'extra'>) {
+export function coverCard(d: Pick<DeckInfo, 'main' | 'extra'> & { cover?: string }) {
+  const chosen = d.cover ? findCard(d.cover) : undefined;
+  if (chosen) return chosen;
   let best: ReturnType<typeof findCard>;
   let bestScore = -Infinity;
   for (const [n, k] of d.main) {
