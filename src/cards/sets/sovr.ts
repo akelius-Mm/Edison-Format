@@ -199,6 +199,9 @@ function koakiUpkeep(revealDesc: string, reveal: ((c: C) => boolean) | null, sen
     event: 'phaseStart',
     range: ['mzone'],
     mandatory: true,
+    // https://edisonrul.ing/cards/k/koaki-meiru-drago.html — "The Maintenance Cost is not an effect. It cannot be negated.
+    // Revealing ... does not start a chain." (also Koa'ki Meiru Doom / Guardian / Ice / Powerhand / Valafar pages)
+    maintenance: true,
     label: "Koa'ki Meiru upkeep",
     categories: ['destroy'],
     eventFilter: (ctx, ev) => ev.phase === 'end' && ctx.isMyTurn && ctx.self.faceUp,
@@ -1736,15 +1739,23 @@ monster('Djinn Presider of Rituals', {
       mandatory: true,
       label: 'Ritual Monster destroyed a monster: draw 1',
       categories: ['draw'],
+      // https://edisonrul.ing/cards/d/djinn-presider-of-rituals.html — "The effect to draw a card does not start a Chain. It
+      // occurs when the monster destroyed by battle is sent to the Graveyard." Several copies used for one Ritual Summon
+      // still draw only 1 card (only the first copy still in place applies).
+      noChain: true,
       eventFilter: (ctx, ev) => {
         const killer = evo(ev);
-        return !!killer && (killer.flags.sovrDjinnPresider ?? []).includes(ctx.self.uid) && killer.location === 'mzone';
-      },
-      activate: async (ctx) => {
-        ctx.data.drawer = evo(ctx.event!)!.controller;
+        if (!killer || killer.location !== 'mzone') return false;
+        const uids = (killer.flags.sovrDjinnPresider ?? []) as number[];
+        const first = uids.find((u) => {
+          const d = ctx.game.card(u);
+          return !!d && djinnRange.includes(d.location);
+        });
+        return first === ctx.self.uid;
       },
       resolve: async (ctx) => {
-        await ctx.draw(1, ctx.data.drawer as PlayerId);
+        const killer = evo(ctx.event!);
+        if (killer) await ctx.draw(1, killer.controller);
       },
     },
   ],
@@ -2507,18 +2518,17 @@ spell('Spider Web', 'field', {
       mandatory: true,
       label: 'Attacker to Defense Position',
       categories: ['position'],
+      // https://edisonrul.ing/cards/s/spider-web.html — "The effects of this card do not start a Chain."
+      noChain: true,
       eventFilter: (ctx, ev) => {
         const a = evc(ev);
-        return stActive(ctx) && !!a && a.location === 'mzone' && a.faceUp && a.pos === 'atk';
-      },
-      activate: async (ctx) => {
-        const a = evc(ctx.event!)!;
-        ctx.data.a = a;
-        ctx.data.mid = a.moveId;
+        if (!(stActive(ctx) && !!a && a.location === 'mzone' && a.faceUp && a.pos === 'atk')) return false;
+        ctx.self.flags.sovrSpiderWebMid = a.moveId;
+        return true;
       },
       resolve: async (ctx) => {
-        const a = ctx.data.a as C;
-        if (!a || a.location !== 'mzone' || a.moveId !== ctx.data.mid || !a.faceUp) return;
+        const a = evc(ctx.event!);
+        if (!stActive(ctx) || !a || a.location !== 'mzone' || a.moveId !== ctx.self.flags.sovrSpiderWebMid || !a.faceUp) return;
         if (a.pos === 'atk') await ctx.changePos(a, 'def', true);
         if (a.location === 'mzone') a.flags.sovrSpiderWebUntil = ctx.game.turn + (ctx.game.turnPlayer === a.controller ? 2 : 1);
       },
@@ -2639,11 +2649,33 @@ spell('Molting Escape', 'equip', {
       (ctx, c) => {
         if (!stActive(ctx) || c !== ctx.equipTarget || ctx.self.flags.sovrMoltTurn === ctx.game.turn) return;
         ctx.self.flags.sovrMoltTurn = ctx.game.turn;
-        ctx.game.addTempMod(c, 'atk', 300, 'field', ctx.self);
-        ctx.game.log(`Molting Escape: ${c.name} is not destroyed and gains 300 ATK.`, 'action', ctx.player);
+        ctx.self.flags.sovrMoltGain = { uid: c.uid, moveId: c.moveId };
+        ctx.game.log(`Molting Escape: ${c.name} is not destroyed.`, 'action', ctx.player);
       },
       ['szone'],
     ),
+    {
+      // https://edisonrul.ing/cards/m/molting-escape.html — "The effect to gain 300 ATK starts a Chain" (at the end of the
+      // Damage Step); the gains last while this card stays equipped.
+      kind: 'trigger',
+      event: 'damageStepEnd',
+      range: ['szone'],
+      mandatory: true,
+      label: 'Equipped monster gains 300 ATK',
+      categories: ['atkChange'],
+      eventFilter: (ctx) => !!ctx.self.flags.sovrMoltGain && ctx.self.flags.sovrMoltTurn === ctx.game.turn,
+      activate: async (ctx) => {
+        ctx.data.gain = ctx.self.flags.sovrMoltGain;
+        delete ctx.self.flags.sovrMoltGain;
+      },
+      resolve: async (ctx) => {
+        const g = ctx.data.gain as { uid: number; moveId: number } | undefined;
+        const c = g ? ctx.game.card(g.uid) : undefined;
+        if (!c || c.moveId !== g!.moveId || !faceUpOn(c) || !stActive(ctx) || ctx.equipTarget !== c) return;
+        ctx.game.addTempMod(c, 'atk', 300, 'field', ctx.self);
+        ctx.game.log(`Molting Escape: ${c.name} gains 300 ATK.`, 'action', ctx.player);
+      },
+    },
   ],
 });
 
@@ -3889,7 +3921,10 @@ trap('Seal of Wickedness', 'continuous', {
       mandatory: true,
       label: 'Pay 500 LP or destroy this card',
       categories: [],
-      eventFilter: (ctx, ev) => ev.phase === 'standby' && ctx.isMyTurn && stActive(ctx),
+      // https://edisonrul.ing/cards/s/seal-of-wickedness.html — "Paying 500 Life Points is a cost, not an effect. It cannot
+      // be negated by 'Royal Decree.'" A maintenance cost: no Chain, and still due while this card is negated.
+      maintenance: true,
+      eventFilter: (ctx, ev) => ev.phase === 'standby' && ctx.isMyTurn && ctx.self.onField && ctx.self.faceUp && ctx.self.activeOnField,
       resolve: async (ctx) => {
         if (!ctx.self.onField) return;
         const pay = ctx.lp > 500 && (await ctx.option('Seal of Wickedness: pay 500 LP or destroy it?', ['Pay 500 LP', 'Destroy Seal of Wickedness'], (i) => (i === 0 ? (ctx.lp > 2500 ? 1 : 0) : 0.5))) === 0;

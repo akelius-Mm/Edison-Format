@@ -254,6 +254,9 @@ function koakiUpkeep(r: Race): EffectDef {
     kind: 'trigger',
     event: 'phaseStart',
     mandatory: true,
+    // https://edisonrul.ing/cards/k/koaki-meiru-drago.html — "The Maintenance Cost is not an effect. It cannot be negated.
+    // Revealing ... does not start a chain." (also Koa'ki Meiru Doom / Guardian / Ice / Powerhand / Valafar pages)
+    maintenance: true,
     label: 'Maintenance',
     categories: ['destroy'],
     eventFilter: (ctx, ev) => ev.phase === 'end' && ctx.isMyTurn && faceUpOn(ctx.self),
@@ -2057,16 +2060,16 @@ monster('Gaia Plate the Earth Giant', {
       opt: true,
       label: 'Maintenance',
       categories: ['banish'],
+      // https://edisonrul.ing/cards/g/gaia-plate-the-earth-giant.html — "The Maintenance Cost does not activate, it simply
+      // applies during your Standby Phase. Removing 1 Rock-Type monster from play is a cost."
+      maintenance: true,
       eventFilter: (ctx, ev) => ev.phase === 'standby' && ctx.isMyTurn && faceUpOn(ctx.self),
       resolve: async (ctx) => {
         if (!faceUpOn(ctx.self)) return;
         const rocks = ctx.grave('me', isRace('Rock'));
         if (rocks.length && (await ctx.confirm('Banish 1 Rock monster from your GY to keep Gaia Plate?'))) {
           const [r] = await ctx.select(rocks, 1, 1, 'Banish 1 Rock monster from your GY.', 'cost');
-          if (r) {
-            await ctx.banish(r);
-            return;
-          }
+          if (r && (await ctx.banish(r, 'cost')).length) return;
         }
         await ctx.sendToGrave(ctx.self);
       },
@@ -2890,6 +2893,10 @@ spell('Brain Research Lab', 'field', {
       mandatory: true,
       label: 'Psychic Counter damage',
       categories: ['damage'],
+      // https://edisonrul.ing/cards/b/brain-research-lab.html — "The ④ Continous-like Effect is mandatory, though it does not
+      // start a chain"; if the Lab's effects are negated (Spell Canceller) its counters are removed, so it inflicts no
+      // damage when it leaves the field while negated (GameEvent.fromNegated).
+      noChain: true,
       eventFilter: (ctx, ev) => {
         const rec = labCounters.get(ctx.self);
         return ev.card === ctx.self && ev.from === 'fzone' && !!rec && rec.moveId === ctx.self.moveId - 1 && rec.n > 0;

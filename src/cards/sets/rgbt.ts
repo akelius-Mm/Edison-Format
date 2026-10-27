@@ -180,6 +180,9 @@ function koakiUpkeep(revealDesc: string | null, revealFilter: ((c: C) => boolean
     event: 'phaseStart',
     range: ['mzone'],
     mandatory: true,
+    // https://edisonrul.ing/cards/k/koaki-meiru-drago.html — "The Maintenance Cost is not an effect. It cannot be negated.
+    // Revealing ... does not start a chain." (also Koa'ki Meiru Doom / Guardian / Ice / Powerhand / Valafar pages)
+    maintenance: true,
     label: "Koa'ki Meiru upkeep",
     categories: ['destroy'],
     eventFilter: (ctx, ev) => ev.phase === 'end' && ctx.isMyTurn && ctx.self.faceUp,

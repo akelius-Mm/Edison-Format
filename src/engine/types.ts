@@ -152,6 +152,8 @@ export interface GameEvent {
   inChain?: boolean;
   /** Damage step id: events in the same damage step share timing. */
   dsId?: number;
+  /** Card movement from the field: the moved card's effects were negated just before it left (Game.isNegated). */
+  fromNegated?: boolean;
   /** True for cleanup events that do not count for 'missing the timing'. */
   minor?: boolean;
   /** Arbitrary extra data. */

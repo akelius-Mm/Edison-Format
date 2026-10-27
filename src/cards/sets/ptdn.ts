@@ -1403,6 +1403,9 @@ monster('Imprisoned Queen Archfiend', {
       opt: true,
       label: 'Pay 1000 LP or destroy this card',
       categories: [],
+      // https://edisonrul.ing/cards/i/imprisoned-queen-archfiend.html — "Paying 1000 Life Points during your Standby Phase
+      // is a maintenance cost" (not an effect, no Chain); with 1000 LP or less it cannot be paid, so this card is destroyed.
+      maintenance: true,
       eventFilter: (ctx, ev) => ev.phase === 'standby' && ctx.isMyTurn && ctx.self.location === 'mzone' && ctx.self.faceUp,
       resolve: async (ctx) => {
         if (ctx.self.location !== 'mzone') return;
@@ -2136,6 +2139,8 @@ monster('Aztekipede, the Worm Warrior', {
   ],
 });
 
+/** Vampire's Curse: the moveId it has once Special Summoned by its own effect. */
+const vampireRevive = new WeakMap<C, number>();
 monster("Vampire's Curse", {
   attribute: 'DARK',
   race: 'Zombie',
@@ -2163,13 +2168,27 @@ monster("Vampire's Curse", {
           'standby',
           async () => {
             if (me.location !== 'grave' || me.moveId !== mid || !ctx.canSpecialSummon()) return;
-            const r = await ctx.specialSummon(me, { pos: 'atk' });
-            if (r.length) ctx.addTempMod(me, 'atk', 500, 'field');
+            // Marked before the Summon so the trigger below sees it (the move resets flags).
+            vampireRevive.set(me, me.moveId + 1);
+            await ctx.specialSummon(me, { pos: 'atk' });
           },
           1,
         );
       },
       ai: { score: (ctx) => (ctx.lp > 2000 ? 1 : 0) },
+    },
+    {
+      // https://edisonrul.ing/cards/v/vampires-curse.html — "The effect that increases 'Vampire's Curse's' ATK starts a
+      // Chain when it is Special Summoned by its effect."
+      kind: 'trigger',
+      event: 'specialSummoned',
+      mandatory: true,
+      label: 'Gains 500 ATK',
+      categories: ['atkChange'],
+      eventFilter: (ctx, ev) => ev.card === ctx.self && vampireRevive.get(ctx.self) === ctx.self.moveId,
+      resolve: async (ctx) => {
+        if (faceUpOn(ctx.self) && vampireRevive.get(ctx.self) === ctx.self.moveId) ctx.addTempMod(ctx.self, 'atk', 500, 'field');
+      },
     },
   ],
 });
@@ -2643,6 +2662,8 @@ spell('Spell Chronicle', 'continuous', {
       mandatory: true,
       label: 'Take 500 damage per banished card',
       categories: ['damage'],
+      // https://edisonrul.ing/cards/s/spell-chronicle.html — "The damage inflicted by 'Spell Chronicle' does not start a Chain."
+      noChain: true,
       eventFilter: (ctx, ev) => ev.card === ctx.self && ev.from === 'szone' && !!ev.fromFaceUp,
       resolve: async (ctx) => {
         const n = chronicleLive(ctx.self).length;

@@ -875,6 +875,9 @@ const ARCANA_EFFECTS: EffectDef[] = [
     mandatory: true,
     label: 'The Dark Ruler (Tails): destroy all cards on the field',
     categories: ['destroy', 'destroyMulti'],
+    // https://edisonrul.ing/cards/a/arcana-force-ex-the-dark-ruler.html — "The (TAILS) Continuous Effect does not start a
+    // Chain"; it can be negated by Skill Drain (not applied if it was negated when destroyed: GameEvent.fromNegated).
+    noChain: true,
     eventFilter: (ctx, ev) => ev.card === ctx.self && fromField(ev) && arcWas(ctx.game, ctx.self, AFEX, 'T'),
     resolve: async (ctx) => {
       await ctx.destroy(ctx.field('both'));
@@ -3196,6 +3199,10 @@ T('Limit Reverse', 'continuous', {
       mandatory: true,
       label: 'Destroy the monster and this card',
       categories: ['destroy'],
+      // https://edisonrul.ing/cards/l/limit-reverse.html — "Destroying the Special Summoned monster when it is changed to
+      // Defense Position, or when 'Limit Reverse' is removed from the field, does not start a Chain." (The leave-the-field
+      // part is the Game.link rule cleanup, also chainless.)
+      noChain: true,
       eventFilter: (ctx, ev) => {
         const c = evc(ev);
         return ctx.self.faceUp && !!c && ctx.self.linkedTo === c.uid && c.location === 'mzone' && c.pos === 'def';
