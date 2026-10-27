@@ -304,6 +304,20 @@ const dragoActive = (g: Game) => fieldCardActive(g, "Koa'ki Meiru Drago", 'monst
 const graveOrganismActive = (g: Game) => fieldCardActive(g, 'Grave of the Super Ancient Organism', 'st');
 const dragoBlocks = (g: Game, c: C) => c.isMonster && isAttr(c, 'LIGHT', 'DARK') && dragoActive(g);
 const faceUpKing = (g: Game, except?: C) => g.allFieldCards().some((c) => c !== except && faceUpOn(c) && c.name === 'King of the Beasts');
+/**
+ * G.B. Hunter: effects that return cards from the field to the Deck / Extra Deck cannot be activated (and Contact
+ * Fusions that shuffle the materials you control into the Deck cannot be performed), instead of being activated with
+ * the return silently skipped. Covers the Gladiator Beast tag-outs (optional End-of-Battle-Phase returns), and the
+ * field-to-Deck costs/effects named below.
+ */
+const GB_HUNTER_NAMED = new Set(['Test Tiger', 'Raptor Wing Strike']);
+function gbHunterBlocks(g: Game, c: C, ef: EffectDef) {
+  if (!gbHunterActive(g) || ef.kind === 'continuous') return false;
+  if (ef.kind === 'proc') return !!c.data.fusion?.noPoly && /shuffling the above cards/i.test(c.data.text);
+  if (!(ef.categories ?? []).includes('toDeck')) return false;
+  if (ef.kind === 'trigger' && ef.event === 'battleEnd' && !ef.mandatory && c.location === 'mzone') return true;
+  return GB_HUNTER_NAMED.has(c.name);
+}
 /** Grave of the Super Ancient Organism: "nor can players activate their effects". */
 function organismBlocks(g: Game, c: C, ef: EffectDef) {
   if (!c.isMonster || c.location !== 'mzone' || !c.faceUp || ef.kind === 'continuous' || ef.kind === 'proc') return false;
@@ -371,7 +385,7 @@ export function ensureRgbtPatches(g: Game) {
   const origCanSynchro = g.canSynchro.bind(g);
   anyG.canSynchro = (p: PlayerId, s: C) => !dragoBlocks(g, s) && origCanSynchro(p, s);
   const origCanProc = g.canProc.bind(g);
-  anyG.canProc = (p: PlayerId, c: C, ef: EffectDef, idx: number) => !dragoBlocks(g, c) && origCanProc(p, c, ef, idx);
+  anyG.canProc = (p: PlayerId, c: C, ef: EffectDef, idx: number) => !dragoBlocks(g, c) && !gbHunterBlocks(g, c, ef) && origCanProc(p, c, ef, idx);
 
   const origCanNS = g.canNormalSummon.bind(g);
   anyG.canNormalSummon = (p: PlayerId, card: C, set = false) => {
@@ -388,11 +402,17 @@ export function ensureRgbtPatches(g: Game) {
   };
 
   const origCAE = g.canActivateEffect.bind(g);
-  anyG.canActivateEffect = (player: PlayerId, card: C, ef: EffectDef, idx: number, mode: any) => (organismBlocks(g, card, ef) ? null : origCAE(player, card, ef, idx, mode));
+  anyG.canActivateEffect = (player: PlayerId, card: C, ef: EffectDef, idx: number, mode: any) =>
+    organismBlocks(g, card, ef) || gbHunterBlocks(g, card, ef) ? null : origCAE(player, card, ef, idx, mode);
   const origActivate = g.activate.bind(g);
   anyG.activate = async (player: PlayerId, act: Activation) => {
     if (organismBlocks(g, act.card, act.effect)) {
       g.log(`Grave of the Super Ancient Organism: ${act.card.name}'s effect cannot be activated.`, 'chain', player);
+      return null;
+    }
+    // Triggers (tag-outs) do not go through canActivateEffect: refuse them here.
+    if (gbHunterBlocks(g, act.card, act.effect)) {
+      g.log(`G.B. Hunter: ${act.card.name}'s effect cannot be activated (cards on the field cannot be returned to the Deck).`, 'chain', player);
       return null;
     }
     return origActivate(player, act);
@@ -2212,7 +2232,8 @@ monster('Beast Striker', {
         await ctx.discard(d, 'cost');
       },
       resolve: async (ctx) => {
-        await summonFromDeck(ctx, (c) => c.name === 'Moja', 'Special Summon 1 "Moja" from your Deck.', 'def');
+        // No position is specified: either Attack or Defense Position.
+        await summonFromDeck(ctx, (c) => c.name === 'Moja', 'Special Summon 1 "Moja" from your Deck.', ctx.game.controllers[ctx.player]?.isHuman ? 'choose' : 'def');
       },
       ai: {
         score: (ctx) => {
