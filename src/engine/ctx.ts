@@ -248,8 +248,12 @@ export class Ctx {
     if (list.some((c) => c.location === 'deck') && this.game.queryPlayer(this.player, 'cannotAddFromDeck')) return [];
     const r = await this.game.toHand(list, reason, this.player, this.self);
     if (r.length && list.some((c) => c.owner === this.player)) {
-      const shown = r.filter((c) => c.location === 'hand');
-      if (shown.length) this.game.log(`${this.game.players[this.player].name} adds ${shown.map((c) => c.name).join(', ')} to their hand.`, 'action', this.player);
+      // name only the cards the opponent saw: a Set card bounced to the hand (Giant Trunade...) stays hidden
+      const inHand = r.filter((c) => c.location === 'hand');
+      const shown = inHand.filter((c) => c.revealedUntil >= this.game.turn).map((c) => c.name);
+      const hidden = inHand.length - shown.length;
+      if (hidden) shown.push(hidden === 1 ? 'a face-down card' : `${hidden} face-down cards`);
+      if (shown.length) this.game.log(`${this.game.players[this.player].name} adds ${shown.join(', ')} to their hand.`, 'action', this.player);
     }
     return r;
   }
