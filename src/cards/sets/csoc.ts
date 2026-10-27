@@ -22,6 +22,7 @@
 import { monster, spell, token, trap } from '../define';
 import { bestTarget, cardValue } from '../helpers';
 import type { CardData, CardInstance, EffectDef } from '../../engine/card';
+import { faceUpFlag } from '../../engine/card';
 import type { Ctx } from '../../engine/ctx';
 import type { Action, PlayerController } from '../../engine/controller';
 import type { ChainLink, Game } from '../../engine/game';
@@ -1783,6 +1784,8 @@ M('Cactus Fighter', {
   ],
 });
 
+// "Once while this card is face-up on the field": the engine drops the flag when it is turned face-down.
+faceUpFlag('overdriveUsed');
 M(OVERDRIVE, {
   attribute: 'LIGHT',
   race: 'Psychic',
@@ -1814,16 +1817,6 @@ M(OVERDRIVE, {
         ctx.game.shuffleDeck(ctx.player);
       },
       ai: { score: (ctx) => (ctx.lp >= 4000 ? 45 : 0) },
-    },
-    {
-      // Bookkeeping only (never activates): "once while this card is face-up" — turned face-down (Book of Moon) and
-      // flipped face-up again, it can use the effect again (face-down monsters see no other events, so this is done on the flip).
-      kind: 'trigger',
-      event: 'flipped',
-      eventFilter: (ctx, ev) => {
-        if (ev.card === ctx.self) delete ctx.self.flags.overdriveUsed;
-        return false;
-      },
     },
   ],
 });

@@ -14,6 +14,7 @@
 import { monster, spell, token, trap } from '../define';
 import { bestTarget, cardValue, destroyTargets, selfDestroysByBattle } from '../helpers';
 import type { CardInstance, EffectDef } from '../../engine/card';
+import { faceUpFlag } from '../../engine/card';
 import type { Ctx } from '../../engine/ctx';
 import type { Game } from '../../engine/game';
 import type { BattlePos, GameEvent, Location, PlayerId, Race } from '../../engine/types';
@@ -1629,6 +1630,8 @@ monster('Falchionβ', {
 const falchionFilter = (c: C) => c.isMonster && c.data.attribute === 'LIGHT' && c.data.race === 'Machine' && (c.data.atk ?? 0) <= 1200;
 const falchionRevive = (ctx: Ctx) => ctx.grave('me', (c) => falchionFilter(c) && ctx.canSummonCard(c));
 
+// "Once while this card is face-up on the field": the engine drops the flag when it is turned face-down.
+faceUpFlag('fulhelmUsed');
 monster('XX-Saber Fulhelmknight', {
   attribute: 'EARTH',
   race: 'Warrior',
@@ -1667,16 +1670,6 @@ monster('XX-Saber Fulhelmknight', {
           const td = t.faceUp ? (t.pos === 'atk' ? ctx.atk(t) : ctx.def(t)) : 1000;
           return atk >= td ? 1 : 0;
         },
-      },
-    },
-    {
-      // "Once while this card is face-up on the field": once turned face-down (Book of Moon etc.) and flipped face-up
-      // again, the attack negation can be used again (bookkeeping, never activates).
-      kind: 'trigger',
-      event: 'flipped',
-      eventFilter: (ctx, ev) => {
-        if (ev.card === ctx.self) delete ctx.self.flags.fulhelmUsed;
-        return false;
       },
     },
     {

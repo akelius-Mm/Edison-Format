@@ -20,6 +20,7 @@
 import { monster, spell, token, trap } from '../define';
 import { cardValue, flip } from '../helpers';
 import type { CardData, CardInstance, EffectDef, QueryKey } from '../../engine/card';
+import { faceUpFlag } from '../../engine/card';
 import { Ctx } from '../../engine/ctx';
 import type { Action } from '../../engine/controller';
 import type { ChainLink, Game } from '../../engine/game';
@@ -1386,6 +1387,8 @@ M('Gragonith, Lightsworn Dragon', {
   ],
 });
 
+// "Once, while this card is face-up on the field": the engine drops the flag (and the Spell Counters) when it is turned face-down.
+faceUpFlag('valkPlaced');
 M('Dark Valkyria', {
   attribute: 'DARK',
   race: 'Fairy',

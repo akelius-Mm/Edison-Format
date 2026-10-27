@@ -1041,8 +1041,8 @@ export class Game {
     card.pos = pos;
     card.faceUp = faceUp;
     if (!faceUp) {
-      card.tempMods = [];
-      card.flags.flipped = false;
+      // face-up -> face-down: it is a new card once flipped face-up again (equips on it are destroyed by ruleCleanup)
+      if (!wasFaceDown) card.resetOnFaceDown();
       await this.ruleCleanup();
     }
     this.beginBatch();
