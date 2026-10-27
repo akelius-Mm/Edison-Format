@@ -2075,15 +2075,18 @@ S('Domino Effect', 'continuous', {
       label: 'Send 1 monster: destroy 1 opponent monster',
       categories: ['destroy'],
       eventFilter: (ctx, ev) => ev.fromController === ctx.opp && evc(ev)?.location === 'grave' && stActive(ctx),
-      canActivate: (ctx) => ctx.monsters('me').length > 0 && ctx.monsters('opp').length > 0,
+      // Sending your monster is the cost; the effect targets 1 monster your opponent controls:
+      // https://edisonrul.ing/cards/d/domino-effect.html
+      canActivate: (ctx) => ctx.monsters('me').length > 0 && ctx.monsters('opp', (c) => ctx.canTarget(c)).length > 0,
       activate: async (ctx) => {
         const sel = await ctx.select(ctx.monsters('me'), 1, 1, 'Send 1 monster you control to the Graveyard.', 'cost', { aiScore: (c) => -cardValue(ctx.game, c) });
         if (!sel.length) return false;
         await ctx.sendToGrave(sel, 'cost');
+        await ctx.selectTargets(ctx.monsters('opp'), 1, 1, 'Target 1 monster your opponent controls to destroy.', 'destroy');
       },
       resolve: async (ctx) => {
-        const [t] = await ctx.select(ctx.monsters('opp'), 1, 1, 'Destroy 1 monster your opponent controls.', 'destroy');
-        if (t) await ctx.destroy(t);
+        const t = ctx.validTargets((c) => c.location === 'mzone');
+        if (t.length) await ctx.destroy(t);
       },
       ai: {
         score: (ctx) => {
@@ -2681,7 +2684,9 @@ T('Defense Draw', 'normal', {
       kind: 'activate',
       damageStep: true,
       categories: ['protect', 'draw'],
-      condition: (ctx) => !ctx.isMyTurn && !!ctx.battle && ctx.battle.inDamageStep && !ctx.battle.calc && !ctx.battle.negated,
+      // Not if you would take no battle damage, nor with an empty Deck: https://edisonrul.ing/cards/d/defense-draw.html
+      condition: (ctx) =>
+        !ctx.isMyTurn && !!ctx.battle && ctx.battle.inDamageStep && !ctx.battle.calc && !ctx.battle.negated && expectedBattleDamage(ctx.game, ctx.player) > 0 && ctx.deck('me').length > 0,
       resolve: async (ctx) => {
         ensureTdgsPatches(ctx.game);
         const b = ctx.battle as any;

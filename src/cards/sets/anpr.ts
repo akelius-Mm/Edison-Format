@@ -857,7 +857,9 @@ monster('Earthbound Immortal Cusillu', {
         if (!(await ctx.confirm(`Tribute 1 other monster instead of destroying ${ctx.self.name} (and halve your opponent's LP)?`))) return [];
         const [t] = await ctx.select(others, 1, 1, 'Tribute 1 other monster.', 'tribute');
         if (!t) return [];
-        await tributeCost(ctx, [t]);
+        // Tributing is part of the effect, not a cost: https://edisonrul.ing/cards/e/earthbound-immortal-cusillu.html
+        ctx.game.log(`${ctx.game.players[ctx.player].name} Tributes ${t.name}.`, 'action', ctx.player);
+        await ctx.game.moveCards([t], 'grave', { reason: 'tribute', reasons: ['tribute', 'effect'], reasonPlayer: ctx.player, reasonCard: ctx.self });
         const ps = ctx.game.players[ctx.opp];
         ps.lp = Math.ceil(ps.lp / 2);
         ctx.log(`${ps.name}'s LP are halved (LP ${ps.lp}).`);
@@ -1451,19 +1453,22 @@ monster('Cyborg Doctor', {
       opt: true,
       label: 'Tribute Tuner: revive',
       categories: ['specialSummon'],
-      canActivate: (ctx) => ctx.faceUpMonsters('me', (c) => c.isTuner && tributable(ctx, c)).some((t) => doctorMatches(ctx, t, true).length > 0),
+      // A face-down Tuner can be Tributed (cost); the effect targets 1 monster in your GY:
+      // https://edisonrul.ing/cards/c/cyborg-doctor.html
+      canActivate: (ctx) => ctx.monsters('me', (c) => c.isTuner && tributable(ctx, c)).some((t) => doctorMatches(ctx, t, true).length > 0),
       activate: async (ctx) => {
-        const tuners = ctx.faceUpMonsters('me', (c) => c.isTuner && tributable(ctx, c)).filter((t) => doctorMatches(ctx, t, true).length > 0);
+        const tuners = ctx.monsters('me', (c) => c.isTuner && tributable(ctx, c)).filter((t) => doctorMatches(ctx, t, true).length > 0);
         const [t] = await ctx.select(tuners, 1, 1, 'Tribute 1 Tuner monster you control.', 'tribute');
-        ctx.data.attr = t.data.attribute;
-        ctx.data.level = ctx.level(t);
+        if (!t) return false;
+        const attr = t.data.attribute;
+        const level = t.faceUp ? ctx.level(t) : lvl(t);
         await tributeCost(ctx, [t]);
+        const cands = ctx.grave('me', (c) => c.isMonster && c.data.attribute === attr && lvl(c) === level && ctx.canSummonCard(c));
+        await ctx.selectTargets(cands, 1, 1, 'Target 1 monster with the same Attribute and Level in your GY.', 'specialSummon');
       },
       resolve: async (ctx) => {
-        if (!ctx.canSpecialSummon()) return;
-        const cands = ctx.grave('me', (c) => c.isMonster && c.data.attribute === ctx.data.attr && lvl(c) === ctx.data.level && ctx.canSummonCard(c));
-        const sel = await ctx.select(cands, 1, 1, 'Special Summon 1 monster with the same Attribute and Level from your GY.', 'specialSummon');
-        if (sel.length) await ctx.specialSummon(sel[0]);
+        const [t] = ctx.validTargets((c) => c.location === 'grave');
+        if (t && ctx.canSummonCard(t)) await ctx.specialSummon(t);
       },
       ai: {
         score: (ctx) => {
@@ -3124,17 +3129,23 @@ trap('Discord', 'continuous', {
       mods: [{ q: 'cannotBeSynchroMaterial', to: 'cards', filter: (_ctx, c) => c.location === 'mzone' }],
     },
     {
+      // Sending it to the GY on your 3rd End Phase does not start a Chain: https://edisonrul.ing/cards/d/discord.html
       kind: 'trigger',
       event: 'phaseStart',
       range: ['szone'],
-      mandatory: true,
-      label: 'Turn count',
-      eventFilter: (ctx, ev) => ev.phase === 'end' && ctx.isMyTurn && stActive(ctx),
-      resolve: async (ctx) => {
-        if (!ctx.self.onField) return;
-        const n = (ctx.self.counters.discord ?? 0) + 1;
-        ctx.self.counters.discord = n;
-        if (n >= 3) await ctx.sendToGrave(ctx.self);
+      label: '(End Phase count)',
+      eventFilter: (ctx, ev) => {
+        if (ev.phase !== 'end' || !ctx.isMyTurn || !stActive(ctx)) return false;
+        const me = ctx.self;
+        const n = (me.counters.discord ?? 0) + 1;
+        me.counters.discord = n;
+        if (n >= 3) {
+          const mid = me.moveId;
+          ctx.game.addDelayed('end', async () => {
+            if (me.onField && me.moveId === mid) await ctx.game.sendToGrave([me], 'effect', me.controller, me);
+          });
+        }
+        return false;
       },
     },
   ],
@@ -3198,13 +3209,17 @@ trap('Depth Amulet', 'continuous', {
       event: 'attackDeclared',
       label: 'Discard: negate attack',
       categories: ['negateAttack'],
+      // Targets the attacking monster; discarding is not a cost: the discard and the negation happen together on
+      // resolution: https://edisonrul.ing/cards/d/depth-amulet.html
       eventFilter: (ctx, ev) => evc(ev)?.controller === ctx.opp && !!ctx.battle && !ctx.battle.inDamageStep && !ctx.battle.negated,
-      canActivate: (ctx) => ctx.hand().length > 0,
+      canActivate: (ctx) => ctx.hand().length > 0 && !!ctx.battle && ctx.canTarget(ctx.battle.attacker),
       activate: async (ctx) => {
-        await ctx.discardFromHand(1, undefined, 'cost', ctx.player, 'Discard 1 card.');
+        if (ctx.battle) ctx.addTargets([ctx.battle.attacker]);
       },
       resolve: async (ctx) => {
-        if (ctx.battle) ctx.negateAttack();
+        if (!ctx.hand().length) return;
+        const d = await ctx.discardFromHand(1, undefined, 'effect', ctx.player, 'Discard 1 card.');
+        if (d.length && ctx.battle && ctx.validTargets((c) => c === ctx.battle?.attacker).length) ctx.negateAttack();
       },
       ai: {
         score: (ctx) => {
@@ -3353,9 +3368,13 @@ trap('Core Reinforcement', 'continuous', {
       mandatory: true,
       label: 'Take damage',
       categories: ['damage'],
+      // Not when the monster is destroyed because this card left the field first (MST in the End Phase), but yes when
+      // both are destroyed together (Icarus Attack): https://edisonrul.ing/cards/c/core-reinforcement.html
       eventFilter: (ctx, ev) => {
         const l = coreLinks.get(ctx.self);
-        return !!l && ev.card === l.mon && l.mon.moveId === l.moveId + 1 && ctx.phase === 'end' && ctx.game.turnPlayer === ctx.player;
+        return (
+          !!l && ev.card === l.mon && l.mon.moveId === l.moveId + 1 && ctx.phase === 'end' && ctx.game.turnPlayer === ctx.player && !reasonsOf(ev).includes('rule')
+        );
       },
       resolve: async (ctx) => {
         const l = coreLinks.get(ctx.self);

@@ -1049,7 +1049,15 @@ monster('Earthbound Immortal Aslla piscu', {
       mandatory: true,
       label: 'Destroy face-up monsters: 800 damage each',
       categories: ['destroy', 'destroyMulti', 'damage'],
-      eventFilter: (ctx, ev) => ev.card === ctx.self && ev.from === 'mzone' && ev.fromFaceUp !== false && ev.reasonCard !== ctx.self,
+      // Not when it is returned to the Deck or banished face-down: https://edisonrul.ing/cards/e/earthbound-immortal-aslla-piscu.html
+      eventFilter: (ctx, ev) =>
+        ev.card === ctx.self &&
+        ev.from === 'mzone' &&
+        ev.fromFaceUp !== false &&
+        ev.reasonCard !== ctx.self &&
+        ev.to !== 'deck' &&
+        ev.to !== 'extra' &&
+        !(ev.to === 'banished' && !ctx.self.faceUp),
       resolve: async (ctx) => {
         const fc = ctx.event?.fromController ?? ctx.player;
         const opp = ctx.game.opp(fc);
