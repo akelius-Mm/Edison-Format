@@ -467,16 +467,24 @@ defTrap('Compulsory Evacuation Device', 'normal', {
   ],
 });
 
+/**
+ * Phoenix Wing Wind Blast cannot target a face-up non-Continuous, non-Equip Spell/Trap that was activated (it is on the
+ * chain, already "considered destroyed"); a face-up "Swords of Revealing Light" that stays on the field can be targeted.
+ */
+const pwwbTargetable = (ctx: Ctx) => (c: CardInstance) =>
+  !(c.faceUp && (c.isSpell || c.isTrap) && !['continuous', 'equip', 'field'].includes(c.data.stype ?? '') && c.data.ttype !== 'continuous' && ctx.game.chain.some((l) => l.card === c && l.isCardActivation));
 defTrap('Phoenix Wing Wind Blast', 'normal', {
-  text: 'Discard 1 card, then target 1 card your opponent controls; place that target on the top of the Deck.',
+  text: 'Discard 1 card. Return 1 card your opponent controls to the top of the Deck.',
   effects: [
     {
       kind: 'activate',
       categories: ['toDeck'],
-      canActivate: (ctx) => ctx.hand().length > 0 && ctx.field('opp', (c) => ctx.canTarget(c)).length > 0,
+      // https://edisonrul.ing/cards/p/phoenix-wing-wind-blast.html — a face-up non-Continuous, non-Equip Spell/Trap (one
+      // resolving on the chain) cannot be targeted: it is already "considered to be destroyed" once activated.
+      canActivate: (ctx) => ctx.hand().length > 0 && ctx.field('opp', (c) => pwwbTargetable(ctx)(c) && ctx.canTarget(c)).length > 0,
       activate: async (ctx) => {
         await ctx.discardFromHand(1, undefined, 'cost', ctx.player, 'Discard 1 card.');
-        await ctx.selectTargets(ctx.field('opp'), 1, 1, 'Target 1 card your opponent controls to place on top of the Deck.', 'toDeck');
+        await ctx.selectTargets(ctx.field('opp', pwwbTargetable(ctx)), 1, 1, 'Target 1 card your opponent controls to place on top of the Deck.', 'toDeck');
       },
       resolve: async (ctx) => {
         const t = ctx.validTargets((c) => c.onField);
@@ -666,11 +674,14 @@ function declarableNames(ctx: Ctx) {
 }
 
 defTrap('Mind Crush', 'normal', {
-  text: 'Declare 1 card name; if that card is in your opponent\'s hand, they must discard all copies of it. Otherwise, you discard 1 random card.',
+  text: 'Declare 1 card name. If that card is in your opponent\'s hand, they must discard all copies of it from their hand. If it is not, you randomly discard 1 card.',
   effects: [
     {
       kind: 'activate',
       categories: ['discard'],
+      // https://edisonrul.ing/cards/m/mind-crush.html — "You CANNOT activate "Mind Crush" while either player has no
+      // cards in hand."
+      canActivate: (ctx) => ctx.hand('me').length > 0 && ctx.hand('opp').length > 0,
       resolve: async (ctx) => {
         const g = ctx.game;
         const ctrl = g.controllers[ctx.player];

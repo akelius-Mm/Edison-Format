@@ -99,10 +99,12 @@ monster('Lumina, Lightsworn Summoner', {
       opt: true,
       label: 'Discard 1: revive a Lightsworn',
       categories: ['specialSummon', 'discard'],
+      // https://edisonrul.ing/cards/l/lumina-lightsworn-summoner.html — "You can't activate this effect without a valid
+      // target in the Graveyard, even if you would one as cost" (a Lightsworn discarded for the cost can still be the target).
       canActivate: (ctx) =>
         ctx.canSpecialSummon() &&
         ctx.hand().length > 0 &&
-        (ctx.grave('me', (c) => isLS(c) && (c.data.level ?? 0) <= 4 && ctx.canSummonCard(c)).length > 0 || ctx.hand('me', (c) => isLS(c) && (c.data.level ?? 0) <= 4).length > 0),
+        ctx.grave('me', (c) => isLS(c) && (c.data.level ?? 0) <= 4 && ctx.canSummonCard(c)).length > 0,
       activate: async (ctx) => {
         const disc = await ctx.select(ctx.hand(), 1, 1, 'Discard 1 card.', 'discard', { aiScore: (c) => lsDumpScore(ctx, c) });
         if (!disc.length) return false;
@@ -280,7 +282,7 @@ monster('Lyla, Lightsworn Sorceress', {
   atk: 1700,
   def: 200,
   sets: LS,
-  text: 'You can change this face-up Attack Position card to Defense Position, then target 1 Spell/Trap on the field; destroy it. This card\'s battle position cannot be changed until the end of your next turn. During each of your End Phases: Send the top 3 cards of your Deck to the GY.',
+  text: 'You can change this card from face-up Attack Position to face-up Defense Position and destroy 1 Spell or Trap Card your opponent controls. If you activate this effect, this card\'s battle position cannot be changed until the end of your next turn, except with a card effect. During each of your End Phases, send the top 3 cards of your Deck to the Graveyard.',
   aiValue: 500,
   effects: [
     {
@@ -288,15 +290,21 @@ monster('Lyla, Lightsworn Sorceress', {
       label: 'To Defense: destroy 1 Spell/Trap',
       categories: ['destroy'],
       condition: (ctx) => ctx.self.pos === 'atk' && ctx.self.faceUp,
-      canActivate: (ctx) => ctx.spellTraps('both', (c) => ctx.canTarget(c)).length > 0,
+      // https://edisonrul.ing/cards/l/lyla-lightsworn-sorceress.html — it targets 1 Spell/Trap your OPPONENT controls;
+      // the change to Defense Position is part of the effect (not a cost), and the target is not destroyed if Lyla
+      // cannot be changed to Defense Position when it resolves.
+      canActivate: (ctx) => ctx.spellTraps('opp', (c) => ctx.canTarget(c)).length > 0,
       activate: async (ctx) => {
-        await ctx.changePos(ctx.self, 'def', true);
-        await ctx.selectTargets(ctx.spellTraps('both'), 1, 1, 'Target 1 Spell/Trap on the field to destroy.', 'destroy');
+        await ctx.selectTargets(ctx.spellTraps('opp'), 1, 1, 'Target 1 Spell/Trap your opponent controls to destroy.', 'destroy');
+        ctx.self.flags.lylaLockUntil = ctx.turn + 2;
       },
       resolve: async (ctx) => {
+        const me = ctx.self;
+        if (me.location !== 'mzone' || !me.faceUp || me.pos !== 'atk') return;
+        await ctx.changePos(me, 'def', true);
+        if ((me.pos as string) !== 'def') return;
         const t = ctx.validTargets((c) => c.onField);
         if (t.length) await ctx.destroy(t);
-        if (ctx.self.location === 'mzone') ctx.self.flags.lylaLockUntil = ctx.turn + 2;
       },
       ai: {
         score: (ctx) => {

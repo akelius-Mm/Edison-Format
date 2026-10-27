@@ -1523,7 +1523,8 @@ export class Game {
       (c): c is CardInstance => !!c && c !== except && (c.faceUp || c.controller === player),
     );
     const toRemove = olds.filter((c) => c.faceUp || c.controller === player);
-    if (toRemove.length) await this.moveCards(toRemove, 'grave', { reason: 'rule', destroyed: true });
+    // reasonPlayer: whose new Field Spell destroyed it (Geartown cannot activate when its controller replaced it).
+    if (toRemove.length) await this.moveCards(toRemove, 'grave', { reason: 'rule', destroyed: true, reasonPlayer: player });
   }
 
   /** Run the chain: response windows then resolution. */
@@ -2429,8 +2430,6 @@ export class Game {
     // SDMM: "You must pay X LP to declare an attack with this card" (Machina Force).
     if (attacker.data.attackLpCost && !this.isNegated(attacker)) await this.payLp(p, attacker.data.attackLpCost);
     attacker.attacksThisTurn++;
-    attacker.attackedThisTurnOrWasAttacked = true;
-    if (target) target.attackedThisTurnOrWasAttacked = true;
     this.battle = {
       attacker,
       target,
@@ -2564,7 +2563,11 @@ export class Game {
         return;
       }
     }
-    // Damage calculation
+    // Damage calculation. Only now has a monster "battled" ("attacked or was attacked" for end-of-Battle-Phase effects): an
+    // attack negated or stopped before damage calculation does not count (Gladiator Beast rulings,
+    // https://edisonrul.ing/cards/g/gladiator-beast-bestiari.html).
+    attacker.attackedThisTurnOrWasAttacked = true;
+    if (target) target.attackedThisTurnOrWasAttacked = true;
     const atkA = this.getAtk(attacker);
     const losers: { card: CardInstance; by: CardInstance }[] = [];
     let dmg: { player: PlayerId; amount: number } | null = null;

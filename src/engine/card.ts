@@ -452,6 +452,9 @@ export class CardInstance {
    */
   resetOnFaceDown() {
     this.faceUpId++;
+    // A monster flipped face-down after battling no longer counts as having battled, even if flipped face-up again
+    // before the end of the Battle Phase (https://edisonrul.ing/cards/g/gladiator-beast-bestiari.html).
+    this.attackedThisTurnOrWasAttacked = false;
     this.tempMods = [];
     this.counters = {};
     for (const k of Object.keys(this.flags)) if (FACE_UP_FLAGS.has(k)) delete this.flags[k];

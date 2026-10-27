@@ -1697,16 +1697,21 @@ async function crmsTests() {
     eq(atk.location, 'grave', 'an Attack Position monster is destroyed, not returned');
   });
 
-  await test('Plaguespreader Zombie: offered in your Standby Phase only (a hand card goes on top of the Deck); not in the Main Phase', async () => {
+  // https://edisonrul.ing/cards/p/plaguespreader-zombie.html: "The ① Ignition Effect activates & resolves in the
+  // Graveyard" (2010 text: no Standby Phase restriction).
+  await test('Plaguespreader Zombie: an Ignition Effect from the GY in your Main Phase (a hand card goes on top of the Deck); no Standby Phase trigger', async () => {
     const { g, c0, place } = setup();
     const pz = place(0, cardByName('Plaguespreader Zombie'), 'grave');
     const h1 = place(0, T.brute, 'hand');
     let asked = 0;
     c0.confirmTrigger = async () => (asked++, true);
-    eq(g.legalMainActions(0).some((x) => x.type === 'activate' && x.card === pz), false, 'no Main Phase activation from the GY');
     g.turn = 3;
     await (g as any).setPhase('standby');
-    eq(asked, 1, 'asked once in the Standby Phase');
+    eq(asked, 0, 'not asked in the Standby Phase');
+    eq(pz.location, 'grave', 'still in the GY');
+    g.phase = 'main1';
+    eq(g.legalMainActions(0).some((x) => x.type === 'activate' && x.card === pz), true, 'Main Phase activation from the GY');
+    await activateCard(g, 0, pz);
     eq(pz.location, 'mzone', 'Special Summoned');
     eq(pz.banishOnLeave, true, 'banished when it leaves the field');
     eq(g.players[0].deck[g.players[0].deck.length - 1] === h1 || g.players[0].deck[0] === h1, true, 'hand card on top of the Deck');
@@ -4148,7 +4153,13 @@ async function sdmmTests() {
   // it is Special Summoned from the GY"; Macro Cosmos ruling on discarding Fortress for its own effect).
   const cog = findCard('Rules Test Cog') ?? normal('Rules Test Cog', 'EARTH', 'Machine', 1, 100, 100);
   const bigMachine = findCard('Rules Test Big Machine') ?? normal('Rules Test Big Machine', 'EARTH', 'Machine', 8, 2800, 2000);
-  const fortAct = (g: Game, c: CardInstance) => g.getActivations(0, { open: true }).find((a) => a.card === c);
+  // The Summon is an inherent Summon procedure, not an Ignition Effect (https://edisonrul.ing/cards/m/machina-fortress.html).
+  const fortAct = (g: Game, c: CardInstance) => g.legalMainActions(0).find((a) => a.type === 'proc' && a.card === c);
+  const fortSummon = async (g: Game, c: CardInstance) => {
+    const a = fortAct(g, c);
+    if (!a) throw new Error('Machina Fortress cannot be Summoned');
+    await g.performAction(0, a);
+  };
   const fortWhy = (g: Game, c: CardInstance) => {
     const ef = c.data.effects![0];
     return ef.whyNot ? ef.whyNot(new Ctx(g, c, ef, c.controller)) : 'none';
@@ -4167,7 +4178,7 @@ async function sdmmTests() {
     const f2 = place(0, cardByName('Machina Fortress'), 'hand');
     eq(!!fortAct(g, f), true, 'offered');
     eq(fortWhy(g, f), null, 'no why-not');
-    await activateCard(g, 0, f);
+    await fortSummon(g, f);
     eq([f, f2].filter((c) => c.location === 'mzone').length, 1, 'one Fortress Summoned');
     eq([f, f2].filter((c) => c.location === 'grave').length, 1, 'the other discarded');
   });
@@ -4185,7 +4196,7 @@ async function sdmmTests() {
       }
       return req.candidates.slice(0, req.min);
     };
-    await activateCard(g, 0, f);
+    await fortSummon(g, f);
     eq(asked.length, 1, 'one discard dialog');
     eq(asked[0].self, true, 'Fortress itself is offered as fodder');
     eq(asked[0].max, 3, 'several Machines can be selected at once');
@@ -4205,7 +4216,7 @@ async function sdmmTests() {
       calls++;
       return calls === 1 ? [k] : [f2];
     };
-    await activateCard(g, 0, f);
+    await fortSummon(g, f);
     eq(calls, 2, 'asked again after only 1/8');
     eq(f.location, 'mzone', 'Fortress Summoned from the hand');
     eq(f2.location, 'grave', 'second Fortress discarded');
@@ -4218,7 +4229,7 @@ async function sdmmTests() {
     const f2 = place(0, cardByName('Machina Fortress'), 'hand');
     const k = place(0, cog, 'hand');
     eq(fortWhy(g, f), null, 'no why-not');
-    await activateCard(g, 0, f);
+    await fortSummon(g, f);
     eq(f.location, 'mzone', 'GY Fortress Summoned');
     eq(f2.location, 'grave', 'hand Fortress discarded');
     eq(k.location, 'grave', 'Level 1 Machine discarded');
@@ -4232,7 +4243,7 @@ async function sdmmTests() {
     eq(fortWhy(g, f), 'needs Machines with 8+ Levels to discard\nYour hand has 1', 'why-not from the GY');
     const big = place(0, bigMachine, 'hand');
     c0.pick = (_g, req) => (req.purpose === 'discard' ? [big] : req.candidates.slice(0, req.min));
-    await activateCard(g, 0, f);
+    await fortSummon(g, f);
     eq(f.location, 'mzone', 'GY Fortress Summoned');
     eq(big.location, 'grave', 'Level 8 Machine discarded');
     eq(k.location, 'hand', 'Level 1 kept');
@@ -4244,7 +4255,7 @@ async function sdmmTests() {
     const y1 = place(0, cardByName('Yellow Gadget'), 'hand');
     const y2 = place(0, cardByName('Yellow Gadget'), 'hand');
     g.controllers[0] = new AIController('hard', 7);
-    await activateCard(g, 0, f);
+    await fortSummon(g, f);
     eq(f.location, 'mzone', 'Fortress Summoned');
     eq([y1, y2].filter((c) => c.location === 'hand').length, 1, 'one Gadget kept');
   });
@@ -4969,12 +4980,8 @@ async function extraDeckTests() {
     const { g, place } = setup();
     const ps = place(0, cardByName('Plaguespreader Zombie'), 'grave');
     place(0, T.wall, 'hand');
-    g.phase = 'standby';
-    g.beginBatch();
-    g.emit({ type: 'phaseStart', phase: 'standby', player: 0 } as any);
-    await g.processTriggers(true);
+    await activateCard(g, 0, ps);
     eq(ps.location, 'mzone', 'revived');
-    g.phase = 'main1';
     const a = place(0, lv3, 'mzone');
     const b = place(0, lv2, 'mzone');
     const brd = place(0, cardByName('Black Rose Dragon'), 'extra');
@@ -5200,7 +5207,7 @@ async function graveEffectTests() {
     const card = place(0, T.giant, 'hand');
     const light = place(1, cardByName('Consecrated Light'), 'mzone');
     light.faceUp = true;
-    await (g as any).setPhase('standby');
+    eq(g.getActivations(0, { open: true }).some((a) => a.card === plague), false, 'not offered');
     eq(plague.location, 'grave', 'still in the GY');
     eq(card.location, 'hand', 'no card was put back on the Deck');
   });
@@ -5416,17 +5423,17 @@ async function archetypeAuditTests() {
     const { g, place } = setup();
     const fort = place(0, cardByName('Machina Fortress'), 'grave');
     const g1 = place(0, cardByName('Green Gadget'), 'hand');
-    eq(offered(g, 0, fort), false, 'only 4 Levels in hand');
+    eq(g.legalMainActions(0).some((x) => x.type === 'proc' && x.card === fort), false, 'only 4 Levels in hand');
     const g2 = place(0, cardByName('Red Gadget'), 'hand');
-    eq(offered(g, 0, fort), true, '4 + 4 Levels');
-    await activateCard(g, 0, fort);
+    eq(g.legalMainActions(0).some((x) => x.type === 'proc' && x.card === fort), true, '4 + 4 Levels');
+    await g.performAction(0, g.legalMainActions(0).find((x) => x.type === 'proc' && x.card === fort)!);
     eq(fort.location, 'mzone', 'Fortress revived');
     eq(g1.location, 'grave', 'Green discarded');
     eq(g2.location, 'grave', 'Red discarded');
     const h = setup();
     const f2 = h.place(0, cardByName('Machina Fortress'), 'hand');
     h.place(0, cardByName('Machina Fortress'), 'grave');
-    eq(offered(h.g, 0, f2), false, 'a lone Fortress in the hand is only 7 Levels, even counting itself');
+    eq(h.g.legalMainActions(0).some((x) => x.type === 'proc' && x.card === f2), false, 'a lone Fortress in the hand is only 7 Levels, even counting itself');
   });
 
   await test('Machina Fortress: destroyed by battle → destroy 1 card the opponent controls', async () => {
@@ -7225,7 +7232,7 @@ async function gladiatorDeepTests() {
     eq(v.location, 'grave', 'Murmillo destroyed the opposing monster');
   });
 
-  await test('GB audit: Secutor (official text) — only if Gladiator-Summoned: after battling it Special Summons 2 and stays; never with only 1 free zone', async () => {
+  await test('GB audit: Secutor (official text) — only if Gladiator-Summoned: after battling it Special Summons 2 and stays; with only 1 free zone 1 is Summoned and the other destroyed', async () => {
     const a = setup();
     const sec = a.place(0, N('Gladiator Beast Secutor'), 'mzone');
     const laq = deckCard(a.g, 0, 'Gladiator Beast Laquari');
@@ -7257,9 +7264,13 @@ async function gladiatorDeepTests() {
     sec3.attackedThisTurnOrWasAttacked = true;
     for (let i = 0; i < 3; i++) c.place(0, T.wall, 'mzone');
     const l3 = deckCard(c.g, 0, 'Gladiator Beast Laquari');
-    deckCard(c.g, 0, 'Gladiator Beast Hoplomus');
+    const h3 = deckCard(c.g, 0, 'Gladiator Beast Hoplomus');
+    pickOnly(c.c0, [l3, h3]);
     await battleEnd(c.g);
-    eq(l3.location, 'deck', 'only 1 free zone: nothing');
+    // https://edisonrul.ing/cards/g/gladiator-beast-secutor.html: "If you have only 1 available Monster Zone Space, you
+    // will still choose 2 ... You will Special Summon one, and the other will be destroyed and sent to the Graveyard."
+    eq(l3.location, 'mzone', 'only 1 free zone: the first pick is Summoned');
+    eq(h3.location, 'grave', 'the other is destroyed and sent to the GY');
   });
 
   await test('GB audit: contact fusion — Gyzarus with Prisma named Bestiari; Heraklinos with Prisma named Laquari; never with a face-down or un-named material', async () => {

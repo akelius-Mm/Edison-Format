@@ -396,17 +396,20 @@ S('Machine Duplication', 'normal', {
         ctx.faceUpMonsters('me', (c) => c.data.race === 'Machine' && ctx.atk(c) <= 500 && ctx.deck('me', (d) => d.name === c.name && ctx.canSummonCard(d)).length > 0).length > 0,
       activate: async (ctx) => {
         const cands = ctx.faceUpMonsters('me', (c) => c.data.race === 'Machine' && ctx.atk(c) <= 500);
-        await ctx.selectTargets(cands, 1, 1, 'Select 1 face-up Machine-Type monster with 500 or less ATK you control.', 'target', {
+        const [t] = await ctx.selectTargets(cands, 1, 1, 'Select 1 face-up Machine-Type monster with 500 or less ATK you control.', 'target', {
           aiScore: (c) => ctx.deck('me', (d) => d.name === c.name).length * 100 + cardValue(ctx.game, c),
         });
+        ctx.data.name = t?.name;
       },
+      // https://edisonrul.ing/cards/m/machine-duplication.html — you still Special Summon from the Deck if the target was
+      // flipped face-down / left the field, has more than 500 ATK or is no longer a Machine by the time this resolves.
       resolve: async (ctx) => {
-        const [t] = ctx.validTargets((c) => faceUpOn(c) && c.controller === ctx.player && c.data.race === 'Machine' && ctx.atk(c) <= 500);
-        if (!t || !ctx.canSpecialSummon()) return;
-        const copies = ctx.deck('me', (d) => d.name === t.name && ctx.canSummonCard(d));
+        const name = ctx.data.name as string | undefined;
+        if (!name || !ctx.canSpecialSummon()) return;
+        const copies = ctx.deck('me', (d) => d.name === name && ctx.canSummonCard(d));
         const n = Math.min(2, copies.length, ctx.freeMZones());
         if (!n) return;
-        const pick = await ctx.select(copies, 1, n, `Special Summon up to ${n} "${t.name}" from your Deck.`, 'specialSummon');
+        const pick = await ctx.select(copies, 1, n, `Special Summon up to ${n} "${name}" from your Deck.`, 'specialSummon');
         if (pick.length) await ctx.specialSummon(pick, { pos: 'choose' });
         ctx.game.shuffleDeck(ctx.player);
       },

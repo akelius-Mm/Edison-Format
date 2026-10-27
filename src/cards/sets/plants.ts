@@ -383,7 +383,7 @@ monster('Level Eater', {
   level: 1,
   atk: 600,
   def: 0,
-  text: 'If this card is in your GY: You can target 1 Level 5 or higher monster you control; reduce its Level by 1, and if you do, Special Summon this card.',
+  text: 'If this card is in the Graveyard, you can activate its effect by selecting 1 face-up Level 5 or higher monster you control. Reduce that monster\'s Level by 1. Special Summon this card from the Graveyard.',
   aiValue: 500,
   effects: [
     {
@@ -397,10 +397,13 @@ monster('Level Eater', {
           aiScore: (c) => (c.isExtra ? 300 : 0) + (c.isTuner ? -200 : 100) + (c.name === 'Quickdraw Synchron' ? 150 : 0),
         });
       },
+      // https://edisonrul.ing/cards/l/level-eater.html — the target's Level is reduced even if it is below 5 by now, or
+      // if Level Eater already left the GY; Level Eater stays in the GY when the Level cannot be reduced.
       resolve: async (ctx) => {
-        const t = ctx.validTargets((c) => c.location === 'mzone' && c.faceUp && ctx.level(c) >= 5);
-        if (!t.length || ctx.self.location !== 'grave') return;
+        const t = ctx.validTargets((c) => c.location === 'mzone' && c.faceUp && ctx.level(c) > 1);
+        if (!t.length) return;
         ctx.addTempMod(t[0], 'level', -1, 'field');
+        if (ctx.self.location !== 'grave') return;
         const oppBest = Math.max(0, ...ctx.faceUpMonsters('opp', (m) => m.pos === 'atk').map((m) => ctx.atk(m)));
         await ctx.specialSummon(ctx.self, { pos: oppBest > 600 ? 'def' : 'choose' });
       },
