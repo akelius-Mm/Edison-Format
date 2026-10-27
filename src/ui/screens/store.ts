@@ -161,7 +161,9 @@ export function resolveDeck(ref: DeckRef): DeckInfo | null {
 }
 
 export function allDeckInfos(): DeckInfo[] {
-  return [...listCustomDecks().map(customInfo), ...PREMADE_DECKS.map(premadeInfo)];
+  // a deck with no cards yet (Deck Builder → New deck, left empty) stays in the Deck Builder, not in deck pickers
+  const used = listCustomDecks().filter((d) => d.main.length + d.extra.length + (d.side?.length ?? 0) > 0);
+  return [...used.map(customInfo), ...PREMADE_DECKS.map(premadeInfo)];
 }
 
 /**
