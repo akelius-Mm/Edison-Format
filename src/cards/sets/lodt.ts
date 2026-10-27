@@ -246,6 +246,8 @@ interface LodtGameState {
   /** Tour of Doom: player p cannot Normal/Flip Summon during turn `turn`. */
   tour: { p: PlayerId; turn: number }[];
   swampBusy: boolean;
+  /** Summon Limit: Summon events per player during turn `turn` (attempts, including negated ones). */
+  summons?: { turn: number; n: [number, number] };
 }
 const GSTATE = new WeakMap<Game, LodtGameState>();
 function gs(g: Game): LodtGameState {
@@ -254,10 +256,18 @@ function gs(g: Game): LodtGameState {
   return s;
 }
 
-/** Number of Summons player p has made this turn (Summon Limit). APPROX: counts successful Summons only, credited to the
- *  player whose field the monster lands on. */
+/**
+ * Number of Summons player p has made this turn (Summon Limit). 2010 rulings: count Summon events (Scapegoat's 4 Tokens are
+ * 1 Summon), and a negated Summon still counts. https://edisonrul.ing/cards/s/summon-limit.html
+ */
 function summonsThisTurn(g: Game, p: PlayerId) {
-  return turnEvents(g).filter((e) => e.type === 'summoned' && e.player === p).length;
+  const s = gs(g).summons;
+  return s && s.turn === g.turn ? s.n[p] : 0;
+}
+function countSummon(g: Game, p: PlayerId) {
+  const st = gs(g);
+  if (!st.summons || st.summons.turn !== g.turn) st.summons = { turn: g.turn, n: [0, 0] };
+  st.summons.n[p]++;
 }
 /** Summons player p may still make this turn (Infinity without an applying Summon Limit). */
 function summonsLeft(g: Game, p: PlayerId) {
@@ -389,10 +399,18 @@ export function ensureLodtPatches(g: Game) {
   anyG.specialSummon = async (cards: C[], player: PlayerId, opts: Parameters<Game['specialSummon']>[2] = {}) => {
     const ctrl = opts?.controller ?? player;
     let list = cards.filter((c) => !effectSummonForbidden(g, c, player, ctrl));
-    const left = summonsLeft(g, player);
-    if (left < list.length) list = list.slice(0, left);
+    if (summonsLeft(g, player) < 1) list = [];
     if (!list.length) return [];
-    return origSS(list, player, opts);
+    const r = await origSS(list, player, opts);
+    if (r.length) countSummon(g, player);
+    return r;
+  };
+  // Normal / Tribute / Flip Summons and inherent Special Summons (Synchro, procedures) all pass the summon-negation
+  // window once per Summon: count the attempt there (it counts even if it is negated).
+  const origSNW = g.summonNegationWindow.bind(g);
+  anyG.summonNegationWindow = async (cards: C[], p: PlayerId, method: string) => {
+    countSummon(g, p);
+    return origSNW(cards, p, method);
   };
   const origISS = g.inherentSpecialSummon.bind(g);
   anyG.inherentSpecialSummon = async (p: PlayerId, card: C, ...rest: any[]) => {
@@ -2675,7 +2693,9 @@ S('Spell Gear', 'normal', {
     {
       kind: 'activate',
       categories: ['specialSummon'],
-      canActivate: (ctx) => ctx.field('me', (c) => c.faceUp && isAncientGear(c)).length >= 3,
+      // 2010 ruling: cannot be activated without an "Ancient Gear Golem" left in your Deck.
+      // https://edisonrul.ing/cards/s/spell-gear.html
+      canActivate: (ctx) => ctx.field('me', (c) => c.faceUp && isAncientGear(c)).length >= 3 && ctx.deck('me', isAGG).length > 0,
       activate: async (ctx) => {
         const sel = await ctx.select(ctx.field('me', (c) => c.faceUp && isAncientGear(c)), 3, 3, 'Send 3 "Ancient Gear" cards you control to the GY.', 'cost');
         if (sel.length < 3) return false;

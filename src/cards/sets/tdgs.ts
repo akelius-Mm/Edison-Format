@@ -713,10 +713,14 @@ M('Twin-Shield Defender', {
       label: "Halve an opponent monster's ATK",
       categories: ['atkChange'],
       eventFilter: (ctx, ev) => ev.card === ctx.self && ev.fromController === ctx.player && ctx.self.location === 'grave',
-      condition: (ctx) => ctx.faceUpMonsters('opp').length > 0,
+      // 2010 ruling: it targets 1 face-up monster your opponent controls. https://edisonrul.ing/cards/t/twin-shield-defender.html
+      canActivate: (ctx) => ctx.faceUpMonsters('opp', (c) => ctx.canTarget(c)).length > 0,
+      activate: async (ctx) => {
+        await ctx.selectTargets(ctx.faceUpMonsters('opp'), 1, 1, 'Target 1 face-up monster your opponent controls (halve its ATK).', 'target', { aiScore: (c) => ctx.atk(c) });
+      },
       resolve: async (ctx) => {
-        const [t] = await ctx.select(ctx.faceUpMonsters('opp'), 1, 1, 'Halve the ATK of 1 face-up monster your opponent controls.', 'target', { aiScore: (c) => ctx.atk(c) });
-        if (t && faceUpOn(t)) ctx.addTempMod(t, 'atk', -Math.ceil(ctx.atk(t) / 2), 'turn');
+        const [t] = ctx.validTargets((c) => faceUpOn(c) && c.controller === ctx.opp);
+        if (t) ctx.addTempMod(t, 'atk', -Math.ceil(ctx.atk(t) / 2), 'turn');
       },
     },
   ],
@@ -2345,7 +2349,10 @@ function spiritEquipReturn(): EffectDef[] {
       label: '(equipped monster returned)',
       eventFilter: (ctx, ev) => {
         const c = evc(ev);
-        if (c && ctx.self.onField && ctx.self.equippedTo === c.uid && ev.fromController === ctx.self.controller) spiritHostBack.set(ctx.self, ctx.self.moveId + 1);
+        // 2010 rulings (Sword of Kusanagi): works when the Spirit you control is your opponent's; not when this card is
+        // your opponent's (taken with "Exchange"). https://edisonrul.ing/cards/s/sword-of-kusanagi.html
+        if (c && ctx.self.onField && ctx.self.equippedTo === c.uid && ev.fromController === ctx.self.controller && ctx.self.owner === ctx.self.controller)
+          spiritHostBack.set(ctx.self, ctx.self.moveId + 1);
         return false;
       },
     },
@@ -2799,9 +2806,14 @@ T('Synchro Deflector', 'normal', {
         const t = evo(ev);
         return !!t && faceUpOn(t) && t.controller === ctx.player && t.hasType('synchro');
       },
+      // 2010 ruling: it targets the opponent's monster it destroys. https://edisonrul.ing/cards/s/synchro-deflector.html
+      canActivate: (ctx) => ctx.monsters('opp', (c) => ctx.canTarget(c)).length > 0,
+      activate: async (ctx) => {
+        await ctx.selectTargets(ctx.monsters('opp'), 1, 1, 'Target 1 monster your opponent controls to destroy.', 'destroy', { aiScore: (c) => cardValue(ctx.game, c) });
+      },
       resolve: async (ctx) => {
         if (ctx.battle) ctx.negateAttack();
-        const [t] = await ctx.select(ctx.monsters('opp'), 1, 1, 'Destroy 1 monster your opponent controls.', 'destroy');
+        const [t] = ctx.validTargets((c) => c.location === 'mzone');
         if (t) await ctx.destroy(t);
       },
       ai: { score: () => 75 },

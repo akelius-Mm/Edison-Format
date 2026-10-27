@@ -122,7 +122,11 @@ spell('Pot of Avarice', 'normal', {
     {
       kind: 'activate',
       categories: ['draw', 'toDeck'],
-      canActivate: (ctx) => ctx.grave('me', isMonster).length >= 5 && ctx.deck().length >= 0,
+      // 2010 ruling: cannot be activated while "Transmigration Break" is active.
+      // https://edisonrul.ing/cards/t/transmigration-break.html
+      canActivate: (ctx) =>
+        ctx.grave('me', isMonster).length >= 5 &&
+        !ctx.game.allFieldCards().some((c) => c.name === 'Transmigration Break' && c.faceUp && c.activeOnField && !ctx.game.isNegated(c)),
       activate: async (ctx) => {
         await ctx.selectTargets(ctx.grave('me', isMonster), 5, 5, 'Target 5 monsters in your GY.', 'toDeck', {
           aiScore: (c) => (c.isExtra ? 2000 : 0) + (c.data.atk ?? 0),

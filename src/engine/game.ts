@@ -2253,8 +2253,10 @@ export class Game {
       if (c.hasType('synchro') && this.freeMZones(p) >= 0 && this.canSynchro(p, c)) out.push({ type: 'synchro', card: c });
     }
     for (const c of this.monsters(p)) {
+      // A Flip Summon changes the battle position: "cannot change its battle position" blocks it (Spellbinding Circle,
+      // 2010 ruling: https://edisonrul.ing/cards/s/spellbinding-circle.html).
       if (!c.faceUp && c.setTurn !== this.turn && c.summonTurn !== this.turn && c.posChangedTurn !== this.turn) {
-        out.push({ type: 'flip', card: c });
+        if (!this.queryCard(c, 'cannotChangePos')) out.push({ type: 'flip', card: c });
       } else if (c.faceUp && c.summonTurn !== this.turn && c.posChangedTurn !== this.turn && c.attacksThisTurn === 0 && !this.queryCard(c, 'cannotChangePos')) {
         out.push({ type: 'position', card: c });
       }

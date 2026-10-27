@@ -2056,10 +2056,12 @@ monster('Zeta Reticulant', {
       mandatory: true,
       label: 'Special Summon an Eva Token',
       categories: ['specialSummon'],
+      // 2010 ruling: the Token is still Summoned if Zeta Reticulant leaves the GY in response.
+      // https://edisonrul.ing/cards/z/zeta-reticulant.html
       eventFilter: (ctx, ev) => !!evc(ev)?.isMonster && ev.from === 'mzone' && ev.fromController === ctx.opp,
       condition: (ctx) => ctx.canSpecialSummon(),
       resolve: async (ctx) => {
-        if (ctx.self.location === 'grave' && ctx.canSpecialSummon()) await ctx.createTokens(evaToken, 1, 'def');
+        if (ctx.canSpecialSummon()) await ctx.createTokens(evaToken, 1, 'def');
       },
     },
   ],
@@ -2072,16 +2074,20 @@ monster('Tethys, Goddess of Light', {
   atk: 2400,
   def: 1800,
   aiValue: 800,
-  text: 'When you draw a Fairy monster(s) (except during the Damage Step): You can reveal 1 of those monsters; draw 1 card. This card must be face-up on the field to activate and to resolve this effect.',
+  text: 'When you draw a Fairy-Type monster(s), you can reveal 1 of those monsters to draw 1 more card.',
   effects: [
     {
+      // 2010 rulings: an optional "When" trigger (misses timing if the draw is not the last thing to happen, e.g.
+      // "Upstart Goblin"); it can be activated during the Damage Step. https://edisonrul.ing/cards/t/tethys-goddess-of-light.html
       kind: 'trigger',
       event: 'drawn',
+      when: true,
+      damageStep: true,
       label: 'Reveal a Fairy: draw 1',
       categories: ['draw'],
       eventFilter: (ctx, ev) => {
         const c = evc(ev);
-        return !!c && ev.player === ctx.player && raceIs(c, 'Fairy') && c.location === 'hand' && monActive(ctx) && !ctx.battle?.inDamageStep;
+        return !!c && ev.player === ctx.player && raceIs(c, 'Fairy') && c.location === 'hand' && monActive(ctx);
       },
       activate: async (ctx) => {
         const c = evc(ctx.event!)!;
@@ -2337,26 +2343,30 @@ spell('Star Blast', 'normal', {
       categories: [],
       // Current Level (a monster in hand may already be lowered by another Star Blast), as the activation uses.
       canActivate: (ctx) => ctx.lp > 500 && (ctx.faceUpMonsters('me', (c) => ctx.level(c) > 1).length > 0 || ctx.hand('me', (c) => c.isMonster && ctx.level(c) > 1).length > 0),
+      // 2010 rulings: Star Blast does not target; the monster is chosen when it resolves. The LP you can pay is capped by
+      // the highest Level among the legal choices at activation (no over-paying), and the chosen monster must keep a
+      // Level of 1 or more (paid 1000: no Level 2). No legal choice on resolution: no effect.
+      // https://edisonrul.ing/cards/s/star-blast.html
       activate: async (ctx) => {
         ensureCrmsPatches(ctx.game);
-        const cands = [...ctx.faceUpMonsters('me', (c) => ctx.level(c) > 1), ...ctx.hand('me', (c) => c.isMonster && ctx.level(c) > 1 && c !== ctx.self)];
-        const [m] = await ctx.select(cands, 1, 1, 'Choose 1 monster you control or in your hand.', 'buff', { aiScore: (c) => starBlastAiValue(ctx, c) });
-        if (!m) return false;
-        const lvNow = ctx.level(m);
-        const maxN = Math.min(lvNow - 1, Math.floor((ctx.lp - 1) / 500));
+        const cands = starBlastChoices(ctx, 1);
+        if (!cands.length) return false;
+        const maxLv = Math.max(...cands.map((c) => ctx.level(c)));
+        const maxN = Math.min(maxLv - 1, Math.floor((ctx.lp - 1) / 500));
         if (maxN < 1) return false;
+        const best = cands.reduce((a, c) => (starBlastAiValue(ctx, c) > starBlastAiValue(ctx, a) ? c : a), cands[0]);
+        const want = best.location === 'hand' ? Math.max(1, ctx.level(best) - 4) : 1;
         const opts = Array.from({ length: maxN }, (_, i) => `Pay ${(i + 1) * 500} LP (-${i + 1} Level)`);
-        const want = m.location === 'hand' ? Math.max(1, lvNow - 4) : 1;
         const i = await ctx.option('How many Life Points?', opts, (k) => -Math.abs(k + 1 - want));
-        ctx.data.m = m;
-        ctx.data.mid = m.moveId;
         ctx.data.n = i + 1;
         await ctx.payLp((i + 1) * 500);
       },
       resolve: async (ctx) => {
-        const m = ctx.data.m as C;
         const n = ctx.data.n as number;
-        if (m.moveId !== ctx.data.mid) return;
+        const cands = starBlastChoices(ctx, n);
+        if (!cands.length) return;
+        const [m] = await ctx.select(cands, 1, 1, `Choose 1 monster you control or in your hand (Level -${n}).`, 'buff', { aiScore: (c) => starBlastAiValue(ctx, c) });
+        if (!m) return;
         if (m.location === 'hand') {
           starBlast.set(m, { turn: ctx.turn, moveId: m.moveId, n });
           ctx.log(`${m.name}'s Level is reduced by ${n}.`);
@@ -2373,6 +2383,11 @@ spell('Star Blast', 'normal', {
     },
   ],
 });
+/** Star Blast: face-up monsters you control / monsters in your hand whose Level stays 1 or more after -n. */
+function starBlastChoices(ctx: Ctx, n: number) {
+  return [...ctx.faceUpMonsters('me', (c) => ctx.level(c) > n), ...ctx.hand('me', (c) => c.isMonster && ctx.level(c) > n && c !== ctx.self)];
+}
+
 /** AI: worth of making `c` summonable without Tributes. */
 function starBlastAiValue(ctx: Ctx, c: C) {
   if (c.location !== 'hand' || c.data.cannotNormalSummon || c.isExtra) return -1;
@@ -2517,14 +2532,27 @@ spell('Telekinetic Power Well', 'quickplay', {
     {
       kind: 'activate',
       categories: ['specialSummon'],
-      canActivate: (ctx) => ctx.canSpecialSummon() && ctx.grave('me', (c) => raceIs(c, 'Psychic') && lvl(c) <= 2 && ctx.canSummonCard(c)).length > 0,
-      resolve: async (ctx) => {
+      // 2010 ruling: it targets the Psychic monsters in the GY; if some are removed in response, the rest are still
+      // Summoned, and the damage counts only the monsters actually Summoned.
+      // https://edisonrul.ing/cards/t/telekinetic-power-well.html
+      canActivate: (ctx) =>
+        ctx.canSpecialSummon() && ctx.freeMZones() > 0 && ctx.grave('me', (c) => raceIs(c, 'Psychic') && lvl(c) <= 2 && ctx.canSummonCard(c) && ctx.canTarget(c)).length > 0,
+      activate: async (ctx) => {
         const cands = ctx.grave('me', (c) => raceIs(c, 'Psychic') && lvl(c) <= 2 && ctx.canSummonCard(c));
         const room = ctx.freeMZones();
-        if (!cands.length || !room) return;
-        const sel = await ctx.select(cands, 1, room, 'Special Summon any number of Level 2 or lower Psychic-Type monsters from your GY.', 'specialSummon', {
+        await ctx.selectTargets(cands, 1, Math.max(1, room), 'Target any number of Level 2 or lower Psychic-Type monsters in your GY.', 'specialSummon', {
           aiScore: (c) => (c.data.atk ?? 0) + (c.isTuner ? 500 : 0),
         });
+      },
+      resolve: async (ctx) => {
+        const room = ctx.freeMZones();
+        let sel = ctx.validTargets((c) => c.location === 'grave' && ctx.canSummonCard(c));
+        if (!sel.length || !room) return;
+        if (sel.length > room) {
+          sel = await ctx.select(sel, room, room, 'Special Summon monsters from your GY.', 'specialSummon', {
+            aiScore: (c) => (c.data.atk ?? 0) + (c.isTuner ? 500 : 0),
+          });
+        }
         // AI guard (not a rule): never take lethal damage from this card.
         if (!ctx.game.controllers[ctx.player].isHuman) while (sel.length > 1 && sel.reduce((a, c) => a + lvl(c), 0) * 300 >= ctx.lp) sel.pop();
         const r = await ctx.specialSummon(sel, { pos: 'choose' });
@@ -2687,6 +2715,9 @@ spell('Verdant Sanctuary', 'continuous', {
       categories: ['search'],
       eventFilter: (ctx, ev) => {
         const c = evc(ev);
+        // 2010 ruling: not for a face-down Insect that was attacked (flipped) and destroyed by battle.
+        // https://edisonrul.ing/cards/v/verdant-sanctuary.html
+        if (ev.dsId !== undefined && ctx.game.eventLog.some((e) => e.type === 'flipped' && e.card === c && e.dsId === ev.dsId)) return false;
         return !!c && raceIs(c, 'Insect') && ev.from === 'mzone' && ev.fromFaceUp !== false && reasonsOf(ev).includes('destroy') && stActive(ctx);
       },
       activate: async (ctx) => {
@@ -3394,7 +3425,9 @@ trap('Supernatural Regeneration', 'normal', {
     {
       kind: 'activate',
       categories: ['recover'],
-      condition: (ctx) => ctx.phase === 'end',
+      // 2010 ruling: cannot be activated if no Psychic-Type monster was sent to the GY this turn.
+      // https://edisonrul.ing/cards/s/supernatural-regeneration.html
+      condition: (ctx) => ctx.phase === 'end' && psychicsToGraveThisTurn(ctx.game) > 0,
       resolve: async (ctx) => {
         const n = psychicsToGraveThisTurn(ctx.game);
         if (n) await ctx.recover(ctx.player, 1000 * n);

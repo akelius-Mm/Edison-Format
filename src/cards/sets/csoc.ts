@@ -228,6 +228,8 @@ interface CsocGameState {
   gardenBusy: number;
   /** Urgent Tuning: Synchro Summon right after the Chain resolves. */
   urgent: PlayerId[];
+  /** Urgent Tuning's Synchro Summon is being performed (no summon-negation window). */
+  urgentSummoning?: boolean;
   /** Battle Mania: player p's listed monsters must attack during turn `turn`. */
   mania: { p: PlayerId; turn: number; uids: Set<number> }[];
   /** Mark of the Rose: control taken while equipped. */
@@ -476,9 +478,19 @@ export function ensureCsocPatches(g: Game) {
       const [syn] = await g.select(p, cands, 1, 1, 'Urgent Tuning: Synchro Summon 1 Synchro Monster.', 'specialSummon', {
         aiScore: (c) => (c.data.atk ?? 0) + (c.data.aiValue ?? 0),
       });
-      if (syn) await g.synchroSummon(p, syn);
+      if (!syn) continue;
+      s.urgentSummoning = true;
+      try {
+        await g.synchroSummon(p, syn);
+      } finally {
+        s.urgentSummoning = false;
+      }
     }
   };
+  // 2010 ruling: the Synchro Summon is part of Urgent Tuning's resolution, so "Solemn Judgment" cannot negate it.
+  // https://edisonrul.ing/cards/u/urgent-tuning.html
+  const origSNW = g.summonNegationWindow.bind(g);
+  anyG.summonNegationWindow = async (cards: C[], p: PlayerId, method: string) => (gs(g).urgentSummoning ? false : origSNW(cards, p, method));
 
   // ---- Battle Mania: forced attacks
   for (const ctrl of g.controllers) {
@@ -1286,7 +1298,8 @@ M('Storm Caller', {
         if (!b) return [];
         const saved: C[] = [];
         for (const c of cards) {
-          if (c.controller !== ctx.opp || c.location !== 'mzone') continue;
+          // 2010 ruling: not your own monster that your opponent controls. https://edisonrul.ing/cards/s/storm-caller.html
+          if (c.controller !== ctx.opp || c.owner !== ctx.opp || c.location !== 'mzone') continue;
           const by = b.attacker === c ? b.target : b.target === c ? b.attacker : null;
           if (!by || by === ctx.self || by.controller !== ctx.player || !isPsychic(by)) continue;
           if (!(await ctx.confirm(`Storm Caller: put ${c.name} on top of its owner's Deck instead of the Graveyard?`))) continue;
@@ -1611,7 +1624,8 @@ M('Tiger Dragon', {
         await ctx.selectTargets(ctx.cards('opp', 'szone', (c) => !c.faceUp), 1, 2, "Select up to 2 face-down cards in your opponent's Spell & Trap Card Zone.", 'destroy');
       },
       resolve: async (ctx) => {
-        const ts = ctx.validTargets((c) => c.onField);
+        // 2010 ruling: a target that was chained (now face-up) is not destroyed. https://edisonrul.ing/cards/t/tiger-dragon.html
+        const ts = ctx.validTargets((c) => c.onField && !c.faceUp);
         if (ts.length) await ctx.destroy(ts);
       },
     },
@@ -2916,6 +2930,21 @@ T('Urgent Tuning', 'normal', {
   ],
 });
 
+/**
+ * Synchro Strike: Synchro Summoned and not flipped face-up since (2010 ruling: not one turned face-down by "Book of Moon"
+ * and later Flip Summoned). https://edisonrul.ing/cards/s/synchro-strike.html
+ */
+function synchroSummonedStill(g: Game, c: C) {
+  if (c.summonMethod !== 'synchro') return false;
+  for (let i = g.eventLog.length - 1; i >= 0; i--) {
+    const e = g.eventLog[i];
+    if (e.card !== c) continue;
+    if (e.type === 'flipped') return false;
+    if (e.type === 'synchroSummoned') return true;
+  }
+  return true;
+}
+
 T('Synchro Strike', 'normal', {
   text: 'Select 1 Synchro Monster that was Synchro Summoned. It gains 500 ATK for each Synchro Material Monster used to Synchro Summon it, until the End Phase.',
   effects: [
@@ -2923,9 +2952,9 @@ T('Synchro Strike', 'normal', {
       kind: 'activate',
       categories: ['atkChange'],
       damageStep: true,
-      canActivate: (ctx) => ctx.faceUpMonsters('both', (c) => c.summonMethod === 'synchro' && ctx.canTarget(c)).length > 0,
+      canActivate: (ctx) => ctx.faceUpMonsters('both', (c) => synchroSummonedStill(ctx.game, c) && ctx.canTarget(c)).length > 0,
       activate: async (ctx) => {
-        await ctx.selectTargets(ctx.faceUpMonsters('both', (c) => c.summonMethod === 'synchro'), 1, 1, 'Select 1 Synchro Summoned monster.', 'buff', {
+        await ctx.selectTargets(ctx.faceUpMonsters('both', (c) => synchroSummonedStill(ctx.game, c)), 1, 1, 'Select 1 Synchro Summoned monster.', 'buff', {
           aiScore: (c) => (c.controller === ctx.player ? 1000 + ctx.atk(c) : 0),
         });
       },
@@ -3405,6 +3434,10 @@ T('Time Machine', 'normal', {
       canActivate: (ctx) => {
         const c = evc(ctx.event!);
         const ctrl = (ctx.event?.fromController ?? c?.owner) as PlayerId;
+        // 2010 ruling: cannot be activated if both monsters were destroyed by the same battle.
+        // https://edisonrul.ing/cards/t/time-machine.html
+        const ev = ctx.event!;
+        if (ev.dsId !== undefined && ctx.game.eventLog.some((e) => e.type === 'battleDestroyed' && e.dsId === ev.dsId && e.card !== c)) return false;
         return !!c && c.location === 'grave' && ctx.game.freeMZones(ctrl) > 0 && ctx.canSummonCard(c, ctrl === ctx.player ? 'me' : 'opp');
       },
       activate: async (ctx) => {

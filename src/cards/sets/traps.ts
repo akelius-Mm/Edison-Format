@@ -1215,6 +1215,17 @@ defTrap('Wall of Revealing Light', 'continuous', {
         ctx.self.flags.wallAmount = amount;
         ctx.log(`Monsters with ${amount} or less ATK cannot attack.`);
       },
+      // 2010 ruling: activated after an attack is declared, it stops that attack if the attacker's ATK is not more than
+      // the LP paid. https://edisonrul.ing/cards/w/wall-of-revealing-light.html
+      resolve: async (ctx) => {
+        const b = ctx.game.battle;
+        if (!b || b.inDamageStep || b.negated || !ctx.self.onField || ctx.game.isNegated(ctx.self)) return;
+        const a = b.attacker;
+        if (a.location === 'mzone' && a.controller === ctx.opp && ctx.atk(a) <= (ctx.self.flags.wallAmount ?? 0)) {
+          b.negated = true;
+          ctx.log(`The attack of ${a.name} stops (Wall of Revealing Light).`);
+        }
+      },
       ai: {
         score: (ctx) => {
           if (haveActiveCopy(ctx)) return 0;
@@ -1445,7 +1456,14 @@ defTrap('Spellbinding Circle', 'continuous', {
         });
       },
       resolve: async (ctx) => {
-        await bindTarget(ctx);
+        const t = await bindTarget(ctx);
+        // 2010 ruling: "If a monster attacks and you activate Spellbinding Circle, the monster's attack stops."
+        // https://edisonrul.ing/cards/s/spellbinding-circle.html
+        const b = ctx.game.battle;
+        if (t && b && b.attacker === t && !b.inDamageStep && !b.negated) {
+          b.negated = true;
+          ctx.log(`The attack of ${t.name} stops (Spellbinding Circle).`);
+        }
       },
       ai: { score: (ctx) => bindAiScore(ctx, 36, 0) },
     },

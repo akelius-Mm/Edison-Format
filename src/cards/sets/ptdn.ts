@@ -602,7 +602,9 @@ monster('Yubel', {
       when: true,
       label: 'Special Summon "Yubel - Terror Incarnate"',
       categories: ['specialSummon'],
-      eventFilter: (ctx, ev) => ev.card === ctx.self && ev.from === 'mzone' && ev.reasonCard !== ctx.self,
+      // 2010 rulings: it also activates when Yubel is destroyed in the hand or Deck, or face-down; its owner activates it.
+      // https://edisonrul.ing/cards/y/yubel.html
+      eventFilter: (ctx, ev) => ev.card === ctx.self && ev.reasonCard !== ctx.self,
       canActivate: (ctx) => ctx.canSpecialSummon() && ctx.cards('me', ['hand', 'deck', 'grave'], (c) => c.name === 'Yubel - Terror Incarnate').length > 0,
       resolve: async (ctx) => {
         await summonFromHandDeckGrave(ctx, (c) => c.name === 'Yubel - Terror Incarnate', 'Special Summon 1 "Yubel - Terror Incarnate" from your hand, Deck, or GY.', true, 'atk');
@@ -2484,13 +2486,15 @@ spell('Vicious Claw', 'equip', {
         if (me.location !== 'hand') return false;
         ctx.game.turnData[`ptdn:claw:${me.owner}`] = true;
         const cands = ctx.monsters('both', (c) => c !== foe);
+        let destroyed = false;
         if (cands.length) {
           const s = await ctx.select(cands, 1, 1, 'Destroy 1 monster (Vicious Claw).', 'destroy', {
             aiScore: (c) => (c === card ? -9000 : c.controller === ctx.player ? -cardValue(ctx.game, c) : cardValue(ctx.game, c)),
           });
-          if (s.length) await ctx.destroy(s);
+          if (s.length) destroyed = (await ctx.destroy(s)).length > 0;
         }
-        await ctx.damage(ctx.opp, 600);
+        // 2010 ruling: if no monster is destroyed, no damage is inflicted. https://edisonrul.ing/cards/v/vicious-claw.html
+        if (destroyed) await ctx.damage(ctx.opp, 600);
         if (ctx.game.freeMZones(ctx.opp) > 0 && !ctx.game.queryPlayer(ctx.player, 'cannotSpecialSummon')) await ctx.createTokens(evilToken, 1, 'atk', ctx.opp);
         return true;
       },
@@ -2782,8 +2786,10 @@ spell('Unleash Your Power!', 'quickplay', {
       kind: 'activate',
       categories: [],
       canActivate: (ctx) => ctx.faceUpMonsters('me', isGemini).length > 0,
+      // 2010 ruling: Gemini monsters already treated as Effect Monsters are unaffected (not Set in the End Phase).
+      // https://edisonrul.ing/cards/u/unleash-your-power.html
       activate: async (ctx) => {
-        ctx.data.list = ctx.faceUpMonsters('me', isGemini).map((c) => ({ c, mid: c.moveId }));
+        ctx.data.list = ctx.faceUpMonsters('me', (c) => isGemini(c) && !geminiActive(c)).map((c) => ({ c, mid: c.moveId }));
       },
       resolve: async (ctx) => {
         const list = (ctx.data.list as { c: C; mid: number }[]).filter((x) => faceUpOn(x.c) && x.c.moveId === x.mid && x.c.controller === ctx.player);

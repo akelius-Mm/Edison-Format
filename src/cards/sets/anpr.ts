@@ -1831,6 +1831,9 @@ monster('White Night Dragon', {
     {
       // APPROX: a mandatory effect in the real game; here it is a Quick Effect the AI always uses.
       kind: 'quick',
+      // 2010 ruling: can be activated in the Damage Step, more than once per Chain.
+      // https://edisonrul.ing/cards/w/white-night-dragon.html
+      damageStep: true,
       label: 'Negate targeting Spell/Trap',
       categories: ['negate'],
       condition: (ctx) => {
@@ -2220,11 +2223,16 @@ monster('Turbo Cannon', {
       opt: true,
       label: 'Destroy & burn',
       categories: ['destroy', 'damage'],
-      canActivate: (ctx) => ctx.faceUpMonsters('both').length > 0,
+      // 2010 rulings: it targets 1 face-up monster; not applied if the target is flipped face-down; the damage goes to
+      // its controller on resolution (half its current ATK). https://edisonrul.ing/cards/t/turbo-cannon.html
+      canActivate: (ctx) => ctx.faceUpMonsters('both', (c) => ctx.canTarget(c)).length > 0,
+      activate: async (ctx) => {
+        await ctx.selectTargets(ctx.faceUpMonsters('both'), 1, 1, 'Target 1 face-up monster on the field.', 'destroy', {
+          aiScore: (c) => (c.controller === ctx.opp ? 1000 + ctx.atk(c) : -ctx.atk(c)),
+        });
+      },
       resolve: async (ctx) => {
-        const cands = ctx.faceUpMonsters('both');
-        if (!cands.length) return;
-        const [t] = await ctx.select(cands, 1, 1, 'Destroy 1 face-up monster on the field.', 'destroy');
+        const [t] = ctx.validTargets((c) => faceUpOn(c));
         if (!t) return;
         const atk = ctx.atk(t);
         const who = t.controller;
