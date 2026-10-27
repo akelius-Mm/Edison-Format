@@ -28,7 +28,7 @@ import { AIController } from '../src/ai/ai';
 import { PREMADE_DECKS, buildDeckList } from '../src/decks';
 import { Game, GameOver, MAX_TURN_WORK, RUNAWAY_REASON } from '../src/engine/game';
 import { clearRestoring, markRestoring, restoreInterrupted, type SavedDuel } from '../src/ui/duel/resume';
-import { beginRisky, endRisky, interruptedStep, risky } from '../src/ui/crashGuard';
+import { beginRisky, bootGuard, endRisky, interruptedStep, risky } from '../src/ui/crashGuard';
 import { KEYS } from '../src/events/storage';
 import { advance, createEvent, finishRound, loadActiveEvent, pendingHumanMatch, reportScore, saveEvent, validateEvent, type EventRun } from '../src/events';
 import { bracketPairs } from '../src/locals/swiss';
@@ -163,6 +163,32 @@ console.error = () => {};
       check(threw, `bracketPairs(${n}) refuses`);
     }
     check(bracketPairs(64).length === 32, 'bracketPairs(64) still works');
+  }
+
+  // 5. app-wide breaker: a mark left while the app is on screen means the browser killed it
+  {
+    const on: Record<string, (() => void)[]> = {};
+    const target = { addEventListener: (t: string, f: () => void) => (on[t] ??= []).push(f) };
+    const g = globalThis as any;
+    g.window = target;
+    g.document = { ...target, visibilityState: 'visible' };
+    g.location = { hash: '#/events?view=run' };
+    const fire = (t: string) => on[t]?.forEach((f) => f());
+    localStorage.removeItem('edison.boot.v1');
+    check(bootGuard() === null, 'boot: a first start is not a crash');
+    // the app dies on the event screen: nothing runs, the mark stays
+    for (const k of Object.keys(on)) delete on[k];
+    const died = bootGuard();
+    check(died?.hash === '#/events?view=run', 'boot: a start after the app was killed on screen reports where it died');
+    // a normal close (background, then gone) is not a crash
+    g.document.visibilityState = 'hidden';
+    fire('visibilitychange');
+    for (const k of Object.keys(on)) delete on[k];
+    g.document.visibilityState = 'visible';
+    check(bootGuard() === null, 'boot: going to the background drops the mark');
+    fire('pagehide');
+    for (const k of Object.keys(on)) delete on[k];
+    check(bootGuard() === null, 'boot: closing the page drops the mark');
   }
 
   console.error = origError;

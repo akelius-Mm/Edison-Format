@@ -16,6 +16,9 @@ import { tournamentScreen } from './screens/tournament';
 import { playScreen } from './screens/play';
 import { mountTabBar } from './screens/tabbar';
 import { loadActiveDuel } from './duel/resume';
+import { bootGuard } from './crashGuard';
+import { getSettings, updateSettings } from './settings';
+import { toast } from './screens/dom';
 // Play a friend (online, room codes).
 import { friendScreen } from './screens/friend';
 // Friends Locals (a Swiss tournament between friends' phones).
@@ -39,6 +42,25 @@ export function startApp(root: HTMLElement) {
   registerRoute('friend', friendScreen);
   registerRoute('friend-locals', friendLocalsScreen);
   clear(root);
+  // The app was killed while on screen last time (iPhone: "A problem repeatedly occurred", nearly
+  // always memory). Open on Home instead of the screen that died, and turn off the two biggest memory
+  // users (music, official card scans) so the same screen does not die again the same way.
+  const crashed = bootGuard();
+  if (crashed) {
+    const s = getSettings();
+    const lighter = s.music || s.officialImages;
+    if (lighter) updateSettings({ music: false, officialImages: false });
+    if (!/^#?\/?(title)?$/.test(location.hash) && !location.hash.startsWith('#/friend?join=') && !location.hash.startsWith('#/friend-locals?join=')) history.replaceState(null, '', '#/title');
+    setTimeout(
+      () =>
+        toast(
+          lighter ? 'The app closed unexpectedly last time. Music and official card images are now off to save memory (Settings turns them back on).' : 'The app closed unexpectedly last time, so it opened on Home.',
+          'info',
+          6500,
+        ),
+      600,
+    );
+  }
   // The app was closed in the middle of a duel (iOS kills home-screen apps in the background):
   // open on Home, where the "Duel in progress" card resumes it.
   // (A friend's invite link still opens the join screen.)

@@ -71,3 +71,49 @@ export function installCrashGuard() {
   document.addEventListener('visibilitychange', () => document.visibilityState === 'hidden' && endRisky());
   window.addEventListener('pagehide', () => endRisky());
 }
+
+// ---------------------------------------------------------------- app-wide breaker
+// The same idea for the whole app: a mark is left while the app is open and on screen, and dropped
+// when it goes to the background or closes normally. A mark still there when the app starts means the
+// browser killed it while it was on screen (on iPhone, almost always for using too much memory).
+const BOOT_KEY = 'edison.boot.v1';
+
+export interface BootCrash {
+  /** The screen the app was on when it died. */
+  hash: string;
+  at: number;
+}
+
+/**
+ * Call once at startup, before the first screen opens. Returns the screen the app died on last time,
+ * or null when it closed normally.
+ */
+export function bootGuard(): BootCrash | null {
+  let crashed: BootCrash | null = null;
+  try {
+    const m = JSON.parse(localStorage.getItem(BOOT_KEY) || 'null') as BootCrash | null;
+    if (m && typeof m.hash === 'string' && typeof m.at === 'number') crashed = m;
+  } catch {
+    /* unreadable: treat as a normal start */
+  }
+  const mark = () => {
+    try {
+      localStorage.setItem(BOOT_KEY, JSON.stringify({ hash: location.hash, at: Date.now() } satisfies BootCrash));
+    } catch {
+      /* storage full: no guard */
+    }
+  };
+  const unmark = () => {
+    try {
+      localStorage.removeItem(BOOT_KEY);
+    } catch {
+      /* ignore */
+    }
+  };
+  mark();
+  window.addEventListener('hashchange', () => document.visibilityState === 'visible' && mark());
+  document.addEventListener('visibilitychange', () => (document.visibilityState === 'hidden' ? unmark() : mark()));
+  window.addEventListener('pagehide', unmark);
+  window.addEventListener('pageshow', mark);
+  return crashed;
+}

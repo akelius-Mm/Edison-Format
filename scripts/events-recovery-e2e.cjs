@@ -93,7 +93,8 @@ async function playFor(page, ms) {
   return 'time';
 }
 
-const dump = (page) => page.evaluate(() => Object.fromEntries(Object.keys(localStorage).map((k) => [k, localStorage.getItem(k)])));
+// (without the app-wide open mark, which a dump taken while the app is open always carries)
+const dump = (page) => page.evaluate(() => Object.fromEntries(Object.keys(localStorage).filter((k) => k !== 'edison.boot.v1').map((k) => [k, localStorage.getItem(k)])));
 
 /** A Regional with the player's round-1 duel in progress (game 1, some moves made), as saved on the phone. */
 async function buildState(browser) {
@@ -236,6 +237,22 @@ async function scenario(browser, name, storage, { hash, tapResume, until, then }
       },
     });
     ok(!after['edison.events.active.v1'] && !after['edison.duel.active.v1'], 'E: the event and its saved duel are gone');
+
+    // F. the app was killed while on the event screen (the open mark is still there): it opens on Home,
+    // says so, and turns music and official card scans off so the same screen does not die again
+    const killed = { ...withDuel((d) => (d.live = false)), 'edison.boot.v1': JSON.stringify({ hash: '#/events?view=run', at: Date.now() }) };
+    killed['edison.settings.v1'] = JSON.stringify({ ...JSON.parse(killed['edison.settings.v1']), music: true, officialImages: true });
+    await scenario(browser, 'F killed on screen', killed, {
+      hash: '#/events?view=run',
+      until: '.ui-toast',
+      then: async (page) => {
+        ok(/#\/title/.test(page.url()), `F: opens on Home (${page.url()})`);
+        ok(/closed unexpectedly/.test(await page.locator('.ui-toast').first().textContent()), 'F: says the app closed unexpectedly');
+        const st = await page.evaluate(() => JSON.parse(localStorage.getItem('edison.settings.v1')));
+        ok(st.music === false && st.officialImages === false, 'F: music and official images are off');
+        ok(!!(await page.locator('.home-resume--duel').count()), 'F: the duel can still be resumed from Home');
+      },
+    });
   } catch (e) {
     ok(false, `run: ${String(e).split('\n')[0]}`);
   } finally {

@@ -91,9 +91,26 @@ function decodeContext(): BaseAudioContext | null {
   }
 }
 
+// Music is decoded at a lower rate: a decoded track is raw float samples, about 35 MB per track at
+// 48 kHz, and a duel keeps two or three of them. iPhone Safari kills a tab that holds too much memory
+// ("A problem repeatedly occurred"), so tracks are kept at 22.05 kHz (about 16 MB each), which is
+// plenty for lo-fi loops. The live context resamples them as they play.
+const MUSIC_RATE = 22050;
+let musicDecoder: BaseAudioContext | null | undefined;
+function musicDecodeContext(): BaseAudioContext | null {
+  if (musicDecoder !== undefined) return musicDecoder ?? decodeContext();
+  try {
+    const OAC = (window as any).OfflineAudioContext || (window as any).webkitOfflineAudioContext;
+    musicDecoder = new OAC(2, 1, MUSIC_RATE) as OfflineAudioContext;
+  } catch {
+    musicDecoder = null;
+  }
+  return musicDecoder ?? decodeContext();
+}
+
 /** decodeAudioData with the callback form too (older Safari has no promise version). */
-export function decodeAudio(data: ArrayBuffer): Promise<AudioBuffer> {
-  const ac = decodeContext();
+export function decodeAudio(data: ArrayBuffer, opts: { music?: boolean } = {}): Promise<AudioBuffer> {
+  const ac = opts.music ? musicDecodeContext() : decodeContext();
   if (!ac) return Promise.reject(new Error('Web Audio unavailable'));
   return new Promise<AudioBuffer>((resolve, reject) => {
     let settled = false;
@@ -112,10 +129,10 @@ export function decodeAudio(data: ArrayBuffer): Promise<AudioBuffer> {
   });
 }
 
-async function fetchDecode(url: string): Promise<AudioBuffer> {
+async function fetchDecode(url: string, opts: { music?: boolean } = {}): Promise<AudioBuffer> {
   const res = await fetch(url);
   if (!res.ok) throw new Error(`${url}: HTTP ${res.status}`);
-  return decodeAudio(await res.arrayBuffer());
+  return decodeAudio(await res.arrayBuffer(), opts);
 }
 
 // ---------------------------------------------------------------- sound-effect bank
@@ -160,14 +177,14 @@ export function loadMusicTrack(id: string): Promise<AudioBuffer> {
   let p = music.get(id);
   if (!p) {
     const t = trackById(id);
-    p = t ? fetchDecode(audioUrl(t.file)) : Promise.reject(new Error(`No track ${id}`));
+    p = t ? fetchDecode(audioUrl(t.file), { music: true }) : Promise.reject(new Error(`No track ${id}`));
     music.set(id, p);
     p.catch(() => music.delete(id));
   }
   return p;
 }
 
-/** Forget a decoded track to free memory (about 35 MB each). */
+/** Forget a decoded track to free memory (about 16 MB each). */
 export function dropMusicTrack(id: string) {
   music.delete(id);
 }
