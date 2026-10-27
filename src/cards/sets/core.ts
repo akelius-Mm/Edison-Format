@@ -169,9 +169,10 @@ spell('Book of Moon', 'quickplay', {
 });
 
 /** Brain Control: only a monster that can be Normal Summoned/Set (no Fusion/Synchro/Ritual/nomi monsters or Tokens). */
-const brainControllable = (c: CardInstance) => c.isMonster && !c.isExtra && !c.isToken && !c.data.cannotNormalSummon;
+// Edison text: any face-up monster (the "can be Normal Summoned/Set" restriction is a later erratum)
+const brainControllable = (c: CardInstance) => c.isMonster;
 spell('Brain Control', 'normal', {
-  text: 'Pay 800 LP, then target 1 face-up monster your opponent controls that can be Normal Summoned/Set; take control of it until the End Phase.',
+  text: 'Pay 800 Life Points. Select 1 face-up monster your opponent controls and take control of it until the End Phase.',
   effects: [
     {
       kind: 'activate',

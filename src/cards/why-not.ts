@@ -76,16 +76,6 @@ function faceUpTargetWhy(ctx: Ctx): string | null {
 const noOtherST = (ctx: Ctx) => (ctx.spellTraps('both', (c) => c !== ctx.self).length ? null : 'no other Spells/Traps on the field');
 const WHEN_ASKED = "\nYou'll be asked then";
 
-/** Why Brain Control can't take this face-up monster (null when it can). */
-function brainControlBlock(c: CardInstance): string | null {
-  if (c.isToken) return "It's a Token";
-  if (c.hasType('synchro')) return "It's a Synchro Monster";
-  if (c.hasType('fusion')) return "It's a Fusion Monster";
-  if (c.hasType('ritual')) return "It's a Ritual Monster";
-  if (c.isExtra || c.data.cannotNormalSummon) return 'It can only be Special Summoned';
-  return null;
-}
-
 // ------------------------------------------------------------------ table: [card name, effect index, reason]
 
 export const WHY_NOT: [string, number, Why][] = [
@@ -99,12 +89,7 @@ export const WHY_NOT: [string, number, Why][] = [
       if (ctx.freeMZones() <= 0) return ZONES_FULL;
       const faceUp = ctx.faceUpMonsters('opp');
       if (!faceUp.length) return 'opponent has no face-up monster';
-      const ok = faceUp.filter((c) => c.isMonster && !brainControlBlock(c));
-      if (!ok.length)
-        return faceUp.length === 1
-          ? `can't take ${faceUp[0].name}\n${brainControlBlock(faceUp[0])}`
-          : "none of their monsters can be taken\nOnly ones that can be Normal Summoned";
-      if (!ok.some((c) => ctx.canTarget(c))) return 'no monster it can target';
+      if (!faceUp.some((c) => ctx.canTarget(c))) return 'no monster it can target';
       return null;
     },
   ],

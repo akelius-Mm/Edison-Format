@@ -4054,14 +4054,10 @@ async function fuzzRegressionTests() {
     };
     const { g, place } = setup();
     const bc = place(0, cardByName('Brain Control'), 'hand');
+    eq(why(g, bc), 'opponent has no face-up monster', 'Brain Control: nothing to take');
+    eq(JSON.stringify(whyRow('Activate', why(g, bc)!)), JSON.stringify({ label: 'Activate: opponent has no face-up monster' }), 'menu row');
     place(1, cardByName('Stardust Dragon'), 'mzone');
-    eq(why(g, bc), "can't take Stardust Dragon\nIt's a Synchro Monster", 'Brain Control: only a Stardust Dragon');
-    eq(JSON.stringify(whyRow('Activate', why(g, bc)!)), JSON.stringify({ label: "Activate: can't take Stardust Dragon", sub: "It's a Synchro Monster" }), 'menu row');
-    const dadOpp = place(1, cardByName('Dark Armed Dragon'), 'mzone');
-    eq(why(g, bc), "none of their monsters can be taken\nOnly ones that can be Normal Summoned", 'Brain Control: Stardust + Dark Armed Dragon');
-    g.rawMove(dadOpp, 'grave', {});
-    place(1, T.brute, 'mzone');
-    eq(why(g, bc), null, 'Brain Control: a legal target');
+    eq(why(g, bc), null, 'Brain Control: a Synchro Monster is a legal target (Edison text)');
     g.players[0].lp = 800;
     eq(/more than 800 LP/.test(why(g, bc) ?? ''), true, 'Brain Control: LP');
     const dad = place(0, cardByName('Dark Armed Dragon'), 'hand');
@@ -6651,17 +6647,18 @@ async function heroDadPsychicAuditTests() {
   });
 
   // ---- Generic staples in these decks
-  await test('Brain Control: only a monster that can be Normal Summoned/Set (not Synchro/Fusion or Dark Armed Dragon)', async () => {
-    const { g, c0, place } = setup();
+  await test('Brain Control (Edison text): any face-up monster, including a Synchro Monster and Dark Armed Dragon', async () => {
+    const { g, place } = setup();
     const bc = place(0, cardByName('Brain Control'), 'hand');
-    live(place(1, cardByName('Stardust Dragon'), 'mzone'));
-    live(place(1, cardByName('Dark Armed Dragon'), 'mzone'));
-    eq(offered(g, 0, bc), false, 'no legal target');
-    const ok = live(place(1, T.brute, 'mzone'));
-    const seen = recordPicks(c0);
+    const sd = live(place(1, cardByName('Stardust Dragon'), 'mzone'));
+    eq(offered(g, 0, bc), true, 'a Synchro Monster is a legal target');
     await activateCard(g, 0, bc);
-    eq(seen.flat().every((c) => c === ok), true, 'only the Normal-Summonable monster is a candidate');
-    eq(ok.controller, 0, 'taken');
+    eq(sd.controller, 0, 'Stardust Dragon taken');
+    const t = setup();
+    const bc2 = t.place(0, cardByName('Brain Control'), 'hand');
+    const dad = live(t.place(1, cardByName('Dark Armed Dragon'), 'mzone'));
+    await activateCard(t.g, 0, bc2);
+    eq(dad.controller, 0, 'Dark Armed Dragon taken');
   });
 
   await test('Mind Control: can take a face-down monster; it cannot attack or be Tributed', async () => {

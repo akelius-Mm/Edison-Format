@@ -1,6 +1,6 @@
 // "Why can't I" reasons + the Rules updates note (Playwright, Chromium, iPhone 13 portrait 390×844).
 //
-//  1. Duel (dev harness, /duel-dev.html on the Vite dev server): Brain Control in hand with only a Stardust Dragon on
+//  1. Duel (dev harness, /duel-dev.html on the Vite dev server): Brain Control in hand with only a face-down monster on
 //     the opponent's field → tapping it shows a disabled row with the Brain Control reason.
 //  2. Home (built app in dist/, served by python3 -m http.server): the one-time "Rules updates" card is one line, opens the list,
 //     is dismissed for good, and Settings → Rules updates opens the full list.
@@ -72,7 +72,7 @@ async function duelCheck(browser) {
         g.rawMove(c, loc, { controller: p, ...opts });
         return c;
       };
-      add('Stardust Dragon', opp, 'mzone', { faceUp: true, pos: 'atk' });
+      add('Sangan', opp, 'mzone', { faceUp: false, pos: 'def' });
       const bc = add('Brain Control', me, 'hand', { faceUp: true });
       g.update();
       return bc.uid;
@@ -83,7 +83,7 @@ async function duelCheck(browser) {
     await page.waitForSelector('.ctx-menu', { timeout: 5000 });
     await sleep(300);
     const text = await page.locator('.ctx-menu').innerText();
-    check(/Activate: can't take Stardust Dragon/.test(text) && /It's a Synchro Monster/.test(text), 'the menu says in one line why Brain Control can\'t be used');
+    check(/Activate: opponent has no face-up monster/.test(text), 'the menu says in one line why Brain Control can\'t be used');
     const rowH = await page.locator('.ctx-menu .ctx-item.is-disabled').first().boundingBox();
     check(!!rowH && rowH.height <= 90, `the reason row is short (${rowH && Math.round(rowH.height)}px)`);
     const enabled = await page.locator('.ctx-menu .ctx-item:not(.is-disabled)').allInnerTexts();
@@ -109,6 +109,7 @@ async function duelCheck(browser) {
         return c;
       };
       add('Summoner Monk', me, 'mzone', { faceUp: true, pos: 'def' });
+      add('Stardust Dragon', 1 - me, 'mzone', { faceUp: true, pos: 'atk' });
       // a Spell/Trap that was already in hand when this prompt's actions were worked out (it can be Set)
       const old = g.zone(me, 'hand').find((c) => (c.isSpell || c.isTrap) && c.data.stype !== 'field');
       const ec = add('Enemy Controller', me, 'hand', { faceUp: true });
@@ -176,10 +177,10 @@ async function homeCheck(browser) {
     await page.waitForSelector('.rn-sheet', { timeout: 5000 });
     await sleep(300);
     const sheet = page.locator('.rn-sheet');
-    check(!(await sheet.getByText(/Brain Control can only take/).isVisible()), 'decks start collapsed in the sheet');
+    check(!(await sheet.getByText(/Brain Control can take any/).isVisible()), 'decks start collapsed in the sheet');
     await sheet.locator('.rn-group summary').first().click();
     await sleep(300);
-    check(await sheet.getByText(/Brain Control can only take/).isVisible(), 'tapping a deck shows its changes');
+    check(await sheet.getByText(/Brain Control can take any/).isVisible(), 'tapping a deck shows its changes');
     await page.screenshot({ path: path.join(OUT, 'rules-updates-home-open.png') });
     await page.locator('.modal').getByRole('button', { name: 'Done' }).click();
     await sleep(400);
