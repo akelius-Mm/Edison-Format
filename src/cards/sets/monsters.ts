@@ -252,23 +252,33 @@ monster('Necro Gardna', {
   level: 3,
   atk: 600,
   def: 1300,
-  text: "During your opponent's turn: You can banish this card from your GY to negate 1 attack of an opponent's monster.",
+  text: 'Remove from play this card from your Graveyard to negate 1 attack this turn from a monster your opponent controls.',
   aiValue: 500,
   effects: [
     {
+      // https://edisonrul.ing/cards/n/necro-gardna.html — a Quick Effect usable at any time during the opponent's turn
+      // before the end of their Battle Phase (not in the Damage Step): it negates the attack in progress, or else
+      // automatically the next attack this turn; several Gardnas activated before an attack all negate that same attack.
       kind: 'quick',
       range: ['grave'],
       label: 'Banish: negate attack',
       categories: ['negateAttack'],
       condition: (ctx) => {
         const b = ctx.battle;
-        return !ctx.isMyTurn && !!b && !b.negated && !b.inDamageStep && b.attacker.controller === ctx.opp && !attackFinished(ctx.game);
+        if (ctx.isMyTurn || b?.inDamageStep) return false;
+        return ctx.phase === 'draw' || ctx.phase === 'standby' || ctx.phase === 'main1' || ctx.phase === 'battle';
       },
       activate: async (ctx) => {
         await ctx.banish(ctx.self, 'cost');
       },
       resolve: async (ctx) => {
-        if (ctx.battle && !ctx.battle.negated) ctx.negateAttack();
+        const b = ctx.battle;
+        if (b && !b.inDamageStep && !attackFinished(ctx.game)) {
+          if (!b.negated) ctx.negateAttack();
+          return;
+        }
+        ctx.game.turnData[`necroGardna:${ctx.player}`] = true;
+        ctx.log("Necro Gardna will negate the opponent's next attack this turn.");
       },
       ai: {
         score: (ctx) => {
@@ -284,6 +294,22 @@ monster('Necro Gardna', {
         },
       },
     },
+    {
+      // The lingering "negate the next attack this turn" (no chain): applied as the opponent declares that attack.
+      kind: 'trigger',
+      event: 'attackDeclared',
+      range: ['banished'],
+      label: 'Necro Gardna (negate the next attack)',
+      eventFilter: (ctx, ev) => {
+        const key = `necroGardna:${ctx.player}`;
+        const b = ctx.game.battle;
+        if (ctx.game.turnData[key] && b && !b.negated && (ev.card as CardInstance).controller === ctx.opp) {
+          delete ctx.game.turnData[key];
+          ctx.game.negateAttack();
+        }
+        return false;
+      },
+    },
   ],
 });
 
@@ -295,7 +321,7 @@ monster('Gorz the Emissary of Darkness', {
   level: 7,
   atk: 2700,
   def: 2500,
-  text: 'If you take damage from a card your opponent controls while you control no cards: You can Special Summon this card from your hand. Then, if it was battle damage, Special Summon 1 "Emissary of Darkness Token" (LIGHT/Fairy/Level 7) with ATK/DEF equal to that damage; if it was effect damage, gain LP equal to that damage.',
+  text: 'When you take damage from a card your opponent controls while you control no cards, you can Special Summon this card from your hand. Then activate the appropriate effect based on the type of damage:\n● Battle Damage: Special Summon 1 "Emissary of Darkness Token" (Fairy-Type/LIGHT/Level 7/ATK ?/DEF ?). Its ATK and DEF are each equal to the amount of battle damage you took.\n● Effect Damage: Inflict damage to your opponent equal to the amount of damage you took.',
   aiValue: 1500,
   effects: [
     {
@@ -303,7 +329,7 @@ monster('Gorz the Emissary of Darkness', {
       event: 'damage',
       range: ['hand'],
       label: 'Special Summon Gorz',
-      categories: ['specialSummon', 'recover'],
+      categories: ['specialSummon', 'damage'],
       eventFilter: (ctx, ev) =>
         ev.player === ctx.player && ev.reasonPlayer === ctx.opp && (ev.amount ?? 0) > 0 && ctx.field('me').length === 0,
       condition: (ctx) => ctx.canSummonSelf() && ctx.canSummonCard(ctx.self),
@@ -325,7 +351,9 @@ monster('Gorz the Emissary of Darkness', {
           }
           ctx.game.update();
         } else {
-          await ctx.recover(ctx.player, amount);
+          // https://edisonrul.ing/cards/g/gorz-the-emissary-of-darkness.html — Effect Damage: "Inflict damage to your
+          // opponent equal to the amount of damage you took" (not an LP gain).
+          await ctx.damage(ctx.opp, amount);
         }
       },
     },
@@ -1130,12 +1158,17 @@ monster('Kycoo the Ghost Destroyer', {
       label: "Banish from opponent's GY",
       categories: ['banish'],
       eventFilter: (ctx, ev) => ev.reasonCard === ctx.self && ev.player === ctx.opp,
-      condition: (ctx) => ctx.grave('opp', (c) => c.isMonster).length > 0,
-      resolve: async (ctx) => {
-        const sel = await ctx.select(ctx.grave('opp', (c) => c.isMonster), 1, 2, "Banish up to 2 monsters from your opponent's GY.", 'banish', {
+      // https://edisonrul.ing/cards/k/kycoo-the-ghost-destroyer.html — it targets up to 2 monsters in the opponent's GY
+      // and "cannot activate while "Necrovalley" is active".
+      condition: (ctx) => !ctx.game.queryPlayer(ctx.player, 'cannotBanishFromGY') && ctx.grave('opp', (c) => c.isMonster && ctx.canTarget(c)).length > 0,
+      activate: async (ctx) => {
+        await ctx.selectTargets(ctx.grave('opp', (c) => c.isMonster), 1, 2, "Target up to 2 monsters in your opponent's GY to banish.", 'banish', {
           aiScore: (c) => (c.data.aiValue ?? 0) + (c.data.atk ?? 0) + (c.data.attribute === 'DARK' || c.data.attribute === 'LIGHT' ? 500 : 0),
         });
-        if (sel.length) await ctx.banish(sel);
+      },
+      resolve: async (ctx) => {
+        const t = ctx.validTargets((c) => c.location === 'grave');
+        if (t.length) await ctx.banish(t);
       },
     },
     {
