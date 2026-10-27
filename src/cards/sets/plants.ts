@@ -144,8 +144,9 @@ monster('Dandylion', {
       mandatory: true,
       label: 'Summon 2 Fluff Tokens',
       categories: ['specialSummon'],
+      // 2010 ruling: this mandatory effect always activates, even if you cannot Special Summon (then no Token is
+      // Summoned: 2 or none). https://edisonrul.ing/cards/d/dandylion.html
       eventFilter: (ctx, ev) => ev.card === ctx.self && ev.to === 'grave',
-      condition: (ctx) => ctx.canSpecialSummon() && ctx.freeMZones() >= 2,
       resolve: async (ctx) => {
         if (!ctx.canSpecialSummon() || ctx.freeMZones() < 2) return;
         const toks = await ctx.createTokens(fluff, 2, 'def');

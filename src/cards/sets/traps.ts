@@ -1035,6 +1035,9 @@ defTrap('Dark Bribe', 'counter', {
         const l = ctx.prevLink();
         return !!l && !l.negated && l.isCardActivation && (l.card.isSpell || l.card.isTrap) && l.player === ctx.opp;
       },
+      // 2010 ruling: it cannot be activated if your opponent has no cards in their Deck.
+      // https://edisonrul.ing/cards/d/dark-bribe.html
+      canActivate: (ctx) => ctx.deck('opp').length > 0,
       activate: async (ctx) => {
         ctx.data.link = ctx.prevLink();
       },

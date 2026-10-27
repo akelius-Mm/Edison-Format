@@ -86,6 +86,8 @@ export interface BattleState {
    * (would be destroyed), before battle-indestructibility is applied. Lives until the battle ends.
    */
   calc?: { attackerAtk: number; targetAtk: number; targetDef: number; targetPos: BattlePos | null; losers: CardInstance[] };
+  /** The attack target was face-down at the start of the Damage Step, before it was flipped (Ally of Justice Catastor). */
+  targetFaceDownAtStart?: boolean;
 }
 
 export interface LogEntry {
@@ -2519,6 +2521,7 @@ export class Game {
         }
       }
     }
+    b.targetFaceDownAtStart = !!target && !target.faceUp && target.location === 'mzone';
     if (target && !target.faceUp && target.location === 'mzone') {
       // flip face-up (flip effects resolve after damage calculation)
       target.faceUp = true;
@@ -2545,6 +2548,21 @@ export class Game {
     if (target && (target.location !== 'mzone' || target.moveId !== b.targetMoveId)) {
       await this.processTriggers(false);
       return;
+    }
+    // "Before damage calculation" triggers (Ehren, Lightsworn Monk), after a Set target was flipped face-up. A monster
+    // that leaves the field here is never part of damage calculation (Flip Effects still wait for after it).
+    if (target) {
+      const held = this.pending;
+      this.pending = [];
+      this.beginBatch();
+      this.emit({ type: 'beforeDamageCalc', card: attacker, other: target, player: p, minor: true });
+      if (this.pending.length) await this.processTriggers(true);
+      this.pending = [...held, ...this.pending];
+      const attackerGone = attacker.location !== 'mzone' || attacker.moveId !== b.attackerMoveId || attacker.pos !== 'atk';
+      if (b.negated || attackerGone || target.location !== 'mzone' || target.moveId !== b.targetMoveId) {
+        await this.processTriggers(false);
+        return;
+      }
     }
     // Damage calculation
     const atkA = this.getAtk(attacker);

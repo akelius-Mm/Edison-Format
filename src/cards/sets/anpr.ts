@@ -633,7 +633,7 @@ monster('Fortune Lady Light', {
   def: 0,
   sets: ['fortune-lady'],
   aiValue: 700,
-  text: "This card's ATK/DEF become its Level x 200. Once per turn, during your Standby Phase: Increase this card's Level by 1 (max. 12). When this face-up card leaves the field by card effect: You can Special Summon 1 \"Fortune Lady\" monster from your Deck.",
+  text: "This card's ATK/DEF become its Level x 200. Once per turn, during your Standby Phase: Increase this card's Level by 1 (max. 12). When this card is removed from the field by a card effect, you can Special Summon 1 \"Fortune Lady\" monster from your Deck.",
   effects: [
     ...fortuneLadyCore(),
     {
@@ -642,7 +642,9 @@ monster('Fortune Lady Light', {
       when: true,
       label: 'Summon a Fortune Lady',
       categories: ['specialSummon'],
-      eventFilter: (ctx, ev) => ev.card === ctx.self && ev.from === 'mzone' && !!ev.fromFaceUp && reasonsOf(ev).includes('effect') && !reasonsOf(ev).includes('cost'),
+      // 2010 text: "When this card is removed from the field by a card effect" (face-down too, e.g. returned to the hand).
+      // https://edisonrul.ing/cards/f/fortune-lady-light.html
+      eventFilter: (ctx, ev) => ev.card === ctx.self && ev.from === 'mzone' && reasonsOf(ev).includes('effect') && !reasonsOf(ev).includes('cost'),
       canActivate: (ctx) => ctx.canSpecialSummon() && ctx.deck('me', (c) => isFortuneLady(c) && ctx.canSummonCard(c)).length > 0,
       resolve: async (ctx) => {
         const cands = ctx.deck('me', (c) => isFortuneLady(c) && ctx.canSummonCard(c));

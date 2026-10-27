@@ -558,6 +558,9 @@ monster('Elemental Hero Prisma', {
         ctx.data.fusion = f;
       },
       resolve: async (ctx) => {
+        // 2010 ruling: if Prisma left the field or was flipped face-down, the effect does nothing (no monster is sent).
+        // https://edisonrul.ing/cards/e/elemental-hero-prisma.html
+        if (ctx.self.location !== 'mzone' || !ctx.self.faceUp) return;
         const f = ctx.data.fusion as C;
         const names = listedMaterials(f);
         const cands = ctx.deck('me', (c) => names.includes(c.name));
@@ -691,7 +694,7 @@ monster('Drill Warrior', {
   def: 2000,
   types: ['synchro'],
   aiValue: 600,
-  text: '"Drill Synchron" + 1 or more non-Tuner monsters\nOnce per turn, during your Main Phase 1: You can halve this card\'s ATK until the end of this turn; it can attack directly this turn. Once per turn: You can discard 1 card; banish this card. During your next Standby Phase: Special Summon this card banished by this effect, then you can add 1 monster from your GY to your hand.',
+  text: '"Drill Synchron" + 1 or more non-Tuner monsters\nOnce per turn, during your Main Phase, you can halve this card\'s ATK (permanently). If you do, it can attack your opponent directly this turn. Once per turn, during your Main Phase, you can discard 1 card and remove this card from play. During your next Standby Phase, Special Summon this card, if removed by this effect. Then, add 1 Monster Card from your Graveyard to your hand.',
   synchro: { tuner: synchronNamed('Drill Synchron'), desc: '"Drill Synchron" + 1+ non-Tuner monsters' },
   effects: [
     {
@@ -699,10 +702,12 @@ monster('Drill Warrior', {
       opt: true, // "Once per turn" per copy (Edison and modern text alike), not by name
       label: 'Halve ATK: attack directly',
       categories: ['atkChange'],
-      condition: (ctx) => ctx.phase === 'main1' && ctx.self.faceUp,
+      // 2010 text and rulings: during your Main Phase; the ATK stays halved while it is face-up on the field (not
+      // just this turn). https://edisonrul.ing/cards/d/drill-warrior.html
+      condition: (ctx) => (ctx.phase === 'main1' || ctx.phase === 'main2') && ctx.self.faceUp,
       resolve: async (ctx) => {
         if (ctx.self.location !== 'mzone' || !ctx.self.faceUp) return;
-        ctx.addTempMod(ctx.self, 'atk', -Math.floor(ctx.atk(ctx.self) / 2), 'turn');
+        ctx.addTempMod(ctx.self, 'atk', -Math.floor(ctx.atk(ctx.self) / 2), 'field');
         ctx.addTempMod(ctx.self, 'directAttack', true, 'turn');
       },
       ai: {
@@ -719,15 +724,16 @@ monster('Drill Warrior', {
       kind: 'ignition',
       opt: true,
       label: 'Discard: banish until next Standby Phase',
-      categories: ['banish', 'toHand'],
+      categories: ['banish', 'toHand', 'discard'],
+      // 2010 rulings: discarding is part of the effect, not a cost: you discard even if this card left the field (or
+      // cannot be banished), and if you cannot discard, this card is not banished. https://edisonrul.ing/cards/d/drill-warrior.html
+      condition: (ctx) => ctx.phase === 'main1' || ctx.phase === 'main2',
       canActivate: (ctx) => ctx.hand().length > 0,
-      activate: async (ctx) => {
-        const d = await ctx.select(ctx.hand(), 1, 1, 'Discard 1 card.', 'discard');
-        if (!d.length) return false;
-        await ctx.discard(d, 'cost');
-      },
       resolve: async (ctx) => {
         const me = ctx.self;
+        const d = await ctx.select(ctx.hand(), 1, 1, 'Discard 1 card.', 'discard', { aiScore: (c) => -cardValue(ctx.game, c) });
+        if (!d.length) return;
+        await ctx.discard(d);
         if (me.location !== 'mzone') return;
         const r = await ctx.banish(me);
         if (!r.length || (me.location as Location) !== 'banished') return;
@@ -738,9 +744,12 @@ monster('Drill Warrior', {
           'standby',
           async () => {
             if (me.location !== 'banished' || me.moveId !== mid || game.turnPlayer !== owner) return;
-            await game.specialSummon([me], owner, { pos: 'atk', ignoreConditions: true, reasonCard: me });
+            const back = await game.specialSummon([me], owner, { pos: 'atk', ignoreConditions: true, reasonCard: me });
+            // 2010 text: "Then, add 1 Monster Card from your Graveyard to your hand" (not optional), only after the
+            // Special Summon. https://edisonrul.ing/cards/d/drill-warrior.html
+            if (!back.length) return;
             const g = game.zone(owner, 'grave').filter((c) => c.isMonster);
-            if (g.length && (await game.confirm(owner, 'Add 1 monster from your GY to your hand?', me, true))) {
+            if (g.length) {
               const sel = await game.select(owner, g, 1, 1, 'Add 1 monster from your GY to your hand.', 'toHand', { source: me });
               if (sel.length) await game.toHand(sel, 'effect', owner, me);
             }

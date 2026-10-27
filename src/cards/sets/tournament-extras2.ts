@@ -395,7 +395,10 @@ once('Dimensional Alchemist', () =>
         event: 'sentToGrave',
         label: 'Add 1 banished monster',
         categories: ['toHand'],
-        eventFilter: (ctx, ev) => ev.card === ctx.self && ev.from === 'mzone' && (ev.reasons ?? []).includes('destroy') && ctx.self.owner === ctx.player,
+        // 2010 text: "When this card is destroyed and sent from your side of the field to the Graveyard" (not while the
+        // opponent controls it). https://edisonrul.ing/cards/d/dimensional-alchemist.html
+        eventFilter: (ctx, ev) =>
+          ev.card === ctx.self && ev.from === 'mzone' && (ev.reasons ?? []).includes('destroy') && ctx.self.owner === ctx.player && (ev.fromController ?? ctx.self.owner) === ctx.self.owner,
         canActivate: (ctx) => ctx.banished('me', (c) => c.isMonster).length > 0,
         activate: async (ctx) => {
           await ctx.selectTargets(ctx.banished('me', (c) => c.isMonster), 1, 1, 'Target 1 of your banished monsters to add to your hand.', 'toHand', {
@@ -840,15 +843,18 @@ once('Dimensional Fissure', () =>
 
 once('Beckoning Light', () =>
   trap('Beckoning Light', 'normal', {
-    text: 'Discard your entire hand, then for each card you discarded to the GY by this effect, add 1 LIGHT monster from your GY to your hand.',
+    text: 'Discard all the cards in your hand, then select a number of LIGHT monsters in your Graveyard equal to the number of cards you discarded, and add them to your hand.',
     effects: [
       {
         kind: 'activate',
         categories: ['discard', 'toHand'],
-        canActivate: (ctx) => ctx.hand().length > 0 && ctx.grave('me', (c) => c.isMonster && c.data.attribute === 'LIGHT').length > 0,
+        // 2010 rulings: it cannot be activated with fewer LIGHT monsters in your GY than cards in your hand, and if
+        // that is the case when it resolves (Disappear), nothing happens (no discard).
+        // https://edisonrul.ing/cards/b/beckoning-light.html
+        canActivate: (ctx) => ctx.hand().length > 0 && ctx.grave('me', (c) => c.isMonster && c.data.attribute === 'LIGHT').length >= ctx.hand().length,
         resolve: async (ctx) => {
           const hand = [...ctx.hand()];
-          if (!hand.length) return;
+          if (!hand.length || ctx.grave('me', (c) => c.isMonster && c.data.attribute === 'LIGHT').length < hand.length) return;
           const disc = await ctx.discard(hand);
           const n = disc.filter((c) => c.location === 'grave').length;
           const light = ctx.grave('me', (c) => c.isMonster && c.data.attribute === 'LIGHT');
@@ -935,18 +941,20 @@ once('Needle Ceiling', () =>
 
 once('Chain Disappearance', () =>
   trap('Chain Disappearance', 'normal', {
-    text: 'When a monster(s) with 1000 or less ATK is Summoned: Banish that monster(s) with 1000 or less ATK, then your opponent banishes all cards with the same name as that card(s) from their hand and Deck.',
+    text: 'You can only activate this card when a monster(s) with an ATK of 1000 or less is Normal Summoned, Flip Summoned or Special Summoned. Remove from play those Summoned monster(s), and your opponent removes from play all cards of the same name in their hand and Deck. Their Deck is then shuffled.',
     effects: [
       {
         kind: 'activate',
         event: 'summoned',
         categories: ['banish'],
+        // 2010 rulings: Tokens are banished too (all 4 "Sheep Tokens" from "Scapegoat"), and the opponent also banishes
+        // the copies in their Extra Deck. https://edisonrul.ing/cards/c/chain-disappearance.html
         eventFilter: (ctx, ev) => {
           const c = evc(ev);
-          return !!c && c.location === 'mzone' && c.faceUp && ctx.atk(c) <= 1000 && !c.isToken;
+          return !!c && c.location === 'mzone' && c.faceUp && ctx.atk(c) <= 1000;
         },
         activate: async (ctx) => {
-          const v = summonedBatch(ctx, 'summoned', (c) => c.location === 'mzone' && c.faceUp && ctx.atk(c) <= 1000 && !c.isToken);
+          const v = summonedBatch(ctx, 'summoned', (c) => c.location === 'mzone' && c.faceUp && ctx.atk(c) <= 1000);
           ctx.data.victims = v;
           ctx.data.ids = v.map((c) => c.moveId);
           ctx.data.names = v.map((c) => c.name);
@@ -956,7 +964,7 @@ once('Chain Disappearance', () =>
           if (!victims.length) return;
           const names = victims.map((c) => c.name);
           await ctx.banish(victims);
-          const copies = ctx.cards('opp', ['hand', 'deck'], (c) => names.includes(c.name));
+          const copies = ctx.cards('opp', ['hand', 'deck', 'extra'], (c) => names.includes(c.name));
           if (copies.length) await ctx.game.banish(copies, 'effect', ctx.opp, ctx.self);
           ctx.game.shuffleDeck(ctx.opp);
         },

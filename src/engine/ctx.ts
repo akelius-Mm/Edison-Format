@@ -136,7 +136,7 @@ export class Ctx {
   /** Can the opponent's cards be affected/targeted by this effect. */
   canTarget(c: CardInstance) {
     if (c.onField && c.controller !== this.player && this.game.queryCard(c, 'untargetable')) return false;
-    if (c.onField && this.game.queryCard(c, 'untargetableByAll')) return false;
+    if ((c.onField || c.location === 'grave' || c.location === 'banished') && this.game.queryCard(c, 'untargetableByAll')) return false;
     if (c.onField && c.faceUp && c.data.targetImmunity && !this.game.isNegated(c) && c.data.targetImmunity(c, this.self, this)) return false;
     if (this.game.isUnaffected(c, this.self, this.player)) return false;
     return true;
