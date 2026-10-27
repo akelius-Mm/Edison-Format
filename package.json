@@ -21,15 +21,7 @@
     "test:events": "tsx scripts/events-test.ts --seasons 4",
     "test:net": "tsx scripts/net-test.ts",
     "test:friend-e2e": "node scripts/friend-e2e.cjs",
-<<<<<<< HEAD
-<<<<<<< HEAD
-    "test:tourney": "tsx scripts/tourney-test.ts && tsx scripts/rulings-abpf-ptdn.ts",
-=======
-    "test:tourney": "tsx scripts/tourney-test.ts && tsx scripts/rulings-crms-rgbt.ts",
->>>>>>> origin/claude/rulings-crms-rgbt
-=======
-    "test:tourney": "tsx scripts/tourney-test.ts && tsx scripts/rulings-tdgs-glas.ts",
->>>>>>> origin/claude/rulings-tdgs-glas
+    "test:tourney": "tsx scripts/tourney-test.ts",
     "test:friends-locals-e2e": "node scripts/friends-locals-e2e.cjs",
     "test:routes-e2e": "node scripts/routes-e2e.cjs",
     "test:undo-e2e": "node scripts/undo-e2e.cjs",
