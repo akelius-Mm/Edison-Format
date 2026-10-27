@@ -717,13 +717,14 @@ monster('Brionac, Dragon of the Ice Barrier', {
   atk: 2300,
   def: 1400,
   types: ['synchro'],
-  text: '1 Tuner + 1 or more non-Tuner monsters\nDiscard any number of cards, then target the same number of cards on the field; return them to the hand. You can only use this effect of "Brionac, Dragon of the Ice Barrier" once per turn.',
+  text: '1 Tuner + 1 or more non-Tuner monsters\nYou can discard any number of cards to select the same number of cards on the field, and return those cards to the hand. This effect can only be used once per turn.',
   synchro: { desc: '1 Tuner + 1+ non-Tuner monsters' },
   aiValue: 800,
   effects: [
     {
       kind: 'ignition',
-      opt: 'brionac',
+      // Edison text: "This effect can only be used once per turn" (per copy); the hard once per turn by name is later errata.
+      opt: true,
       label: 'Discard & bounce',
       categories: ['toHand'],
       canActivate: (ctx) => ctx.hand().length > 0 && ctx.field('both', (c) => c !== ctx.self && ctx.canTarget(c)).length > 0,
