@@ -373,7 +373,7 @@ export function ensureLodtPatches(g: Game) {
     return true;
   };
   const origNS = g.normalSummon.bind(g);
-  anyG.normalSummon = async (p: PlayerId, card: C, set: boolean) => {
+  anyG.normalSummon = async (p: PlayerId, card: C, set: boolean, opts?: { byEffect?: boolean }) => {
     if (set) card.flags.lodtSetting = true;
     try {
       if (card.name === FOG_KING && !set) {
@@ -385,7 +385,7 @@ export function ensureLodtPatches(g: Game) {
         const i = await g.option(p, `Normal Summon ${card.name}:`, opts, card, (k) => (k === 1 && cheapest < 1500 ? 2 : k === 0 ? 1 : 0));
         card.flags.lodtFogNeed = i;
       }
-      return await origNS(p, card, set);
+      return await origNS(p, card, set, opts);
     } finally {
       if (card.location === 'hand') {
         delete card.flags.lodtSetting;

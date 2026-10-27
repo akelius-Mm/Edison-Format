@@ -102,7 +102,7 @@ export function ensureArchetypeExtras2Patches(g: Game) {
     }
   };
   const origNS = g.normalSummon.bind(g);
-  anyG.normalSummon = async (p: PlayerId, card: C, set: boolean) => {
+  anyG.normalSummon = async (p: PlayerId, card: C, set: boolean, opts?: { byEffect?: boolean }) => {
     const castle = set ? undefined : castleFor(g, p, card);
     if (castle) {
       const need = g.tributesNeeded(card);
@@ -124,13 +124,13 @@ export function ensureArchetypeExtras2Patches(g: Game) {
         await g.sendToGrave([castle], 'cost', p, castle);
         card.flags.noTribute = true;
         try {
-          return await origNS(p, card, set);
+          return await origNS(p, card, set, opts);
         } finally {
           if (card.location === 'hand') delete card.flags.noTribute;
         }
       }
     }
-    return origNS(p, card, set);
+    return origNS(p, card, set, opts);
   };
 }
 

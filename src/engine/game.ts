@@ -2084,13 +2084,16 @@ export class Game {
 
   /** Window where summons can be negated (Solemn Judgment etc.). Returns true if negated. */
   async summonNegationWindow(cards: CardInstance[], player: PlayerId, method: string): Promise<boolean> {
-    this.pendingSummon = { cards, player, method, negated: false };
+    // a window can open while another is resolving (a Summon performed by an effect): keep the outer one intact
+    const outer = this.pendingSummon;
+    const ps = { cards, player, method, negated: false };
+    this.pendingSummon = ps;
     try {
       const opp = this.opp(player);
       // Only the window where counter traps can be used.
       await this.responseLoop('summonNegation', opp);
       if (this.chain.length) await this.resolveChain();
-      if (this.pendingSummon.negated) {
+      if (ps.negated) {
         this.log(`The summon of ${cards.map((c) => c.name).join(', ')} is negated.`, 'chain');
         const still = cards.filter((c) => c.location === 'mzone');
         if (still.length) await this.destroy(still, 'rule');
@@ -2098,7 +2101,7 @@ export class Game {
       }
       return false;
     } finally {
-      this.pendingSummon = null;
+      this.pendingSummon = outer;
     }
   }
 
