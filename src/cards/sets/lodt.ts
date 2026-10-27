@@ -1850,10 +1850,16 @@ M(SIMORGH, {
         const ts = (ev.tributes ?? []) as C[];
         return ev.card === ctx.self && ts.length > 0 && ts.every((t) => t.data.attribute === 'WIND');
       },
-      condition: (ctx) => ctx.field('opp').length > 0,
+      condition: (ctx) => ctx.field('opp', (c) => ctx.canTarget(c)).length > 0,
+      // https://edisonrul.ing/cards/s/simorgh-bird-of-ancestry.html — targets 1 or 2 of the opponent's cards.
+      activate: async (ctx) => {
+        await ctx.selectTargets(ctx.field('opp'), 1, 2, 'Target up to 2 cards your opponent controls to return to the hand.', 'bounce', {
+          aiScore: (c) => cardValue(ctx.game, c),
+        });
+      },
       resolve: async (ctx) => {
-        const sel = await ctx.select(ctx.field('opp'), 0, 2, 'Return up to 2 cards your opponent controls to the hand.', 'bounce');
-        if (sel.length) await ctx.toHand(sel);
+        const t = ctx.validTargets((c) => c.onField);
+        if (t.length) await ctx.toHand(t);
       },
     },
     {
@@ -2771,10 +2777,15 @@ S('Quick Charger', 'quickplay', {
     {
       kind: 'activate',
       categories: ['toHand'],
-      canActivate: (ctx) => ctx.grave('me', (c) => isBatteryman(c) && lvl(c) <= 4).length >= 2,
+      canActivate: (ctx) => ctx.grave('me', (c) => isBatteryman(c) && lvl(c) <= 4 && ctx.canTarget(c)).length >= 2,
+      // https://edisonrul.ing/cards/q/quick-charger.html — targets the 2 "Batteryman" monsters; if 1 leaves the GY in the
+      // chain, the other is still added to the hand.
+      activate: async (ctx) => {
+        await ctx.selectTargets(ctx.grave('me', (c) => isBatteryman(c) && lvl(c) <= 4), 2, 2, 'Target 2 Level 4 or lower "Batteryman" monsters in your GY.', 'toHand');
+      },
       resolve: async (ctx) => {
-        const sel = await ctx.select(ctx.grave('me', (c) => isBatteryman(c) && lvl(c) <= 4), 2, 2, 'Add 2 Level 4 or lower "Batteryman" monsters to your hand.', 'toHand');
-        if (sel.length) await ctx.toHand(sel);
+        const t = ctx.validTargets((c) => c.location === 'grave');
+        if (t.length) await ctx.toHand(t);
       },
       ai: { score: (ctx) => (ctx.isMyTurn ? 45 : 0) },
     },
@@ -2909,6 +2920,9 @@ S('Ribbon of Rebirth', 'equip', {
         const p = s.controller;
         const mid = c.moveId;
         g.addDelayed('end', async () => {
+          // https://edisonrul.ing/cards/r/ribbon-of-rebirth.html — no effect if Ribbon of Rebirth is not in the GY or the
+          // removed zone during the End Phase.
+          if (!(s.location === 'grave' || s.location === 'banished')) return;
           if (c.location === 'grave' && c.moveId === mid && g.freeMZones(p) > 0) {
             g.log(`Ribbon of Rebirth returns ${c.name}.`, 'action', p);
             await g.specialSummon([c], p, { pos: 'choose', reasonCard: s });
@@ -3132,6 +3146,9 @@ T('Hero Blast', 'normal', {
   ],
 });
 
+// https://edisonrul.ing/cards/r/rainbow-gravity.html — a "Rainbow Dragon" / "Rainbow Dark Dragon" in the GY that was not
+// properly Special Summoned first cannot be Special Summoned with it.
+const gravityOk = (c: C) => isUltimateCrystal(c) && (c.location !== 'grave' || c.properlySummoned);
 T('Rainbow Gravity', 'normal', {
   text: 'If you have 7 "Crystal Beast" cards with different names on your field and/or in your GY: Special Summon 1 "Ultimate Crystal" monster from your Deck or GY, ignoring its Summoning conditions.',
   effects: [
@@ -3139,9 +3156,9 @@ T('Rainbow Gravity', 'normal', {
       kind: 'activate',
       categories: ['specialSummon'],
       condition: (ctx) => new Set(ctx.cards('me', ['mzone', 'szone', 'grave'], (c) => isCrystalBeast(c) && (c.faceUp || c.location === 'grave')).map((c) => c.name)).size >= 7,
-      canActivate: (ctx) => ctx.canSpecialSummon() && ctx.cards('me', ['deck', 'grave'], isUltimateCrystal).length > 0,
+      canActivate: (ctx) => ctx.canSpecialSummon() && ctx.cards('me', ['deck', 'grave'], gravityOk).length > 0,
       resolve: async (ctx) => {
-        const [c] = await ctx.select(ctx.cards('me', ['deck', 'grave'], isUltimateCrystal), 1, 1, 'Special Summon 1 "Ultimate Crystal" monster.', 'specialSummon');
+        const [c] = await ctx.select(ctx.cards('me', ['deck', 'grave'], gravityOk), 1, 1, 'Special Summon 1 "Ultimate Crystal" monster.', 'specialSummon');
         const fromDeck = c?.location === 'deck';
         if (c) await ctx.specialSummon(c, { pos: 'choose', ignoreConditions: true });
         if (fromDeck) ctx.game.shuffleDeck(ctx.player);
@@ -3477,15 +3494,25 @@ function ragingCands(ctx: Ctx): C[] {
 
 T(SANGUINE_SWAMP, 'continuous', {
   text: 'If you control any other Spell or Trap Cards, destroy this card. Face-down Spell and Trap Cards cannot be activated. Destroy this card during your 2nd Standby Phase after activation.',
-  // APPROX: when another Spell/Trap is activated from the hand, this card is destroyed after that Chain (not at once).
+  // https://edisonrul.ing/cards/s/sanguine-swamp.html — its effects do not start a chain; activated while you control
+  // other (face-down) Spell/Trap Cards, it is destroyed after it resolves.
+  // APPROX: a Spell/Trap Set later (no engine event for Setting) only destroys it when a Spell/Trap Card is next activated.
   effects: [
-    { kind: 'activate', categories: ['lockdown'], ai: { score: (ctx) => (ctx.spellTraps('me', (c) => c !== ctx.self).length === 0 && ctx.spellTraps('opp', (c) => !c.faceUp).length >= 2 ? 40 : 0) } },
-    secondStandbyDestroy(),
+    {
+      kind: 'activate',
+      categories: ['lockdown'],
+      resolve: async (ctx) => {
+        if (ctx.self.onField && ctx.spellTraps('me', (c) => c !== ctx.self).length) await ctx.destroy(ctx.self);
+      },
+      ai: { score: (ctx) => (ctx.spellTraps('me', (c) => c !== ctx.self).length === 0 && ctx.spellTraps('opp', (c) => !c.faceUp).length >= 2 ? 40 : 0) },
+    },
+    { ...secondStandbyDestroy(), noChain: true },
     {
       kind: 'trigger',
       event: 'cardActivated',
       range: ['szone'],
       mandatory: true,
+      noChain: true,
       label: 'Destroy this card',
       categories: ['destroy'],
       eventFilter: (ctx, ev) => {

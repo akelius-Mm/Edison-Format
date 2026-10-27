@@ -199,6 +199,11 @@ export interface EffectDef {
    * its effect is negated (Imperial Order, Starlight Road): undoes what applied from activation (Scapegoat, Soul Exchange).
    */
   onActivationNegated?: (ctx: Ctx) => void;
+  /**
+   * Mandatory 'trigger' that does not start a chain: `resolve` runs at once when the trigger is processed (rulings say
+   * "does not start a Chain": Nightmare Archfiends' damage, Phoenixian Cluster Amaryllis' self-destruction, ...).
+   */
+  noChain?: boolean;
 }
 
 // ---------------------------------------------------------------------------

@@ -654,17 +654,21 @@ monster(AMARYLLIS, {
   // Special Summon (those two summon it with ignoreConditions and never mark it as properly summoned).
   nomi: true,
   aiValue: 500,
-  text: 'This card cannot be Special Summoned except with its own effect or with "Phoenixian Seed". If this card attacks, it is destroyed after damage calculation. If this card you control is destroyed and sent to the GY, inflict 800 damage to your opponent. During your End Phase, you can remove from play 1 Plant monster from your GY to Special Summon this card from your GY in Defense Position.',
+  text: 'This card cannot be Special Summoned except with its own effect or with "Phoenixian Seed". If this card attacks, it is destroyed after damage calculation. If this card you control is destroyed and sent to the Graveyard, inflict 800 damage to your opponent. During your End Phase, you can remove from play 1 Plant-Type monster from your Graveyard to Special Summon this card from your Graveyard in Defense Position.',
   effects: [
     {
+      // https://edisonrul.ing/cards/p/phoenixian-cluster-amaryllis.html — a Continuous Effect applied right after damage
+      // calculation, before any chain; if it was destroyed by that battle, it does not also destroy itself.
       kind: 'trigger',
-      event: 'damageStepEnd',
+      event: ['damageCalculated', 'damageStepEnd'],
       mandatory: true,
+      noChain: true,
       label: 'Destroyed after attacking',
       categories: ['destroy'],
-      eventFilter: (ctx, ev) => ev.card === ctx.self && faceUpOn(ctx.self),
+      eventFilter: (ctx, ev) =>
+        ev.card === ctx.self && faceUpOn(ctx.self) && (ev.type === 'damageCalculated' || !ev.other) && !(ctx.game.battle?.calc?.losers ?? []).includes(ctx.self),
       resolve: async (ctx) => {
-        if (faceUpOn(ctx.self)) await ctx.destroy(ctx.self);
+        if (faceUpOn(ctx.self) && !ctx.game.isNegated(ctx.self)) await ctx.destroy(ctx.self);
       },
     },
     {
@@ -2939,17 +2943,19 @@ spell('Ojama Country', 'field', {
       opt: true,
       label: 'Send an Ojama: revive an Ojama',
       categories: ['specialSummon'],
-      canActivate: (ctx) => ctx.canSpecialSummon() && ctx.hand('me', isOjama).length > 0 && ctx.cards('me', ['grave', 'hand'], (c) => isOjamaMonster(c)).length > 0,
+      // https://edisonrul.ing/cards/o/ojama-country.html — sending the "Ojama" card is a cost; the effect targets 1 "Ojama"
+      // monster in your GY and cannot be activated without one there (the card just sent can then be the target).
+      canActivate: (ctx) =>
+        ctx.canSpecialSummon() && ctx.hand('me', isOjama).length > 0 && ctx.grave('me', (c) => isOjamaMonster(c) && ctx.canSummonCard(c)).length > 0,
       activate: async (ctx) => {
         const [s] = await ctx.select(ctx.hand('me', isOjama), 1, 1, 'Send 1 "Ojama" card from your hand to the GY.', 'cost');
         if (!s) return false;
         await ctx.sendToGrave(s, 'cost');
+        await ctx.selectTargets(ctx.grave('me', (c) => isOjamaMonster(c) && ctx.canSummonCard(c)), 1, 1, 'Target 1 "Ojama" monster in your GY.', 'specialSummon');
       },
       resolve: async (ctx) => {
-        const cands = ctx.grave('me', (c) => isOjamaMonster(c) && ctx.canSummonCard(c));
-        if (!cands.length || !ctx.canSpecialSummon()) return;
-        const [c] = await ctx.select(cands, 1, 1, 'Special Summon 1 "Ojama" monster from your GY.', 'specialSummon');
-        if (c) await ctx.specialSummon(c, { pos: aiPos(ctx, c) });
+        const [c] = ctx.validTargets((x) => x.location === 'grave');
+        if (c && ctx.canSpecialSummon()) await ctx.specialSummon(c, { pos: aiPos(ctx, c) });
       },
       ai: { score: () => 45 },
     },
@@ -3119,6 +3125,8 @@ trap('Overdoom Line', 'continuous', {
       mandatory: true,
       label: 'Destroy on the 2nd End Phase',
       categories: ['destroy'],
+      // https://edisonrul.ing/cards/o/overdoom-line.html — the self-destruction is not an effect (Royal Decree does not stop it).
+      noChain: true,
       eventFilter: (ctx, ev) => {
         if (ev.phase !== 'end' || !ctx.isMyTurn || !ctx.self.faceUp || !ctx.self.activeOnField) return false;
         ctx.self.flags.rgbtOdEnds = (ctx.self.flags.rgbtOdEnds ?? 0) + 1;

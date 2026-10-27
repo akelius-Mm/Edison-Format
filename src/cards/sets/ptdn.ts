@@ -499,7 +499,8 @@ monster('Samsara Lotus', {
       categories: ['damage'],
       eventFilter: (ctx, ev) => ev.phase === 'standby' && ctx.isMyTurn && ctx.self.location === 'mzone' && ctx.self.faceUp,
       resolve: async (ctx) => {
-        if (ctx.self.location === 'mzone') await ctx.damage(ctx.player, 1000);
+        // https://edisonrul.ing/cards/s/samsara-lotus.html — flipped face-down in the chain (Book of Moon): the effect disappears.
+        if (ctx.self.location === 'mzone' && ctx.self.faceUp) await ctx.damage(ctx.player, 1000);
       },
     },
   ],
@@ -3047,7 +3048,9 @@ trap('Sinister Seeds', 'normal', {
         const wasAtk = !b?.calc || (c === b.attacker ? true : b.calc.targetPos === 'atk');
         return seedsDamage(ctx, ev) >= 500 && wasAtk;
       },
-      canActivate: (ctx) => ctx.canSpecialSummon(),
+      // https://edisonrul.ing/cards/s/sinister-seeds.html — cannot be activated without enough empty Monster Zones for every
+      // Token (so never for 3000 or more battle damage).
+      canActivate: (ctx) => ctx.canSpecialSummon() && !!ctx.event && ctx.freeMZones() >= Math.floor(seedsDamage(ctx, ctx.event) / 500),
       activate: async (ctx) => {
         ctx.data.n = ctx.event ? Math.floor(seedsDamage(ctx, ctx.event) / 500) : 0;
       },

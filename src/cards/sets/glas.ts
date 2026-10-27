@@ -986,13 +986,15 @@ function gbCounter(kind: 'spell' | 'trap'): EffectDef {
       const l = ctx.prevLink();
       return !!l && !l.negated && l.isCardActivation && l.player !== ctx.player && (kind === 'spell' ? l.card.isSpell : l.card.isTrap);
     },
+    // https://edisonrul.ing/cards/p/parry.html, https://edisonrul.ing/cards/d/disarm.html — cannot be activated without a
+    // "Gladiator Beast" in the hand; it is returned to the Deck (shown) when this resolves: not a cost.
     canActivate: (ctx) => ctx.hand('me', isGBCard).length > 0,
-    activate: async (ctx) => {
-      const [c] = await ctx.select(ctx.hand('me', isGBCard), 1, 1, 'Return 1 "Gladiator Beast" card from your hand to the Deck.', 'cost');
-      if (!c) return false;
-      await ctx.toDeck(c, 'shuffle', 'cost');
-    },
     resolve: async (ctx) => {
+      const [c] = await ctx.select(ctx.hand('me', isGBCard), 1, 1, 'Return 1 "Gladiator Beast" card from your hand to the Deck.', 'toDeck');
+      if (c) {
+        await ctx.game.anim({ type: 'reveal', cards: [c.uid], player: ctx.player });
+        await ctx.toDeck(c, 'shuffle');
+      }
       await ctx.negateAndDestroy(ctx.prevLink());
     },
     ai: {
@@ -1457,14 +1459,15 @@ T('Rain Storm', 'normal', {
           aiScore: (c) => ctx.atk(c),
         });
         if (!t) return false;
-        const opts = ['Reduce by 1000 (destroy 1 Spell/Trap)'];
-        if (ctx.atk(t) >= 2000) opts.push('Reduce by 2000 (destroy 2 cards)');
-        ctx.data.mode = opts.length > 1 ? await ctx.option('Rain Storm:', opts, (i) => (i === 1 && ctx.field('opp').length >= 2 ? 2 : i === 0 && ctx.spellTraps('opp').length ? 1 : 0)) : 0;
       },
       resolve: async (ctx) => {
         const [t] = ctx.validTargets(faceUpOn);
-        const x = ctx.data.mode === 1 ? 2000 : 1000;
-        if (!t || ctx.atk(t) < x) return;
+        if (!t || ctx.atk(t) < 1000) return;
+        // https://edisonrul.ing/cards/r/rain-storm.html — you select which effect to apply when resolving it.
+        const opts = ['Reduce by 1000 (destroy 1 Spell/Trap)'];
+        if (ctx.atk(t) >= 2000) opts.push('Reduce by 2000 (destroy 2 cards)');
+        const mode = opts.length > 1 ? await ctx.option('Rain Storm:', opts, (i) => (i === 1 && ctx.field('opp').length >= 2 ? 2 : i === 0 && ctx.spellTraps('opp').length ? 1 : 0)) : 0;
+        const x = mode === 1 ? 2000 : 1000;
         ctx.addTempMod(t, 'atk', -x, 'field');
         if (x === 1000) {
           const st = ctx.spellTraps('opp');
@@ -2997,7 +3000,16 @@ function overLimitCands(ctx: Ctx): C[] {
     const c = evc(e);
     if (e.type === 'battleDestroyed' && c && c.location === 'grave' && isNormalLike(c) && (c.data.atk ?? 0) <= 1000) out.add(c);
   }
-  return [...out];
+  // https://edisonrul.ing/cards/o/over-limit.html — a monster destroyed by battle that left the GY and was later sent back
+  // there this turn by other means (Tributed, etc.) cannot be Special Summoned: its last trip to the GY must be the battle.
+  const evs = turnEvents(ctx.game);
+  return [...out].filter((c) => {
+    for (let i = evs.length - 1; i >= 0; i--) {
+      const e = evs[i];
+      if (e.type === 'sentToGrave' && evc(e) === c) return (e.reasons ?? [e.reason]).includes('battle');
+    }
+    return false;
+  });
 }
 
 T('No Entry!!', 'normal', {

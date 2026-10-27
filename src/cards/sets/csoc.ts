@@ -1935,8 +1935,11 @@ M('Puppet Master', {
         });
       },
       resolve: async (ctx) => {
-        const ts = ctx.validTargets((c) => c.location === 'grave');
-        if (ts.length < 2 || ctx.freeMZones() < 2) return;
+        // https://edisonrul.ing/cards/p/puppet-master.html — if a target leaves the GY, the other is still Special Summoned.
+        let ts = ctx.validTargets((c) => c.location === 'grave');
+        const room = ctx.freeMZones();
+        if (!ts.length || room < 1) return;
+        if (ts.length > room) ts = await ctx.select(ts, room, room, 'Select the monster(s) to Special Summon.', 'specialSummon');
         const r = await ctx.specialSummon(ts, { pos: 'choose' });
         for (const c of r) c.flags.cannotAttackTurn = ctx.turn;
       },
@@ -2151,6 +2154,9 @@ M('Neos Wiseman', {
         const a = evc(ev);
         const t = evo(ev);
         const o = (a === ctx.self ? t : a)!;
+        // https://edisonrul.ing/cards/n/neos-wiseman.html — destroyed: its original ATK/DEF; still on the field: its
+        // current ATK/DEF; returned to the hand/Deck or flipped face-down before the end of the Damage Step: no effect.
+        if (!(o.location === 'mzone' && o.faceUp) && o.location !== 'grave' && o.location !== 'banished') return;
         const atk = o.location === 'mzone' && o.faceUp ? ctx.atk(o) : o.data.atk ?? 0;
         const def = o.location === 'mzone' && o.faceUp ? ctx.def(o) : o.data.def ?? 0;
         await ctx.damage(ctx.opp, atk);
@@ -2550,7 +2556,12 @@ S('Poison Chain', 'continuous', {
       categories: ['mill'],
       eventFilter: (ctx, ev) => ev.phase === 'end' && ctx.isMyTurn && stActive(ctx),
       condition: (ctx) =>
-        stActive(ctx) && ctx.faceUpMonsters('me', isIronChain).length > 0 && !turnEvents(ctx.game).some((e) => e.type === 'attackDeclared' && e.player === ctx.player),
+        stActive(ctx) &&
+        ctx.faceUpMonsters('me', isIronChain).length > 0 &&
+        // https://edisonrul.ing/cards/p/poison-chain.html — does not activate if the opponent's Deck has fewer cards than
+        // the number of "Iron Chain" monsters you control.
+        ctx.deck('opp').length >= ctx.faceUpMonsters('me', isIronChain).length &&
+        !turnEvents(ctx.game).some((e) => e.type === 'attackDeclared' && e.player === ctx.player),
       resolve: async (ctx) => {
         const n = ctx.faceUpMonsters('me', isIronChain).length;
         if (n) await ctx.mill(n, ctx.opp);
@@ -2616,7 +2627,10 @@ S('Psychokinesis', 'normal', {
       },
       resolve: async (ctx) => {
         const ts = ctx.validTargets((c) => c.onField);
-        if (ts.length) await ctx.destroy(ts);
+        // https://edisonrul.ing/cards/p/psychokinesis.html — destroying and the 1000 damage happen at the same time: if the
+        // target left the field in the chain, no damage is inflicted.
+        if (!ts.length) return;
+        await ctx.destroy(ts);
         await ctx.game.damage(ctx.player, 1000, 'effect', ctx.self, ctx.player);
       },
       ai: { score: (ctx) => (ctx.lp > 2500 && ctx.field('opp').length ? 50 : 0) },
@@ -2809,8 +2823,8 @@ S('Omega Goggles', 'equip', {
       canActivate: (ctx) => ctx.hand('opp').length > 0,
       resolve: async (ctx) => {
         const h = ctx.hand('opp');
-        const t = ctx.equipTarget;
-        if (t) t.flags.cannotAttackTurn = ctx.turn;
+        // The attack restriction is applied by the continuous effect below, only while this card stays equipped.
+        ctx.self.flags.gogglesTurn = ctx.turn;
         if (!h.length) return;
         const c = h[ctx.game.rng.int(h.length)];
         c.revealedUntil = ctx.turn;
@@ -2818,6 +2832,12 @@ S('Omega Goggles', 'equip', {
         await ctx.game.anim({ type: 'reveal', cards: [c.uid], player: ctx.player });
       },
       ai: { score: (ctx) => (ctx.phase === 'main2' ? 20 : 0) },
+    },
+    {
+      // https://edisonrul.ing/cards/o/omega-goggles.html — if Omega Goggles is unequipped after using its effect, the
+      // monster can attack this turn.
+      kind: 'continuous',
+      mods: [{ q: 'cannotAttack', to: 'cards', filter: (ctx, c: C) => c === ctx.equipTarget && ctx.self.flags.gogglesTurn === ctx.turn }],
     },
   ],
 });
@@ -2975,6 +2995,11 @@ T('Prideful Roar', 'normal', {
       },
       resolve: async (ctx) => {
         const mine = ctx.data.mine as C;
+        // https://edisonrul.ing/cards/p/prideful-roar.html — if your monster's ATK is no longer lower than the ATK of the
+        // monster it battles when this resolves, the effect disappears.
+        const b = ctx.battle;
+        const other = b ? (mine === b.attacker ? b.target : b.attacker) : null;
+        if (!other || !faceUpOn(other) || ctx.atk(mine) >= ctx.atk(other)) return;
         if (mine && faceUpOn(mine)) ctx.addTempMod(mine, 'atk', (ctx.data.d ?? 0) + 300, 'battle');
       },
       ai: {
@@ -2997,7 +3022,8 @@ T('Revival Gift', 'normal', {
     {
       kind: 'activate',
       categories: ['specialSummon'],
-      canActivate: (ctx) => ctx.canSpecialSummon() && ctx.grave('me', (c) => c.isTuner && ctx.canSummonCard(c)).length > 0,
+      // https://edisonrul.ing/cards/r/revival-gift.html — cannot be activated if the opponent has 1 or fewer empty Monster Zones.
+      canActivate: (ctx) => ctx.canSpecialSummon() && ctx.freeMZones('opp') >= 2 && ctx.grave('me', (c) => c.isTuner && ctx.canSummonCard(c)).length > 0,
       activate: async (ctx) => {
         await ctx.selectTargets(ctx.grave('me', (c) => c.isTuner && ctx.canSummonCard(c)), 1, 1, 'Select 1 Tuner monster in your Graveyard.', 'specialSummon', {
           aiScore: (c) => lvl(c) * 100 + (c.data.atk ?? 0),
