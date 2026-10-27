@@ -59,6 +59,8 @@ export interface ChainLink {
   isCardActivation: boolean;
   /** Card was a monster on the field when the effect activated. */
   fromLocation: Location;
+  /** The card's moveId once its costs were paid ("negate and destroy" only hits that same card). */
+  moveIdAfterCost?: number;
 }
 
 interface PendingTrigger {
@@ -1477,6 +1479,7 @@ export class Game {
       this.update();
       return null;
     }
+    link.moveIdAfterCost = card.moveId;
     this.beginBatch();
     this.emit({ type: 'cardActivated', card, player, minor: true, data: { link } });
     this.emit({ type: 'chainActivated', card, player, minor: true, data: { link } });

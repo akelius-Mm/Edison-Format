@@ -5212,6 +5212,21 @@ async function archetypeAuditTests() {
   };
 
   // ---- Gladiator Beasts
+  await test('War Chariot: a monster effect activated from the hand (Battle Fader) is negated and destroyed in the hand', async () => {
+    const { g, c0, c1, place } = setup();
+    const gb = place(1, cardByName('Gladiator Beast Laquari'), 'mzone');
+    const wc = place(1, cardByName('Gladiator Beast War Chariot'), 'szone');
+    const bf = place(0, cardByName('Battle Fader'), 'hand');
+    c0.respond = respondWith('Battle Fader');
+    c1.respond = respondWith('Gladiator Beast War Chariot');
+    g.turnPlayer = 1;
+    g.phase = 'battle';
+    await g.conductAttack(1, gb);
+    eq(wc.location, 'grave', 'War Chariot used');
+    eq(bf.location, 'grave', 'Battle Fader destroyed in the hand');
+    eq(g.players[0].lp, 8000 - (gb.data.atk ?? 0), 'the attack went through');
+  });
+
   await test('GB tag-out: after a real attack it shuffles itself in and tags in a different Gladiator Beast; Bestiari pops a Spell/Trap', async () => {
     const { g, c0, place } = setup();
     const best = deckCard(g, 0, 'Gladiator Beast Bestiari');
