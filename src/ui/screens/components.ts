@@ -150,6 +150,8 @@ export function signatureCard(d: Pick<DeckInfo, 'main' | 'extra'> & { ref?: Deck
     if (twin) return SIGNATURE[twin.id];
   }
   if (kind === 'custom') {
+    const cov = getCustomDeck(id)?.cover;
+    if (cov && findCard(cov)) return cov;
     const base = getCustomDeck(id)?.basedOn;
     if (base && SIGNATURE[base]) return SIGNATURE[base];
   }

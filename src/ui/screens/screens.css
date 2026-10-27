@@ -3606,3 +3606,7 @@ tr.pending .pt-score {
 .dl-card:hover, .dl-card:focus-visible { background: var(--line); }
 .dl-n { color: var(--gold); min-width: 2.2em; font-variant-numeric: tabular-nums; }
 .dl-name { min-width: 0; overflow-wrap: anywhere; }
+.cover-list { display: grid; gap: 2px; margin-top: 10px; max-height: 60vh; overflow-y: auto; }
+.cover-opt { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 10px 12px; border: 0; border-radius: 8px; background: transparent; color: var(--text); font: inherit; text-align: left; cursor: pointer; }
+.cover-opt:hover, .cover-opt:focus-visible { background: var(--line); }
+.cover-opt.on { color: var(--gold); }
