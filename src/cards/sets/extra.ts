@@ -1205,8 +1205,9 @@ monster('Thousand-Eyes Restrict', {
           if (!other) return false;
           const a = ctx.atk(self);
           const o = ctx.atk(other);
-          if (ev.card === self) return other.pos === 'atk' && (o > a || (o === a && a > 0));
-          return self.pos === 'atk' ? o > a || (o === a && o > 0) : o > ctx.def(self);
+          // Equal ATK: both destroyed, even at 0 ATK (Edison Format Rule #13, https://www.edisonformat.com/edison-rule-differences.html).
+          if (ev.card === self) return other.pos === 'atk' && o >= a;
+          return self.pos === 'atk' ? o >= a : o > ctx.def(self);
         },
         resolve: async (ctx) => {
           const e = equipped(ctx);
