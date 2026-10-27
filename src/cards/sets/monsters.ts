@@ -71,12 +71,12 @@ function wouldLoseBattle(ctx: Ctx, c: CardInstance, opp: CardInstance, cIsAttack
     if (opp.pos !== 'atk') return false;
     const a = ctx.atk(c);
     const o = ctx.atk(opp);
-    return o > a || (o === a && a > 0);
+    return o >= a; // equal ATK: both destroyed, even at 0 (Edison Format Rule #13)
   }
   const a = ctx.atk(opp);
   if (c.pos === 'atk') {
     const s = ctx.atk(c);
-    return a > s || (a === s && a > 0);
+    return a >= s; // equal ATK: both destroyed, even at 0 (Edison Format Rule #13)
   }
   return a > ctx.def(c);
 }

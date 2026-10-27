@@ -139,6 +139,10 @@ export class Ctx {
     if ((c.onField || c.location === 'grave' || c.location === 'banished') && this.game.queryCard(c, 'untargetableByAll')) return false;
     if (c.onField && c.faceUp && c.data.targetImmunity && !this.game.isNegated(c) && c.data.targetImmunity(c, this.self, this)) return false;
     if (this.game.isUnaffected(c, this.self, this.player)) return false;
+    // A monster destroyed by battle in damage calculation (still on the field until the end of the Damage Step) cannot
+    // be targeted, e.g. by a Flip Effect. Rulebook v7.0 p.34, https://www.edisonformat.com/rulebook.html
+    const b = this.game.battle;
+    if (b?.inDamageStep && c.location === 'mzone' && b.markedDestroyed?.includes(c)) return false;
     return true;
   }
   isNegated(c: CardInstance) {
