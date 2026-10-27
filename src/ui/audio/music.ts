@@ -981,7 +981,7 @@ class MusicController {
         if (t.kind === 'user') {
           const data = await userTrackData(t.userId!);
           if (!data) throw new Error('missing');
-          buf = await decodeAudio(data);
+          buf = await decodeAudio(data, { music: true });
         } else buf = await loadMusicTrack(t.track!.id);
         this.bufs.set(key, { buf, level: levelFor(buf, t.kind === 'user' ? USER_DB : RECORDED_DB) });
       } catch {
