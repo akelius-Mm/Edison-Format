@@ -954,14 +954,18 @@ monster("Koa'ki Meiru Crusader", {
       event: 'battleDestroyed',
       label: "Add Koa'ki Meiru card",
       categories: ['toHand'],
-      eventFilter: selfDestroysByBattle,
-      canActivate: (ctx) => ctx.grave('me', isKoaki).length > 0,
-      resolve: async (ctx) => {
-        const cands = ctx.grave('me', isKoaki);
-        const sel = await ctx.select(cands, 1, 1, 'Add 1 "Koa\'ki Meiru" card from your GY to your hand.', 'toHand', {
+      // https://edisonrul.ing/cards/k/koaki-meiru-crusader.html — "This effect targets 1 "Koa'ki Meiru" card in your
+      // Graveyard. If this card battles a monster with the same ATK and both are destroyed, its effect will activate."
+      eventFilter: (ctx, ev) => ev.type === 'battleDestroyed' && ev.other === ctx.self && (ev.card as C).owner !== ctx.player,
+      canActivate: (ctx) => ctx.grave('me', (c) => isKoaki(c) && ctx.canTarget(c)).length > 0,
+      activate: async (ctx) => {
+        await ctx.selectTargets(ctx.grave('me', isKoaki), 1, 1, 'Target 1 "Koa\'ki Meiru" card in your GY to add to your hand.', 'toHand', {
           aiScore: (c) => (isIronCore(c) ? 5000 : cardValue(ctx.game, c)),
         });
-        if (sel.length) await ctx.toHand(sel);
+      },
+      resolve: async (ctx) => {
+        const t = ctx.validTargets((c) => c.location === 'grave');
+        if (t.length) await ctx.toHand(t);
       },
     },
   ],

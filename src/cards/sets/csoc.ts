@@ -705,7 +705,9 @@ M('Morphtronic Celfon', {
       label: '(Attack) Roll a die: Special Summon a Morphtronic',
       categories: ['specialSummon'],
       condition: (ctx) => ctx.self.pos === 'atk',
-      canActivate: (ctx) => ctx.deck().length > 0,
+      // https://edisonrul.ing/cards/m/morphtronic-celfon.html — it cannot be activated if you cannot Special Summon, or
+      // if there are no "Morphtronic" monsters left in your Deck.
+      canActivate: (ctx) => ctx.deck().length > 0 && ctx.canSpecialSummon() && ctx.deck('me', isMorphMon).length > 0,
       resolve: async (ctx) => {
         const n = await rollDie(ctx);
         const deck = ctx.game.players[ctx.player].deck;

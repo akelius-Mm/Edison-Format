@@ -185,7 +185,8 @@ function eq(a: unknown, b: unknown, msg: string) {
     eq(g.players[1].lp, 8000, 'no LP gained');
   });
 
-  await test('Grandmaster of the Six Samurai: "When ... you can" misses the timing if not the last thing to happen', async () => {
+  // https://edisonrul.ing/cards/g/grandmaster-of-the-six-samurai.html: "The ① mandatory Trigger Effect cannot miss timing."
+  await test('Grandmaster of the Six Samurai: mandatory, it does not miss the timing when not the last thing to happen', async () => {
     for (const miss of [false, true]) {
       const { g, place } = setup();
       const gm = place(0, cardByName('Grandmaster of the Six Samurai'), 'mzone');
@@ -195,7 +196,7 @@ function eq(a: unknown, b: unknown, msg: string) {
       if (miss) await g.mill(1, 1, 'effect');
       await g.processTriggers(true);
       eq(gm.location, 'grave', 'Grandmaster destroyed');
-      eq(sam.location, miss ? 'grave' : 'hand', miss ? 'missed the timing' : 'Six Samurai added');
+      eq(sam.location, 'hand', miss ? 'does not miss the timing' : 'Six Samurai added');
     }
   });
 

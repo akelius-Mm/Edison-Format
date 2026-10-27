@@ -3306,6 +3306,9 @@ trap('Morphtronic Forcefield', 'counter', {
         const l = ctx.prevLink();
         return !!l && !l.negated && l.isCardActivation && (l.card.isSpell || l.card.isTrap) && threatensMorph(ctx, l);
       },
+      // https://edisonrul.ing/cards/m/morphtronic-forcefield.html — it cannot be activated with no "Morphtronic" monsters
+      // in your Deck, or while "Thunder King Rai-Oh" is on the field (no adding from the Deck).
+      canActivate: (ctx) => !ctx.game.queryPlayer(ctx.player, 'cannotAddFromDeck') && ctx.deck('me', (c) => c.isMonster && isMorph(c)).length > 0,
       activate: async (ctx) => {
         ctx.data.link = ctx.prevLink();
       },

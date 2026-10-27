@@ -257,9 +257,9 @@ export class Game {
 
   /**
    * The data of `c` as changed by 'continuous' dataMod effects that apply right now (Zombie World: monsters on the field
-   * and in the GYs are Zombie-Type; Proto-Cyber Dragon: named "Cyber Dragon" while face-up on the field). A change to a
-   * card in the GY does not apply while the GY is locked (Necrovalley: "negate any card effect that changes Types or
-   * Attributes in the GY"). APPROX: a Spell/Trap source is not checked for negation (only monsters are).
+   * and in the GYs are Zombie-Type; Proto-Cyber Dragon: named "Cyber Dragon" while face-up on the field). It also applies
+   * in the GY under "Necrovalley" (2010 ruling: non-targeting Type/Attribute changes apply,
+   * https://edisonrul.ing/cards/n/necrovalley.html). APPROX: a Spell/Trap source is not checked for negation (only monsters are).
    */
   private cardView = (c: CardInstance, d: CardData): CardData => {
     if (!this.dataModSources.length || this.viewing) return d;
@@ -280,7 +280,6 @@ export class Game {
           if (m.to === 'cards' && m.filter && !m.filter(c)) continue;
           if (src.isMonster && this.isNegated(src)) continue;
           if (ef.active && !ef.active(this.effectCtx(src, ef))) continue;
-          if (c.location === 'grave' && this.gyLocked()) continue;
           out = m.apply(out, c);
         }
       }
@@ -367,7 +366,10 @@ export class Game {
     return Math.max(0, empty - locked);
   }
   freeSZones(p: PlayerId) {
-    return this.players[p].szone.filter((c) => !c).length;
+    // A Trap Monster (flags.trapMonster) also takes up 1 Spell & Trap Zone of its controller.
+    // https://edisonrul.ing/cards/misc/trap-monsters.html
+    const trapMonsters = this.players[p].mzone.filter((c) => c?.flags.trapMonster).length;
+    return Math.max(0, this.players[p].szone.filter((c) => !c).length - trapMonsters);
   }
 
   isOptUsed(key: string) {
@@ -468,18 +470,9 @@ export class Game {
     return this.queryPlayer(0, 'cannotBanishFromGY') || this.queryPlayer(1, 'cannotBanishFromGY');
   }
 
-  /** Necrovalley's GY lock applies (query 'gyLock'): effects that move cards in the GY, or change their Types, are negated. */
+  /** Necrovalley's ① applies (query 'gyLock'): effects that TARGET a card in a GY are negated (src/cards/necrovalley.ts). */
   gyLocked(): boolean {
     return this.queryPlayer(0, 'gyLock') || this.queryPlayer(1, 'gyLock');
-  }
-
-  /** Necrovalley: a card effect of `reasonCard` that would move `cards` out of the GY does not move them. Returns the rest. */
-  private dropGyLocked(cards: CardInstance[], reason: Reason, reasonCard?: CardInstance): CardInstance[] {
-    if (reason !== 'effect' || !reasonCard || reasonCard.data.ignoresGyLock || !cards.some((c) => c.location === 'grave')) return cards;
-    if (!this.gyLocked()) return cards;
-    const kept = cards.filter((c) => c.location === 'grave');
-    this.log(`Necrovalley: ${kept.map((c) => c.name).join(', ')} cannot leave the GY.`, 'info');
-    return cards.filter((c) => c.location !== 'grave');
   }
 
   isNegated(card: CardInstance): boolean {
@@ -741,7 +734,6 @@ export class Game {
       noAnim?: boolean;
     },
   ): Promise<CardInstance[]> {
-    cards = this.dropGyLocked(cards, opts.reason, opts.reasonCard);
     if (!cards.length) return [];
     this.beginBatch();
     const moved: { card: CardInstance; from: Location; to: Location; fromFaceUp: boolean; fromCtrl: PlayerId; wasMonster: boolean }[] = [];
@@ -1092,7 +1084,7 @@ export class Game {
     const ctrl = opts.controller ?? player;
     if (this.queryPlayer(player, 'cannotSpecialSummon')) return [];
     const list: CardInstance[] = [];
-    for (const c of this.dropGyLocked(cards, 'effect', opts.reasonCard)) {
+    for (const c of cards) {
       if (this.freeMZones(ctrl) - list.length <= 0) break;
       if (!opts.ignoreConditions && c.data.nomi && !c.properlySummoned && (c.location === 'grave' || c.location === 'banished')) continue;
       if (!opts.faceDown && this.queryCard(c, 'cannotBeSummoned')) continue;
@@ -1523,7 +1515,8 @@ export class Game {
       (c): c is CardInstance => !!c && c !== except && (c.faceUp || c.controller === player),
     );
     const toRemove = olds.filter((c) => c.faceUp || c.controller === player);
-    if (toRemove.length) await this.moveCards(toRemove, 'grave', { reason: 'rule', destroyed: true });
+    // reasonPlayer: whose new Field Spell destroyed it (Geartown cannot activate when its controller replaced it).
+    if (toRemove.length) await this.moveCards(toRemove, 'grave', { reason: 'rule', destroyed: true, reasonPlayer: player });
   }
 
   /** Run the chain: response windows then resolution. */
@@ -1878,6 +1871,45 @@ export class Game {
     this.emit({ type: 'normalSummoned', ...common });
     if (need) this.emit({ type: 'tributeSummoned', ...common });
     this.emit({ type: 'summoned', ...common });
+    await this.processTriggers(true);
+  }
+
+  /**
+   * Gemini Summon: Normal Summon a face-up Gemini monster again so it becomes an Effect Monster. Not while its effects
+   * are negated (Skill Drain). https://edisonrul.ing/cards/misc/gemini-monsters-gigaplant-elemental-hero-neos-alius-etc.html
+   */
+  canGeminiSummon(p: PlayerId, card: CardInstance): boolean {
+    if (card.location !== 'mzone' || !card.faceUp || card.controller !== p || !card.hasType('gemini') || card.flags.geminiSummoned) return false;
+    if (this.chain.length || this.isNegated(card)) return false;
+    if (this.players[p].normalSummonsLeft <= 0 || !this.hasNormalSummonFor(p, card, false)) return false;
+    return !this.queryPlayer(p, 'cannotNormalSummon') && !this.queryCard(card, 'cannotBeSummoned');
+  }
+
+  /**
+   * The Gemini Summon (2010 rulings, page above): it does not start a chain and needs no Tributes; it can be negated
+   * (Solemn Judgment, which destroys the monster) and answered like any Normal Summon (Torrential Tribute, Black Garden).
+   * The monster stays on the field and keeps its position (it cannot change it afterwards this turn).
+   */
+  async geminiSummon(p: PlayerId, card: CardInstance) {
+    this.players[p].normalSummonsLeft--;
+    (this.turnData.normalSummonedOrSet ??= {})[p] = true;
+    const restricted = this.players[p].restrictedSummons ?? [];
+    const ri = restricted.findIndex((r) => r.allow(card, false));
+    if (ri >= 0) restricted.splice(ri, 1);
+    else if (restricted.length > this.players[p].normalSummonsLeft) restricted.splice(0, restricted.length - this.players[p].normalSummonsLeft);
+    this.recentEvents = [];
+    card.summonTurn = this.turn;
+    this.log(`${this.players[p].name} Gemini Summons ${card.name} (Normal Summon).`, 'action', p);
+    await this.anim({ type: 'summon', cards: [card.uid], method: 'normal', from: ['mzone'] });
+    if (await this.summonNegationWindow([card], p, 'normal')) return;
+    if (card.location !== 'mzone' || !card.faceUp) return;
+    card.flags.geminiSummoned = true;
+    this.log(`${card.name} is now treated as an Effect Monster.`, 'action', p);
+    this.beginBatch();
+    const common = { card, player: p, from: 'mzone' as Location, to: 'mzone' as Location, tributes: [] as CardInstance[], method: 'normal' as GameEvent['method'] };
+    this.emit({ type: 'normalSummoned', ...common });
+    this.emit({ type: 'summoned', ...common });
+    this.update();
     await this.processTriggers(true);
   }
 
@@ -2268,6 +2300,7 @@ export class Game {
   }
 
   canProc(p: PlayerId, c: CardInstance, ef: EffectDef, idx: number): boolean {
+    if (ef.geminiSummon) return this.canGeminiSummon(p, c);
     const range = this.defaultRange(c, ef);
     if (!range.includes(c.location)) return false;
     if (this.chain.length) return false;
@@ -2336,6 +2369,10 @@ export class Game {
       }
       case 'proc': {
         const { card, effect: ef, effectIndex: idx } = a.act;
+        if (ef.geminiSummon) {
+          await this.geminiSummon(p, card);
+          return;
+        }
         const ctx = new Ctx(this, card, ef, p);
         ctx.effectIndex = idx;
         if (ef.opt) this.useOpt(this.optKey(card, ef, idx, p));
@@ -2429,8 +2466,6 @@ export class Game {
     // SDMM: "You must pay X LP to declare an attack with this card" (Machina Force).
     if (attacker.data.attackLpCost && !this.isNegated(attacker)) await this.payLp(p, attacker.data.attackLpCost);
     attacker.attacksThisTurn++;
-    attacker.attackedThisTurnOrWasAttacked = true;
-    if (target) target.attackedThisTurnOrWasAttacked = true;
     this.battle = {
       attacker,
       target,
@@ -2564,7 +2599,11 @@ export class Game {
         return;
       }
     }
-    // Damage calculation
+    // Damage calculation. Only now has a monster "battled" ("attacked or was attacked" for end-of-Battle-Phase effects): an
+    // attack negated or stopped before damage calculation does not count (Gladiator Beast rulings,
+    // https://edisonrul.ing/cards/g/gladiator-beast-bestiari.html).
+    attacker.attackedThisTurnOrWasAttacked = true;
+    if (target) target.attackedThisTurnOrWasAttacked = true;
     const atkA = this.getAtk(attacker);
     const losers: { card: CardInstance; by: CardInstance }[] = [];
     let dmg: { player: PlayerId; amount: number } | null = null;

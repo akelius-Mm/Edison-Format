@@ -87,8 +87,7 @@ export type QueryKey =
   | 'cannotSynchroSummon'
   // player subject: cards in the GY cannot be banished (Necrovalley, Kycoo); effects with gyBanishCost are not offered.
   | 'cannotBanishFromGY'
-  // player subject: Necrovalley's GY lock — card effects that would move a card in the GY, or change Types/Attributes in
-  // the GY, are negated (Game.moveCards / specialSummon / cardView; targeted ones by necrovalleyNegates).
+  // player subject: Necrovalley's ① (2010 text) — effects that TARGET a card in a GY are negated (necrovalleyNegates).
   | 'gyLock'
   // player subject (numeric): Monster Zones of that player that cannot be used (Phantom Dragon: 2).
   | 'lockedMZones';
@@ -154,6 +153,11 @@ export interface EffectDef {
   /** For 'proc': allowed summon positions. */
   procPositions?: BattlePos[];
   /**
+   * For 'proc' (range ['mzone']) on a Gemini monster: the Gemini Summon — a Normal Summon of the face-up monster
+   * (Game.geminiSummon), not an effect: no chain, no Tributes, Solemn Judgment / Torrential Tribute can answer it.
+   */
+  geminiSummon?: boolean;
+  /**
    * ANPR: destruction replacement ("if X would be destroyed, you can ... instead").
    * Called by `Game.destroy` (reason 'effect') and by battle destruction (reason 'battle') for every
    * source card in `range` (default: monsters 'mzone', Spells/Traps 'szone'/'fzone'; face-up, not negated
@@ -174,7 +178,7 @@ export interface EffectDef {
    * On a 'continuous' effect: changes the printed data (Type, name...) of cards while the effect applies, so every check
    * that reads `card.data` / `card.name` sees it (Zombie World, Proto-Cyber Dragon). `to`: 'self' (default) or any card
    * passing `filter`. `apply` must return a stable object for the same input (use `dataVariant`). Applied by
-   * Game.cardView; a change to a card in the GY does not apply while the GY is locked (Necrovalley, query 'gyLock').
+   * Game.cardView (also in the GY under Necrovalley, which only negates effects that target).
    */
   dataMod?: { to?: 'self' | 'cards'; filter?: (c: CardInstance) => boolean; apply: (d: CardData, c: CardInstance) => CardData };
   /**
@@ -273,7 +277,7 @@ export interface CardData {
   attackLpCost?: number;
   /** SDMM (The Big Saturn): locations it cannot be Special Summoned from (unless the effect ignores Summoning conditions). */
   noSpecialFrom?: Location[];
-  /** Its effects cannot be negated by Necrovalley's GY lock (Gravekeeper's Stele). */
+  /** Its effects cannot be negated by Necrovalley (Gravekeeper's Stele's printed text). */
   ignoresGyLock?: boolean;
 }
 
@@ -452,6 +456,9 @@ export class CardInstance {
    */
   resetOnFaceDown() {
     this.faceUpId++;
+    // A monster flipped face-down after battling no longer counts as having battled, even if flipped face-up again
+    // before the end of the Battle Phase (https://edisonrul.ing/cards/g/gladiator-beast-bestiari.html).
+    this.attackedThisTurnOrWasAttacked = false;
     this.tempMods = [];
     this.counters = {};
     for (const k of Object.keys(this.flags)) if (FACE_UP_FLAGS.has(k)) delete this.flags[k];
