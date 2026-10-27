@@ -161,7 +161,16 @@ monster('Light and Darkness Dragon', {
         if (ctx.game.getAtk(me) < 500 || ctx.game.getDef(me) < 500) return;
         ctx.game.addTempMod(me, 'atk', -500, 'field', me);
         ctx.game.addTempMod(me, 'def', -500, 'field', me);
-        if (target && !target.negated && ctx.game.chain.includes(target)) ctx.game.negateLink(target, false, me);
+        if (target && !target.negated && ctx.game.chain.includes(target)) {
+          ctx.game.negateLink(target, false, me);
+          // Edison functional errata (Lumina / Susa Soldier entries): a Phase-Dependent Mandatory Trigger whose activation
+          // is negated by this card "activates again ... until it is able to resolve" (Judgment Dragon, every Lightsworn
+          // and every Spirit monster). https://www.edisonformat.com/functional-errata.html
+          const ev = target.ctx.event;
+          if (target.effect.kind === 'trigger' && target.effect.mandatory && ev?.type === 'phaseStart' && ev.phase === ctx.game.phase) {
+            ctx.game.pending.push({ card: target.card, effect: target.effect, effectIndex: target.effectIndex, event: ev, player: target.player });
+          }
+        }
       },
     },
     {

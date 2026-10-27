@@ -1824,8 +1824,11 @@ export class Game {
     return ps.normalSummonsLeft > restricted.length || restricted.some((r) => r.allow(card, set));
   }
 
-  /** Normal Summon or Set a monster (handles tributes). */
-  async normalSummon(p: PlayerId, card: CardInstance, set: boolean) {
+  /**
+   * Normal Summon or Set a monster (handles tributes). `byEffect`: the Summon is performed while a card effect resolves
+   * (Ultimate Offering): it cannot be negated (no Solemn Judgment window) and its triggers wait for the Chain to end.
+   */
+  async normalSummon(p: PlayerId, card: CardInstance, set: boolean, opts: { byEffect?: boolean } = {}) {
     const need = this.tributesNeeded(card);
     let tributes: CardInstance[] = [];
     if (need > 0) {
@@ -1866,18 +1869,18 @@ export class Game {
       this.log(`${this.players[p].name} Sets a monster.`, 'action', p);
       await this.anim({ type: 'summon', cards: [card.uid], method: 'set', from: ['hand'] });
       this.emit({ type: 'monsterSet', card, player: p });
-      await this.processTriggers(true);
+      if (!opts.byEffect) await this.processTriggers(true);
       return;
     }
     this.log(`${this.players[p].name} ${need ? 'Tribute' : 'Normal'} Summons ${card.name}.`, 'action', p);
     await this.anim({ type: 'summon', cards: [card.uid], method: need ? 'tribute' : 'normal', from: ['hand'] });
-    if (await this.summonNegationWindow([card], p, need ? 'tribute' : 'normal')) return;
+    if (!opts.byEffect && (await this.summonNegationWindow([card], p, need ? 'tribute' : 'normal'))) return;
     this.beginBatch();
     const common = { card, player: p, from: 'hand' as Location, to: 'mzone' as Location, tributes, method: (need ? 'tribute' : 'normal') as GameEvent['method'] };
     this.emit({ type: 'normalSummoned', ...common });
     if (need) this.emit({ type: 'tributeSummoned', ...common });
     this.emit({ type: 'summoned', ...common });
-    await this.processTriggers(true);
+    if (!opts.byEffect) await this.processTriggers(true);
   }
 
   /**

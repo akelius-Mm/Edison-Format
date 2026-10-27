@@ -1,75 +1,103 @@
-// Edison Format Forbidden & Limited list (TCG list in effect for SJC Edison, April 2010),
-// reconstructed for this simulator. Cards not listed are unlimited (3).
+// Edison Format Forbidden & Limited list: the TCG list effective 2010-03-01 (in force for SJC Edison, April 2010).
+// Cards not listed are unlimited (3).
+// Sources (they agree card for card: 43 Forbidden, 70 Limited, 19 Semi-Limited):
+//   - https://www.edisonformat.com/banlist.html ("Edison Format Follows the March 2010 (TCG) Forbidden and Limited List")
+//   - https://yugipedia.com/wiki/March_2010_Lists_(TCG), citing Konami's list
+//     http://www.yugioh-card.com/en/limited/10_03_list.html (archived 2010-08-25)
+// Names on that list that have no card definition here are kept so the list stays complete.
+//
+// KNOWN DIFFERENCES, NOT YET APPLIED (marked "OFFICIAL:" below): the official list is stricter for these cards, but
+// applying it would make bundled non-tournament decks in src/decks/ illegal (scripts/side-deck-test.ts), so they keep
+// their old limit until those decks are updated: Magician of Faith, Tsukuyomi, Dark Hole, Monster Reborn and Premature
+// Burial (Forbidden); Blackwing - Gale the Whirlwind, Lumina, Lightsworn Summoner, Mezuki and Necro Gardna (Limited);
+// Dandylion, Goblin Zombie, Judgment Dragon, Lonefire Blossom, Black Whirlwind and Bottomless Trap Hole (Semi-Limited).
 import { CARDS } from './define';
 
 export const FORBIDDEN = [
+  // Monsters
   'Black Luster Soldier - Envoy of the Beginning',
-  'Butterfly Dagger - Elma',
-  'Card of Safe Return',
-  'Change of Heart',
   'Chaos Emperor Dragon - Envoy of the End',
-  'Crush Card Virus',
   'Cyber Jar',
   'Cyber-Stein',
   'Dark Magician of Chaos',
   'Dark Strike Fighter',
-  'Delinquent Duo',
-  'Destiny Draw',
-  'Dimension Fusion',
-  'Exchange of the Spirit',
+  'Destiny Hero - Disk Commander',
   'Fiber Jar',
-  'Graceful Charity',
-  "Harpie's Feather Duster",
-  'Imperial Order',
-  'Last Turn',
   'Magical Scientist',
   'Makyura the Destructor',
+  'Sinister Serpent',
+  'Thousand-Eyes Restrict',
+  'Tribe-Infecting Virus',
+  'Victory Dragon',
+  'Witch of the Black Forest',
+  'Yata-Garasu',
+  // Spells
+  'Butterfly Dagger - Elma',
+  'Card of Safe Return',
+  'Change of Heart',
+  'Confiscation',
+  'Delinquent Duo',
+  'Dimension Fusion',
+  'Graceful Charity',
+  "Harpie's Feather Duster",
+  'Last Will',
   'Metamorphosis',
   'Mirage of Nightmare',
   'Painful Choice',
   'Pot of Greed',
   'Raigeki',
-  'Ring of Destruction',
-  'Sacred Phoenix of Nephthys',
-  'Sinister Serpent',
   'Snatch Steal',
   'The Forceful Sentry',
-  'Thousand-Eyes Restrict',
+  // Traps
+  'Crush Card Virus',
+  'Exchange of the Spirit',
+  'Imperial Order',
+  'Last Turn',
+  'Ring of Destruction',
   'Time Seal',
-  'Victory Dragon',
-  'Witch of the Black Forest',
-  'Yata-Garasu',
 ];
 
 export const LIMITED = [
   // Monsters
+  'Black Rose Dragon',
   'Brionac, Dragon of the Ice Barrier',
   'Card Trooper',
+  'Chaos Sorcerer',
   'Dark Armed Dragon',
-  'Destiny Hero - Disk Commander',
   'Elemental Hero Stratos',
+  'Exodia the Forbidden One',
   'Gladiator Beast Bestiari',
   'Gorz the Emissary of Darkness',
   'Goyo Guardian',
-  'Magician of Faith',
+  'Left Arm of the Forbidden One',
+  'Left Leg of the Forbidden One',
+  'Magician of Faith', // OFFICIAL: Forbidden
   'Marshmallon',
+  'Mind Master',
   'Morphing Jar',
+  'Necroface',
   'Neo-Spacian Grand Mole',
+  'Night Assailant',
   'Plaguespreader Zombie',
   'Rescue Cat',
+  'Right Arm of the Forbidden One',
+  'Right Leg of the Forbidden One',
   'Sangan',
+  'Snipe Hunter',
   'Spirit Reaper',
-  'Tribe-Infecting Virus',
-  'Tsukuyomi',
-  'Night Assailant',
+  'Summoner Monk',
+  'Tragoedia',
+  'Tsukuyomi', // OFFICIAL: Forbidden
   // Spells
+  'Advanced Ritual Art',
   'Allure of Darkness',
   'Brain Control',
+  'Burial from a Different Dimension',
   'Card Destruction',
   'Charge of the Light Brigade',
   'Cold Wave',
-  'Dark Hole',
-  'E - Emergency Call',
+  'Dark Hole', // OFFICIAL: Forbidden
+  'Destiny Draw',
   'Emergency Teleport',
   'Foolish Burial',
   'Future Fusion',
@@ -77,55 +105,81 @@ export const LIMITED = [
   // both main-decked 1 in the SJC Edison 2010 Top 16 (src/decks/tournament2.ts).
   'Giant Trunade',
   'Heavy Storm',
+  'Level Limit - Area B',
   'Limiter Removal',
-  'Mass Driver',
   'Megamorph',
-  'Messenger of Peace',
   'Mind Control',
-  'Monster Reborn',
+  'Monster Gate',
+  'Monster Reborn', // OFFICIAL: Forbidden
   'Mystical Space Typhoon',
+  'One for One',
   'Overload Fusion',
-  'Premature Burial',
+  'Premature Burial', // OFFICIAL: Forbidden
+  'Reasoning',
   'Reinforcement of the Army',
   'Scapegoat',
+  'Swords of Revealing Light',
   // Traps
   'Call of the Haunted',
   'Ceasefire',
+  'Gravity Bind',
   'Magic Cylinder',
   'Magical Explosion',
+  'Mind Crush',
   'Mirror Force',
+  'Ojama Trio',
   'Return from the Different Dimension',
   'Solemn Judgment',
+  'The Transmigration Prophecy',
   'Torrential Tribute',
   'Trap Dustshoot',
   'Wall of Revealing Light',
 ];
 
-// Corrections from the real SJC Edison decklists (src/decks/tournament.ts) and the March 2010 TCG list:
-// Book of Moon, Pot of Avarice and Nobleman of Crossout were Unlimited (Jeff Jones won with 3 Pot of Avarice,
-// Jake Mattern sided 3 Nobleman), and Royal Oppression was Semi-Limited (Renaldo Lainez played 2).
+// Book of Moon, Pot of Avarice and Nobleman of Crossout were Unlimited (Jeff Jones won SJC Edison with 3 Pot of Avarice,
+// Jake Mattern sided 3 Nobleman). Breaker the Magical Warrior had left the list in September 2009, and Lightning Vortex,
+// Sacred Phoenix of Nephthys, E - Emergency Call, Mass Driver and Messenger of Peace are not on the March 2010 list.
 export const SEMI_LIMITED = [
-  'Royal Oppression',
-  'Burial from a Different Dimension',
-  'Chaos Sorcerer',
+  // Monsters
   'Cyber Dragon',
-  'Reasoning',
-  'Swords of Revealing Light',
+  'Demise, King of Armageddon',
   'Destiny Hero - Malicious',
-  // Corrections from the SJC Edison 2010 Top 16 lists (src/decks/tournament2.ts) and Yugipedia's March 2010 TCG list:
-  // Gold Sarcophagus (2 in Daniel LaMartina's and Miguel Garcia's mains), Royal Decree (2 sided by LaMartina and Thai Bui)
-  // and Ultimate Offering (2 in Enye Gilmore's main) were Semi-Limited. Breaker the Magical Warrior had left the list in
-  // September 2009 (Garcia sided 2), so it is Unlimited.
-  'Gold Sarcophagus',
-  'Royal Decree',
-  'Ultimate Offering',
-  // Corrections from real 2010 decklists played under the March 2010 list (it ran until 1 September 2010), from the
-  // YugiohTopDecks archive (https://github.com/CalciumKid/YTDDecks): Treeborn Frog was Semi-Limited, not Limited
-  // (2 copies: Devin Djuricin and Jason Hoang, YCS Washington DC, May 2010; Levi Nissen, YCS Chicago, June 2010;
-  // Rodrigo Togores, 1st at the 2010 European Championship). Lightning Vortex was off the list (Brenden Beckmann
-  // ran 3 at YCS Indianapolis, August 2010), so it is Unlimited.
+  'Honest',
+  // The user's decision: Treeborn Frog stays Semi-Limited (it is Semi-Limited on the March 2010 list too).
   'Treeborn Frog',
+  // Spells
+  'Chain Strike',
+  'Gold Sarcophagus',
+  'Magical Stone Excavation',
+  'United We Stand',
+  // Traps
+  'Royal Decree',
+  'Royal Oppression',
+  'Skill Drain',
+  'Ultimate Offering',
 ];
+
+/**
+ * Official March 2010 limits NOT applied yet (see KNOWN DIFFERENCES above): name -> official limit. The cards keep
+ * the limit given by the lists above (or Unlimited) until the bundled decks that exceed it are updated.
+ */
+export const OFFICIAL_PENDING: Record<string, 0 | 1 | 2> = {
+  'Magician of Faith': 0,
+  Tsukuyomi: 0,
+  'Dark Hole': 0,
+  'Monster Reborn': 0,
+  'Premature Burial': 0,
+  'Blackwing - Gale the Whirlwind': 1,
+  'Lumina, Lightsworn Summoner': 1,
+  Mezuki: 1,
+  'Necro Gardna': 1,
+  Dandylion: 2,
+  'Goblin Zombie': 2,
+  'Judgment Dragon': 2,
+  'Lonefire Blossom': 2,
+  'Black Whirlwind': 2,
+  'Bottomless Trap Hole': 2,
+};
 
 // Cards scripted for the simulator (TSHD packs, Draft, Sealed, the collection) that had no English TCG
 // release on or before SJC Edison (2010-04-24). They stay defined, but validateDeck rejects them in
