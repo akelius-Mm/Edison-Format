@@ -13,7 +13,7 @@ import { Ctx } from '../engine/ctx';
 import type { Game } from '../engine/game';
 import { Rng } from '../engine/rng';
 import type { BattlePos, PlayerId } from '../engine/types';
-import { cardValue } from '../cards/helpers';
+import { cardValue, pendingHits } from '../cards/helpers';
 
 export type Difficulty = 'easy' | 'normal' | 'hard';
 
@@ -25,6 +25,8 @@ export const aiDebug: { onHintError?: (card: string, e: unknown) => void } = {};
 
 const HARMFUL = new Set(['destroy', 'banish', 'bounce', 'control', 'negate', 'toDeck', 'position']);
 const COSTLY = new Set(['discard', 'tribute', 'cost', 'material', 'toGrave']);
+/** Effect categories that remove, flip or take an opponent's card (see pendingHits). */
+const HIT_CATS = new Set(['destroy', 'banish', 'toDeck', 'toHand', 'position', 'control', 'negateAttack']);
 
 export class AIController implements PlayerController {
   readonly isHuman = false;
@@ -140,6 +142,7 @@ export class AIController implements PlayerController {
     if (cats.includes('negate') && game.chain.some((l) => l.player === p && l.index === game.chain.length && (l.effect.categories ?? []).includes('negate'))) {
       return -1;
     }
+    if (s > 0 && this.pointless(game, p, act)) return -1;
     // Save a card that is about to be destroyed / removed by chaining it.
     const top = game.chain[game.chain.length - 1];
     if (top && top.player !== p && act.card.onField && !act.card.faceUp && top.ctx.targets.includes(act.card)) {
@@ -147,6 +150,35 @@ export class AIController implements PlayerController {
     }
     if (s > 0) s += this.noise(10);
     return s;
+  }
+
+  /** An activation that would do nothing useful whatever the card's own hint says. */
+  private pointless(game: Game, p: PlayerId, act: Activation): boolean {
+    // A pure search while adding from the Deck is blocked (our own Thunder King Rai-Oh): it resolves with no effect.
+    const cats = act.effect.categories ?? [];
+    if (cats.includes('search') && cats.every((c) => c === 'search' || c === 'toHand') && game.queryPlayer(p, 'cannotAddFromDeck')) return true;
+    // Don't answer a card our own chain already answers: a second Bottomless Trap Hole on the same summon, or Book of
+    // Moon / Enemy Controller on an attacker our Dimensional Prison already banishes.
+    return this.redundantAnswer(game, p, act);
+  }
+
+  /** Would this activation only hit an opponent's card that our own pending chain links already remove? */
+  private redundantAnswer(game: Game, p: PlayerId, act: Activation): boolean {
+    const cats = act.effect.categories ?? [];
+    if (!cats.some((c) => HIT_CATS.has(c) || c === 'destroyMulti')) return false;
+    const hits = pendingHits(game, p);
+    if (!hits.size) return false;
+    const ev = act.event?.card as CardInstance | undefined;
+    if (cats.includes('destroyMulti')) {
+      // Mirror Force / Torrential Tribute after our Dimensional Prison / Bottomless Trap Hole took the only monster
+      const theirs = game.monsters(game.opp(p));
+      return !!ev && ev.isMonster && theirs.length > 0 && theirs.every((m) => hits.has(m));
+    }
+    if (ev && ev.controller !== p && hits.has(ev)) return true;
+    // attack stoppers during the opponent's attack
+    const b = game.battle;
+    if (b && !b.inDamageStep && b.attacker.controller !== p && hits.has(b.attacker) && cats.some((c) => c === 'position' || c === 'control' || c === 'negateAttack')) return true;
+    return false;
   }
 
   // ------------------------------------------------------------ main
@@ -205,6 +237,7 @@ export class AIController implements PlayerController {
       }
       case 'proc': {
         const c = a.card;
+        if (this.specialSummonNegated(game, p, c)) return -1;
         const ctx = this.ctxFor(game, p, a.act);
         if (a.act.effect.ai?.score) return a.act.effect.ai.score(ctx);
         return 70 + (c.data.atk ?? 0) / 100;
@@ -322,6 +355,9 @@ export class AIController implements PlayerController {
     }
     if (isFlip) return 5;
     let s = 35 + atk / 100 + ai / 100 + (hasSummonTrigger ? 15 : 0) - tribLoss / 200;
+    // A monster that stops adding cards from the Deck (Thunder King Rai-Oh) comes after our own searches this turn.
+    const locksSearch = (c.data.effects ?? []).some((e) => e.kind === 'continuous' && (e.mods ?? []).some((m) => m.q === 'cannotAddFromDeck'));
+    if (locksSearch && game.players[p].hand.some((h) => h !== c && (h.data.effects ?? []).some((e) => e.kind === 'activate' && (e.categories ?? []).includes('search')))) s -= 30;
     if (atk < oppBest && !hasSummonTrigger && game.phase === 'main1') s -= 15;
     // keep the tuner for a synchro if there is a non-tuner on board
     return s;
@@ -357,7 +393,20 @@ export class AIController implements PlayerController {
     return false;
   }
 
+  /**
+   * The opponent controls a face-up monster that negates a single Special Summon (Thunder King Rai-Oh) and would use it
+   * on this one: summoning into it throws away the monster (and its materials / cost) for their 1 card.
+   */
+  private specialSummonNegated(game: Game, p: PlayerId, c: CardInstance): boolean {
+    const v = (c.data.atk ?? 0) + (c.data.aiValue ?? 0) + (c.isExtra ? 600 : 0);
+    if (v < 2000) return false;
+    return game.faceUpMonsters(game.opp(p)).some(
+      (m) => !game.isNegated(m) && (m.data.effects ?? []).some((e) => e.kind === 'quick' && e.negateSummon),
+    );
+  }
+
   private scoreSynchro(game: Game, p: PlayerId, syn: CardInstance): number {
+    if (this.specialSummonNegated(game, p, syn)) return -1;
     const combos = game.synchroCombos(p, syn);
     if (!combos.length) return -1;
     const matValue = Math.min(...combos.map((cb) => cb.reduce((a, m) => a + cardValue(game, m) * (m.isToken ? 0.3 : 1), 0)));
@@ -389,11 +438,24 @@ export class AIController implements PlayerController {
     if (direct) consider(null, 60 + atk / 100 + (game.players[opp].lp <= atk ? 500 : 0));
     // Monsters with an end-of-Battle-Phase effect (Gladiator Beast tag-outs) want to attack
     // even without winning, as long as they survive the battle.
-    const tagOut = (attacker.data.effects ?? []).some((e) => e.kind === 'trigger' && ([] as string[]).concat(e.event ?? []).includes('battleEnd'));
+    // Only an optional trigger that would activate now (a Gladiator Beast tag-out with a Gladiator Beast left in the Deck;
+    // Stealthroid only with another "roid"), not a mandatory one like Interplanetary Invader "A"'s.
+    const tagOut = (attacker.data.effects ?? []).some((e) => {
+      if (e.kind !== 'trigger' || e.mandatory || !([] as string[]).concat(e.event ?? []).includes('battleEnd')) return false;
+      try {
+        const ctx = new Ctx(game, attacker, e, p);
+        return e.condition?.(ctx) !== false && e.canActivate?.(ctx) !== false && (e.ai?.score ? e.ai.score(ctx) > 0 : true);
+      } catch {
+        return false;
+      }
+    });
+    const lp = game.players[p].lp;
     for (const t of targets) {
       if (tagOut) {
+        // bouncing off a Defense Position monster costs LP: only a small amount
+        const bounce = t.faceUp && t.pos === 'def' ? Math.max(0, game.getDef(t) - atk) : 0;
         const survives = t.faceUp
-          ? t.pos === 'def' || game.getAtk(t) < atk || game.queryCard(attacker, 'indestructibleBattle')
+          ? (t.pos === 'def' && bounce <= 800 && bounce < lp / 4) || (t.pos === 'atk' && game.getAtk(t) < atk) || game.queryCard(attacker, 'indestructibleBattle')
           : atk >= 1600;
         if (survives) consider(t, 26 + (t.faceUp && t.pos === 'def' ? -Math.max(0, game.getDef(t) - atk) / 200 : 0));
       }
@@ -473,6 +535,7 @@ export class AIController implements PlayerController {
   }
 
   async confirmTrigger(game: Game, p: PlayerId, act: Activation): Promise<boolean> {
+    if (this.pointless(game, p, act)) return false;
     if (act.effect.ai?.score) {
       try {
         return act.effect.ai.score(this.ctxFor(game, p, act)) > 0;
@@ -508,13 +571,15 @@ export class AIController implements PlayerController {
     const harmful = HARMFUL.has(req.purpose);
     const costly = COSTLY.has(req.purpose);
     const handNames = new Set(game.players[p].hand.map((c) => c.name));
+    const hits = harmful ? pendingHits(game, p) : new Set<CardInstance>();
     const score = (c: CardInstance): number => {
       if (req.aiScore) return req.aiScore(c);
       const mine = game.cardUser(c) === p;
       const v = cardValue(game, c);
       if (costly) return mine ? -v : v;
       if (harmful || req.purpose === 'target' || req.purpose === 'generic') {
-        return mine ? -v - 5000 : v;
+        // an opponent's card our own chain already removes is a wasted pick (but still better than our own card)
+        return mine ? -v - 5000 : hits.has(c) ? v / 10 - 3000 : v;
       }
       // beneficial for self (search/toHand/specialSummon/buff/equip)
       let s = mine ? v : -v;

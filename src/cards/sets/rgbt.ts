@@ -14,7 +14,7 @@
 // Beasts, Miracle Locus, Crimson Fire / Spell of Pain) are installed per game by `ensureRgbtPatches`, the
 // same way anpr.ts and traps.ts wrap Game methods. Approximations are marked "APPROX:".
 import { monster, spell, token, trap } from '../define';
-import { bestTarget, cardValue, flip, selfDestroysByBattle } from '../helpers';
+import { bestTarget, cardValue, flip, selfDestroysByBattle, specialSummonBlockers } from '../helpers';
 import { synchroOptions } from './plants';
 import { ensureAnprPatches } from './anpr';
 import type { CardInstance, EffectDef } from '../../engine/card';
@@ -306,6 +306,7 @@ const gbHunterActive = (g: Game) => fieldCardActive(g, 'G.B. Hunter', 'monster')
 const dragoActive = (g: Game) => fieldCardActive(g, "Koa'ki Meiru Drago", 'monster');
 const graveOrganismActive = (g: Game) => fieldCardActive(g, 'Grave of the Super Ancient Organism', 'st');
 const dragoBlocks = (g: Game, c: C) => c.isMonster && isAttr(c, 'LIGHT', 'DARK') && dragoActive(g);
+specialSummonBlockers.push(dragoBlocks);
 const faceUpKing = (g: Game, except?: C) => g.allFieldCards().some((c) => c !== except && faceUpOn(c) && c.name === 'King of the Beasts');
 /**
  * G.B. Hunter: effects that return cards from the field to the Deck / Extra Deck cannot be activated (and Contact

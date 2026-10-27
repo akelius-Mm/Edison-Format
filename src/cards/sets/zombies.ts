@@ -1,6 +1,6 @@
 // Card definitions: Zombies (Zombie Synchro / Plaguespreader engine).
 import { monster, spell } from '../define';
-import { cardValue } from '../helpers';
+import { aiCanSpecialSummon, cardValue } from '../helpers';
 import { dataVariant, type CardInstance } from '../../engine/card';
 import type { Ctx } from '../../engine/ctx';
 import { geminiSummonEffect, isGeminiActive, searchScored, synchroOptions } from './plants';
@@ -227,7 +227,8 @@ monster('Plaguespreader Zombie', {
       },
       ai: {
         score: (ctx) => {
-          if (ctx.freeMZones() <= 0) return 0;
+          // (not under our own Koa'ki Meiru Drago: the card goes back to the Deck and it stays in the GY)
+          if (ctx.freeMZones() <= 0 || !aiCanSpecialSummon(ctx, ctx.self)) return 0;
           // Revive it for a Synchro Summon right away, or with a Normal Summon still to make that pairs with it.
           if (synchroOptions(ctx, [{ card: ctx.self }]).length) return 55;
           const hand = ctx.hand();
