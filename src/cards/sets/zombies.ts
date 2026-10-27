@@ -46,7 +46,8 @@ monster('Zombie Master', {
   level: 4,
   atk: 1800,
   def: 0,
-  text: 'Once per turn: You can discard 1 monster, then target 1 Level 4 or lower Zombie-Type monster in either GY; Special Summon that target.',
+  // TAEV (Edison) text: the face-up clause is part of the card; a target must already be in a GY before the discard (2008 ruling).
+  text: "Once per turn, you can discard 1 monster card to select and Special Summon 1 Level 4 or lower Zombie-Type monster from either player's Graveyard. This card must be face-up on the field to activate and to resolve this effect.",
   aiValue: 500,
   effects: [
     {
@@ -57,9 +58,8 @@ monster('Zombie Master', {
       canActivate: (ctx) =>
         ctx.canSpecialSummon() &&
         ctx.hand('me', (c) => c.isMonster).length > 0 &&
-        // a target must exist after paying the cost (the discarded card itself may qualify)
-        (ctx.grave('both', (c) => isZombie(ctx, c) && (c.data.level ?? 0) <= 4 && !c.isExtra && ctx.canSummonCard(c)).length > 0 ||
-          ctx.hand('me', (c) => c.data.race === 'Zombie' && (c.data.level ?? 0) <= 4).length > 0),
+        // Ruling: a target must already be in a GY; the monster discarded for the cost does not count.
+        ctx.grave('both', (c) => isZombie(ctx, c) && (c.data.level ?? 0) <= 4 && !c.isExtra && ctx.canSummonCard(c)).length > 0,
       activate: async (ctx) => {
         const disc = await ctx.select(ctx.hand('me', (c) => c.isMonster), 1, 1, 'Discard 1 monster.', 'discard', { aiScore: (c) => zombieDiscardScore(ctx, c) });
         if (!disc.length) return false;
@@ -70,6 +70,8 @@ monster('Zombie Master', {
         });
       },
       resolve: async (ctx) => {
+        // "This card must be face-up on the field to activate and to resolve this effect."
+        if (!ctx.self.faceUpMonster) return;
         const t = ctx.validTargets((c) => c.location === 'grave');
         if (t.length) await ctx.specialSummon(t[0]);
       },
