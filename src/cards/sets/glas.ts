@@ -979,8 +979,9 @@ function gbCounter(kind: 'spell' | 'trap'): EffectDef {
     kind: 'activate',
     categories: ['negate', 'destroy'],
     condition: (ctx) => {
+      // "negate the activation of a Spell/Trap Card": only a card activation, not an effect of a face-up Spell/Trap.
       const l = ctx.prevLink();
-      return !!l && l.player !== ctx.player && (kind === 'spell' ? l.card.isSpell : l.card.isTrap);
+      return !!l && !l.negated && l.isCardActivation && l.player !== ctx.player && (kind === 'spell' ? l.card.isSpell : l.card.isTrap);
     },
     canActivate: (ctx) => ctx.hand('me', isGBCard).length > 0,
     activate: async (ctx) => {
