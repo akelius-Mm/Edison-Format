@@ -17,7 +17,6 @@ export interface AudioGraph {
 
 const graphs = new WeakMap<Ctx, AudioGraph>();
 const fades = new WeakMap<Ctx, GainNode>();
-let hideTimer = 0;
 
 /** Input level that maps to the end of the clip curve (louder input is held at full scale). */
 const CLIP_RANGE = 1.5;
@@ -182,37 +181,38 @@ function onGesture() {
   resumeAudio();
 }
 
+/** Leaving the app: silence at once and pause. iOS cuts the audio off as the app leaves the screen,
+ *  and anything still sounding then (a fade-out included) came out as a short "eep", so nothing
+ *  fades: the output goes to zero on the spot and the context pauses. */
+function silenceForLeave() {
+  const c = live;
+  if (!c || c.state !== 'running') return;
+  suspendedForHidden = true;
+  const fade = fades.get(c);
+  if (fade) {
+    fade.gain.cancelScheduledValues(0);
+    fade.gain.value = 0;
+  }
+  c.suspend().catch(() => {});
+}
+
 function onVisibility() {
   const c = live;
   if (!c) return;
-  const fade = fades.get(c);
   if (document.hidden) {
-    if (c.state === 'running') {
-      suspendedForHidden = true;
-      // a short fade, then pause: no click or cut-off when the app goes to the background
-      if (fade) {
-        const t = c.currentTime;
-        fade.gain.cancelScheduledValues(t);
-        fade.gain.setValueAtTime(fade.gain.value, t);
-        fade.gain.linearRampToValueAtTime(0, t + 0.18);
-      }
-      window.clearTimeout(hideTimer);
-      hideTimer = window.setTimeout(() => {
-        if (document.hidden && c.state === 'running') c.suspend().catch(() => {});
-      }, fade ? 220 : 0);
-    }
-  } else {
-    window.clearTimeout(hideTimer);
-    if (fade) {
-      const t = c.currentTime;
-      fade.gain.cancelScheduledValues(t);
-      fade.gain.setValueAtTime(fade.gain.value, t);
-      fade.gain.linearRampToValueAtTime(1, t + 0.45);
-    }
-    if (suspendedForHidden || c.state !== 'running') {
-      suspendedForHidden = false;
-      resumeAudio();
-    }
+    silenceForLeave();
+    return;
+  }
+  const fade = fades.get(c);
+  if (fade) {
+    const t = c.currentTime;
+    fade.gain.cancelScheduledValues(t);
+    fade.gain.setValueAtTime(0, t);
+    fade.gain.linearRampToValueAtTime(1, t + 0.45);
+  }
+  if (suspendedForHidden || c.state !== 'running') {
+    suspendedForHidden = false;
+    resumeAudio();
   }
 }
 
@@ -224,4 +224,8 @@ export function installAudioUnlock() {
   for (const ev of ['pointerdown', 'pointerup', 'touchend', 'click', 'keydown']) document.addEventListener(ev, onGesture, opts);
   document.addEventListener('visibilitychange', onVisibility);
   window.addEventListener('pageshow', onVisibility);
+  // the app switcher and the home gesture take focus before the page is hidden: go quiet then already
+  window.addEventListener('blur', silenceForLeave);
+  window.addEventListener('pagehide', silenceForLeave);
+  window.addEventListener('focus', () => !document.hidden && onVisibility());
 }
