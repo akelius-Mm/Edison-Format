@@ -236,9 +236,25 @@ spell('Scapegoat', 'quickplay', {
       kind: 'activate',
       categories: ['specialSummon', 'protect'],
       canActivate: (ctx) => ctx.freeMZones() >= 4 && ctx.canSpecialSummon(),
+      activate: async (ctx) => {
+        // "You cannot Summon other monsters the turn you activate this card": applies from activation (even if this card
+        // is negated). Setting is not a Summon and stays legal. The Sheep Tokens themselves are exempt (see resolve).
+        ctx.addPlayerMod(ctx.player, 'cannotNormalSummon');
+        ctx.addPlayerMod(ctx.player, 'cannotSpecialSummon');
+        ctx.data.lock = ctx.game.playerMods.slice(-2);
+      },
       resolve: async (ctx) => {
-        const toks = await ctx.createTokens(sheep, 4, 'def');
-        for (const t of toks) t.flags.noTributeSummonFodder = true;
+        const g = ctx.game;
+        const lock = (ctx.data.lock ?? []) as typeof g.playerMods;
+        const ss = lock.find((m) => m.q === 'cannotSpecialSummon' && g.playerMods.includes(m));
+        if (ss) g.playerMods = g.playerMods.filter((m) => m !== ss);
+        try {
+          const toks = await ctx.createTokens(sheep, 4, 'def');
+          for (const t of toks) t.flags.noTributeSummonFodder = true;
+        } finally {
+          if (ss && !g.playerMods.includes(ss)) g.playerMods.push(ss);
+          g.update();
+        }
       },
       ai: {
         score: (ctx) => {
@@ -384,7 +400,8 @@ trap('Call of the Haunted', 'continuous', {
         const t = ctx.validTargets((c) => c.location === 'grave');
         if (!t.length) return;
         const r = await ctx.specialSummon(t[0], { pos: 'atk' });
-        if (r.length && ctx.self.onField) ctx.game.link(ctx.self, r[0]);
+        // "When that monster is destroyed, destroy this card": Tributed / used as material / bounced, Call stays.
+        if (r.length && ctx.self.onField) ctx.game.link(ctx.self, r[0], true, { cardOnlyIfDestroyed: true });
       },
       ai: {
         score: (ctx) => {
@@ -408,6 +425,7 @@ trap('Royal Oppression', 'continuous', {
       kind: 'quick',
       label: 'Pay 800: negate Special Summon',
       negateSummon: true,
+      anyPlayer: true, // "Any player can pay 800 LP..."; the opponent can use your Royal Oppression too.
       categories: ['negateSummon'],
       condition: (ctx) => {
         const ps = ctx.game.pendingSummon;

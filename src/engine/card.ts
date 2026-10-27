@@ -81,6 +81,8 @@ export type QueryKey =
   | 'cannotDraw'
   | 'cannotAddFromDeck'
   | 'cannotSet'
+  // player subject: cannot Set Spell/Trap Cards (Cold Wave). Monsters can still be Set.
+  | 'cannotSetSpellTrap'
   // ABPF: player subject — "you cannot Synchro Summon this turn" (Variety Comes Out). Checked in Game.canSynchro.
   | 'cannotSynchroSummon'
   // player subject: cards in the GY cannot be banished (Necrovalley, Kycoo); effects with gyBanishCost are not offered.
@@ -130,6 +132,11 @@ export interface EffectDef {
   damageStep?: boolean;
   /** Can be used in the summon-negation window (Solemn Judgment, Royal Oppression...). */
   negateSummon?: boolean;
+  /**
+   * Either player can use this effect of a face-up card on the field, whoever controls it (Royal Oppression: "Any
+   * player can pay 800 LP..."). Read by Game.getActivations / canActivateEffect.
+   */
+  anyPlayer?: boolean;
   categories?: Category[];
   /** Situational requirement for activation. */
   condition?: (ctx: Ctx) => boolean;

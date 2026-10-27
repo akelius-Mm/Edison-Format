@@ -721,7 +721,8 @@ defTrap('Dust Tornado', 'normal', {
       resolve: async (ctx) => {
         const t = ctx.validTargets((c) => c.onField);
         if (t.length) await ctx.destroy(t);
-        const cands = ctx.hand('me', (c) => (c.isSpell || c.isTrap) && (c.data.stype === 'field' || ctx.freeSZones() > 0));
+        const noSet = ctx.game.queryPlayer(ctx.player, 'cannotSet') || ctx.game.queryPlayer(ctx.player, 'cannotSetSpellTrap'); // Cold Wave
+        const cands = noSet ? [] : ctx.hand('me', (c) => (c.isSpell || c.isTrap) && (c.data.stype === 'field' || ctx.freeSZones() > 0));
         if (cands.length && (await ctx.confirm('Set 1 Spell/Trap Card from your hand?'))) {
           const sel = await ctx.select(cands, 1, 1, 'Choose a Spell/Trap to Set.', 'generic', {
             aiScore: (c) => (c.isTrap ? 1000 : 0) + (c.data.stype === 'quickplay' ? 500 : 0) + (c.data.aiValue ?? 0),
