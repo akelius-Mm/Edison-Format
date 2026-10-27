@@ -197,6 +197,8 @@ const alienBattleRule: EffectDef = {
 const PATCHED = new WeakSet<Game>();
 /** Monsters changed from face-up Attack to face-up Defense Position: card → turn. */
 const atkToDef = new WeakMap<C, { turn: number; moveId: number }>();
+/** Battle position of a monster right before its latest changePosition call. */
+const prevPos = new WeakMap<C, { pos: BattlePos; faceUp: boolean; moveId: number }>();
 /** Counter Traps whose activation resolved: card → moveId at resolution. */
 const resolvedCounter = new WeakMap<C, number>();
 /** Star Blast: Level reduction of a monster in the hand. */
@@ -312,6 +314,8 @@ export function ensureCrmsPatches(g: Game) {
   const origPos = g.changePosition.bind(g);
   anyG.changePosition = async (card: C, pos: BattlePos, faceUp = true, reasonPlayer?: PlayerId) => {
     const wasUpAtk = card.location === 'mzone' && card.faceUp && card.pos === 'atk';
+    // Morphtronic Map: the position before this change (read while the 'positionChanged' event is emitted).
+    if (card.location === 'mzone') prevPos.set(card, { pos: card.pos, faceUp: card.faceUp, moveId: card.moveId });
     await origPos(card, pos, faceUp, reasonPlayer);
     if (wasUpAtk && card.location === 'mzone' && card.faceUp && card.pos === 'def') atkToDef.set(card, { turn: g.turn, moveId: card.moveId });
   };
@@ -1413,7 +1417,7 @@ monster('Morphtronic Boarden', {
     {
       kind: 'continuous',
       active: (ctx) => ctx.self.pos === 'def',
-      mods: [{ q: 'indestructibleBattle', to: 'cards', filter: (ctx, c: C) => c !== ctx.self && c.location === 'mzone' && c.controller === ctx.player && isMorphMon(c) }],
+      mods: [{ q: 'indestructibleBattle', to: 'cards', filter: (ctx, c: C) => c !== ctx.self && faceUpOn(c) && c.controller === ctx.player && isMorphMon(c) }],
     },
   ],
 });
@@ -2445,12 +2449,19 @@ spell('Morphtronic Rusty Engine', 'equip', {
 spell('Morphtronic Map', 'field', {
   text: 'Each time a monster\'s battle position is changed, place 1 Morph Counter on this card. All "Morphtronic" monsters gain 300 ATK for each Morph Counter on this card. When this card is destroyed and sent from the field to the Graveyard, you can Special Summon 1 "Morphtronic" monster from your Graveyard.',
   effects: [
+    PATCH_LISTENER,
     { kind: 'activate', categories: [], ai: { score: (ctx) => (ctx.cards('me', ['hand', 'mzone'], isMorphMon).length ? 25 : 5) } },
     {
       kind: 'trigger',
-      event: 'positionChanged',
+      // A Flip Summon (face-down Defense -> face-up Attack) is a battle position change too (no 'positionChanged' event).
+      event: ['positionChanged', 'flipSummoned'],
       eventFilter: (ctx, ev) => {
-        if (evc(ev)?.location === 'mzone' && stActive(ctx)) {
+        const c = evc(ev);
+        // Ruling: flipping a face-down Defense Position monster face-up (e.g. when it is attacked) does not change its
+        // battle position, so no Morph Counter is placed.
+        const before = c ? prevPos.get(c) : undefined;
+        if (ev.type === 'positionChanged' && c && before && before.moveId === c.moveId && before.pos === c.pos && !before.faceUp && c.faceUp) return false;
+        if (c?.location === 'mzone' && stActive(ctx)) {
           ctx.self.counters.morph = (ctx.self.counters.morph ?? 0) + 1;
           ctx.game.update();
         }
