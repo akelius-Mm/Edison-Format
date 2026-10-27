@@ -14,6 +14,7 @@ import { loadActiveDuel } from '../duel/resume';
 import { resumeDuelCard } from './resumeCard';
 import { browserBanner } from './report';
 import { rulesNotesCard } from './rulesNotes';
+import { FORBIDDEN, LIMITED, SEMI_LIMITED } from '../../cards/banlist';
 
 interface MenuItem {
   route: string;
@@ -130,7 +131,7 @@ export function titleScreen(): Screen {
     'div',
     { class: 'home', tabindex: '-1' },
     hero,
-    h('div', { class: 'home-body' }, browserBanner(), duelCard, resume, thisWeek, h('h2', { class: 'home-h' }, 'Your cards'), tiles, more, rulesNotesCard(), h('p', { class: 'home-foot' }, 'Fan-made, non-commercial simulator. Not affiliated with the card game’s publisher.')),
+    h('div', { class: 'home-body' }, browserBanner(), duelCard, resume, thisWeek, h('h2', { class: 'home-h' }, 'Your cards'), tiles, more, rulesNotesCard(), banlistCard(), h('p', { class: 'home-foot' }, 'Fan-made, non-commercial simulator. Not affiliated with the card game’s publisher.')),
   );
 
   return { el };
@@ -224,4 +225,24 @@ function titleMark(): HTMLElement {
   img.onerror = () => img.remove();
   img.src = 'https://images.ygoprodeck.com/images/cards_cropped/65192027.jpg';
   return img;
+}
+
+/** Always-on Home row at the bottom: the official March 2010 Forbidden & Limited list (How to Play → Banlist). */
+function banlistCard(): HTMLElement {
+  return h(
+    'section',
+    { class: 'rn-card rn-card--ban', 'aria-label': 'Banlist' },
+    h(
+      'button',
+      { type: 'button', class: 'rn-open', 'data-test': 'home-banlist', onclick: () => go('rules', { tab: 'banlist' }) },
+      h('span', { class: 'rn-icon' }, icon('warn')),
+      h(
+        'span',
+        { class: 'rn-text' },
+        h('b', null, 'Banlist · March 2010'),
+        h('small', null, `${FORBIDDEN.length} Forbidden · ${LIMITED.length} Limited · ${SEMI_LIMITED.length} Semi-Limited`),
+      ),
+      icon('chevron'),
+    ),
+  );
 }
