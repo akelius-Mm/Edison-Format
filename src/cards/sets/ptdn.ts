@@ -191,6 +191,7 @@ function trapMonsterActivate(stats: Partial<CardData>, score: (ctx: Ctx) => numb
       if (r.length) {
         me.flags.staysOnField = true;
         me.flags.ptdnTrapMonster = true;
+        me.flags.trapMonster = true;
         after?.(ctx, me);
       }
     },
@@ -336,6 +337,8 @@ interface SpellInfo {
   ptdnSpell: true;
   player: PlayerId;
   turnPlayer: PlayerId;
+  /** The Spell was Chain Link 1 (nothing resolves after it). */
+  cl1?: boolean;
   phase: Game['phase'];
 }
 function watchSpell(g: Game, link: ChainLink) {
@@ -347,6 +350,7 @@ function watchSpell(g: Game, link: ChainLink) {
   link.effect = {
     ...orig,
     resolve: async (c) => {
+      info.cl1 = g.chain.length === 0 || g.chain[0] === link;
       if (orig.resolve) await orig.resolve(c);
       g.beginBatch();
       g.emit({ type: 'chainResolved', card: link.card, player: link.player, minor: true, data: info });
@@ -374,23 +378,15 @@ function makeGeminiActive(ctx: Ctx, c: C) {
   ctx.log(`${c.name} is now treated as an Effect Monster.`);
   ctx.game.update();
 }
-/**
- * Gemini Summon. APPROX (as in plants.ts / sovr.ts): the engine has no Gemini Summon action, so it is an
- * Ignition effect that uses the turn's Normal Summon; it starts a chain instead of being a Summon.
- */
+/** Gemini Summon: a Normal Summon of the face-up Gemini monster (Game.geminiSummon, no chain). */
 function geminiSummon(score: (ctx: Ctx) => number = () => 40): EffectDef {
   return {
-    kind: 'ignition',
+    // The Gemini Summon is a Normal Summon, not an effect (Game.geminiSummon; no chain).
+    kind: 'proc',
+    geminiSummon: true,
+    range: ['mzone'],
     label: 'Gemini Summon (Normal Summon again)',
     categories: [],
-    condition: (ctx) =>
-      ctx.self.faceUp && !ctx.self.flags.geminiSummoned && ctx.game.players[ctx.player].normalSummonsLeft > 0 && !ctx.game.queryPlayer(ctx.player, 'cannotNormalSummon'),
-    activate: async (ctx) => {
-      ctx.game.players[ctx.player].normalSummonsLeft--;
-    },
-    resolve: async (ctx) => {
-      makeGeminiActive(ctx, ctx.self);
-    },
     ai: {
       score: (ctx) => {
         const better = ctx.hand('me', (c) => c.isMonster && ctx.game.canNormalSummon(ctx.player, c) && revScore(c) > 1900);
@@ -499,7 +495,8 @@ monster('Samsara Lotus', {
       categories: ['damage'],
       eventFilter: (ctx, ev) => ev.phase === 'standby' && ctx.isMyTurn && ctx.self.location === 'mzone' && ctx.self.faceUp,
       resolve: async (ctx) => {
-        if (ctx.self.location === 'mzone') await ctx.damage(ctx.player, 1000);
+        // https://edisonrul.ing/cards/s/samsara-lotus.html — flipped face-down in the chain (Book of Moon): the effect disappears.
+        if (ctx.self.location === 'mzone' && ctx.self.faceUp) await ctx.damage(ctx.player, 1000);
       },
     },
   ],
@@ -708,7 +705,7 @@ monster('Armored Cybern', {
   def: 2000,
   types: ['union'],
   aiValue: 400,
-  text: 'Once per turn, you can either: Target 1 "Cyber Dragon" you control, or 1 Fusion Monster you control that lists "Cyber Dragon" as Fusion Material; equip this card to that target, OR: Unequip this card and Special Summon it. Once per turn, while equipped to a monster by this effect: You can target 1 face-up monster on the field; the equipped monster loses exactly 1000 ATK (even if this card leaves the field), and if it does, destroy that target. If the equipped monster would be destroyed by battle or card effect, destroy this card instead.',
+  text: 'Once per turn, during your Main Phase, you can equip this card to a "Cyber Dragon" you control, or to a Fusion Monster you control that lists "Cyber Dragon" as a Fusion Material Monster, OR unequip it to Special Summon this card in face-up Attack Position. Once per turn, while equipped to a monster by this effect, you can decrease the equipped monster\'s ATK by 1000 and destroy 1 face-up monster. (A monster can only be equipped with 1 Union Monster at a time. If the equipped monster would be destroyed, destroy this card instead.)',
   effects: [
     {
       kind: 'ignition',
@@ -733,7 +730,8 @@ monster('Armored Cybern', {
           ctx.self.flags.unionEquipped = true;
           ctx.game.update();
         } else if (ctx.self.location === 'szone') {
-          await ctx.specialSummon(ctx.self, { pos: 'choose' });
+          // 2010 text: unequipped, it is Special Summoned in face-up Attack Position.
+          await ctx.specialSummon(ctx.self, { pos: 'atk' });
         }
       },
       ai: {
@@ -760,7 +758,11 @@ monster('Armored Cybern', {
       resolve: async (ctx) => {
         const host = ctx.data.host as C;
         if (!faceUpOn(host) || host.moveId !== ctx.data.hostMid || ctx.atk(host) < 1000) return;
-        ctx.addTempMod(host, 'atk', -1000, 'field');
+        // 2010 ruling: the ATK loss stops applying once this card is unequipped or leaves the field (see the
+        // continuous effect below). https://edisonrul.ing/cards/a/armored-cybern.html
+        if (ctx.self.location !== 'szone' || ctx.equipTarget !== host) return;
+        ctx.self.flags.cybernLoss = { uid: host.uid, mid: host.moveId, n: ((ctx.self.flags.cybernLoss?.uid === host.uid && ctx.self.flags.cybernLoss?.mid === host.moveId ? ctx.self.flags.cybernLoss.n : 0) as number) + 1 };
+        ctx.game.update();
         const t = ctx.validTargets((c) => c.location === 'mzone' && c.faceUp)[0];
         if (t) await ctx.destroy(t);
       },
@@ -773,6 +775,18 @@ monster('Armored Cybern', {
           return cardValue(ctx.game, bestTarget(ctx.game, foe)) >= 1500 ? 55 : 0;
         },
       },
+    },
+    {
+      kind: 'continuous',
+      range: ['szone'],
+      mods: [
+        {
+          q: 'atk',
+          to: 'cards',
+          filter: (ctx, c: C) => !!ctx.self.flags.unionEquipped && c === ctx.equipTarget && ctx.self.flags.cybernLoss?.uid === c.uid && ctx.self.flags.cybernLoss?.mid === c.moveId,
+          value: (ctx) => -1000 * (ctx.self.flags.cybernLoss?.n ?? 0),
+        },
+      ],
     },
     {
       kind: 'continuous',
@@ -970,7 +984,9 @@ monster('Dark Horus', {
       categories: ['specialSummon'],
       eventFilter: (ctx, ev) => {
         const info = spellResolved(ev);
-        return !!info && info.player === ctx.opp && info.turnPlayer === ctx.opp && (info.phase === 'main1' || info.phase === 'main2') && monActive(ctx);
+        // Activates after the Spell resolves and misses the timing unless that Spell was Chain Link 1:
+        // https://edisonrul.ing/cards/d/dark-horus.html
+        return !!info && !!info.cl1 && info.player === ctx.opp && info.turnPlayer === ctx.opp && (info.phase === 'main1' || info.phase === 'main2') && monActive(ctx);
       },
       canActivate: (ctx) => monActive(ctx) && ctx.canSpecialSummon() && ctx.grave('me', (c) => isDark(c) && lvl(c) === 4 && ctx.canSummonCard(c)).length > 0,
       activate: async (ctx) => {
@@ -1599,7 +1615,14 @@ monster('Blue Thunder T-45', {
       mandatory: true,
       label: 'Special Summon a Thunder Option Token',
       categories: ['specialSummon'],
-      eventFilter: selfDestroysByBattle,
+      // 2010 rulings: it still activates if this card was destroyed by a card effect after damage calculation, or if
+      // the destroyed monster was banished instead ("Dimensional Fissure"). https://edisonrul.ing/cards/b/blue-thunder-t-45.html
+      range: ALL_LOCS,
+      eventFilter: (ctx, ev) =>
+        ev.type === 'battleDestroyed' &&
+        ev.other === ctx.self &&
+        (ev.card as C).owner !== ctx.self.controller &&
+        (ctx.self.location === 'mzone' || !ctx.game.eventLog.some((e) => e.batch === ev.batch && e.type === 'battleDestroyed' && e.card === ctx.self)),
       canActivate: (ctx) => ctx.canSpecialSummon(),
       resolve: async (ctx) => {
         const r = await ctx.createTokens(thunderOption, 1, bestOppAtk(ctx) > 1500 ? 'def' : 'atk');
@@ -2165,9 +2188,11 @@ monster('Castle Gate', {
       label: 'Tribute a Level 5 or lower monster: damage',
       categories: ['damage'],
       condition: (ctx) => ctx.self.pos === 'atk',
-      canActivate: (ctx) => tributable(ctx, (c) => c !== ctx.self && (!c.faceUp || ctx.level(c) <= 5) && lvl(c) <= 5).length > 0,
+      // 2010 rulings: a monster whose Level was reduced to 5 or less by a card effect can be Tributed; the damage is its
+      // original (printed) ATK. https://edisonrul.ing/cards/c/castle-gate.html
+      canActivate: (ctx) => tributable(ctx, (c) => c !== ctx.self && (c.faceUp ? ctx.level(c) : lvl(c)) <= 5).length > 0,
       activate: async (ctx) => {
-        const s = await ctx.select(tributable(ctx, (c) => c !== ctx.self && (!c.faceUp || ctx.level(c) <= 5) && lvl(c) <= 5), 1, 1, 'Tribute 1 Level 5 or lower monster.', 'tribute', {
+        const s = await ctx.select(tributable(ctx, (c) => c !== ctx.self && (c.faceUp ? ctx.level(c) : lvl(c)) <= 5), 1, 1, 'Tribute 1 Level 5 or lower monster.', 'tribute', {
           aiScore: (c) => (c.data.atk ?? 0) - cardValue(ctx.game, c) * 0.5,
         });
         if (!s.length) return false;
@@ -2617,26 +2642,37 @@ spell('Spell Chronicle', 'continuous', {
   ],
 });
 
+const dimExplosionCands = (ctx: Ctx, p: PlayerId) =>
+  ctx.game
+    .zone(p, 'banished')
+    .filter((c) => c.isMonster && c.faceUp && !c.isToken && !(c.data.nomi && !c.properlySummoned) && !(c.isExtra && !c.properlySummoned) && ctx.canTarget(c));
 spell('Dimension Explosion', 'quickplay', {
-  text: 'Return 1 face-up Fusion Monster you control to the Extra Deck. Both players select up to 2 of their monsters that are removed from play, and Special Summon them.',
+  text: 'Return 1 face-up Fusion Monster you control to the Fusion Deck. Both players select up to 2 of their monsters that are removed from play, and Special Summon them.',
   effects: [
     {
       kind: 'activate',
       categories: ['specialSummon'],
-      canActivate: (ctx) => ctx.faceUpMonsters('me', (c) => c.hasType('fusion')).length > 0,
+      // Returning the Fusion Monster is the cost; it targets banished monsters of both players, and needs at least 1
+      // banished monster and 1 open Monster Card Zone for each player: https://edisonrul.ing/cards/d/dimension-explosion.html
+      canActivate: (ctx) =>
+        ctx.faceUpMonsters('me', (c) => c.hasType('fusion')).length > 0 &&
+        ([ctx.player, ctx.opp] as PlayerId[]).every((p) => dimExplosionCands(ctx, p).length > 0) &&
+        ctx.game.freeMZones(ctx.opp) > 0,
       activate: async (ctx) => {
         const s = await ctx.select(ctx.faceUpMonsters('me', (c) => c.hasType('fusion')), 1, 1, 'Return 1 face-up Fusion Monster you control to the Extra Deck.', 'cost');
         if (!s.length) return false;
         await ctx.toDeck(s, 'shuffle', 'cost');
+        for (const p of [ctx.player, ctx.opp] as PlayerId[]) {
+          const max = Math.max(1, Math.min(2, ctx.game.freeMZones(p)));
+          const t = await ctx.select(dimExplosionCands(ctx, p), 1, max, 'Select up to 2 of your banished monsters to Special Summon.', 'specialSummon', { player: p, aiScore: revScore });
+          ctx.addTargets(t);
+        }
       },
       resolve: async (ctx) => {
-        for (const p of [ctx.player, ctx.opp]) {
+        for (const p of [ctx.player, ctx.opp] as PlayerId[]) {
           const g = ctx.game;
           if (g.queryPlayer(p, 'cannotSpecialSummon') || g.freeMZones(p) <= 0) continue;
-          const cands = g.zone(p, 'banished').filter((c) => c.isMonster && c.faceUp && !c.isToken && !(c.data.nomi && !c.properlySummoned) && !(c.isExtra && !c.properlySummoned));
-          if (!cands.length) continue;
-          const max = Math.min(2, g.freeMZones(p));
-          const s = await ctx.select(cands, 0, max, 'Select up to 2 of your banished monsters to Special Summon.', 'specialSummon', { player: p, aiScore: revScore });
+          const s = ctx.validTargets((c) => c.location === 'banished' && c.owner === p).slice(0, g.freeMZones(p));
           if (s.length) await g.specialSummon(s, p, { pos: 'choose', reasonCard: ctx.self });
         }
       },
@@ -3047,7 +3083,9 @@ trap('Sinister Seeds', 'normal', {
         const wasAtk = !b?.calc || (c === b.attacker ? true : b.calc.targetPos === 'atk');
         return seedsDamage(ctx, ev) >= 500 && wasAtk;
       },
-      canActivate: (ctx) => ctx.canSpecialSummon(),
+      // https://edisonrul.ing/cards/s/sinister-seeds.html — cannot be activated without enough empty Monster Zones for every
+      // Token (so never for 3000 or more battle damage).
+      canActivate: (ctx) => ctx.canSpecialSummon() && !!ctx.event && ctx.freeMZones() >= Math.floor(seedsDamage(ctx, ctx.event) / 500),
       activate: async (ctx) => {
         ctx.data.n = ctx.event ? Math.floor(seedsDamage(ctx, ctx.event) / 500) : 0;
       },
@@ -3151,7 +3189,9 @@ trap('Alchemy Cycle', 'normal', {
       canActivate: (ctx) => ctx.faceUpMonsters('me').length > 0,
       resolve: async (ctx) => {
         const g = ctx.game;
-        for (const c of ctx.faceUpMonsters('me')) {
+        // 2010 ruling: monsters whose original ATK is already 0 are not affected (no draw for them).
+        // https://edisonrul.ing/cards/a/alchemy-cycle.html
+        for (const c of ctx.faceUpMonsters('me', (m) => g.baseAtk(m) > 0)) {
           c.flags.baseAtk = 0;
           alchemyMarks.set(c, { src: ctx.self.uid, mid: c.moveId, turn: ctx.turn });
           const mid = c.moveId;
@@ -3376,9 +3416,12 @@ trap('Drastic Drop Off', 'counter', {
       kind: 'activate',
       event: 'addedToHand',
       categories: ['discard'],
+      // Not when the same resolution then has them discard (Graceful Charity): https://edisonrul.ing/cards/d/drastic-drop-off.html
       eventFilter: (ctx, ev) => {
         const c = evc(ev);
-        return !!c && ev.from === 'deck' && c.owner === ctx.opp && c.location === 'hand';
+        if (!c || ev.from !== 'deck' || c.owner !== ctx.opp || c.location !== 'hand') return false;
+        const evs = ctx.game.recentEvents;
+        return !evs.slice(evs.indexOf(ev) + 1).some((e) => e.type === 'discarded' && evc(e)?.owner === ctx.opp);
       },
       activate: async (ctx) => {
         ctx.data.cards = batchCards(ctx, ['addedToHand']).filter((c) => c.owner === ctx.opp && c.location === 'hand');
@@ -3403,23 +3446,35 @@ trap('Drastic Drop Off', 'counter', {
 });
 
 trap('All-Out Attacks', 'continuous', {
-  text: 'If a monster(s) is Special Summoned while this card is face-up on the field: Change that monster to face-up Attack Position, and must attack, if able, during the turn they are Special Summoned.',
+  text: 'All monsters that are Special Summoned are changed to face-up Attack Position and must attack, if able, during the turn they are Special Summoned.',
   effects: [
     { kind: 'activate', categories: [], ai: { score: (ctx) => (!ctx.isMyTurn && ctx.phase === 'end' && !ctx.game.chain.length ? 15 : 0) } },
     {
-      // Continuous effect (no chain). APPROX: "must attack, if able" is not enforced (no engine hook for forced attacks).
+      // 2010 rulings: a mandatory Trigger-like effect that starts a Chain, even when the monsters were Special Summoned
+      // in Attack Position; face-down ones are changed to face-up Attack Position too.
+      // https://edisonrul.ing/cards/a/all-out-attacks.html
+      // APPROX: "must attack, if able" is not enforced (no engine hook for forced attacks).
       kind: 'trigger',
       event: 'specialSummoned',
       range: ['szone'],
-      label: '(change to Attack Position)',
+      mandatory: true,
+      label: 'Change to face-up Attack Position',
+      categories: ['position'],
       eventFilter: (ctx, ev) => {
         const c = evc(ev);
-        if (!c || !stActive(ctx) || c.location !== 'mzone' || (c.faceUp && c.pos === 'atk')) return false;
-        c.pos = 'atk';
-        c.faceUp = true;
-        ctx.game.log(`${c.name} is changed to face-up Attack Position (All-Out Attacks).`, 'action');
-        ctx.game.update();
-        return false;
+        return !!c && stActive(ctx) && c.location === 'mzone';
+      },
+      activate: async (ctx) => {
+        const ev = ctx.event!;
+        const mons = ctx.game.eventLog.filter((e) => e.batch === ev.batch && e.type === 'specialSummoned').map((e) => evc(e)!).filter((c) => !!c && c.location === 'mzone');
+        ctx.data.mons = [...new Set(mons)].map((c) => ({ c, mid: c.moveId }));
+      },
+      resolve: async (ctx) => {
+        if (!stActive(ctx)) return;
+        for (const { c, mid } of ctx.data.mons as { c: C; mid: number }[]) {
+          if (c.location !== 'mzone' || c.moveId !== mid || (c.faceUp && c.pos === 'atk')) continue;
+          await ctx.changePos(c, 'atk', true);
+        }
       },
     },
   ],

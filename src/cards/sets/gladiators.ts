@@ -351,7 +351,7 @@ monster(SECUTOR, {
   def: 300,
   sets: GB,
   aiValue: 400,
-  text: `If this card was Special Summoned by the effect of a "Gladiator Beast" monster, then at the end of any Battle Phase in which this card attacked or was attacked: Special Summon 2 "Gladiator Beast" monsters from your Deck, except "${SECUTOR}".`,
+  text: `If this card was Special Summoned by the effect of a "Gladiator Beast" monster, at the end of any Battle Phase, if this card attacks or was attacked, Special Summon 2 "Gladiator Beast" monsters from your Deck, except "${SECUTOR}".`,
   effects: [
     markGB,
     {
@@ -361,12 +361,13 @@ monster(SECUTOR, {
       label: 'Special Summon 2 Gladiator Beasts',
       categories: ['specialSummon'],
       eventFilter: (ctx) => ctx.self.location === 'mzone' && ctx.self.faceUp && !!ctx.self.flags.gbSummoned && ctx.self.attackedThisTurnOrWasAttacked,
-      // "Special Summon 2": nothing happens unless both can be Special Summoned.
-      canActivate: (ctx) => ctx.canSpecialSummon() && ctx.freeMZones() >= 2 && secutorCands(ctx).length >= 2,
+      // https://edisonrul.ing/cards/g/gladiator-beast-secutor.html — with only 1 free Monster Zone you still pick 2:
+      // one is Special Summoned and the other is destroyed and sent to the GY; with only 1 in the Deck, nothing.
+      canActivate: (ctx) => ctx.canSpecialSummon() && secutorCands(ctx).length >= 2,
       resolve: async (ctx) => {
         const cands = secutorCands(ctx);
-        if (ctx.freeMZones() < 2 || cands.length < 2 || !ctx.canSpecialSummon()) return;
-        const picked: CardInstance[] = [];
+        if (cands.length < 2 || !ctx.canSpecialSummon()) return;
+        let picked: CardInstance[] = [];
         for (let i = 0; i < 2; i++) {
           const sel = await ctx.select(cands.filter((c) => !picked.includes(c)), 1, 1, `Special Summon a "Gladiator Beast" from your Deck (${i + 1}/2).`, 'specialSummon', {
             aiScore: (c) => gbTagScore(ctx, c, picked),
@@ -374,6 +375,10 @@ monster(SECUTOR, {
           if (!sel.length) break;
           picked.push(sel[0]);
         }
+        const room = ctx.freeMZones();
+        const extra = picked.slice(room);
+        if (extra.length) await ctx.game.moveCards(extra, 'grave', { reason: 'effect', reasons: ['effect', 'destroy'], reasonPlayer: ctx.player, reasonCard: ctx.self, destroyed: true });
+        picked = picked.slice(0, room);
         if (picked.length) await ctx.specialSummon(picked);
         ctx.game.shuffleDeck(ctx.player);
       },

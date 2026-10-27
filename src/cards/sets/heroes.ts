@@ -216,23 +216,12 @@ monster('Elemental Hero Neos Alius', {
   text: 'Gemini: treated as a Normal Monster while face-up on the field or in the GY. While face-up on the field, you can Normal Summon it to have it become an Effect Monster with this effect. ● This card\'s name is treated as "Elemental Hero Neos" while it is face-up on the field.',
   effects: [
     {
-      kind: 'ignition',
+      // The Gemini Summon is a Normal Summon, not an effect (Game.geminiSummon; no chain).
+      kind: 'proc',
+      geminiSummon: true,
+      range: ['mzone'],
       label: 'Gemini Summon',
       categories: [],
-      condition: (ctx) =>
-        ctx.self.faceUp &&
-        !ctx.self.flags.geminiSummoned &&
-        ctx.game.players[ctx.player].normalSummonsLeft > 0 &&
-        !ctx.game.queryPlayer(ctx.player, 'cannotNormalSummon'),
-      activate: async (ctx) => {
-        // A Gemini Summon uses the turn's Normal Summon.
-        ctx.game.players[ctx.player].normalSummonsLeft--;
-      },
-      resolve: async (ctx) => {
-        if (ctx.self.location !== 'mzone' || !ctx.self.faceUp) return;
-        ctx.self.flags.geminiSummoned = true;
-        ctx.log(`${ctx.self.name} is Gemini Summoned and is now treated as "Elemental Hero Neos".`);
-      },
       ai: {
         score: (ctx) => {
           // Only worth it when the Normal Summon would otherwise be wasted.
@@ -594,7 +583,7 @@ trap('Hero Barrier', 'normal', {
 });
 
 trap('A Hero Emerges', 'normal', {
-  text: 'When an opponent\'s monster declares an attack: Your opponent chooses 1 card from your hand at random. If it is a monster that can be Special Summoned, Special Summon it.',
+  text: 'You can only activate this card when your opponent declares an attack. Your opponent selects 1 random card from your hand. If it is a Monster Card, Special Summon it on your side of the field. If not, send it to the Graveyard.',
   effects: [
     {
       kind: 'activate',
@@ -609,7 +598,10 @@ trap('A Hero Emerges', 'normal', {
         const c = hand[ctx.game.rng.int(hand.length)];
         ctx.log(`${ctx.game.players[ctx.opp].name} picks ${c.name} at random.`);
         c.revealedUntil = ctx.turn;
-        if (c.isMonster && !c.data.cannotNormalSummon && ctx.canSummonCard(c)) await ctx.specialSummon(c);
+        // 2010 text/rulings: a card that is not Summoned (not a monster, a Special Summon-only or Spirit monster) is
+        // sent to the Graveyard. https://edisonrul.ing/cards/a/a-hero-emerges.html
+        if (c.isMonster && !c.data.cannotNormalSummon && !c.hasType('spirit') && ctx.canSummonCard(c)) await ctx.specialSummon(c);
+        if (c.location === 'hand') await ctx.sendToGrave(c);
       },
       ai: {
         score: (ctx) => {
