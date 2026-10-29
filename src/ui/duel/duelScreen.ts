@@ -33,6 +33,7 @@ import {
   triggerOrderDialog,
 } from './dialogs';
 import { HandFidget } from './fidget';
+import { SwipePlay } from './swipe';
 import { FxDirector, sleep } from './fx';
 import { FAST_FORWARD, setupHurry } from './hurry';
 import { HumanController, type HumanUI, PacedController } from './human';
@@ -92,6 +93,8 @@ class DuelScreen implements HumanUI {
   readonly fx: FxDirector;
   /** Hand-shuffle fidget, on either turn (fidget.ts). */
   readonly fidget: HandFidget;
+  /** Swipe a card up from your hand to play it (swipe.ts). */
+  private swipe: SwipePlay;
   readonly me: PlayerId;
   readonly viewer: PlayerId | null;
   readonly spectator: boolean;
@@ -180,7 +183,7 @@ class DuelScreen implements HumanUI {
     setDuelDiag({ opts, seed, me: this.me, log: () => this.recorder?.log ?? [], turn: () => this.game.turn });
 
     // ---- DOM
-    this.root = h('div', `duel-root${this.spectator ? ' is-spectator' : ''}${s.showLog ? '' : ' hide-log'}`);
+    this.root = h('div', `duel-root${this.spectator ? ' is-spectator' : ''}${s.showLog ? '' : ' hide-log'}${s.swipeToPlay ? ' swipe-play' : ''}`);
     this.root.tabIndex = -1;
     applyPlaymat(this.root, opts.playmat);
     this.root.style.background = '';
@@ -253,6 +256,17 @@ class DuelScreen implements HumanUI {
     });
     // a card entering or leaving the hand stops a shuffle at once
     this.board.onHandChange = () => this.fidget.cancel();
+    this.swipe = new SwipePlay({
+      board: this.board,
+      fidget: this.fidget,
+      me: this.me,
+      spectator: this.spectator,
+      speed: () => this.speed(),
+      card: (uid) => this.game.card(uid),
+      canSwipe: (c) => this.canSwipe(c),
+      play: (c, el) => this.swipePlay(c, el),
+      prompting: () => this.deciding(),
+    });
 
     // ---- wiring
     this.board.onCardClick = (c, el, ev) => this.onCardClick(c, el, ev);
@@ -299,6 +313,8 @@ class DuelScreen implements HumanUI {
       }
       // the in-duel Settings sheet (flag menu → Settings) can switch the log too
       this.root.classList.toggle('hide-log', !st.showLog);
+      this.root.classList.toggle('swipe-play', st.swipeToPlay);
+      if (!st.swipeToPlay) this.swipe.cancel();
       this.sfx.enabled = st.sound;
       this.sfx.volume = st.volume;
       this.updateSoundBtn();
@@ -716,6 +732,7 @@ class DuelScreen implements HumanUI {
     this.unsubSettings();
     this.dialogs.dispose();
     this.fidget.dispose();
+    this.swipe.dispose();
     this.board.destroy();
     if (this.raf) cancelAnimationFrame(this.raf);
     window.setTimeout(() => this.sfx.dispose(), 1500);
@@ -1145,6 +1162,32 @@ class DuelScreen implements HumanUI {
       ],
     );
     void ev;
+  }
+
+  /**
+   * Swipe up to play (swipe.ts): a card in your hand can be picked up only while you are asked for your
+   * next play (your own priority: not a response prompt, attack targets, the AI's or your friend's turn).
+   */
+  private canSwipe(c: CardInstance): boolean {
+    const st = this.actionState;
+    if (!getSettings().swipeToPlay || this.spectator || this.replaying || this.aborted || this.attackState || !st || st.p !== this.me) return false;
+    if (c.location !== 'hand' || c.owner !== this.me) return false;
+    return !this.root.querySelector('.dlg-layer:not(.is-closing)');
+  }
+
+  /**
+   * A card swiped up past the line: its only action is taken straight away; with several (Normal Summon / Set,
+   * Activate / Set...) or none, the tap menu opens at the drop point (the choices, or why it can't be used),
+   * so what can be played and why not stays in one place (onCardClick).
+   */
+  private swipePlay(c: CardInstance, el: HTMLElement): 'played' | 'menu' {
+    const acts = this.actionState?.byCard.get(c.uid) ?? [];
+    if (acts.length === 1) {
+      this.resolveAction(acts[0]);
+      return 'played';
+    }
+    this.onCardClick(c, el, new MouseEvent('click'));
+    return 'menu';
   }
 
   /**

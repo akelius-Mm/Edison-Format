@@ -1,6 +1,6 @@
 // Settings rows shared by the Settings screen and the in-duel Settings sheet (duel flag menu → Settings).
 // Every control saves through updateSettings(), so a change applies at once wherever it is made: the duel
-// listens with onSettingsChange (sound, volume, animation speed, card images, duel log), music.ts follows
+// listens with onSettingsChange (sound, volume, animation speed, card images, duel log, swipe up to play), music.ts follows
 // music and volume, and response prompts, haptics and end-of-turn confirmation are read when they are used.
 // Settings are local to this device: changing them never touches an online game.
 import { haptic } from '../haptics';
@@ -43,6 +43,8 @@ export function responsePromptsRow() {
 }
 
 export const confirmEndTurnRow = () => iosRow('Confirm end of turn', 'Ask when you still have plays.', toggle(getSettings().confirmEndTurn, (v) => set({ confirmEndTurn: v }), 'Confirm end of turn'));
+export const swipeToPlayRow = () =>
+  iosRow('Swipe up to play', 'Drag a card from your hand up onto the field to play it.', toggle(getSettings().swipeToPlay, (v) => set({ swipeToPlay: v }), 'Swipe up to play'));
 export const showLogRow = () => iosRow('Show duel log', null, toggle(getSettings().showLog, (v) => set({ showLog: v }), 'Show duel log'));
 
 export const OFFICIAL_IMAGES_FOOT = 'Loads card artwork from the YGOPRODeck database when online. Card art is © its owners; generated art is used when it is unavailable.';
@@ -90,7 +92,7 @@ export function openDuelSettings(opts: { spectator?: boolean } = {}) {
   const body = h(
     'div',
     { class: 'duel-settings', 'data-test': 'duel-settings' },
-    iosGroup('Duel', [animationSpeedRow(), ...(opts.spectator ? [] : [responsePromptsRow(), confirmEndTurnRow()]), showLogRow()]),
+    iosGroup('Duel', [animationSpeedRow(), ...(opts.spectator ? [] : [responsePromptsRow(), confirmEndTurnRow(), swipeToPlayRow()]), showLogRow()]),
     iosGroup('Audio', [soundRow(), musicRow(), volumeRow(), hapticsRow()]),
     iosGroup('Display', [officialImagesRow()], OFFICIAL_IMAGES_FOOT),
     h('p', { class: 'duel-settings-note' }, 'Changes apply right away and are saved on this device. Nothing here is sent to your opponent.'),

@@ -14,7 +14,7 @@ import { onlineSettingsGroup } from './friend';
 import { openReportSheet } from './report';
 import { openRulesNotes } from './rulesNotes';
 import { editName, playerName } from './playerName';
-import { OFFICIAL_IMAGES_FOOT, animationSpeedRow, confirmEndTurnRow, hapticsRow, musicRow, officialImagesRow, responsePromptsRow, showLogRow, soundRow, volumeRow } from './settingsControls';
+import { OFFICIAL_IMAGES_FOOT, animationSpeedRow, confirmEndTurnRow, swipeToPlayRow, hapticsRow, musicRow, officialImagesRow, responsePromptsRow, showLogRow, soundRow, volumeRow } from './settingsControls';
 
 export function settingsScreen(): Screen {
   const s = getSettings();
@@ -64,6 +64,7 @@ export function settingsScreen(): Screen {
         iosRow('First player skips draw', 'Modern rule. Off in Edison: the player going first draws on turn 1.', toggle(s.skipFirstDraw, (v) => set({ skipFirstDraw: v }), 'First player skips draw')),
         iosRow('Side decking in best-of-3', 'Swap cards with your Side Deck between games. Off keeps both decks as they are.', toggle(s.sideDecking, (v) => set({ sideDecking: v }), 'Side decking in best-of-3')),
         confirmEndTurnRow(),
+        swipeToPlayRow(),
         showLogRow(),
       ],
     ),
