@@ -101,6 +101,8 @@ export const ICONS = {
   dice: I('<rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8" cy="8" r="1.2" fill="currentColor"/><circle cx="16" cy="16" r="1.2" fill="currentColor"/><circle cx="12" cy="12" r="1.2" fill="currentColor"/><circle cx="16" cy="8" r="1.2" fill="currentColor"/><circle cx="8" cy="16" r="1.2" fill="currentColor"/>'),
   flag: I('<path d="M5 21V4"/><path d="M5 4h11l-2 4 2 4H5"/>'),
   bracket: I('<path d="M3 5h5v6H3M3 13h5v6H3"/><path d="M8 8h4v8H8"/><path d="M12 12h5"/><path d="M17 9h4v6h-4z"/>'),
+  store: I('<path d="M3 9.5 4.5 4h15L21 9.5"/><path d="M3 9.5a3 3 0 0 0 6 0 3 3 0 0 0 6 0 3 3 0 0 0 6 0"/><path d="M5 12v8h14v-8"/><path d="M10 20v-5h4v5"/>'),
+  swap: I('<path d="M4 8h14l-4-4"/><path d="M20 16H6l4 4"/>'),
   list: I('<path d="M8 6h13M8 12h13M8 18h13"/><circle cx="3.5" cy="6" r="1"/><circle cx="3.5" cy="12" r="1"/><circle cx="3.5" cy="18" r="1"/>'),
   grid: I('<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>'),
   hand: I('<path d="M7 11V5.5a1.5 1.5 0 0 1 3 0V11"/><path d="M10 10V4a1.5 1.5 0 0 1 3 0v6"/><path d="M13 10V5a1.5 1.5 0 0 1 3 0v7"/><path d="M16 9.5a1.5 1.5 0 0 1 3 0V14a7 7 0 0 1-7 7h-1a7 7 0 0 1-5.6-2.8L3 15a1.6 1.6 0 0 1 2.4-2.1L7 14.5V11"/>'),

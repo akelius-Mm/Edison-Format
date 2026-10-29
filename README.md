@@ -64,6 +64,10 @@ and works offline.
 
 - **Packs and Binder**: buy era booster packs and Structure Decks with Duel Points, open them
   card by card, and track your collection by set. Optionally build decks only from cards you own.
+- **Card Shop and trades**: buy singles from a glass case whose stock changes every Friday and sell your cards to
+  the buylist. Prices follow rarity and how much of the 2010 field plays each card; older-set cards like Gorz and
+  Dandylion can be bought as singles. Trade with the Locals regulars, who have their own binders, want lists and
+  bargaining styles.
 - **Deck builder**: searchable card database, live banlist and legality checks, test hands, stats,
   Side Deck, and decklist import and export.
 - **Profile and ratings**: Constructed and Limited ratings, trophies and win rates by deck.
@@ -122,7 +126,7 @@ npx tsx scripts/sim.ts --deck quickdraw-plant --games 1 --log   # full duel log
 ```
 
 Browser tests (Playwright, against a `npm run build`): `test:routes-e2e`, `test:friend-e2e`,
-`test:friends-locals-e2e` and `test:monkey-e2e`.
+`test:friends-locals-e2e`, `test:monkey-e2e` and `test:shop-e2e`.
 
 ## Project layout
 
