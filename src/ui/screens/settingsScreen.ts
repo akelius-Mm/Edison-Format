@@ -2,6 +2,8 @@
 import type { Difficulty } from '../../ai/ai';
 import { clearOfficialArtCache } from '../cards/officialArt';
 import { DEFAULT_SETTINGS, getSettings, updateSettings, type Settings } from '../settings';
+import { backupFileName, createBackup, describeBackup, parseBackup, restoreBackup } from '../backup';
+import { BUILD } from '../diag';
 import { builtInTracksRow, nowPlayingRow, showAudioCredits, yourMusicGroup } from './audioSettings';
 import { iosAction, iosGroup, iosNav, iosRow } from './components';
 import { packsDraftSettingsGroup } from './draftSetup';
@@ -91,6 +93,8 @@ export function settingsScreen(): Screen {
     iosGroup(
       'Data',
       [
+        iosAction('Back up progress', () => void backUpProgress()),
+        iosAction('Restore from backup', () => void restoreFromBackup()),
         iosAction('Restore default settings', async () => {
           if (!(await confirmDialog('Restore defaults', 'Reset all settings to their defaults? Your name, decks and stats are kept.', 'Restore'))) return;
           const keep = getSettings();
@@ -111,8 +115,52 @@ export function settingsScreen(): Screen {
           true,
         ),
       ],
-      `${games} game${games === 1 ? '' : 's'} played · ${p.tournaments.length} tournament${p.tournaments.length === 1 ? '' : 's'} · ${Object.keys(p.decks).length} deck${Object.keys(p.decks).length === 1 ? '' : 's'} with stats. Everything is stored on this device.`,
+      `${games} game${games === 1 ? '' : 's'} played · ${p.tournaments.length} tournament${p.tournaments.length === 1 ? '' : 's'} · ${Object.keys(p.decks).length} deck${Object.keys(p.decks).length === 1 ? '' : 's'} with stats. Everything is stored on this device: back it up to keep your decks and cards safe if the browser clears its data, or to move them to another phone.`,
     ),
   );
   return { el };
+}
+
+/** Saves every deck, card, stat and setting as one .json file: the share sheet on phones ("Save to Files"), a download elsewhere. */
+async function backUpProgress() {
+  const b = createBackup(localStorage, BUILD);
+  const name = backupFileName(b);
+  const json = JSON.stringify(b);
+  try {
+    const file = new File([json], name, { type: 'application/json' });
+    if (navigator.canShare?.({ files: [file] })) {
+      await navigator.share({ title: 'Edison backup', files: [file] });
+      toast('Backup saved.', 'success');
+      return;
+    }
+  } catch (e) {
+    if ((e as Error)?.name === 'AbortError') return; // the share sheet was closed
+  }
+  const url = URL.createObjectURL(new Blob([json], { type: 'application/json' }));
+  h('a', { href: url, download: name }).click();
+  setTimeout(() => URL.revokeObjectURL(url), 10_000);
+  toast(`Backup downloaded: ${name}`, 'success', 3200);
+}
+
+function restoreFromBackup() {
+  const input = h('input', { type: 'file', accept: 'application/json,.json' });
+  input.onchange = async () => {
+    const file = input.files?.[0];
+    if (!file) return;
+    try {
+      const b = parseBackup(await file.text());
+      const { decks, cards, games } = describeBackup(b);
+      const made = b.createdAt ? new Date(b.createdAt).toLocaleDateString() : 'an unknown date';
+      const msg = `This backup from ${made} has ${decks} deck${decks === 1 ? '' : 's'}, ${cards} card${cards === 1 ? '' : 's'} in the collection and ${games} game${games === 1 ? '' : 's'} played. It replaces everything on this device. Continue?`;
+      if (!(await confirmDialog('Restore from backup', msg, 'Restore', true))) return;
+      restoreBackup(localStorage, b);
+    } catch (e) {
+      toast((e as Error).message, 'error', 4000);
+      return;
+    }
+    toast('Backup restored.', 'success');
+    setTimeout(() => location.replace(location.pathname + '#/title'), 300);
+    setTimeout(() => location.reload(), 350);
+  };
+  input.click();
 }
