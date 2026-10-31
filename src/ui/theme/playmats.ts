@@ -337,6 +337,7 @@ function realMats(): Def[] {
         ),
     },
     ...eraMats(noise, grain),
+    ...prestigeMats(noise, grain),
   ];
 }
 
@@ -425,6 +426,211 @@ function eraMats(noise: (id: string, freq: string, alpha: number, octaves?: numb
   ];
 }
 
+// ---------------------------------------------------------------- prestige mats
+// Six tournament mats earned by playing the big events (unlock rules: src/events/matUnlocks.ts).
+
+/** A hypotrochoid "guilloche" rosette, the engraved linework of certificates and banknotes. */
+function guilloche(cx: number, cy: number, R: number, r: number, d: number, turns: number, color: string, op: number, sw: number) {
+  const n = 1400;
+  let p = '';
+  for (let i = 0; i <= n; i++) {
+    const t = (i / n) * Math.PI * 2 * turns;
+    const x = cx + (R - r) * Math.cos(t) + d * Math.cos(((R - r) / r) * t);
+    const y = cy + (R - r) * Math.sin(t) - d * Math.sin(((R - r) / r) * t);
+    p += `${i ? 'L' : 'M'}${x.toFixed(1)} ${y.toFixed(1)}`;
+  }
+  return `<path d="${p}" fill="none" stroke="${color}" stroke-width="${sw}" opacity="${op}"/>`;
+}
+
+/** One half of a laurel wreath around (cx, cy); side -1 = left, 1 = right. */
+function laurel(cx: number, cy: number, rad: number, color: string, op: number, side: -1 | 1) {
+  let s = '';
+  const n = 13;
+  for (let i = 0; i < n; i++) {
+    const a = (side < 0 ? Math.PI * 0.62 : Math.PI * 0.38) - side * (i / n) * Math.PI * 0.78;
+    const x = cx + rad * Math.cos(a);
+    const y = cy + rad * Math.sin(a);
+    const deg = (a * 180) / Math.PI + (side < 0 ? 60 : 120);
+    const sc = 1 - i * 0.035;
+    s += `<ellipse cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" rx="${(26 * sc).toFixed(1)}" ry="${(9 * sc).toFixed(1)}" transform="rotate(${deg.toFixed(1)} ${x.toFixed(1)} ${y.toFixed(1)})"/>`;
+  }
+  return `<g fill="${color}" opacity="${op}">${s}</g>`;
+}
+
+/** Thin triangular rays from (cx, cy) between angles `from` and `to`. */
+function rays(cx: number, cy: number, n: number, len: number, color: string, op: number, spread = 1, from = 0, to = Math.PI * 2) {
+  let s = '';
+  for (let i = 0; i < n; i++) {
+    const a = from + ((to - from) * (i + 0.5)) / n;
+    const w = ((to - from) / n) * 0.5 * spread;
+    s += `<polygon points="${cx},${cy} ${(cx + len * Math.cos(a - w)).toFixed(1)},${(cy + len * Math.sin(a - w)).toFixed(1)} ${(cx + len * Math.cos(a + w)).toFixed(1)},${(cy + len * Math.sin(a + w)).toFixed(1)}"/>`;
+  }
+  return `<g fill="${color}" opacity="${op}">${s}</g>`;
+}
+
+function border(inset: number, color: string, op: number, double = true) {
+  const a = `<rect x="${inset}" y="${inset}" width="${VW - inset * 2}" height="${VH - inset * 2}" rx="18"/>`;
+  const b = double ? `<rect x="${inset + 14}" y="${inset + 14}" width="${VW - inset * 2 - 28}" height="${VH - inset * 2 - 28}" rx="10"/>` : '';
+  return `<g fill="none" stroke="${color}" opacity="${op}" stroke-width="2">${a}${b}</g>`;
+}
+
+function cornerStars(inset: number, color: string, op: number) {
+  let s = '';
+  for (const [x, y, sx, sy] of [
+    [inset, inset, 1, 1],
+    [VW - inset, inset, -1, 1],
+    [inset, VH - inset, 1, -1],
+    [VW - inset, VH - inset, -1, -1],
+  ])
+    s += `<g transform="translate(${x} ${y}) scale(${sx} ${sy})"><path d="M0 70 L0 0 L70 0 M14 56 L14 14 L56 14" fill="none"/><polygon points="${starPoints(30, 30, 4, 12, 4, -45)}"/></g>`;
+  return `<g stroke="${color}" fill="${color}" stroke-width="2" opacity="${op}">${s}</g>`;
+}
+
+/** Art Deco arcs rising from the bottom edge plus stepped rules along the top. */
+function decoArcs(color: string, op: number) {
+  let s = '';
+  for (let i = 0; i < 6; i++) {
+    const r = 180 + i * 90;
+    s += `<path d="M${800 - r} ${VH} A${r} ${r} 0 0 1 ${800 + r} ${VH}" stroke-width="${i % 2 ? 1.5 : 3}"/>`;
+  }
+  for (let k = 0; k < 4; k++) {
+    const y = 70 + k * 16;
+    s += `<path d="M120 ${y} H${600 - k * 30} M${1000 + k * 30} ${y} H1480" stroke-width="1.5"/>`;
+  }
+  return `<g stroke="${color}" fill="none" opacity="${op}">${s}</g>`;
+}
+
+const matTitle = (text: string, color: string, font = 'Georgia, serif', size = 24, spacing = 12, op = 0.62) =>
+  `<text x="800" y="508" text-anchor="middle" font-family="${font}" font-size="${size}" letter-spacing="${spacing}" fill="${color}" opacity="${op}">${text}</text>`;
+
+function prestigeMats(noise: (id: string, freq: string, alpha: number, octaves?: number, extra?: string) => string, grain: () => string): Def[] {
+  const g = noise('grain', '.9', 0.06, 2);
+  return [
+    {
+      id: 'regional-silver',
+      name: 'Regional Qualifier · Silver Series',
+      description: 'Midnight navy with an engraved silver rosette and silver zone printing.',
+      base: '#0c1632',
+      accent: '#dfe7f5',
+      zoneLine: 'rgba(214,224,242,.62)',
+      zoneFill: 'rgba(4,8,22,.34)',
+      printedZones: true,
+      gradient: 'radial-gradient(ellipse at 50% 50%, #1a2b55 0%, #0c1632 55%, #04081a 100%)',
+      svg: () =>
+        wrap(
+          `${guilloche(800, 500, 300, 47, 118, 47, '#cfd8ea', 0.2, 1.1)}${guilloche(800, 500, 420, 61, 40, 61, '#cfd8ea', 0.09, 1)}
+          ${laurel(800, 500, 330, '#cfd8ea', 0.13, -1)}${laurel(800, 500, 330, '#cfd8ea', 0.13, 1)}${border(36, '#cfd8ea', 0.22)}
+          ${grain()}${matTitle('REGIONAL QUALIFIER · 2010 SEASON', '#dfe7f5')}`,
+          g,
+        ),
+    },
+    {
+      id: 'regional-top16',
+      name: 'Regional Top Cut',
+      description: 'The Silver Series mat finished in gold: double frame, corner stars and a laurel.',
+      base: '#0f1d44',
+      accent: '#f2d27a',
+      zoneLine: 'rgba(240,214,140,.7)',
+      zoneFill: 'rgba(4,8,22,.36)',
+      printedZones: true,
+      gradient: 'radial-gradient(ellipse at 50% 50%, #203a75 0%, #0f1d44 55%, #050a1d 100%)',
+      svg: () =>
+        wrap(
+          `${guilloche(800, 500, 300, 47, 118, 47, '#cfd8ea', 0.13, 1)}
+          ${laurel(800, 500, 300, '#e8c96f', 0.3, -1)}${laurel(800, 500, 300, '#e8c96f', 0.3, 1)}
+          <polygon points="${starPoints(800, 190, 5, 30, 12)}" fill="#e8c96f" opacity=".5"/>${border(30, '#e8c96f', 0.5)}${cornerStars(30, '#e8c96f', 0.55)}
+          ${grain()}${matTitle('TOP CUT · REGIONAL QUALIFIER', '#f2d27a')}`,
+          g,
+        ),
+    },
+    {
+      id: 'championship-edison',
+      name: 'Championship Series · Edison',
+      description: 'Crimson and black with a star medallion, dated for the weekend the format is named after.',
+      base: '#2a070d',
+      accent: '#ffd9cf',
+      zoneLine: 'rgba(255,214,200,.55)',
+      zoneFill: 'rgba(10,2,4,.36)',
+      printedZones: true,
+      gradient: 'radial-gradient(ellipse at 50% 50%, #6a1420 0%, #2a070d 55%, #0b0204 100%)',
+      svg: () =>
+        wrap(
+          `${rays(800, 500, 48, 1100, '#ff9c8c', 0.06, 0.55)}
+          <circle cx="800" cy="500" r="210" fill="none" stroke="#ffd9cf" stroke-width="2" opacity=".22"/>
+          <circle cx="800" cy="500" r="190" fill="none" stroke="#ffd9cf" stroke-dasharray="4 8" opacity=".25"/>
+          <polygon points="${starPoints(800, 500, 5, 170, 66)}" fill="none" stroke="#ffd9cf" stroke-width="2" opacity=".2"/>${border(36, '#ffd9cf', 0.18, false)}
+          ${grain()}${matTitle('EDISON, NJ · APRIL 24–25, 2010', '#ffd9cf', 'Arial Narrow, Arial, sans-serif', 26, 10)}`,
+          g,
+        ),
+    },
+    {
+      id: 'nationals-indy',
+      name: 'National Championship 2010',
+      description: 'Black and gold Art Deco: a sunburst, stepped arcs and a field of stars.',
+      base: '#0e0b05',
+      accent: '#f2d27a',
+      zoneLine: 'rgba(242,210,122,.7)',
+      zoneFill: 'rgba(0,0,0,.32)',
+      printedZones: true,
+      gradient: 'radial-gradient(ellipse at 50% 50%, #2a2210 0%, #0e0b05 55%, #030201 100%)',
+      svg: () =>
+        wrap(
+          `${rays(800, VH, 30, 1200, '#f2d27a', 0.07, 0.5, Math.PI, Math.PI * 2)}${decoArcs('#f2d27a', 0.3)}${starfield('nats', 120, '#f6dc8e')}
+          <polygon points="${starPoints(800, 130, 5, 26, 10)}" fill="#f2d27a" opacity=".6"/>${border(30, '#f2d27a', 0.35)}
+          ${grain()}${matTitle('NATIONAL CHAMPIONSHIP · INDIANAPOLIS', '#f2d27a')}`,
+          g,
+        ),
+    },
+    {
+      id: 'feature-table',
+      name: 'Feature Table',
+      description: 'Stage blue under two spotlights, with camera alignment marks in the corners.',
+      base: '#0a1a33',
+      accent: '#cfe6ff',
+      zoneLine: 'rgba(190,224,255,.55)',
+      zoneFill: 'rgba(2,8,20,.32)',
+      printedZones: true,
+      gradient: 'radial-gradient(ellipse at 50% 50%, #173a66 0%, #0a1a33 55%, #030812 100%)',
+      svg: () =>
+        wrap(
+          `<polygon points="560,0 640,0 980,1000 300,1000" fill="#bfe0ff" opacity=".05"/><polygon points="960,0 1040,0 1300,1000 620,1000" fill="#bfe0ff" opacity=".05"/>
+          <g stroke="#cfe6ff" stroke-width="2" opacity=".35" fill="none">${[
+            [90, 90],
+            [1510, 90],
+            [90, 910],
+            [1510, 910],
+          ]
+            .map(([x, y]) => `<circle cx="${x}" cy="${y}" r="16"/><path d="M${x - 30} ${y}H${x + 30}M${x} ${y - 30}V${y + 30}"/>`)
+            .join('')}</g>
+          <g fill="#cfe6ff" opacity=".5" font-family="Consolas, Menlo, monospace" font-size="16" letter-spacing="3"><text x="120" y="60">CAM A</text><text x="1400" y="60">CAM B</text></g>
+          ${grain()}${matTitle('FEATURE MATCH', '#cfe6ff', 'Arial Narrow, Arial, sans-serif', 26, 14)}`,
+          g,
+        ),
+    },
+    {
+      id: 'national-champion',
+      name: 'National Champion',
+      description: 'Gold guilloche and a laurel crown on black, numbered one of one.',
+      base: '#0b0904',
+      accent: '#f6dc8e',
+      zoneLine: 'rgba(250,224,150,.78)',
+      zoneFill: 'rgba(0,0,0,.3)',
+      printedZones: true,
+      gradient: 'radial-gradient(ellipse at 50% 50%, #262012 0%, #0b0904 55%, #000 100%)',
+      svg: () =>
+        wrap(
+          `${guilloche(800, 500, 330, 53, 140, 53, '#f2d27a', 0.22, 1.2)}${guilloche(800, 500, 470, 71, 46, 71, '#f2d27a', 0.12, 1)}
+          ${laurel(800, 500, 360, '#f6dc8e', 0.32, -1)}${laurel(800, 500, 360, '#f6dc8e', 0.32, 1)}
+          <polygon points="${starPoints(740, 150, 5, 18, 7)}" fill="#f6dc8e" opacity=".6"/><polygon points="${starPoints(800, 130, 5, 26, 10)}" fill="#f6dc8e" opacity=".75"/><polygon points="${starPoints(860, 150, 5, 18, 7)}" fill="#f6dc8e" opacity=".6"/>
+          ${border(26, '#f6dc8e', 0.55)}${cornerStars(26, '#f6dc8e', 0.6)}
+          <text x="1520" y="955" text-anchor="end" font-family="Consolas, Menlo, monospace" font-size="18" letter-spacing="4" fill="#f6dc8e" opacity=".55">No. 001 / 001</text>
+          ${grain()}${matTitle('NATIONAL CHAMPION · 2010', '#f6dc8e')}`,
+          g,
+        ),
+    },
+  ];
+}
+
 const cache = new Map<string, string>();
 
 export const CUSTOM_MAT_ID = 'custom';
@@ -449,7 +655,27 @@ const BUILT_IN: Playmat[] = DEFS.map((d) => ({
 }));
 
 /** Only realistic mats are offered (the older fantasy designs stay defined but hidden). */
-const OFFERED_MATS = ['tournament-black', 'starter-game-mat', 'championship-prize-mat', 'regional-qualifier-mat', 'edison-2010', 'green-felt', 'walnut-table'];
+const OFFERED_MATS = [
+  'tournament-black',
+  'starter-game-mat',
+  'championship-prize-mat',
+  'regional-qualifier-mat',
+  'edison-2010',
+  'green-felt',
+  'walnut-table',
+  // earned at the big events (src/events/matUnlocks.ts)
+  'regional-silver',
+  'regional-top16',
+  'championship-edison',
+  'feature-table',
+  'nationals-indy',
+  'national-champion',
+];
+
+/** Mats you earn at Regionals, the Championship Series and Nationals; locked until then. */
+export const PRESTIGE_MAT_IDS = ['regional-silver', 'regional-top16', 'championship-edison', 'feature-table', 'nationals-indy', 'national-champion'] as const;
+export type PrestigeMatId = (typeof PRESTIGE_MAT_IDS)[number];
+export const isPrestigeMat = (id: string): id is PrestigeMatId => (PRESTIGE_MAT_IDS as readonly string[]).includes(id);
 
 export const PLAYMATS: Playmat[] = [
   ...OFFERED_MATS.map((id) => BUILT_IN.find((m) => m.id === id)).filter((m): m is Playmat => !!m),
@@ -490,7 +716,7 @@ export function applyMatVars(el: HTMLElement, id: string) {
 
 /** The opponent brings their own mat: a stable pick per opponent name, never the same as yours. */
 export function opponentMat(oppName: string, mine: string): string {
-  const pool = PLAYMATS.filter((m) => m.id !== mine && m.id !== 'green-felt' && m.id !== 'walnut-table');
+  const pool = PLAYMATS.filter((m) => m.id !== mine && m.id !== 'green-felt' && m.id !== 'walnut-table' && !isPrestigeMat(m.id));
   let h = 0;
   for (const ch of oppName) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
   return (pool[h % pool.length] ?? PLAYMATS[0]).id;

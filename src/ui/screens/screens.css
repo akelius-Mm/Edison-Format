@@ -2106,6 +2106,26 @@ i.k-monster,
   text-align: center;
   line-height: 1.2;
 }
+.cz-opt.is-locked .cz-matsw {
+  filter: saturate(0.3) brightness(0.5);
+}
+.cz-opt.is-locked .cz-label {
+  color: var(--text-3, rgba(255, 255, 255, 0.5));
+}
+.cz-lock {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  line-height: 1.2;
+  text-align: center;
+  color: var(--gold);
+}
+.cz-lock .icon {
+  width: 12px;
+  height: 12px;
+  flex: none;
+}
 .cz-sleeve .yc {
   --yc-w: 76px;
 }

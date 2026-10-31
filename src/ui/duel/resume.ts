@@ -89,6 +89,8 @@ export interface SavedDuel {
     sides: [SavedSide, SavedSide];
     bestOf: 1 | 3;
     playmat: string;
+    /** The opponent's half when the event supplied the mats. */
+    oppPlaymat?: string;
     caption: string;
     requireWinner?: boolean;
     stats?: { deckKey: string; deckName: string };
