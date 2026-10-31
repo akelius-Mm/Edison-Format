@@ -77,6 +77,7 @@ async function duel() {
       { name: 'Rival AI', deck: deck(), avatar: 'avatar-3', sleeve: 'arcane-circle', control: diff },
     ],
     playmat: q.get('mat') ?? 'edison-night',
+    oppPlaymat: q.get('oppmat') ?? undefined,
     firstPlayer: q.has('first') ? (Number(q.get('first')) as 0 | 1) : 'coin',
     seed: q.has('seed') ? Number(q.get('seed')) : undefined,
     caption: 'Dev Duel',

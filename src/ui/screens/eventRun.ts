@@ -3,6 +3,12 @@
 // neighbourhood in the standings, with "show all" for the full sheet. Engine in src/events.
 import {
   EVENT_SPECS,
+  FEATURE_TABLES,
+  MAT_CHAMPION,
+  eventTableMat,
+  isMatUnlocked,
+  syncMatUnlocks,
+  unlockMats,
   acceptId,
   advance,
   autoPlay,
@@ -45,6 +51,7 @@ import type { LocalsMatch, LocalsStanding } from '../../locals/types';
 import { topRoundLabel } from '../../tournament/swiss';
 import type { DuelSide } from '../duel/api';
 import { getSettings } from '../settings';
+import { playmatById } from '../theme/playmats';
 import { ctaButton, lobbySection, stickyBar } from './components';
 import { confirmDialog, h, icon, segmented, toast, type Child } from './dom';
 import { sleevePreview } from './ext';
@@ -74,7 +81,6 @@ const roundKey = (ms: LocalsMatch[]) => ms[0]?.id.replace(/-\d+$|-bye$/, '') ?? 
 const involves = (m: LocalsMatch, id: string) => m.a === id || m.b === id;
 /** Sheets longer than this show feature tables + your table until expanded. */
 const SHEET_LIMIT = 24;
-const FEATURE_TABLES = 8;
 
 function scoreFor(m: LocalsMatch, id: string) {
   const wa = m.games.filter((g) => g.winner === 0).length;
@@ -96,6 +102,11 @@ export const eventScope = (r: Pick<EventRun, 'id'>) => `events:${r.id}`;
 
 /** The saved-duel key of an event match. */
 const duelKey = (r: EventRun, m: LocalsMatch) => `events:${r.id}:${m.id}`;
+
+/** Toast newly earned prestige playmats (Customize → Playmat). */
+function announceMats(ids: string[]) {
+  if (ids.length) toast(`New playmat${ids.length > 1 ? 's' : ''}: ${ids.map((id) => playmatById(id).name).join(', ')}. Find ${ids.length > 1 ? 'them' : 'it'} in Customize.`, 'gold', 3600);
+}
 
 export function eventRunScreen(r: EventRun, autoResume = false): Screen {
   const scope = eventScope(r);
@@ -144,6 +155,7 @@ export function eventRunScreen(r: EventRun, autoResume = false): Screen {
   };
 
   function redraw() {
+    if (r.phase === 'done') announceMats(syncMatUnlocks());
     timers.length = 0;
     revealTimers.forEach(clearTimeout);
     revealTimers = [];
@@ -723,9 +735,14 @@ export function eventRunScreen(r: EventRun, autoResume = false): Screen {
       { name: opp.name, deck: toDeckList(opp.deck), avatar: opp.avatar, sleeve: opp.sleeve, control: opp.difficulty, title: deckLabel(opp) },
     ];
     const where = m.stage === 'top' ? m.label : `Round ${m.round} · Table ${m.table}`;
+    // Big events put their own mat on the table (both halves); a National Champion keeps theirs.
+    const tableMat = eventTableMat(r.kind, r.size, m);
+    announceMats(unlockMats([tableMat]));
+    const ownMat = s.playmat === MAT_CHAMPION && isMatUnlocked(MAT_CHAMPION) ? s.playmat : null;
     const setup: MatchSetup = {
       sides,
       bestOf: 3,
+      ...(tableMat ? { playmat: ownMat ?? tableMat, oppPlaymat: tableMat } : {}),
       caption: `${where} – vs ${opp.name}`,
       requireWinner: m.stage === 'top',
       stats: { deckKey: me.deck.id, deckName: me.deck.name },

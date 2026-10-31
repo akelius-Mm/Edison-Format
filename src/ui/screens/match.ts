@@ -38,6 +38,8 @@ export interface MatchSetup {
   sides: [DuelSide, DuelSide];
   bestOf: 1 | 3;
   playmat?: string;
+  /** The opponent's half of the table (default: a mat of their own, see opponentMat). */
+  oppPlaymat?: string;
   /** Header caption, e.g. "Round 2 – vs Rei Mori (Blackwings)". */
   caption: string;
   /** Top-cut style: keep playing until someone leads. */
@@ -68,7 +70,7 @@ export function setupFromSaved(d: SavedDuel): MatchSetup | null {
   const a = fromSavedSide(d.setup.sides[0]);
   const b = fromSavedSide(d.setup.sides[1]);
   if (!a || !b) return null;
-  return { sides: [a, b], bestOf: d.setup.bestOf, playmat: d.setup.playmat, caption: d.setup.caption, requireWinner: d.setup.requireWinner, stats: d.setup.stats, resume: d.tag, limited: d.setup.limited };
+  return { sides: [a, b], bestOf: d.setup.bestOf, playmat: d.setup.playmat, oppPlaymat: d.setup.oppPlaymat, caption: d.setup.caption, requireWinner: d.setup.requireWinner, stats: d.setup.stats, resume: d.tag, limited: d.setup.limited };
 }
 
 export async function runMatch(setup: MatchSetup): Promise<MatchOutcome> {
@@ -98,6 +100,7 @@ export async function runMatch(setup: MatchSetup): Promise<MatchOutcome> {
           sides: [toSavedSide(setup.sides[0]), toSavedSide(setup.sides[1])],
           bestOf: setup.bestOf,
           playmat: setup.playmat ?? getSettings().playmat,
+          ...(setup.oppPlaymat ? { oppPlaymat: setup.oppPlaymat } : {}),
           caption: setup.caption,
           requireWinner: setup.requireWinner,
           stats: setup.stats,
@@ -244,6 +247,7 @@ export async function runMatch(setup: MatchSetup): Promise<MatchOutcome> {
         r = await startDuel(host, {
           sides: gameSides,
           playmat,
+          oppPlaymat: setup.oppPlaymat,
           firstPlayer: game.first,
           seed: game.seed,
           skipFirstDraw: game.skipFirstDraw,

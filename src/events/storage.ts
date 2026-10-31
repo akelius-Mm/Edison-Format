@@ -8,6 +8,7 @@ export const KEYS = {
   eventForm: 'edison.events.form.v1',
   season: 'edison.circuit.season.v1',
   seasonArchive: 'edison.circuit.archive.v1',
+  matUnlocks: 'edison.mats.unlocked.v1',
 } as const;
 
 export function load<T>(key: string, fallback: T): T {

@@ -8,6 +8,7 @@ import { frame, type Screen } from './nav';
 import { getProfile, ordinal, tournamentSummary, winRate } from './store';
 import { playerName, saveName } from './playerName';
 import { NAME_MAX } from '../../net/protocol';
+import { MAT_UNLOCK_TEXT, isMatUnlocked, syncMatUnlocks } from '../../events';
 
 const SEARCH: Record<CustomKind, { label: string; url: string }[]> = {
   mat: [
@@ -23,6 +24,8 @@ const SEARCH: Record<CustomKind, { label: string; url: string }[]> = {
 };
 
 export function customizeScreen(): Screen {
+  // earlier event results (from before prestige mats existed) unlock their mats here
+  syncMatUnlocks();
   const s = getSettings();
 
   // ---- live preview: your mat with three of your sleeved cards on it
@@ -80,6 +83,18 @@ function picker(kind: CustomKind, onChange: () => void): HTMLElement {
   const tileFor = (id: string, label: string, removable: boolean) => {
     const sw = isMat ? h('span', { class: 'cz-matsw' }) : h('span', { class: 'cz-sleeve' }, sleevePreview(id, 'sm'));
     if (isMat) applyPlaymat(sw, id);
+    if (isMat && !isMatUnlocked(id))
+      return h(
+        'div',
+        { class: 'cz-opt is-locked' },
+        h(
+          'button',
+          { type: 'button', class: 'cz-pick', role: 'radio', 'aria-checked': 'false', 'aria-disabled': 'true', title: `Locked: ${MAT_UNLOCK_TEXT[id]}`, onclick: () => toast(`${label} is locked. ${MAT_UNLOCK_TEXT[id]} to earn it.`, 'info', 2800) },
+          sw,
+          h('span', { class: 'cz-label' }, label),
+          h('span', { class: 'cz-lock' }, icon('medal'), MAT_UNLOCK_TEXT[id]),
+        ),
+      );
     const on = current() === id;
     return h(
       'div',
