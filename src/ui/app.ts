@@ -6,6 +6,7 @@ import { deckBuilderScreen } from './screens/deckBuilder';
 import { draftScreen } from './screens/draft';
 import { binderScreen } from './screens/binder';
 import { packsScreen } from './screens/packs';
+import { shopScreen, tradeScreen } from './screens/shop';
 import { duelSetupScreen, exhibitionScreen } from './screens/duelSetup';
 import { registerRoute, startRouter } from './screens/nav';
 import { rulesScreen } from './screens/rules';
@@ -39,6 +40,8 @@ export function startApp(root: HTMLElement) {
   registerRoute('draft', draftScreen);
   registerRoute('packs', packsScreen);
   registerRoute('binder', binderScreen);
+  registerRoute('shop', shopScreen);
+  registerRoute('trade', tradeScreen);
   registerRoute('friend', friendScreen);
   registerRoute('friend-locals', friendLocalsScreen);
   clear(root);

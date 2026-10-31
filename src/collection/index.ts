@@ -337,6 +337,49 @@ export function openNextPack(code: string): OpenResult | null {
   return { code, seed, pulls: out };
 }
 
+// ------------------------------------------------------------------ singles & trades
+
+/** One or more copies of a card in one rarity. */
+export interface Copies {
+  name: string;
+  rarity: Rarity;
+  n: number;
+}
+
+/**
+ * Apply a shop purchase, sale or trade in one step: `dp` is added (negative spends), `add` copies join the
+ * collection and `remove` copies leave it. Nothing changes and false is returned when the player can't pay
+ * or doesn't own every copy being removed.
+ */
+export function transact(o: { dp: number; add?: Copies[]; remove?: Copies[] }): boolean {
+  const s = S();
+  if (s.dp + o.dp < 0) return false;
+  const need = new Map<string, number>();
+  for (const c of o.remove ?? []) {
+    if (!(c.n > 0)) return false;
+    const k = `${c.name}\u0000${c.rarity}`;
+    need.set(k, (need.get(k) ?? 0) + c.n);
+  }
+  for (const [k, n] of need) {
+    const [name, rarity] = k.split('\u0000') as [string, Rarity];
+    if ((s.owned[name]?.[rarity] ?? 0) < n) return false;
+  }
+  for (const c of o.remove ?? []) {
+    const r = s.owned[c.name];
+    r[c.rarity] = r[c.rarity]! - c.n;
+    if (!r[c.rarity]) delete r[c.rarity];
+    if (!Object.keys(r).length) delete s.owned[c.name];
+  }
+  for (const c of o.add ?? []) if (c.n > 0) addCard(s, c.name, c.rarity, c.n);
+  if (o.dp > 0) earn(s, o.dp);
+  else if (o.dp < 0) {
+    s.dp += o.dp;
+    s.stats.dpSpent -= o.dp;
+  }
+  save();
+  return true;
+}
+
 // ------------------------------------------------------------------ dupes
 
 /**

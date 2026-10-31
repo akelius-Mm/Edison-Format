@@ -319,6 +319,13 @@ export class BoardView {
       el.style.removeProperty('--fan-r');
       el.style.removeProperty('--fan-y');
     }
+    // a card swiped up to play (swipe.ts) leaves the hand: drop the drag transform here, after the move's
+    // start was measured at the drop point and before its end is, so it flies on from under the finger
+    if (place !== 'hand' && el.classList.contains('is-swiping')) {
+      el.classList.remove('is-swiping');
+      el.style.transform = '';
+      el.style.transition = '';
+    }
     el.classList.toggle('is-def', place === 'mzone' && c.pos === 'def');
     el.classList.toggle('is-set', (place === 'mzone' || place === 'szone' || place === 'fzone') && !c.faceUp);
     el.classList.toggle('is-opp', c.controller !== this.cfg.me);

@@ -128,6 +128,11 @@ export class HandFidget {
     return performance.now() - this.swallowAt < 700 || !!this.gesture?.fired;
   }
 
+  /** This touch picked a card up (swipe.ts): it is not a shuffle, whichever way it moves next. */
+  release() {
+    this.gesture = null;
+  }
+
   get running() {
     return this.cards.length > 0;
   }
