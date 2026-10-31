@@ -2524,6 +2524,27 @@
 .stage--tall .fidget-hint { bottom: calc(var(--ch) * 1.72); }
 .fidget-hint.is-gone { opacity: 0; }
 
+/* ---------------------------------------------------------------- swipe up to play (swipe.ts)
+   The lifted card follows the finger (an inline transform on the .dc); your half of the board glows
+   softly as the drop target, brighter once letting go would play the card. */
+/* every touch on your hand reaches the page (no browser pan): sideways is the shuffle, upwards a play */
+.duel-root.swipe-play:not(.is-spectator) .hand-me .dc { touch-action: none; }
+.duel-root .hand-me .dc.is-swiping { z-index: 90 !important; will-change: transform; }
+.duel-root .hand-me .dc.is-swiping .dc-shadow { opacity: 1; transform: translateY(9%) scale(1.05); }
+.duel-root .hand-me .dc.is-swiping .yc { box-shadow: 0 0 0 2px #ffe08a, 0 0 22px 6px rgba(255, 205, 90, 0.55), 0 18px 34px rgba(0, 0, 0, 0.8); }
+.side-me::after {
+  content: '';
+  position: absolute;
+  inset: calc(var(--gap) * -1.2) calc(var(--gap) * -1.4);
+  border-radius: calc(var(--gap) * 1.6);
+  box-shadow: inset 0 0 0 1.5px rgba(255, 224, 138, 0.75), inset 0 0 28px rgba(255, 205, 90, 0.22), 0 0 18px rgba(255, 205, 90, 0.2);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity calc(var(--dur-base) * var(--sp)) var(--ease-out);
+}
+.side-me.swipe-drop::after { opacity: 0.4; }
+.side-me.swipe-drop.is-armed::after { opacity: 1; }
+
 /* ---------------------------------------------------------------- screen swap
    The duel replaces its setup screen inside the same host: a quick fade instead of a jump cut. */
 .duel-root { animation: duelIn var(--dur-slow) var(--ease-out); }

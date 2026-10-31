@@ -28,6 +28,8 @@ export interface Settings {
   sideDecking: boolean;
   showLog: boolean;
   confirmEndTurn: boolean;
+  /** Drag a card in your hand up onto the field to play it (duel/swipe.ts). */
+  swipeToPlay: boolean;
   /** Opt-in: show official card artwork fetched from the YGOPRODeck database. */
   officialImages: boolean;
   /** Built-in music tracks the player switched off (track ids). */
@@ -54,6 +56,7 @@ export const DEFAULT_SETTINGS: Settings = {
   sideDecking: true,
   showLog: true,
   confirmEndTurn: false,
+  swipeToPlay: true,
   officialImages: true,
   musicOff: [],
   netServer: '',
