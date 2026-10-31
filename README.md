@@ -78,6 +78,8 @@ and works offline.
 - **Customization**: sleeves, playmats (or a photo of your own), player name, animation speed.
 - **Official card images (optional)**: Settings → "Load official card images" fetches artwork
   from the public YGOPRODeck database when online, and falls back to generated art.
+- **Back up and restore**: Settings → Data saves your decks, collection, stats and settings as one
+  file, and restores them on this or another phone ("Your music" files are not included).
 - **Report a problem**: builds a bug report with your device details that you can share or copy.
 - **How to Play**: the format, its duel rules, the card pool and the banlist, in the app.
 
