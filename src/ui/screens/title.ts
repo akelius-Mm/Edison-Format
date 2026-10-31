@@ -114,6 +114,8 @@ export function titleScreen(): Screen {
     tile('draft', 'Draft', 'Draft and Sealed', 'Gold Sarcophagus'),
     tile('deck-builder', 'Decks', 'Build and edit', 'Brionac, Dragon of the Ice Barrier'),
     tile('binder', 'Binder', 'Your collection', 'Stardust Dragon'),
+    tile('shop', 'Card Shop', 'Buy and sell singles', 'Card Trader'),
+    tile('shop', 'Trades', 'Trade with the regulars', 'Swap Frog', undefined, { tab: 'trade' }),
   );
 
   const row = (route: string, label: string, ic: keyof typeof ICONS) =>

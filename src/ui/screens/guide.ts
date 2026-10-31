@@ -33,7 +33,7 @@ function tabsSection() {
       tab(
         'Home',
         'home',
-        h('p', null, 'Pick up an unfinished duel, see this week’s play, and open your cards: Packs, Draft, Decks and Binder.'),
+        h('p', null, 'Pick up an unfinished duel, see this week’s play, and open your cards: Packs, Draft, Decks, Binder, the Card Shop (buy and sell singles) and Trades with the Locals regulars.'),
         list(
           [b('Card Database'), ': search every card in the pool.'],
           [b('How to Play & Banlist'), ': the format, the duel rules and the full banlist with search.'],

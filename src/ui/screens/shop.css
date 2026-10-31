@@ -1,0 +1,367 @@
+/* Card Shop (glass case, sell, trade) and the trade table. Builds on the binder's search and chip styles. */
+
+.sh-tabs {
+  margin: 4px 0 14px;
+}
+.sh-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 14px;
+  padding-bottom: 24px;
+}
+.sh-intro {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 14px;
+  border-radius: 16px;
+  background: var(--grp);
+  color: var(--text);
+  font: 400 14px/1.4 var(--font);
+}
+.sh-intro b {
+  font-weight: 600;
+}
+.sh-intro-icon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background: var(--grp-hi);
+  color: var(--gold);
+}
+.sh-muted,
+.sh-sub {
+  color: var(--muted);
+  font: 400 13px/1.35 var(--font);
+}
+.sh-hot {
+  color: var(--gold);
+}
+.sh-h {
+  margin: 18px 0 8px;
+  font: 600 17px/1.2 var(--font);
+  color: var(--text);
+}
+.sh-feat .sh-h {
+  margin-top: 4px;
+}
+
+/* the case: a horizontal row of foils */
+.sh-feat {
+  min-width: 0;
+}
+.sh-feat-row {
+  display: flex;
+  gap: 12px;
+  overflow-x: auto;
+  margin: 0 calc(-1 * var(--gutter, 16px));
+  padding: 4px var(--gutter, 16px) 8px;
+  scroll-snap-type: x proximity;
+  -webkit-overflow-scrolling: touch;
+}
+.sh-feat-card {
+  flex: none;
+  display: grid;
+  gap: 6px;
+  width: 112px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text);
+  text-align: left;
+  scroll-snap-align: start;
+  cursor: pointer;
+}
+.sh-feat-card .rf {
+  width: 112px;
+}
+.sh-feat-card .rf .yc {
+  width: 100%;
+  height: auto;
+}
+.sh-feat-price {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font: 600 13px var(--font);
+}
+.sh-feat-stock {
+  color: var(--muted);
+  font: 400 12px var(--font);
+}
+
+.sh-controls {
+  display: grid;
+  gap: 10px;
+}
+.sh-search {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+/* rows */
+.sh-list {
+  display: grid;
+  gap: 1px;
+  border-radius: 16px;
+  overflow: hidden;
+  background: var(--sep);
+}
+.sh-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 56px;
+  padding: 10px 12px;
+  background: var(--grp);
+  color: var(--text);
+  border: 0;
+  text-align: left;
+  font: inherit;
+  flex-wrap: wrap;
+}
+.sh-row.on {
+  background: color-mix(in srgb, var(--gold) 12%, var(--grp));
+}
+.sh-name {
+  flex: 1 1 160px;
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+.sh-title {
+  font: 600 15px/1.25 var(--font);
+  overflow-wrap: anywhere;
+}
+.sh-title .rpill {
+  vertical-align: 1px;
+}
+.sh-prints {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-start;
+}
+.sh-print {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--grp-hi);
+  color: var(--text);
+  font: 500 13px var(--font);
+  cursor: pointer;
+}
+.sh-print b {
+  font-weight: 700;
+}
+.sh-print.is-out {
+  opacity: 0.45;
+  cursor: default;
+}
+.sh-stock {
+  color: var(--muted);
+  font-size: 12px;
+}
+.sh-older {
+  background: rgba(212, 175, 55, 0.14);
+  color: var(--gold);
+}
+.sh-trend {
+  font: 600 11px var(--font);
+}
+.sh-trend.up {
+  color: #e2766b;
+}
+.sh-trend.down {
+  color: #6bc58c;
+}
+.sh-sell {
+  flex: none;
+}
+.sh-more {
+  justify-self: center;
+  margin: 10px auto;
+  background: var(--grp);
+}
+.sh-list > .sh-more {
+  width: 100%;
+  margin: 0;
+  border-radius: 0;
+}
+.sh-empty {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 18px 14px;
+  background: var(--grp);
+  color: var(--muted);
+  font: 400 14px var(--font);
+}
+
+/* traders */
+.sh-traders {
+  display: grid;
+  gap: 10px;
+}
+.sh-trader {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border: 0;
+  border-radius: 16px;
+  background: var(--grp);
+  color: var(--text);
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+.sh-trader-text {
+  flex: 1;
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+.sh-trader > .icon:last-child {
+  color: var(--faint);
+}
+
+/* trade table */
+.sh-pick {
+  width: 100%;
+  cursor: pointer;
+  flex-wrap: nowrap;
+}
+.sh-check {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 7px;
+  border: 1.5px solid var(--faint);
+}
+.sh-pick.on .sh-check {
+  border-color: var(--gold);
+  background: var(--gold);
+  color: #1a1408;
+}
+.sh-check .icon {
+  width: 16px;
+  height: 16px;
+}
+.sh-val {
+  flex: none;
+  font: 700 14px var(--font);
+}
+.sh-wants {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.sh-want {
+  min-height: 34px;
+  padding: 0 12px;
+  border: 1px dashed var(--faint);
+  border-radius: 999px;
+  background: none;
+  color: var(--text-2);
+  font: 500 13px var(--font);
+  cursor: pointer;
+}
+.sh-want.have {
+  border-style: solid;
+  border-color: var(--gold);
+  color: var(--gold);
+}
+.sh-step {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+.sh-step b {
+  min-width: 18px;
+  text-align: center;
+  font: 700 15px var(--font);
+}
+.sh-dp-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+  padding: 12px;
+  border-radius: 16px;
+  background: var(--grp);
+  color: var(--text);
+  font: 500 14px var(--font);
+}
+.sh-dp-row .sh-step b {
+  min-width: 70px;
+}
+
+/* the offer bar stays at the bottom of the screen, above the tab bar, within thumb reach */
+.sh-bar {
+  position: sticky;
+  bottom: calc(var(--tabbar-h, 64px) + 8px);
+  z-index: 3;
+  display: grid;
+  gap: 10px;
+  margin-top: 16px;
+  padding: 12px;
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--grp) 92%, transparent);
+  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(16px);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
+}
+.sh-bar .ui-btn {
+  width: 100%;
+  justify-content: center;
+}
+.sh-meter-row {
+  display: grid;
+  gap: 6px;
+}
+.sh-meter {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--grp-hi);
+  overflow: hidden;
+}
+.sh-meter span {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  background: var(--muted);
+  transition: width var(--dur-base) var(--ease-out);
+}
+.sh-meter span.ok {
+  background: var(--gold);
+}
+.sh-reply {
+  color: var(--text);
+  font: 400 14px/1.4 var(--font);
+}
+.sh-reply.ok b {
+  color: var(--gold);
+}
+@media (prefers-reduced-motion: reduce) {
+  .sh-meter span {
+    transition: none;
+  }
+}
