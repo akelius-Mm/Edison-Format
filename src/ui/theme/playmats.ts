@@ -1,6 +1,12 @@
-// Themed playmats. Each provides a background (layered gradients + SVG ornament) and zone colours.
-import { customSrc, getCustomImage } from './customImages';
-import { Rand, polyPoints, starPoints, svgUri } from './util';
+// Playmats, modelled on what people actually duelled on in 2010: plain neoprene, the paper starter-deck mat,
+// felt and a kitchen table, and card-art mats (the official card artwork printed on neoprene, the way prize mats
+// and most players' own mats looked). Nothing here is drawn: surfaces are material textures, and every picture is
+// the card's official artwork (YGOPRODeck, the same source as the card images; see ../cards/officialArt.ts).
+// When the artwork can't load (offline before it was ever cached, or official images turned off) an art mat
+// shows as plain neoprene in its base colour, with its event print and stitched edge.
+import { cachedOfficialImage, getOfficialImage, officialArtEnabled } from '../cards/officialArt';
+import { customSrc } from './customImages';
+import { svgUri } from './util';
 
 export interface Playmat {
   id: string;
@@ -15,9 +21,41 @@ export interface Playmat {
   zoneFill: string;
   /** Print official-style zone names ("Monster Card Zone"...) inside the zones. */
   printedZones?: boolean;
-  /** CSS background value. */
+  /** Card whose official artwork is printed on the mat. */
+  art?: string;
+  /** Colour of the stitched edge. */
+  edge?: string;
+  /** CSS background value (reads the artwork cache, so it can change once the artwork is known). */
   readonly css: string;
 }
+
+// ---------------------------------------------------------------- materials (textures, not pictures)
+
+const noiseTile = (size: number, freq: string, alpha: number, octaves = 3, seed = 7) =>
+  svgUri(
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}"><filter id="n" x="0" y="0" width="100%" height="100%"><feTurbulence type="fractalNoise" baseFrequency="${freq}" numOctaves="${octaves}" seed="${seed}" stitchTiles="stitch"/><feColorMatrix values="0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 ${alpha} 0"/></filter><rect width="${size}" height="${size}" filter="url(#n)"/></svg>`,
+  );
+
+/** Neoprene: a fine, slightly uneven rubber grain. */
+const NEOPRENE = `${noiseTile(240, '.95', 0.075)} 0 0 / 240px 240px repeat`;
+/** Felt: a soft, directional nap. */
+const FELT = `${noiseTile(200, '1.4 .9', 0.12, 4)} 0 0 / 200px 200px repeat`;
+/** Paper: very fine grain. */
+const PAPER = `${noiseTile(180, '1.6', 0.06, 2)} 0 0 / 180px 180px repeat`;
+/** Overhead light: a soft hot spot and darker edges, like a photo of a mat on a table. */
+const LIGHT = 'radial-gradient(ellipse at 50% 38%, rgba(255,255,255,.07), rgba(255,255,255,0) 60%), radial-gradient(ellipse at 50% 50%, rgba(0,0,0,0) 55%, rgba(0,0,0,.5) 100%)';
+/** Keeps zone lines readable over busy artwork. */
+const ART_SCRIM = 'linear-gradient(rgba(0,0,0,.30), rgba(0,0,0,.30))';
+
+const WOOD = svgUri(
+  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1000" preserveAspectRatio="none"><filter id="w" x="0" y="0" width="100%" height="100%"><feTurbulence type="fractalNoise" baseFrequency=".0035 .09" numOctaves="4" seed="7" stitchTiles="stitch"/><feColorMatrix values="0 0 0 .55 .2  0 0 0 .32 .11  0 0 0 .16 .05  0 0 0 0 .55"/></filter><rect width="1600" height="1000" filter="url(#w)"/><g stroke="#000" stroke-opacity=".28" stroke-width="3">${[0, 1, 2, 3, 4, 5].map((i) => `<line x1="0" y1="${i * 200 + 40}" x2="1600" y2="${i * 200 + 40}"/>`).join('')}</g></svg>`,
+);
+
+/** Printed text in a mat's corner (an event mat's name and date). */
+const printLayer = (text: string, color: string) =>
+  `${svgUri(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${Math.max(200, text.length * 13)} 30"><text x="100%" y="21" text-anchor="end" font-family="Arial Narrow, Arial, Helvetica, sans-serif" font-weight="700" font-size="18" letter-spacing="3" fill="${color}" fill-opacity=".85">${text}</text></svg>`)} right 3.5% bottom 4% / auto 5.5% no-repeat`;
+
+// ---------------------------------------------------------------- definitions
 
 interface Def {
   id: string;
@@ -28,648 +66,205 @@ interface Def {
   zoneLine: string;
   zoneFill: string;
   printedZones?: boolean;
-  gradient: string;
-  svg: () => string;
+  /** Surface under everything (also what an art mat shows while its artwork is missing). */
+  surface: string;
+  /** Material texture over the surface. */
+  texture?: string;
+  art?: string;
+  print?: string;
+  edge?: string;
 }
 
-const VW = 1600;
-const VH = 1000;
-const wrap = (inner: string, defs = '') =>
-  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${VW} ${VH}" preserveAspectRatio="xMidYMid slice"><defs><filter id="b"><feGaussianBlur stdDeviation="6"/></filter><filter id="b2"><feGaussianBlur stdDeviation="22"/></filter>${defs}</defs>${inner}</svg>`;
+const neoprene = (base: string, mid: string, dark: string) => `radial-gradient(ellipse at 50% 45%, ${mid} 0%, ${base} 60%, ${dark} 100%)`;
 
-function starfield(seed: string, n: number, color: string) {
-  const r = new Rand(seed);
-  let s = '';
-  for (let i = 0; i < n; i++) s += `<circle cx="${r.range(0, VW).toFixed(0)}" cy="${r.range(0, VH).toFixed(0)}" r="${r.range(0.5, 2).toFixed(1)}" opacity="${r.range(0.15, 0.7).toFixed(2)}"/>`;
-  return `<g fill="${color}">${s}</g>`;
-}
-
-function seal(cx: number, cy: number, R: number, color: string, op: number) {
-  let ticks = '';
-  for (let i = 0; i < 72; i++) {
-    const a = (i / 72) * Math.PI * 2;
-    const r2 = i % 6 ? R - 8 : R - 18;
-    ticks += `<line x1="${(cx + R * Math.cos(a)).toFixed(1)}" y1="${(cy + R * Math.sin(a)).toFixed(1)}" x2="${(cx + r2 * Math.cos(a)).toFixed(1)}" y2="${(cy + r2 * Math.sin(a)).toFixed(1)}"/>`;
-  }
-  return `<g fill="none" stroke="${color}" opacity="${op}" stroke-width="1.5"><circle cx="${cx}" cy="${cy}" r="${R}"/><circle cx="${cx}" cy="${cy}" r="${R * 0.82}"/><circle cx="${cx}" cy="${cy}" r="${R * 0.5}" stroke-dasharray="6 8"/>
-    <polygon points="${starPoints(cx, cy, 8, R * 0.82, R * 0.5)}"/><polygon points="${polyPoints(cx, cy, 4, R * 0.82)}"/><polygon points="${polyPoints(cx, cy, 4, R * 0.82, -45)}"/>${ticks}</g>`;
-}
-
-const DEFS: Def[] = [
+const PLAIN: Def[] = [
   {
-    id: 'edison-night',
-    name: 'Edison Night',
-    description: 'Midnight blue with a golden duelling seal.',
-    base: '#0b1224',
-    accent: '#d8b45a',
-    zoneLine: 'rgba(216,180,90,.55)',
-    zoneFill: 'rgba(10,18,40,.45)',
-    gradient: 'radial-gradient(ellipse at 50% 50%, #1b2a52 0%, #0d1530 45%, #05080f 100%)',
-    svg: () =>
-      wrap(
-        `${starfield('edison', 220, '#cfe0ff')}
-        ${seal(800, 500, 380, '#d8b45a', 0.16)}
-        <g stroke="#d8b45a" stroke-width="1.2" opacity=".22" fill="none"><path d="M0 500 L560 500 M1040 500 L1600 500"/><path d="M0 60 L1600 60 M0 940 L1600 940" stroke-dasharray="2 10"/></g>`,
-      ),
+    id: 'tournament-black',
+    name: 'Black Neoprene',
+    description: 'A plain black rubber-backed mat with white zone printing.',
+    base: '#111215',
+    accent: '#e8e8e8',
+    zoneLine: 'rgba(240,240,240,.62)',
+    zoneFill: 'rgba(255,255,255,.025)',
+    surface: neoprene('#121316', '#202227', '#08090b'),
+    texture: NEOPRENE,
+    edge: 'rgba(255,255,255,.16)',
   },
   {
-    id: 'crimson-arena',
-    name: 'Crimson Arena',
-    description: 'A blood-red coliseum floor scattered with embers.',
-    base: '#2a0606',
-    accent: '#ff7a4a',
-    zoneLine: 'rgba(255,122,74,.55)',
-    zoneFill: 'rgba(40,6,6,.45)',
-    gradient: 'radial-gradient(ellipse at 50% 50%, #5a1010 0%, #2a0606 50%, #0e0202 100%)',
-    svg: () => {
-      let hex = '';
-      for (let y = 0; y < VH + 60; y += 52) for (let x = (y / 52) % 2 ? 30 : 0; x < VW + 60; x += 60) hex += `<polygon points="${polyPoints(x, y, 6, 30, 0)}"/>`;
-      return wrap(`<g fill="none" stroke="#ff6a3a" stroke-width="1" opacity=".09">${hex}</g>${starfield('ember', 140, '#ffb070')}
-        <g fill="none" stroke="#ff7a4a" opacity=".2" stroke-width="3"><ellipse cx="800" cy="500" rx="700" ry="430"/><ellipse cx="800" cy="500" rx="660" ry="400" stroke-width="1"/></g>`);
-    },
+    id: 'neo-navy',
+    name: 'Navy Neoprene',
+    description: 'Plain navy rubber-backed mat.',
+    base: '#101a33',
+    accent: '#dfe7f5',
+    zoneLine: 'rgba(225,235,250,.6)',
+    zoneFill: 'rgba(255,255,255,.03)',
+    surface: neoprene('#121d3a', '#1c2c55', '#070c1a'),
+    texture: NEOPRENE,
+    edge: 'rgba(225,235,250,.2)',
   },
   {
-    id: 'verdant-grove',
-    name: 'Verdant Grove',
-    description: 'Sunlight filtering through an ancient forest.',
-    base: '#0b2414',
-    accent: '#a6e36a',
-    zoneLine: 'rgba(166,227,106,.5)',
-    zoneFill: 'rgba(6,26,12,.45)',
-    gradient: 'radial-gradient(ellipse at 50% 0%, #2d6a35 0%, #123a1d 45%, #04140a 100%)',
-    svg: () => {
-      const r = new Rand('grove');
-      let leaves = '';
-      for (let i = 0; i < 40; i++) {
-        const x = r.range(0, VW);
-        const y = r.range(0, VH);
-        const s = r.range(0.6, 1.8);
-        leaves += `<path d="M0 0 C20 -30 60 -30 80 0 C60 30 20 30 0 0 Z M0 0 L80 0" transform="translate(${x.toFixed(0)} ${y.toFixed(0)}) rotate(${r.range(0, 360).toFixed(0)}) scale(${s.toFixed(2)})"/>`;
-      }
-      let rays = '';
-      for (let i = 0; i < 7; i++) rays += `<polygon points="${200 + i * 200},0 ${260 + i * 200},0 ${120 + i * 230},1000 ${40 + i * 230},1000"/>`;
-      return wrap(`<g fill="#e8ffb0" opacity=".05">${rays}</g><g fill="none" stroke="#a6e36a" stroke-width="2" opacity=".12">${leaves}</g>`);
-    },
+    id: 'neo-red',
+    name: 'Red Neoprene',
+    description: 'Plain deep red rubber-backed mat.',
+    base: '#3a0a0f',
+    accent: '#ffe1dc',
+    zoneLine: 'rgba(255,225,220,.58)',
+    zoneFill: 'rgba(0,0,0,.08)',
+    surface: neoprene('#3a0a0f', '#561219', '#170306'),
+    texture: NEOPRENE,
+    edge: 'rgba(255,225,220,.2)',
   },
   {
-    id: 'abyssal-depths',
-    name: 'Abyssal Depths',
-    description: 'Caustic light dancing on the ocean floor.',
-    base: '#021a26',
-    accent: '#5ee0ff',
-    zoneLine: 'rgba(94,224,255,.5)',
-    zoneFill: 'rgba(2,20,32,.45)',
-    gradient: 'linear-gradient(180deg, #0b4a66 0%, #04293b 45%, #010a12 100%)',
-    svg: () => {
-      const r = new Rand('abyss');
-      let caustic = '';
-      for (let i = 0; i < 60; i++) {
-        const x = r.range(0, VW);
-        const y = r.range(0, VH);
-        caustic += `<path d="M${x.toFixed(0)} ${y.toFixed(0)} q${r.range(20, 60).toFixed(0)} ${r.range(-30, 30).toFixed(0)} ${r.range(60, 120).toFixed(0)} ${r.range(-10, 10).toFixed(0)}"/>`;
-      }
-      let bubbles = '';
-      for (let i = 0; i < 50; i++) bubbles += `<circle cx="${r.range(0, VW).toFixed(0)}" cy="${r.range(0, VH).toFixed(0)}" r="${r.range(2, 9).toFixed(1)}"/>`;
-      return wrap(`<g fill="none" stroke="#8ff0ff" stroke-width="3" opacity=".08" filter="url(#b)">${caustic}</g><g fill="none" stroke="#bff6ff" stroke-width="1.2" opacity=".18">${bubbles}</g>`);
-    },
+    id: 'starter-game-mat',
+    name: 'Starter Deck Game Mat',
+    description: 'The fold-out paper mat from a starter deck, zones printed and labelled.',
+    base: '#1b3f73',
+    accent: '#9fd2ff',
+    zoneLine: 'rgba(190,226,255,.75)',
+    zoneFill: 'rgba(120,180,255,.10)',
+    printedZones: true,
+    // the fold lines of a mat that lives folded in the deck box
+    surface:
+      'linear-gradient(180deg, rgba(0,0,0,0) 49.6%, rgba(8,22,44,.55) 50%, rgba(255,255,255,.06) 50.4%, rgba(0,0,0,0) 51%), linear-gradient(90deg, rgba(0,0,0,0) 49.8%, rgba(8,22,44,.35) 50%, rgba(0,0,0,0) 50.3%), linear-gradient(180deg, #24508f 0%, #1b3f73 48%, #16365f 52%, #1e477f 100%)',
+    texture: PAPER,
   },
   {
-    id: 'molten-core',
-    name: 'Molten Core',
-    description: 'Obsidian plates split by rivers of lava.',
-    base: '#120604',
-    accent: '#ff8a1e',
-    zoneLine: 'rgba(255,138,30,.55)',
-    zoneFill: 'rgba(16,6,4,.55)',
-    gradient: 'radial-gradient(ellipse at 50% 120%, #6a1c04 0%, #200805 45%, #070202 100%)',
-    svg: () => {
-      const r = new Rand('lava');
-      let cracks = '';
-      for (let i = 0; i < 26; i++) {
-        let x = r.range(0, VW);
-        let y = r.range(0, VH);
-        let d = `M${x.toFixed(0)} ${y.toFixed(0)}`;
-        for (let k = 0; k < 6; k++) {
-          x += r.range(-90, 90);
-          y += r.range(-60, 60);
-          d += ` L${x.toFixed(0)} ${y.toFixed(0)}`;
-        }
-        cracks += `<path d="${d}"/>`;
-      }
-      return wrap(`<g fill="none" stroke="#ff6a00" stroke-width="10" opacity=".25" filter="url(#b)">${cracks}</g><g fill="none" stroke="#ffc04a" stroke-width="2" opacity=".35">${cracks}</g>`);
-    },
+    id: 'green-felt',
+    name: 'Green Felt',
+    description: 'Card-room felt with a soft woven nap.',
+    base: '#0f3d26',
+    accent: '#e9d9a6',
+    zoneLine: 'rgba(240,226,180,.5)',
+    zoneFill: 'rgba(0,0,0,.12)',
+    surface: 'radial-gradient(ellipse at 50% 45%, #1d6b42 0%, #12472c 55%, #072316 100%)',
+    texture: FELT,
   },
   {
-    id: 'celestial-temple',
-    name: 'Celestial Temple',
-    description: 'Golden orbits over a violet sky.',
-    base: '#1c1238',
-    accent: '#f3d27a',
-    zoneLine: 'rgba(243,210,122,.55)',
-    zoneFill: 'rgba(28,18,56,.45)',
-    gradient: 'radial-gradient(ellipse at 50% 40%, #4b3592 0%, #241650 50%, #0b0619 100%)',
-    svg: () =>
-      wrap(`${starfield('celestial', 260, '#fff4d0')}
-        <g fill="none" stroke="#f3d27a" opacity=".2" stroke-width="1.5"><ellipse cx="800" cy="500" rx="720" ry="200" transform="rotate(-12 800 500)"/><ellipse cx="800" cy="500" rx="640" ry="300" transform="rotate(18 800 500)"/><ellipse cx="800" cy="500" rx="300" ry="300"/></g>
-        <circle cx="800" cy="500" r="120" fill="#f3d27a" opacity=".07" filter="url(#b2)"/>`),
+    id: 'walnut-table',
+    name: 'Walnut Table',
+    description: 'No mat: duelling on the wooden kitchen table.',
+    base: '#3b2414',
+    accent: '#f0c98a',
+    zoneLine: 'rgba(255,226,170,.5)',
+    zoneFill: 'rgba(20,10,4,.28)',
+    surface: `linear-gradient(135deg, rgba(255,255,255,.1) 0%, rgba(255,255,255,0) 40%, rgba(0,0,0,.25) 100%), ${WOOD} center / cover no-repeat, linear-gradient(180deg, #5a361d 0%, #3d2412 50%, #4d2e17 100%)`,
   },
-  {
-    id: 'cyber-grid',
-    name: 'Cyber Grid',
-    description: 'Neon lattice of a virtual duel arena.',
-    base: '#04070c',
-    accent: '#3ef0ff',
-    zoneLine: 'rgba(62,240,255,.6)',
-    zoneFill: 'rgba(2,10,18,.55)',
-    gradient: 'radial-gradient(ellipse at 50% 50%, #0d2233 0%, #050b14 55%, #010204 100%)',
-    svg: () => {
-      let g = '';
-      for (let x = 0; x <= VW; x += 50) g += `<line x1="${x}" y1="0" x2="${x}" y2="${VH}"/>`;
-      for (let y = 0; y <= VH; y += 50) g += `<line x1="0" y1="${y}" x2="${VW}" y2="${y}"/>`;
-      return wrap(`<g stroke="#3ef0ff" stroke-width="1" opacity=".08">${g}</g>
-        <g stroke="#ff3ec8" stroke-width="2" opacity=".18" fill="none"><path d="M0 500 L1600 500"/><rect x="40" y="40" width="1520" height="920" rx="20"/></g>
-        <circle cx="800" cy="500" r="200" fill="#3ef0ff" opacity=".05" filter="url(#b2)"/>`);
-    },
-  },
-  {
-    id: 'desert-ruins',
-    name: 'Desert Ruins',
-    description: 'Sun-baked sandstone carved with ancient glyphs.',
-    base: '#3a2810',
-    accent: '#f0c46a',
-    zoneLine: 'rgba(255,224,160,.55)',
-    zoneFill: 'rgba(46,30,10,.45)',
-    gradient: 'radial-gradient(ellipse at 50% 30%, #8a6430 0%, #4e3416 50%, #1c1006 100%)',
-    svg: () => {
-      const r = new Rand('glyph');
-      let glyphs = '';
-      for (let row of [70, 930]) {
-        for (let x = 40; x < VW; x += 70) {
-          const t = r.int(5);
-          const shapes = [
-            `<circle cx="${x}" cy="${row}" r="16"/><line x1="${x}" y1="${row + 16}" x2="${x}" y2="${row + 40}"/>`,
-            `<polygon points="${x - 18},${row + 20} ${x},${row - 20} ${x + 18},${row + 20}"/>`,
-            `<path d="M${x - 18} ${row} Q${x} ${row - 30} ${x + 18} ${row} Q${x} ${row + 30} ${x - 18} ${row} Z"/><circle cx="${x}" cy="${row}" r="5"/>`,
-            `<rect x="${x - 14}" y="${row - 20}" width="28" height="40"/><line x1="${x - 14}" y1="${row}" x2="${x + 14}" y2="${row}"/>`,
-            `<path d="M${x - 16} ${row + 20} L${x - 16} ${row - 10} Q${x} ${row - 30} ${x + 16} ${row - 10} L${x + 16} ${row + 20}"/>`,
-          ];
-          glyphs += shapes[t];
-        }
-      }
-      return wrap(`<g fill="none" stroke="#ffe2a0" stroke-width="3" opacity=".16">${glyphs}</g>
-        <g fill="none" stroke="#ffe2a0" opacity=".12" stroke-width="2"><rect x="20" y="20" width="1560" height="960"/><line x1="0" y1="120" x2="1600" y2="120"/><line x1="0" y1="880" x2="1600" y2="880"/></g>
-        ${seal(800, 500, 300, '#ffe2a0', 0.1)}`);
-    },
-  },
-  {
-    id: 'frozen-tundra',
-    name: 'Frozen Tundra',
-    description: 'Glacial ice fractured into crystal facets.',
-    base: '#0e2233',
-    accent: '#bfeaff',
-    zoneLine: 'rgba(191,234,255,.6)',
-    zoneFill: 'rgba(10,30,46,.45)',
-    gradient: 'linear-gradient(160deg, #3d6f92 0%, #16344d 50%, #071422 100%)',
-    svg: () => {
-      const r = new Rand('tundra');
-      let facets = '';
-      for (let i = 0; i < 60; i++) {
-        const x = r.range(-100, VW);
-        const y = r.range(-100, VH);
-        facets += `<polygon points="${x.toFixed(0)},${y.toFixed(0)} ${(x + r.range(80, 260)).toFixed(0)},${(y + r.range(-60, 120)).toFixed(0)} ${(x + r.range(-40, 160)).toFixed(0)},${(y + r.range(100, 280)).toFixed(0)}" opacity="${r.range(0.02, 0.08).toFixed(3)}"/>`;
-      }
-      return wrap(`<g fill="#ffffff" stroke="#e6f7ff" stroke-width="1" stroke-opacity=".08">${facets}</g>${starfield('snow', 160, '#ffffff')}`);
-    },
-  },
-  {
-    id: 'shadow-realm',
-    name: 'Shadow Realm',
-    description: 'Violet mist swirling around a watching sigil.',
-    base: '#0c0414',
-    accent: '#c06bff',
-    zoneLine: 'rgba(192,107,255,.55)',
-    zoneFill: 'rgba(16,4,26,.5)',
-    gradient: 'radial-gradient(ellipse at 50% 50%, #3a1260 0%, #160626 50%, #050108 100%)',
-    svg: () => {
-      const r = new Rand('shadow');
-      let mist = '';
-      for (let i = 0; i < 26; i++) mist += `<circle cx="${r.range(0, VW).toFixed(0)}" cy="${r.range(0, VH).toFixed(0)}" r="${r.range(60, 180).toFixed(0)}" opacity="${r.range(0.04, 0.12).toFixed(2)}"/>`;
-      return wrap(`<g fill="#9a4ae0" filter="url(#b2)">${mist}</g>
-        <g fill="none" stroke="#c06bff" opacity=".22" stroke-width="2"><path d="M560 500 Q800 330 1040 500 Q800 670 560 500 Z"/><circle cx="800" cy="500" r="60"/><circle cx="800" cy="500" r="20" fill="#c06bff" opacity=".5"/></g>
-        ${seal(800, 500, 360, '#c06bff', 0.12)}`);
-    },
-  },
-  ...realMats(),
 ];
 
-/** Mats modelled on real-world play surfaces: neoprene, felt, wood. */
-function realMats(): Def[] {
-  const noise = (id: string, freq: string, alpha: number, octaves = 3, extra = '') =>
-    `<filter id="${id}" x="0" y="0" width="100%" height="100%"><feTurbulence type="fractalNoise" baseFrequency="${freq}" numOctaves="${octaves}" seed="7" stitchTiles="stitch"/>${extra || `<feColorMatrix values="0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 ${alpha} 0"/>`}</filter>`;
-  const grain = () => `<rect width="${VW}" height="${VH}" filter="url(#grain)"/>`;
-  return [
-    {
-      id: 'tournament-black',
-      name: 'Tournament Neoprene',
-      description: 'Black rubber-backed mat with crisp white zone printing.',
-      base: '#111215',
-      accent: '#e8e8e8',
-      zoneLine: 'rgba(240,240,240,.62)',
-      zoneFill: 'rgba(255,255,255,.025)',
-      gradient: 'radial-gradient(ellipse at 50% 45%, #202227 0%, #121316 60%, #08090b 100%)',
-      svg: () =>
-        wrap(
-          `${grain()}
-`,
-          noise('grain', '.85', 0.09),
-        ),
-    },
-    {
-      id: 'green-felt',
-      name: 'Green Felt',
-      description: 'Card-room felt with a soft woven nap.',
-      base: '#0f3d26',
-      accent: '#e9d9a6',
-      zoneLine: 'rgba(240,226,180,.5)',
-      zoneFill: 'rgba(0,0,0,.12)',
-      gradient: 'radial-gradient(ellipse at 50% 45%, #1d6b42 0%, #12472c 55%, #072316 100%)',
-      svg: () => wrap(`${grain()}`, noise('grain', '1.4 .9', 0.12, 4)),
-    },
-    {
-      id: 'walnut-table',
-      name: 'Walnut Table',
-      description: 'Duelling on a polished wooden kitchen table.',
-      base: '#3b2414',
-      accent: '#f0c98a',
-      zoneLine: 'rgba(255,226,170,.5)',
-      zoneFill: 'rgba(20,10,4,.28)',
-      gradient: 'linear-gradient(180deg, #5a361d 0%, #3d2412 50%, #4d2e17 100%)',
-      svg: () =>
-        wrap(
-          `<rect width="${VW}" height="${VH}" filter="url(#wood)"/>
-          <g stroke="#000" stroke-opacity=".28" stroke-width="3">${[0, 1, 2, 3, 4, 5].map((i) => `<line x1="0" y1="${i * 200 + 40}" x2="${VW}" y2="${i * 200 + 40}"/>`).join('')}</g>
-          <rect width="${VW}" height="${VH}" fill="url(#gloss)"/>`,
-          noise(
-            'wood',
-            '.0035 .09',
-            0,
-            4,
-            '<feColorMatrix values="0 0 0 .55 .2  0 0 0 .32 .11  0 0 0 .16 .05  0 0 0 0 .55"/>',
-          ) + '<linearGradient id="gloss" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".1"/><stop offset=".4" stop-color="#fff" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".25"/></linearGradient>',
-        ),
-    },
-    {
-      id: 'edison-2010',
-      name: 'Edison 2010',
-      description: 'Event-style navy mat with a gold championship crest.',
-      base: '#0a1530',
-      accent: '#e6c46a',
-      zoneLine: 'rgba(230,196,106,.6)',
-      zoneFill: 'rgba(6,12,30,.45)',
-      gradient: 'radial-gradient(ellipse at 50% 45%, #1b2f63 0%, #0d1a3c 55%, #040915 100%)',
-      svg: () =>
-        wrap(
-          `${grain()}
-          ${seal(800, 500, 330, '#e6c46a', 0.16)}
-          <text x="800" y="470" text-anchor="middle" font-family="Georgia, serif" font-weight="700" font-size="64" letter-spacing="14" fill="#e6c46a" opacity=".16">EDISON</text>
-          <text x="800" y="545" text-anchor="middle" font-family="Georgia, serif" font-size="30" letter-spacing="12" fill="#e6c46a" opacity=".16">APRIL · 2010</text>`,
-          noise('grain', '.9', 0.07),
-        ),
-    },
-    ...eraMats(noise, grain),
-    ...prestigeMats(noise, grain),
-  ];
+/** An art mat: a card's official artwork printed on black neoprene. */
+function artDef(card: string, extra: Partial<Def> = {}): Def {
+  return {
+    id: artMatId(card),
+    name: card,
+    description: `${card} printed on a neoprene mat.`,
+    base: '#0e0f12',
+    accent: '#f0f0f0',
+    zoneLine: 'rgba(255,255,255,.66)',
+    zoneFill: 'rgba(0,0,0,.18)',
+    surface: neoprene('#121316', '#1c1d22', '#08090b'),
+    texture: NEOPRENE,
+    art: card,
+    edge: 'rgba(0,0,0,.55)',
+    ...extra,
+  };
 }
 
-/** Original designs in the style of 2010 game mats: the starter-deck paper mat and event prize mats. */
-function eraMats(noise: (id: string, freq: string, alpha: number, octaves?: number, extra?: string) => string, grain: () => string): Def[] {
-  const burst = (cx: number, cy: number, n: number, r1: number, r2: number, color: string, op: number) => {
-    let o = '';
-    for (let i = 0; i < n; i++) {
-      const a = (i / n) * Math.PI * 2;
-      const a2 = a + Math.PI / n;
-      o += `<path d="M${cx} ${cy} L${(cx + r2 * Math.cos(a)).toFixed(0)} ${(cy + r2 * Math.sin(a)).toFixed(0)} L${(cx + r1 * Math.cos(a2)).toFixed(0)} ${(cy + r1 * Math.sin(a2)).toFixed(0)} Z"/>`;
-    }
-    return `<g fill="${color}" opacity="${op}">${o}</g>`;
-  };
-  const wings = (color: string, op: number) => {
-    let o = '';
-    for (const flip of [1, -1])
-      for (let i = 0; i < 8; i++) {
-        const sx = 800 + flip * (120 + i * 40);
-        o += `<path d="M800 520 Q${800 + flip * (260 + i * 60)} ${300 - i * 40} ${800 + flip * (520 + i * 70)} ${180 - i * 10} Q${sx + flip * 160} ${380 - i * 20} ${800 + flip * (60 + i * 16)} ${560 + i * 6} Z"/>`;
-      }
-    return `<g fill="${color}" opacity="${op}">${o}</g>`;
-  };
-  return [
-    {
-      id: 'starter-game-mat',
-      name: 'Starter Deck Game Mat',
-      description: 'The fold-out paper mat from a 2010 starter deck, zones printed and labelled.',
-      base: '#1b3f73',
-      accent: '#9fd2ff',
-      zoneLine: 'rgba(190,226,255,.75)',
-      zoneFill: 'rgba(120,180,255,.10)',
-      printedZones: true,
-      gradient: 'linear-gradient(180deg, #24508f 0%, #1b3f73 48%, #16365f 52%, #1e477f 100%)',
-      svg: () =>
-        wrap(
-          `${grain()}
-          <line x1="0" y1="500" x2="${VW}" y2="500" stroke="#0b1d38" stroke-opacity=".55" stroke-width="5"/>
-          <line x1="800" y1="0" x2="800" y2="${VH}" stroke="#0b1d38" stroke-opacity=".35" stroke-width="3"/>
-          <g fill="none" stroke="#b9dcff" opacity=".18" stroke-width="3"><circle cx="800" cy="500" r="120"/><circle cx="800" cy="500" r="96"/></g>
-          <text x="800" y="508" text-anchor="middle" font-family="Arial Black, Arial, sans-serif" font-size="22" letter-spacing="8" fill="#d6ecff" opacity=".35">GAME MAT</text>`,
-          noise('grain', '1.6', 0.06, 2),
-        ),
-    },
-    {
-      id: 'championship-prize-mat',
-      name: 'Championship Prize Mat',
-      description: 'Top-cut prize mat: a golden starburst and soaring wings behind printed zones.',
-      base: '#0a0d1c',
-      accent: '#f2cf6b',
-      zoneLine: 'rgba(255,240,200,.7)',
-      zoneFill: 'rgba(0,0,0,.25)',
-      printedZones: true,
-      gradient: 'radial-gradient(ellipse at 50% 50%, #3a3f8c 0%, #171a40 45%, #060714 100%)',
-      svg: () =>
-        wrap(
-          `${burst(800, 520, 36, 900, 900, '#f7d774', 0.08)}
-          <circle cx="800" cy="520" r="260" fill="url(#core)"/>
-          ${wings('#e8f0ff', 0.13)}
-          ${grain()}
-          <text x="800" y="508" text-anchor="middle" font-family="Georgia, serif" font-weight="700" font-size="22" letter-spacing="9" fill="#f2cf6b" opacity=".75">DUELIST CHAMPIONSHIP · EDISON 2010</text>`,
-          noise('grain', '.9', 0.06) + '<radialGradient id="core"><stop offset="0" stop-color="#fff2c4" stop-opacity=".55"/><stop offset="1" stop-color="#fff2c4" stop-opacity="0"/></radialGradient>',
-        ),
-    },
-    {
-      id: 'regional-qualifier-mat',
-      name: 'Regional Qualifier Mat',
-      description: 'Deep violet event mat with synchro rings and gold zone printing.',
-      base: '#140a24',
-      accent: '#e6c46a',
-      zoneLine: 'rgba(230,196,106,.7)',
-      zoneFill: 'rgba(10,4,20,.35)',
-      printedZones: true,
-      gradient: 'radial-gradient(ellipse at 50% 50%, #3b1d66 0%, #1a0c30 55%, #07030d 100%)',
-      svg: () => {
-        let rings = '';
-        for (let i = 0; i < 7; i++) rings += `<ellipse cx="800" cy="${250 + i * 85}" rx="${520 - Math.abs(i - 3) * 70}" ry="46" fill="none" stroke="#7dffb0" stroke-width="${5 - i * 0.4}" opacity="${0.16 - i * 0.012}"/>`;
-        return wrap(
-          `${rings}<line x1="800" y1="120" x2="800" y2="900" stroke="#c9ffe0" stroke-width="6" opacity=".14"/>
-          ${grain()}
-          <text x="800" y="508" text-anchor="middle" font-family="Georgia, serif" font-size="24" letter-spacing="14" fill="#e6c46a" opacity=".6">REGIONAL QUALIFIER · 2010</text>`,
-          noise('grain', '.9', 0.06),
-        );
-      },
-    },
-  ];
-}
+export const ART_MAT_PREFIX = 'art:';
+export const artMatId = (card: string) => ART_MAT_PREFIX + card;
+export const isArtMatId = (id: string) => id.startsWith(ART_MAT_PREFIX);
+
+/** Art mats offered in the picker; any other card can be printed from the search there. */
+export const ART_MAT_CARDS = [
+  'Dark Armed Dragon',
+  'Stardust Dragon',
+  'Black Rose Dragon',
+  'Judgment Dragon',
+  'Gladiator Beast Gyzarus',
+  'Blackwing Armor Master',
+  'Caius the Shadow Monarch',
+  'Machina Fortress',
+];
 
 // ---------------------------------------------------------------- prestige mats
-// Six tournament mats earned by playing the big events (unlock rules: src/events/matUnlocks.ts).
+// Six tournament mats earned by playing the big events (unlock rules: src/events/matUnlocks.ts). Each is an art mat
+// with the event printed in the corner and a coloured stitched edge, like the prize mats handed out in 2010.
 
-/** A hypotrochoid "guilloche" rosette, the engraved linework of certificates and banknotes. */
-function guilloche(cx: number, cy: number, R: number, r: number, d: number, turns: number, color: string, op: number, sw: number) {
-  const n = 1400;
-  let p = '';
-  for (let i = 0; i <= n; i++) {
-    const t = (i / n) * Math.PI * 2 * turns;
-    const x = cx + (R - r) * Math.cos(t) + d * Math.cos(((R - r) / r) * t);
-    const y = cy + (R - r) * Math.sin(t) - d * Math.sin(((R - r) / r) * t);
-    p += `${i ? 'L' : 'M'}${x.toFixed(1)} ${y.toFixed(1)}`;
-  }
-  return `<path d="${p}" fill="none" stroke="${color}" stroke-width="${sw}" opacity="${op}"/>`;
-}
+const SILVER = '#dfe7f5';
+const GOLD = '#f2d27a';
 
-/** One half of a laurel wreath around (cx, cy); side -1 = left, 1 = right. */
-function laurel(cx: number, cy: number, rad: number, color: string, op: number, side: -1 | 1) {
-  let s = '';
-  const n = 13;
-  for (let i = 0; i < n; i++) {
-    const a = (side < 0 ? Math.PI * 0.62 : Math.PI * 0.38) - side * (i / n) * Math.PI * 0.78;
-    const x = cx + rad * Math.cos(a);
-    const y = cy + rad * Math.sin(a);
-    const deg = (a * 180) / Math.PI + (side < 0 ? 60 : 120);
-    const sc = 1 - i * 0.035;
-    s += `<ellipse cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" rx="${(26 * sc).toFixed(1)}" ry="${(9 * sc).toFixed(1)}" transform="rotate(${deg.toFixed(1)} ${x.toFixed(1)} ${y.toFixed(1)})"/>`;
-  }
-  return `<g fill="${color}" opacity="${op}">${s}</g>`;
-}
-
-/** Thin triangular rays from (cx, cy) between angles `from` and `to`. */
-function rays(cx: number, cy: number, n: number, len: number, color: string, op: number, spread = 1, from = 0, to = Math.PI * 2) {
-  let s = '';
-  for (let i = 0; i < n; i++) {
-    const a = from + ((to - from) * (i + 0.5)) / n;
-    const w = ((to - from) / n) * 0.5 * spread;
-    s += `<polygon points="${cx},${cy} ${(cx + len * Math.cos(a - w)).toFixed(1)},${(cy + len * Math.sin(a - w)).toFixed(1)} ${(cx + len * Math.cos(a + w)).toFixed(1)},${(cy + len * Math.sin(a + w)).toFixed(1)}"/>`;
-  }
-  return `<g fill="${color}" opacity="${op}">${s}</g>`;
-}
-
-function border(inset: number, color: string, op: number, double = true) {
-  const a = `<rect x="${inset}" y="${inset}" width="${VW - inset * 2}" height="${VH - inset * 2}" rx="18"/>`;
-  const b = double ? `<rect x="${inset + 14}" y="${inset + 14}" width="${VW - inset * 2 - 28}" height="${VH - inset * 2 - 28}" rx="10"/>` : '';
-  return `<g fill="none" stroke="${color}" opacity="${op}" stroke-width="2">${a}${b}</g>`;
-}
-
-function cornerStars(inset: number, color: string, op: number) {
-  let s = '';
-  for (const [x, y, sx, sy] of [
-    [inset, inset, 1, 1],
-    [VW - inset, inset, -1, 1],
-    [inset, VH - inset, 1, -1],
-    [VW - inset, VH - inset, -1, -1],
-  ])
-    s += `<g transform="translate(${x} ${y}) scale(${sx} ${sy})"><path d="M0 70 L0 0 L70 0 M14 56 L14 14 L56 14" fill="none"/><polygon points="${starPoints(30, 30, 4, 12, 4, -45)}"/></g>`;
-  return `<g stroke="${color}" fill="${color}" stroke-width="2" opacity="${op}">${s}</g>`;
-}
-
-/** Art Deco arcs rising from the bottom edge plus stepped rules along the top. */
-function decoArcs(color: string, op: number) {
-  let s = '';
-  for (let i = 0; i < 6; i++) {
-    const r = 180 + i * 90;
-    s += `<path d="M${800 - r} ${VH} A${r} ${r} 0 0 1 ${800 + r} ${VH}" stroke-width="${i % 2 ? 1.5 : 3}"/>`;
-  }
-  for (let k = 0; k < 4; k++) {
-    const y = 70 + k * 16;
-    s += `<path d="M120 ${y} H${600 - k * 30} M${1000 + k * 30} ${y} H1480" stroke-width="1.5"/>`;
-  }
-  return `<g stroke="${color}" fill="none" opacity="${op}">${s}</g>`;
-}
-
-const matTitle = (text: string, color: string, font = 'Georgia, serif', size = 24, spacing = 12, op = 0.62) =>
-  `<text x="800" y="508" text-anchor="middle" font-family="${font}" font-size="${size}" letter-spacing="${spacing}" fill="${color}" opacity="${op}">${text}</text>`;
-
-function prestigeMats(noise: (id: string, freq: string, alpha: number, octaves?: number, extra?: string) => string, grain: () => string): Def[] {
-  const g = noise('grain', '.9', 0.06, 2);
-  return [
-    {
-      id: 'regional-silver',
-      name: 'Regional Qualifier · Silver Series',
-      description: 'Midnight navy with an engraved silver rosette and silver zone printing.',
-      base: '#0c1632',
-      accent: '#dfe7f5',
-      zoneLine: 'rgba(214,224,242,.62)',
-      zoneFill: 'rgba(4,8,22,.34)',
-      printedZones: true,
-      gradient: 'radial-gradient(ellipse at 50% 50%, #1a2b55 0%, #0c1632 55%, #04081a 100%)',
-      svg: () =>
-        wrap(
-          `${guilloche(800, 500, 300, 47, 118, 47, '#cfd8ea', 0.2, 1.1)}${guilloche(800, 500, 420, 61, 40, 61, '#cfd8ea', 0.09, 1)}
-          ${laurel(800, 500, 330, '#cfd8ea', 0.13, -1)}${laurel(800, 500, 330, '#cfd8ea', 0.13, 1)}${border(36, '#cfd8ea', 0.22)}
-          ${grain()}${matTitle('REGIONAL QUALIFIER · 2010 SEASON', '#dfe7f5')}`,
-          g,
-        ),
-    },
-    {
-      id: 'regional-top16',
-      name: 'Regional Top Cut',
-      description: 'The Silver Series mat finished in gold: double frame, corner stars and a laurel.',
-      base: '#0f1d44',
-      accent: '#f2d27a',
-      zoneLine: 'rgba(240,214,140,.7)',
-      zoneFill: 'rgba(4,8,22,.36)',
-      printedZones: true,
-      gradient: 'radial-gradient(ellipse at 50% 50%, #203a75 0%, #0f1d44 55%, #050a1d 100%)',
-      svg: () =>
-        wrap(
-          `${guilloche(800, 500, 300, 47, 118, 47, '#cfd8ea', 0.13, 1)}
-          ${laurel(800, 500, 300, '#e8c96f', 0.3, -1)}${laurel(800, 500, 300, '#e8c96f', 0.3, 1)}
-          <polygon points="${starPoints(800, 190, 5, 30, 12)}" fill="#e8c96f" opacity=".5"/>${border(30, '#e8c96f', 0.5)}${cornerStars(30, '#e8c96f', 0.55)}
-          ${grain()}${matTitle('TOP CUT · REGIONAL QUALIFIER', '#f2d27a')}`,
-          g,
-        ),
-    },
-    {
-      id: 'championship-edison',
-      name: 'Championship Series · Edison',
-      description: 'Crimson and black with a star medallion, dated for the weekend the format is named after.',
-      base: '#2a070d',
-      accent: '#ffd9cf',
-      zoneLine: 'rgba(255,214,200,.55)',
-      zoneFill: 'rgba(10,2,4,.36)',
-      printedZones: true,
-      gradient: 'radial-gradient(ellipse at 50% 50%, #6a1420 0%, #2a070d 55%, #0b0204 100%)',
-      svg: () =>
-        wrap(
-          `${rays(800, 500, 48, 1100, '#ff9c8c', 0.06, 0.55)}
-          <circle cx="800" cy="500" r="210" fill="none" stroke="#ffd9cf" stroke-width="2" opacity=".22"/>
-          <circle cx="800" cy="500" r="190" fill="none" stroke="#ffd9cf" stroke-dasharray="4 8" opacity=".25"/>
-          <polygon points="${starPoints(800, 500, 5, 170, 66)}" fill="none" stroke="#ffd9cf" stroke-width="2" opacity=".2"/>${border(36, '#ffd9cf', 0.18, false)}
-          ${grain()}${matTitle('EDISON, NJ · APRIL 24–25, 2010', '#ffd9cf', 'Arial Narrow, Arial, sans-serif', 26, 10)}`,
-          g,
-        ),
-    },
-    {
-      id: 'nationals-indy',
-      name: 'National Championship 2010',
-      description: 'Black and gold Art Deco: a sunburst, stepped arcs and a field of stars.',
-      base: '#0e0b05',
-      accent: '#f2d27a',
-      zoneLine: 'rgba(242,210,122,.7)',
-      zoneFill: 'rgba(0,0,0,.32)',
-      printedZones: true,
-      gradient: 'radial-gradient(ellipse at 50% 50%, #2a2210 0%, #0e0b05 55%, #030201 100%)',
-      svg: () =>
-        wrap(
-          `${rays(800, VH, 30, 1200, '#f2d27a', 0.07, 0.5, Math.PI, Math.PI * 2)}${decoArcs('#f2d27a', 0.3)}${starfield('nats', 120, '#f6dc8e')}
-          <polygon points="${starPoints(800, 130, 5, 26, 10)}" fill="#f2d27a" opacity=".6"/>${border(30, '#f2d27a', 0.35)}
-          ${grain()}${matTitle('NATIONAL CHAMPIONSHIP · INDIANAPOLIS', '#f2d27a')}`,
-          g,
-        ),
-    },
-    {
-      id: 'feature-table',
-      name: 'Feature Table',
-      description: 'Stage blue under two spotlights, with camera alignment marks in the corners.',
-      base: '#0a1a33',
-      accent: '#cfe6ff',
-      zoneLine: 'rgba(190,224,255,.55)',
-      zoneFill: 'rgba(2,8,20,.32)',
-      printedZones: true,
-      gradient: 'radial-gradient(ellipse at 50% 50%, #173a66 0%, #0a1a33 55%, #030812 100%)',
-      svg: () =>
-        wrap(
-          `<polygon points="560,0 640,0 980,1000 300,1000" fill="#bfe0ff" opacity=".05"/><polygon points="960,0 1040,0 1300,1000 620,1000" fill="#bfe0ff" opacity=".05"/>
-          <g stroke="#cfe6ff" stroke-width="2" opacity=".35" fill="none">${[
-            [90, 90],
-            [1510, 90],
-            [90, 910],
-            [1510, 910],
-          ]
-            .map(([x, y]) => `<circle cx="${x}" cy="${y}" r="16"/><path d="M${x - 30} ${y}H${x + 30}M${x} ${y - 30}V${y + 30}"/>`)
-            .join('')}</g>
-          <g fill="#cfe6ff" opacity=".5" font-family="Consolas, Menlo, monospace" font-size="16" letter-spacing="3"><text x="120" y="60">CAM A</text><text x="1400" y="60">CAM B</text></g>
-          ${grain()}${matTitle('FEATURE MATCH', '#cfe6ff', 'Arial Narrow, Arial, sans-serif', 26, 14)}`,
-          g,
-        ),
-    },
-    {
-      id: 'national-champion',
-      name: 'National Champion',
-      description: 'Gold guilloche and a laurel crown on black, numbered one of one.',
-      base: '#0b0904',
-      accent: '#f6dc8e',
-      zoneLine: 'rgba(250,224,150,.78)',
-      zoneFill: 'rgba(0,0,0,.3)',
-      printedZones: true,
-      gradient: 'radial-gradient(ellipse at 50% 50%, #262012 0%, #0b0904 55%, #000 100%)',
-      svg: () =>
-        wrap(
-          `${guilloche(800, 500, 330, 53, 140, 53, '#f2d27a', 0.22, 1.2)}${guilloche(800, 500, 470, 71, 46, 71, '#f2d27a', 0.12, 1)}
-          ${laurel(800, 500, 360, '#f6dc8e', 0.32, -1)}${laurel(800, 500, 360, '#f6dc8e', 0.32, 1)}
-          <polygon points="${starPoints(740, 150, 5, 18, 7)}" fill="#f6dc8e" opacity=".6"/><polygon points="${starPoints(800, 130, 5, 26, 10)}" fill="#f6dc8e" opacity=".75"/><polygon points="${starPoints(860, 150, 5, 18, 7)}" fill="#f6dc8e" opacity=".6"/>
-          ${border(26, '#f6dc8e', 0.55)}${cornerStars(26, '#f6dc8e', 0.6)}
-          <text x="1520" y="955" text-anchor="end" font-family="Consolas, Menlo, monospace" font-size="18" letter-spacing="4" fill="#f6dc8e" opacity=".55">No. 001 / 001</text>
-          ${grain()}${matTitle('NATIONAL CHAMPION · 2010', '#f6dc8e')}`,
-          g,
-        ),
-    },
-  ];
-}
-
-const cache = new Map<string, string>();
-
-export const CUSTOM_MAT_ID = 'custom';
-
-const BUILT_IN: Playmat[] = DEFS.map((d) => ({
-  id: d.id,
-  name: d.name,
-  description: d.description,
-  base: d.base,
-  accent: d.accent,
-  zoneLine: d.zoneLine,
-  zoneFill: d.zoneFill,
-  printedZones: d.printedZones,
-  get css() {
-    let c = cache.get(d.id);
-    if (!c) {
-      c = `${svgUri(d.svg())} center / cover no-repeat, ${d.gradient}`;
-      cache.set(d.id, c);
-    }
-    return c;
-  },
-}));
-
-/** Only realistic mats are offered (the older fantasy designs stay defined but hidden). */
-const OFFERED_MATS = [
-  'tournament-black',
-  'starter-game-mat',
-  'championship-prize-mat',
-  'regional-qualifier-mat',
-  'edison-2010',
-  'green-felt',
-  'walnut-table',
-  // earned at the big events (src/events/matUnlocks.ts)
-  'regional-silver',
-  'regional-top16',
-  'championship-edison',
-  'feature-table',
-  'nationals-indy',
-  'national-champion',
+const PRESTIGE: Def[] = [
+  artDef('Brionac, Dragon of the Ice Barrier', {
+    id: 'regional-silver',
+    name: 'Regional Qualifier · Silver Series',
+    description: 'Brionac on navy neoprene, silver stitching and the 2010 Regional print.',
+    base: '#0c1632',
+    accent: SILVER,
+    surface: neoprene('#0c1632', '#1a2b55', '#04081a'),
+    print: 'REGIONAL QUALIFIER · 2010 SEASON',
+    edge: SILVER,
+    printedZones: true,
+    zoneLine: 'rgba(214,224,242,.7)',
+  }),
+  artDef('Goyo Guardian', {
+    id: 'regional-top16',
+    name: 'Regional Top Cut',
+    description: 'Goyo Guardian with gold stitching: handed to the Regional top cut.',
+    base: '#0f1d44',
+    accent: GOLD,
+    surface: neoprene('#0f1d44', '#203a75', '#050a1d'),
+    print: 'REGIONAL QUALIFIER · TOP CUT',
+    edge: GOLD,
+    printedZones: true,
+    zoneLine: 'rgba(240,214,140,.75)',
+  }),
+  artDef('Black Luster Soldier - Envoy of the Beginning', {
+    id: 'championship-edison',
+    name: 'Championship Series · Edison',
+    description: 'Black Luster Soldier, dated for the weekend the format is named after.',
+    base: '#2a070d',
+    accent: '#ffd9cf',
+    surface: neoprene('#2a070d', '#4a0f18', '#0b0204'),
+    print: 'EDISON, NJ · APRIL 24–25, 2010',
+    edge: '#c2333f',
+    printedZones: true,
+    zoneLine: 'rgba(255,214,200,.65)',
+  }),
+  artDef('Arcanite Magician', {
+    id: 'feature-table',
+    name: 'Feature Table',
+    description: 'The mat on the camera tables: Arcanite Magician under the lights.',
+    base: '#0a1a33',
+    accent: '#cfe6ff',
+    surface: neoprene('#0a1a33', '#173a66', '#030812'),
+    print: 'FEATURE MATCH',
+    edge: '#cfe6ff',
+    printedZones: true,
+    zoneLine: 'rgba(190,224,255,.65)',
+  }),
+  artDef('Red Dragon Archfiend', {
+    id: 'nationals-indy',
+    name: 'National Championship 2010',
+    description: 'Red Dragon Archfiend with gold stitching, from Nationals in Indianapolis.',
+    base: '#0e0b05',
+    accent: GOLD,
+    surface: neoprene('#0e0b05', '#2a2210', '#030201'),
+    print: 'NATIONAL CHAMPIONSHIP · INDIANAPOLIS 2010',
+    edge: GOLD,
+    printedZones: true,
+    zoneLine: 'rgba(242,210,122,.75)',
+  }),
+  artDef('Ancient Fairy Dragon', {
+    id: 'national-champion',
+    name: 'National Champion',
+    description: 'Ancient Fairy Dragon, gold stitching, numbered one of one.',
+    base: '#0b0904',
+    accent: '#f6dc8e',
+    surface: neoprene('#0b0904', '#262012', '#000000'),
+    print: 'NATIONAL CHAMPION 2010 · No. 001/001',
+    edge: '#f6dc8e',
+    printedZones: true,
+    zoneLine: 'rgba(250,224,150,.8)',
+  }),
 ];
 
 /** Mats you earn at Regionals, the Championship Series and Nationals; locked until then. */
@@ -677,46 +272,125 @@ export const PRESTIGE_MAT_IDS = ['regional-silver', 'regional-top16', 'champions
 export type PrestigeMatId = (typeof PRESTIGE_MAT_IDS)[number];
 export const isPrestigeMat = (id: string): id is PrestigeMatId => (PRESTIGE_MAT_IDS as readonly string[]).includes(id);
 
-export const PLAYMATS: Playmat[] = [
-  ...OFFERED_MATS.map((id) => BUILT_IN.find((m) => m.id === id)).filter((m): m is Playmat => !!m),
-];
+/** Older saves name mats that were drawn designs: each maps to the closest real mat. */
+const LEGACY: Record<string, string> = {
+  'edison-2010': artMatId('Dark Armed Dragon'),
+  'championship-prize-mat': artMatId('Stardust Dragon'),
+  'regional-qualifier-mat': artMatId('Black Rose Dragon'),
+  'edison-night': 'neo-navy',
+  'crimson-arena': 'neo-red',
+  'verdant-grove': 'green-felt',
+  'abyssal-depths': 'neo-navy',
+  'molten-core': 'neo-red',
+  'celestial-temple': 'neo-navy',
+  'cyber-grid': 'tournament-black',
+  'desert-ruins': 'walnut-table',
+  'frozen-tundra': 'neo-navy',
+  'shadow-realm': 'tournament-black',
+};
+
+// ---------------------------------------------------------------- building
+
+/** The artwork's URL, once looked up (undefined while unknown or when official images are off). */
+function artUrl(card: string | undefined): string | undefined {
+  if (!card || !officialArtEnabled()) return undefined;
+  return cachedOfficialImage(card)?.art;
+}
+
+function cssOf(d: Def): string {
+  const layers: string[] = [];
+  if (d.texture) layers.push(d.texture);
+  layers.push(LIGHT);
+  if (d.print) layers.push(printLayer(d.print, d.edge ?? d.accent));
+  const url = artUrl(d.art);
+  if (url) layers.push(ART_SCRIM, `url("${url}") center / cover no-repeat`);
+  layers.push(d.surface);
+  return layers.join(', ');
+}
+
+function build(d: Def): Playmat {
+  return {
+    id: d.id,
+    name: d.name,
+    description: d.description,
+    base: d.base,
+    accent: d.accent,
+    zoneLine: d.zoneLine,
+    zoneFill: d.zoneFill,
+    printedZones: d.printedZones,
+    art: d.art,
+    edge: d.edge,
+    get css() {
+      return cssOf(d);
+    },
+  };
+}
+
+export const CUSTOM_MAT_ID = 'custom';
+
+/** Every offered mat: plain surfaces, the art mats, then the six event mats. */
+export const PLAYMATS: Playmat[] = [...PLAIN, ...ART_MAT_CARDS.map((c) => artDef(c)), ...PRESTIGE].map(build);
+
+const artCache = new Map<string, Playmat>();
 
 export function playmatById(id: string): Playmat {
   if (id.startsWith('custom')) {
     const src = customSrc('mat', id);
     if (src)
-      return { id, name: 'Your mat', description: 'Your own playmat photo.', base: '#111', accent: '#e8e8e8', zoneLine: 'rgba(255,255,255,.55)', zoneFill: 'rgba(0,0,0,.16)', css: `url("${src}") center / cover no-repeat, #111` };
+      return { id, name: 'Your mat', description: 'Your own playmat photo.', base: '#111', accent: '#e8e8e8', zoneLine: 'rgba(255,255,255,.55)', zoneFill: 'rgba(0,0,0,.16)', edge: 'rgba(0,0,0,.5)', css: `url("${src}") center / cover no-repeat, #111` };
   }
-  return PLAYMATS.find((p) => p.id === id) ?? PLAYMATS[0];
+  const real = LEGACY[id] ?? id;
+  const found = PLAYMATS.find((p) => p.id === real);
+  if (found) return found;
+  if (isArtMatId(real) && real.length > ART_MAT_PREFIX.length) {
+    let m = artCache.get(real);
+    if (!m) artCache.set(real, (m = build(artDef(real.slice(ART_MAT_PREFIX.length)))));
+    return m;
+  }
+  return PLAYMATS[0];
+}
+
+/** Once an art mat's artwork is looked up, paint it again (if the element still shows that mat). */
+function whenArtKnown(el: HTMLElement, id: string, m: Playmat, paint: () => void) {
+  if (!m.art || !officialArtEnabled() || cachedOfficialImage(m.art) !== undefined) return;
+  void getOfficialImage(m.art).then((img) => {
+    if (img && el.dataset.playmat === m.id && el.dataset.playmatReq === id) paint();
+  });
+}
+
+function setVars(el: HTMLElement, id: string, m: Playmat) {
+  el.style.setProperty('--mat-accent', m.accent);
+  el.style.setProperty('--zone-line', m.zoneLine);
+  el.style.setProperty('--zone-fill', m.zoneFill);
+  el.style.setProperty('--mat-base', m.base);
+  el.style.setProperty('--mat-edge', m.edge ?? 'rgba(255,255,255,.13)');
+  el.dataset.playmat = m.id;
+  el.dataset.playmatReq = id;
+  el.dataset.matLabels = m.printedZones ? '1' : '';
 }
 
 /** Apply a playmat to an element: sets its background and the zone colour custom properties. */
 export function applyPlaymat(el: HTMLElement, id: string) {
   const m = playmatById(id);
   el.style.background = m.css;
-  el.style.setProperty('--mat-accent', m.accent);
-  el.style.setProperty('--zone-line', m.zoneLine);
-  el.style.setProperty('--zone-fill', m.zoneFill);
-  el.style.setProperty('--mat-base', m.base);
-  el.dataset.playmat = m.id;
-  el.dataset.matLabels = m.printedZones ? '1' : '';
+  setVars(el, id, m);
+  // repaint only where the picture is still shown (the duel screen clears it and uses the zone colours only)
+  whenArtKnown(el, id, m, () => {
+    if (el.style.backgroundImage) applyPlaymat(el, id);
+  });
 }
 
 /** Set a mat's zone colours on an element and expose its picture as --mat-bg (for one player's half). */
 export function applyMatVars(el: HTMLElement, id: string) {
   const m = playmatById(id);
   el.style.setProperty('--mat-bg', m.css);
-  el.style.setProperty('--mat-accent', m.accent);
-  el.style.setProperty('--zone-line', m.zoneLine);
-  el.style.setProperty('--zone-fill', m.zoneFill);
-  el.style.setProperty('--mat-base', m.base);
-  el.dataset.playmat = m.id;
-  el.dataset.matLabels = m.printedZones ? '1' : '';
+  setVars(el, id, m);
+  whenArtKnown(el, id, m, () => applyMatVars(el, id));
 }
 
 /** The opponent brings their own mat: a stable pick per opponent name, never the same as yours. */
 export function opponentMat(oppName: string, mine: string): string {
-  const pool = PLAYMATS.filter((m) => m.id !== mine && m.id !== 'green-felt' && m.id !== 'walnut-table' && !isPrestigeMat(m.id));
+  const pool = PLAYMATS.filter((m) => m.id !== mine && m.id !== 'green-felt' && m.id !== 'walnut-table' && m.id !== 'starter-game-mat' && !isPrestigeMat(m.id));
   let h = 0;
   for (const ch of oppName) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
   return (pool[h % pool.length] ?? PLAYMATS[0]).id;

@@ -157,7 +157,7 @@ function recordH2H(friend: string, matchId: string, result: 'W' | 'L' | 'D') {
 let active: FriendSession | null = null;
 
 export function friendScreen(params: Record<string, string>): Screen {
-  const el = frame('Play a friend', { cls: 'friend-screen lobby-screen', compact: true, backTo: () => go('play'), backLabel: 'Duel' });
+  const el = frame('Play a friend', { cls: 'friend-screen lobby-screen', compact: true, backTo: () => go('title'), backLabel: 'Play' });
   const body = el.querySelector('.frame-body') as HTMLElement;
   const screen: Screen = {
     el,

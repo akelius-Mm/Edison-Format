@@ -113,7 +113,7 @@ export function shopScreen(params: Params): Screen {
     'Shop section',
   );
 
-  const el = frame('Card Shop', { actions: chipHost, cls: 'sh-frame', eyebrow: SHOP.name }, h('div', { class: 'sh-tabs' }, tabs), body);
+  const el = frame('Card Shop', { actions: chipHost, cls: 'sh-frame', eyebrow: SHOP.name, backTo: () => go('collection'), backLabel: 'Collection' }, h('div', { class: 'sh-tabs' }, tabs), body);
 
   let q = '';
   let filter: BuyFilter = 'all';

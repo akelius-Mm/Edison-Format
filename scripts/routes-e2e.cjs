@@ -52,6 +52,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const ROUTES = [
   'title',
   'play',
+  'collection',
   'duel',
   'exhibition',
   'deck-builder',
@@ -343,7 +344,7 @@ async function firstRun(browser, viewport, tag) {
       ok((await page.evaluate(() => localStorage.length)) >= 0, 'empty profile opens');
     });
     await step('Settings: animations Instant', async () => {
-      await page.locator('.tabbar .tab[data-route=settings]').click();
+      await page.locator('.home-gear').click();
       await page.locator('.seg-btn', { hasText: 'Instant' }).first().click();
     });
     await step('Duel → pick decks', async () => {

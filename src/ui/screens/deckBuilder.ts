@@ -755,6 +755,7 @@ export function deckBuilderScreen(params: Params): Screen {
       },
       icon('plus'),
     ),
+    h('button', { type: 'button', class: 'head-icon-btn', title: 'Card Database', 'aria-label': 'Card Database', onclick: () => go('database') }, icon('search')),
   );
   void renameDeck;
 
@@ -775,7 +776,7 @@ export function deckBuilderScreen(params: Params): Screen {
   );
   tabs.classList.add('db-tabs');
 
-  const el = frame('Decks', { cls: 'deck-builder frame-wide', actions: headerActions, compact: true }, tabs, layout);
+  const el = frame('Decks', { cls: 'deck-builder frame-wide', actions: headerActions, compact: true, root: true }, tabs, layout);
 
   drawHeader();
   drawDeck();

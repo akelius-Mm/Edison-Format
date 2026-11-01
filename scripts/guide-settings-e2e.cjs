@@ -72,23 +72,20 @@ const saved = (page) => page.evaluate(() => JSON.parse(localStorage.getItem('edi
 const live = '.screen:not(.screen-leave)';
 
 async function guide(page) {
+  // The Guide lives in Settings → Help (the gear in the Play tab's corner)
   await page.goto(BASE + '#/title');
-  const row = page.locator(`${live} [data-test=home-guide]`);
-  await row.waitFor({ timeout: 15000 });
-  ok(/Guide · How the app works/.test(await row.innerText()), 'home: the Guide row reads "Guide · How the app works"');
-  const order = await page.evaluate(() => {
-    const ban = document.querySelector('[data-test=home-banlist]')?.closest('section');
-    const g = document.querySelector('[data-test=home-guide]')?.closest('section');
-    return !!ban && !!g && ban.nextElementSibling === g;
-  });
-  ok(order, 'home: the Guide row sits right under the banlist row');
+  const gear = page.locator(`${live} [data-test=home-settings]`);
+  await gear.waitFor({ timeout: 15000 });
+  await gear.click();
+  await page.waitForFunction(() => location.hash.startsWith('#/settings'));
+  const row = page.locator(`${live} .ios-row--nav`, { hasText: 'Guide' });
   await row.scrollIntoViewIfNeeded();
   await sleep(300);
-  await shot(page, 'home-guide-row');
+  await shot(page, 'settings-guide-row');
   await row.click();
   await page.waitForFunction(() => location.hash === '#/guide' && !!document.querySelector('.guide-screen:not(.screen-leave)'));
   await sleep(400);
-  ok(true, 'home: the Guide row opens #/guide');
+  ok(true, 'Play → Settings → Guide opens #/guide');
 
   const info = await page.evaluate(() => {
     const s = document.querySelector('.guide-screen:not(.screen-leave)');

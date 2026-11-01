@@ -672,7 +672,7 @@ function homeView(ctl: Ctl, opts: { customize?: boolean } = {}) {
     setsInfo,
   );
   sync();
-  ctl.show(frame('Draft', { subtitle: 'Booster Draft and Sealed' }, body), 'home');
+  ctl.show(frame('Draft', { subtitle: 'Booster Draft and Sealed', root: true }, body), 'home');
   if (opts.customize) setTimeout(openCustomize, 60);
 }
 

@@ -63,7 +63,9 @@ const noSideScroll = (page) => page.evaluate(() => document.documentElement.scro
     await page.reload();
     await sleep(800);
 
-    console.log('Home');
+    console.log('Collection');
+    await page.locator('.tabbar .tab[data-route=collection]').click();
+    await page.waitForSelector('.collection-screen');
     check(await page.locator('.home-tile', { hasText: 'Card Shop' }).count() === 1, 'Card Shop tile');
     check(await page.locator('.home-tile', { hasText: 'Trades' }).count() === 1, 'Trades tile');
 

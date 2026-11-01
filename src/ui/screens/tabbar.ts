@@ -3,12 +3,13 @@ import { h, icon, ICONS } from './dom';
 import { go, parseHash } from './nav';
 import { haptic } from '../haptics';
 
+// Five tabs, one area each. Settings and Profile open from the corner of the Play tab, which stays lit on them.
 const TABS: { route: string; label: string; icon: keyof typeof ICONS; match: string[] }[] = [
-  { route: 'title', label: 'Home', icon: 'home', match: ['title', '', 'packs', 'binder', 'profile'] },
-  { route: 'play', label: 'Duel', icon: 'swords', match: ['play', 'duel', 'exhibition', 'locals', 'events', 'tournament', 'friend', 'friend-locals'] },
+  { route: 'title', label: 'Play', icon: 'swords', match: ['title', '', 'play', 'duel', 'exhibition', 'friend', 'friend-locals', 'profile', 'settings', 'customize', 'rules', 'guide'] },
+  { route: 'events', label: 'Events', icon: 'trophy', match: ['events', 'locals', 'tournament'] },
   { route: 'draft', label: 'Draft', icon: 'cards', match: ['draft'] },
+  { route: 'collection', label: 'Collection', icon: 'store', match: ['collection', 'packs', 'binder', 'shop', 'trade'] },
   { route: 'deck-builder', label: 'Decks', icon: 'edit', match: ['deck-builder', 'database'] },
-  { route: 'settings', label: 'More', icon: 'gear', match: ['settings', 'customize', 'rules'] },
 ];
 
 export function mountTabBar() {

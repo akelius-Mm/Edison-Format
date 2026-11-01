@@ -9,7 +9,11 @@ const store = new Map<string, string>();
 };
 
 import { EVENT_KEYS, eventTableMat, isMatUnlocked, loadUnlockedMats, matsEarnedFrom, syncMatUnlocks, unlockMats, MAT_UNLOCK_TEXT } from '../src/events';
-import { PLAYMATS, PRESTIGE_MAT_IDS, opponentMat, playmatById } from '../src/ui/theme/playmats';
+import { PLAYMATS, PRESTIGE_MAT_IDS, artMatId, opponentMat, playmatById } from '../src/ui/theme/playmats';
+import { SLEEVES, artSleeveId, sleeveById } from '../src/ui/theme/sleeves';
+import { allCards } from '../src/cards';
+
+const cardNames = new Set(allCards().map((c) => c.name));
 
 let passed = 0;
 const failures: string[] = [];
@@ -19,20 +23,42 @@ function check(ok: boolean, msg: string) {
 }
 const same = (a: string[], b: string[]) => a.length === b.length && [...a].sort().every((x, i) => x === [...b].sort()[i]);
 
-// ---- the mats exist, are offered, and render as SVG with balanced tags
+// ---- the mats exist, are offered, and are real-world mats: a card's official artwork on neoprene, with the
+// event printed in the corner (an SVG text layer) and a stitched edge
 for (const id of PRESTIGE_MAT_IDS) {
   const m = playmatById(id);
   check(m.id === id, `${id}: registered in PLAYMATS`);
   check(!!MAT_UNLOCK_TEXT[id], `${id}: has unlock text`);
   check(m.printedZones === true, `${id}: printed zones`);
-  const svg = decodeURIComponent(/data:image\/svg\+xml;utf8,(.*?)"\)/.exec(m.css)?.[1] ?? '');
-  check(svg.startsWith('<svg') && svg.endsWith('</svg>'), `${id}: css holds an SVG`);
+  check(!!m.art && !!cardNames.has(m.art), `${id}: artwork of an Edison-era card (${m.art})`);
+  check(!!m.edge, `${id}: stitched edge colour`);
+  const svgs = [...m.css.matchAll(/data:image\/svg\+xml;utf8,([^"]*)"\)/g)].map((x) => decodeURIComponent(x[1]));
+  const svg = svgs.find((x) => x.includes('<text')) ?? '';
+  check(svg.startsWith('<svg') && svg.endsWith('</svg>'), `${id}: css holds the event print`);
   const open = (svg.match(/<(g|defs|filter|svg|text)[\s>]/g) ?? []).length;
   const close = (svg.match(/<\/(g|defs|filter|svg|text)>/g) ?? []).length;
   check(open === close, `${id}: balanced tags (${open} open, ${close} close)`);
-  check(!/NaN|undefined/.test(svg), `${id}: no NaN/undefined in the SVG`);
+  check(!/NaN|undefined/.test(m.css), `${id}: no NaN/undefined in the css`);
 }
-check(PLAYMATS.length === 13, `13 mats offered (got ${PLAYMATS.length})`);
+check(PLAYMATS.length === 20, `20 mats offered (got ${PLAYMATS.length})`);
+check(new Set(PLAYMATS.map((m) => m.id)).size === PLAYMATS.length, 'mat ids are unique');
+for (const m of PLAYMATS) if (m.art) check(cardNames.has(m.art), `${m.id}: art card ${m.art} is in the card pool`);
+for (const s of SLEEVES) if (s.art) check(cardNames.has(s.art), `${s.id}: art card ${s.art} is in the card pool`);
+
+// ---- older saves named drawn designs: they still load, as the closest real mat or sleeve
+check(playmatById('edison-2010').id === artMatId('Dark Armed Dragon'), 'legacy edison-2010 mat: Dark Armed Dragon art mat');
+check(playmatById('shadow-realm').id === 'tournament-black', 'legacy fantasy mat: black neoprene');
+check(playmatById('no-such-mat').id === PLAYMATS[0].id, 'unknown mat: the first mat');
+check(playmatById(artMatId('Cyber Dragon')).art === 'Cyber Dragon', 'any card can be printed on a mat');
+check(sleeveById('classic-red').id === 'matte-red', 'legacy classic-red sleeve: matte red');
+check(sleeveById('arcane-circle').id === 'matte-purple', 'legacy arcane-circle sleeve: matte purple');
+check(sleeveById('stardust-wings').id === artSleeveId('Stardust Dragon'), 'legacy stardust-wings sleeve: Stardust Dragon art sleeve');
+check(sleeveById(artSleeveId('Cyber Dragon')).art === 'Cyber Dragon', 'any card can be an art sleeve');
+check(sleeveById('nope').id === SLEEVES[0].id, 'unknown sleeve: the first sleeve');
+// without official images an art mat or sleeve falls back to its plain surface (no artwork URL in the css)
+check(!/url\("https?:/.test(playmatById(artMatId('Stardust Dragon')).css), 'art mat without the artwork: plain neoprene');
+check(!/url\("https?:/.test(sleeveById(artSleeveId('Stardust Dragon')).css), 'art sleeve without the artwork: plain sleeve');
+
 // opponents never bring an event mat you have to earn
 for (const name of ['Nick Ma', 'Bryan Ortiz', 'Renaldo Lainez', 'Sara', 'Tom', 'Jae', 'Ana', 'Marcus', 'Dami', 'Edwin']) check(!(PRESTIGE_MAT_IDS as readonly string[]).includes(opponentMat(name, 'tournament-black')), `opponentMat(${name}) is not a prestige mat`);
 

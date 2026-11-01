@@ -151,21 +151,24 @@ export function startRouter(el: HTMLElement) {
  */
 export function frame(
   title: Child,
-  opts: { subtitle?: Child; actions?: Child; cls?: string; backTo?: () => void; backLabel?: string; compact?: boolean; eyebrow?: Child },
+  opts: { subtitle?: Child; actions?: Child; cls?: string; backTo?: () => void; backLabel?: string; compact?: boolean; eyebrow?: Child; root?: boolean },
   ...body: Child[]
 ) {
   const compact = !!opts.compact;
-  const back = h(
+  // a tab's own screen has no back button: the tab bar is right there
+  const back = opts.root
+    ? h('span', { class: 'frame-back-none', 'aria-hidden': 'true' })
+    : h(
     'button',
     {
       type: 'button',
       class: 'frame-back',
-      'aria-label': `Back to ${opts.backLabel ?? 'Home'}`,
+      'aria-label': `Back to ${opts.backLabel ?? 'Play'}`,
       title: 'Back (Esc)',
       onclick: opts.backTo ?? (() => go('title')),
     },
     icon('back'),
-    h('span', { class: 'frame-back-label' }, opts.backLabel ?? 'Home'),
+    h('span', { class: 'frame-back-label' }, opts.backLabel ?? 'Play'),
   );
   const sub = opts.subtitle ? h('div', { class: 'frame-sub' }, opts.subtitle) : null;
   const head = h(

@@ -22,7 +22,7 @@ import { zoomCard } from '../cards/zoom';
 import { loadJSON, saveJSON } from '../settings';
 import { button, confirmDialog, h, icon, segmented, toast, toggle } from './dom';
 import { dpChip, fmtDP, packArt, rarityPill, releaseLabel, foilCard } from './collectionUi';
-import { frame, type Params, type Screen } from './nav';
+import { frame, go, type Params, type Screen } from './nav';
 
 type Group = 'set' | 'type';
 type Show = 'all' | 'owned' | 'missing' | 'foils';
@@ -112,7 +112,7 @@ export function binderScreen(_params: Params): Screen {
 
   const el = frame(
     'Binder',
-    { actions: chipHost, cls: 'bd-frame', eyebrow: 'Your collection' },
+    { actions: chipHost, cls: 'bd-frame', eyebrow: 'Your collection', backTo: () => go('collection'), backLabel: 'Collection' },
     summary,
     modeRow,
     h('div', { class: 'bd-controls' }, h('div', { class: 'bd-searchrow' }, h('label', { class: 'bd-search' }, icon('search'), search), groupSeg), showChips),

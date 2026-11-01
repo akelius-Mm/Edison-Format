@@ -9,6 +9,9 @@ import { getProfile, ordinal, tournamentSummary, winRate } from './store';
 import { playerName, saveName } from './playerName';
 import { NAME_MAX } from '../../net/protocol';
 import { MAT_UNLOCK_TEXT, isMatUnlocked, syncMatUnlocks } from '../../events';
+import { allCards } from '../../cards';
+import { artMatId, isArtMatId, playmatById } from '../theme/playmats';
+import { artSleeveId, isArtSleeveId, sleeveById } from '../theme/sleeves';
 
 const SEARCH: Record<CustomKind, { label: string; url: string }[]> = {
   mat: [
@@ -19,7 +22,6 @@ const SEARCH: Record<CustomKind, { label: string; url: string }[]> = {
   sleeve: [
     { label: 'Konami sleeves 2010', url: 'https://www.google.com/search?tbm=isch&q=yu-gi-oh+konami+card+sleeves+2010' },
     { label: 'Matte deck sleeves', url: 'https://www.google.com/search?tbm=isch&q=small+size+matte+card+sleeves+yugioh' },
-    { label: 'Yu-Gi-Oh card back', url: 'https://www.google.com/search?tbm=isch&q=yu-gi-oh+card+back' },
   ],
 };
 
@@ -125,8 +127,49 @@ function picker(kind: CustomKind, onChange: () => void): HTMLElement {
   const draw = () => {
     clear(grid);
     listCustom(kind).forEach((it, i) => grid.appendChild(tileFor(it.id, `${isMat ? 'Mat' : 'Sleeve'} ${i + 1}`, true)));
-    for (const x of isMat ? PLAYMATS : SLEEVES) grid.appendChild(tileFor(x.id, x.name, false));
+    // a card picked from the search below that is not one of the listed ones
+    const cur = current();
+    const list = isMat ? PLAYMATS : SLEEVES;
+    if ((isMat ? isArtMatId(cur) : isArtSleeveId(cur)) && !list.some((x) => x.id === cur)) grid.appendChild(tileFor(cur, isMat ? playmatById(cur).name : sleeveById(cur).name, false));
+    for (const x of list) grid.appendChild(tileFor(x.id, x.name, false));
   };
+
+  // ---- any card's official artwork, printed on the mat or the sleeves
+  const listId = `cz-cards-${kind}`;
+  const names = () => [...new Set(allCards().map((c) => c.name))].sort();
+  const cardIn = h('input', {
+    id: `cz-art-${kind}`,
+    class: 'ios-input',
+    type: 'search',
+    list: listId,
+    placeholder: 'Card name, e.g. Stardust Dragon',
+    autocomplete: 'off',
+    spellcheck: false,
+    'aria-label': isMat ? 'Card to print on your mat' : 'Card to print on your sleeves',
+  }) as HTMLInputElement;
+  let datalist: HTMLElement | null = null;
+  cardIn.addEventListener('focus', () => {
+    if (datalist) return;
+    datalist = h('datalist', { id: listId }, ...names().map((n) => h('option', { value: n })));
+    cardIn.after(datalist);
+  });
+  const useCard = () => {
+    const q = cardIn.value.trim().toLowerCase();
+    if (!q) return cardIn.focus();
+    const all = names();
+    const name = all.find((n) => n.toLowerCase() === q) ?? all.find((n) => n.toLowerCase().startsWith(q)) ?? all.find((n) => n.toLowerCase().includes(q));
+    if (!name) return toast('No Edison-era card by that name.', 'error', 2600);
+    cardIn.value = '';
+    cardIn.blur();
+    select(isMat ? artMatId(name) : artSleeveId(name));
+    toast(`${name} ${isMat ? 'mat' : 'sleeves'}.`, 'success', 1600);
+  };
+  cardIn.addEventListener('change', () => {
+    if (names().includes(cardIn.value)) useCard();
+  });
+  cardIn.addEventListener('keydown', (ev) => {
+    if ((ev as KeyboardEvent).key === 'Enter') useCard();
+  });
 
   const linkIn = h('input', {
     id: `cz-link-${kind}`,
@@ -167,6 +210,11 @@ function picker(kind: CustomKind, onChange: () => void): HTMLElement {
     'div',
     { class: 'cz-block' },
     h('section', { class: 'ios-group' }, h('h2', { class: 'ios-group-h' }, isMat ? 'Playmat' : 'Card sleeves'), h('div', { class: 'cz-grid-wrap' }, grid)),
+    iosGroup(
+      isMat ? 'Print any card on your mat' : 'Art sleeves of any card',
+      [h('div', { class: 'ios-row ios-row--input' }, cardIn, h('button', { type: 'button', class: 'ios-inline-btn', onclick: useCard }, 'Use'))],
+      isMat ? "The card's official artwork on black neoprene." : "The card's official artwork with a gloss finish.",
+    ),
     iosGroup(
       null,
       [
