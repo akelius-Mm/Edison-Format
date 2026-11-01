@@ -301,7 +301,6 @@
 .chain-link.is-negated { opacity: 0.55; }
 .chain-link.is-negated .chain-name { text-decoration: line-through; }
 .chain-link.flash { animation: chainFlash calc(500ms * var(--sp)) var(--ease-out); }
-@keyframes chainFlash { 40% { background: rgba(255, 230, 150, 0.45); } }
 .chain-num {
   flex: none;
   width: 24px;
@@ -716,17 +715,7 @@
 
 /* card FX */
 .dc.fx-summon .dc-fx { animation: fxSummon calc(480ms * var(--sp)) var(--ef-ease-out); }
-@keyframes fxSummon {
-  0% { transform: scale(1.35); filter: brightness(3) drop-shadow(0 0 20px #fff); }
-  40% { transform: scale(0.96); filter: brightness(1.5) drop-shadow(0 0 16px #ffd76a); }
-  100% { transform: scale(1); filter: none; }
-}
 .dc.fx-tribute .dc-fx { animation-name: fxTribute; }
-@keyframes fxTribute {
-  0% { transform: scale(1.5); filter: brightness(3) hue-rotate(-30deg) drop-shadow(0 0 24px #ff9a3a); }
-  50% { transform: scale(0.95); filter: brightness(1.4) drop-shadow(0 0 18px #ff9a3a); }
-  100% { transform: scale(1); filter: none; }
-}
 .dc.fx-synchro-card .dc-fx { animation: fxSynchroCard calc(800ms * var(--sp)) var(--ef-ease-out); }
 @keyframes fxSynchroCard {
   0% { opacity: 0; transform: scale(1.6); filter: brightness(4); }
@@ -737,9 +726,7 @@
 .dc.fx-set .dc-fx { animation: fxSet calc(280ms * var(--sp)) var(--ef-ease-out); }
 @keyframes fxSet { 0% { transform: scale(1.25) translateY(-10%); opacity: 0.6; } 70% { transform: scale(0.97); } 100% { transform: none; opacity: 1; } }
 .dc.fx-activate .yc { animation: fxActivate calc(560ms * var(--sp)) var(--ease-out); }
-@keyframes fxActivate { 0%, 100% { filter: none; } 30% { filter: brightness(1.9) drop-shadow(0 0 18px #fff3b0); } }
 .dc.fx-resolve .yc { animation: fxResolve calc(360ms * var(--sp)) var(--ease-out); }
-@keyframes fxResolve { 40% { filter: brightness(2.2) drop-shadow(0 0 22px #ffe08a); } }
 
 /* ---------------------------------------------------------------- overlay FX */
 .duel-overlay { position: absolute; inset: 0; pointer-events: none; z-index: 40; overflow: hidden; overflow: clip; }

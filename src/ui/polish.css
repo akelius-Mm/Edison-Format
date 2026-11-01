@@ -453,28 +453,6 @@ body.has-tabbar .frame {
   width: 14px;
   height: 14px;
 }
-
-.lob-note {
-  margin: 0;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-  font-size: 13.5px;
-  line-height: 1.4;
-  color: var(--muted);
-}
-.lob-warn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  color: #e8b77a;
-}
-.lob-warn .icon {
-  width: 15px;
-  height: 15px;
-  flex: none;
-}
 .lob-group {
   border-radius: 14px;
   background: var(--grp);
@@ -1040,10 +1018,6 @@ button.mu-side {
   place-items: normal !important;
   padding: 0 0 calc(var(--tabbar-h) + 24px) !important;
   background: var(--bg-0) !important;
-}
-.results .res-rays,
-.results .res-crown {
-  display: none !important;
 }
 .res-hero {
   position: relative;

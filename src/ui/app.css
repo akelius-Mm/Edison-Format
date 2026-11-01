@@ -405,18 +405,6 @@ input[type='range'] {
 .tier-1 {
   color: #ffd76a;
 }
-.tier-2 {
-  color: #b9c6ff;
-}
-.tier-3 {
-  color: #b9b9b9;
-}
-.divider {
-  height: 1px;
-  background: linear-gradient(90deg, transparent, var(--gold-line), transparent);
-  margin: 16px 0;
-  border: 0;
-}
 .empty {
   display: grid;
   place-items: center;

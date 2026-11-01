@@ -57,13 +57,8 @@ body {
 :where(body) :not(.yc):not(.yc *) {
   text-shadow: none !important;
 }
-.gold-text,
 .frame-title,
-.logo-main,
-.logo-sub,
 .res-headline,
-.fin-place-big,
-.inter-wins,
 .pp-lp,
 .pp-lp.dmg,
 .pp-lp.heal,
@@ -90,8 +85,7 @@ body {
   text-transform: none;
   font-size: clamp(18px, 2.2vw, 22px);
 }
-.section-title h2,
-.cz-section h2 {
+.section-title h2 {
   font-family: var(--font);
   letter-spacing: 0.02em;
 }
@@ -105,20 +99,6 @@ body {
 .title-eyebrow {
   letter-spacing: 0.12em;
   color: var(--muted);
-}
-.logo-main {
-  font-family: var(--font-display);
-  font-weight: 700;
-  letter-spacing: -0.03em;
-  text-transform: none;
-  font-size: clamp(48px, 9vw, 104px);
-}
-.logo-sub {
-  font-family: var(--font);
-  font-weight: 500;
-  letter-spacing: 0.02em;
-  text-transform: none;
-  color: var(--muted) !important;
 }
 .title-tag {
   color: var(--text-2);
@@ -280,16 +260,11 @@ body::after {
 .section-title h2 {
   color: var(--muted) !important;
 }
-.start-btn {
-  text-transform: none !important;
-  letter-spacing: 0 !important;
-}
 
 /* Panels with gold haze → flat */
 .card,
 .panel,
-.setup-card,
-.tm-card {
+.setup-card {
   background-image: none !important;
 }
 
@@ -319,7 +294,6 @@ body::after {
   text-transform: none !important;
 }
 .rule-hero,
-.my-match,
 .lobby-hero,
 .br-champ.set {
   background: var(--bg-2) !important;
@@ -334,8 +308,7 @@ body::after {
   color: var(--muted) !important;
 }
 .setup-panel,
-.setup-bar,
-.player-plate {
+.setup-bar {
   background: var(--bg-2) !important;
   background-image: none !important;
   box-shadow: none !important;
@@ -344,8 +317,7 @@ body::after {
 .setup-panel::before,
 .setup-panel::after,
 .setup-bar::before,
-.setup-bar::after,
-.player-plate::before {
+.setup-bar::after {
   display: none !important;
 }
 .setup-bar {
@@ -356,12 +328,8 @@ body::after {
 .avatar,
 .avatar-ring,
 .pp-avatar,
-.pt-player > .avatar,
-.cz-pplayer {
+.pt-player > .avatar {
   display: none !important;
-}
-.player-plate {
-  padding-left: 18px !important;
 }
 
 /* App mark on the title screen (Dark Armed Dragon artwork, hosted site only) */
