@@ -59,6 +59,7 @@
   inset: 8px;
   overflow: visible;
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06), inset 0 0 80px rgba(0, 0, 0, 0.65), 0 10px 40px rgba(0, 0, 0, 0.5);
+  border-radius: 14px !important;
 }
 .duel-mat::after {
   content: '';
@@ -67,6 +68,8 @@
   border-radius: inherit;
   pointer-events: none;
   border: 1px solid color-mix(in srgb, var(--mat-accent) 35%, transparent);
+  box-shadow: none !important;
+  border-color: rgba(255, 255, 255, 0.06) !important;
 }
 
 /* ---------------------------------------------------------------- player panels */
@@ -78,6 +81,9 @@
   position: relative;
   flex: none;
   transition: border-color var(--dur-slow), box-shadow var(--dur-slow);
+  border-radius: 12px !important;
+  background: rgba(18, 19, 22, 0.94) !important;
+  border: 1px solid rgba(255, 255, 255, 0.07) !important;
 }
 .pp--me { --pc: var(--ef-me); }
 .pp--opp { --pc: var(--ef-opp); }
@@ -91,9 +97,11 @@
   border-radius: 4px;
   background: var(--pc);
   box-shadow: 0 0 10px var(--pc);
+  display: none !important;
 }
 .pp.is-turn {
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--pc) 40%, transparent), 0 0 24px color-mix(in srgb, var(--pc) 35%, transparent);
+  border-color: rgba(201, 182, 142, 0.5) !important;
 }
 .pp-avatar {
   position: relative;
@@ -106,11 +114,14 @@
 .pp-name { font-weight: 800; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; letter-spacing: 0.02em; }
 .pp-title { font-size: 11px; color: var(--ef-text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .pp-lprow { display: flex; align-items: baseline; gap: 6px; margin-top: 2px; }
-.pp-lplabel { font: 800 11px var(--ef-font-ui); letter-spacing: 0.1em; }
+.pp-lplabel { font: 800 11px var(--ef-font-ui); letter-spacing: 0.1em; color: var(--muted) !important; font-weight: 600 !important; }
 .pp-lp {
   font: 900 26px/1 var(--font);
   font-variant-numeric: tabular-nums;
   transition: filter var(--dur-base);
+  font-family: var(--font-display) !important;
+  font-weight: 700;
+  letter-spacing: -0.02em;
 }
 .pp-bar {
   position: relative;
@@ -134,9 +145,11 @@
 .pp-bar-ghost { background: #fff; opacity: 0.55; transition: transform calc(600ms * var(--sp)) var(--ease-out) calc(250ms * var(--sp)); }
 .pp-bar-fill {
   transition: transform calc(380ms * var(--sp)) var(--ef-ease-out);
+  background: var(--gold) !important;
+  box-shadow: none !important;
 }
 .pp.is-low .pp-bar-fill { background: linear-gradient(90deg, #7a0f1a, #ff4d5e); box-shadow: 0 0 10px #ff4d5e; }
-.pp-stats { display: flex; gap: 10px; font-size: 11px; margin-top: 3px; }
+.pp-stats { display: flex; gap: 10px; font-size: 11px; margin-top: 3px; color: var(--muted) !important; }
 
 /* ---------------------------------------------------------------- preview */
 .preview {
@@ -249,6 +262,8 @@
   flex-direction: column;
   gap: 8px;
   --tc: var(--ef-me);
+  background: rgba(18, 19, 22, 0.94) !important;
+  border: 1px solid rgba(255, 255, 255, 0.07) !important;
 }
 .phasebar.is-opp-turn { --tc: var(--ef-opp); }
 .phasebar-turn { font-size: 12px; font-weight: 700; color: var(--ef-text-dim); }
@@ -266,7 +281,7 @@
 .ph span { display: none; }
 .ph.is-past { color: var(--ef-text-dim); }
 .phasebar-btns { display: flex; flex-direction: column; gap: 6px; }
-.btn--phase { width: 100%; }
+.btn--phase { width: 100%; background: rgba(255, 255, 255, 0.04) !important; border: 1px solid rgba(255, 255, 255, 0.08) !important; color: var(--text) !important; font-weight: 600 !important; }
 .phasebar:not(.is-active) .btn--phase { opacity: 0.5; }
 
 /* chain */
@@ -432,6 +447,8 @@
   position: relative;
   border: 1px solid var(--zone-line);
   transition: box-shadow var(--dur-base), border-color var(--dur-base), background var(--dur-base);
+  border-width: 1px !important;
+  border-radius: 6px !important;
 }
 .zone--m::before,
 .zone--s::before,
@@ -520,6 +537,10 @@
   font: 800 calc(var(--cw) * 0.13) / 1.35 var(--ef-font-ui);
   text-align: center;
   pointer-events: none;
+  background: rgba(10, 10, 12, 0.85) !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  color: var(--text) !important;
+  box-shadow: none !important;
 }
 .pile-count[hidden] { display: none; }
 .zone--deck.is-low .pile-count { border-color: var(--ef-red); color: #ffb3ba; }
@@ -928,6 +949,9 @@
   border: 1px solid rgba(216, 180, 90, 0.55);
   animation: bannerPhase calc(520ms * var(--sp)) var(--ef-ease-out) forwards;
   white-space: nowrap;
+  background: rgba(14, 15, 18, 0.92) !important;
+  border-color: var(--line-2) !important;
+  box-shadow: none !important;
 }
 .banner--phase b { font: 800 20px var(--font); }
 .banner--phase.is-opp .fx-banner-in { border-color: rgba(255, 93, 108, 0.55); }
@@ -1245,6 +1269,7 @@
     margin: 4px 6px;
     gap: 8px;
     pointer-events: auto;
+    padding: 6px 12px !important;
   }
   .pp-avatar .avatar { width: 30px !important; height: 30px !important; }
   .pp-info { flex-direction: row; align-items: center; gap: 10px; }
@@ -1355,6 +1380,7 @@
   pointer-events: none;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 .07 0'/%3E%3C/filter%3E%3Crect width='220' height='220' filter='url(%23n)'/%3E%3C/svg%3E");
   outline-offset: -7px;
+  outline: none !important;
 }
 
 /* Printed zone names on mats that have them (like real Yu-Gi-Oh! mats) */
@@ -2419,7 +2445,7 @@
 
 /* ---------------------------------------------------------------- screen swap
    The duel replaces its setup screen inside the same host: a quick fade instead of a jump cut. */
-.duel-root { animation: duelIn var(--dur-slow) var(--ease-out); }
+.duel-root { animation: duelIn var(--dur-slow) var(--ease-out); background: var(--bg-0) !important; padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px); }
 @keyframes duelIn { from { opacity: 0; } }
 
 @media (prefers-reduced-motion: reduce) {
@@ -2548,3 +2574,220 @@
 .sp-col small.is-dmg { color: #b3261e; }
 .sp-col small.is-heal { color: #1f7a3a; }
 .sp-foot { margin-top: 6px; font: 500 11px var(--ef-font-ui, system-ui, sans-serif); color: rgba(29, 42, 74, 0.55); text-align: center; }
+
+/* No glowing or gradient lettering anywhere in the interface (card faces keep their own styling). */
+:where(body) :not(.yc):not(.yc *) {
+  text-shadow: none !important;
+}
+
+/* Buttons and selection: flat */
+.ui-btn,
+.ui-btn-primary,
+.ui-btn-gold,
+.btn,
+.btn--primary,
+.btn--phase,
+.btn--end,
+.chip-btn,
+.icon-btn {
+  box-shadow: none !important;
+  text-shadow: none !important;
+}
+
+/* Duel chrome */
+.pp,
+.phasebar,
+.chain,
+.log,
+.preview,
+.duel-left,
+.duel-right {
+  box-shadow: none !important;
+}
+.pp.is-turn .pp-avatar > .avatar,
+.pp.is-turn .pp-avatar {
+  animation: none !important;
+}
+.ph.is-current {
+  background: rgba(255, 255, 255, 0.14) !important;
+  color: #f2efe8 !important;
+  box-shadow: none !important;
+  transform: none !important;
+}
+.banner,
+.result-box {
+  font-family: var(--font-display);
+}
+.pp-avatar,
+.pp.is-turn .pp-avatar {
+  background: none !important;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.14) !important;
+  border: 0 !important;
+}
+.pp.is-turn .pp-avatar {
+  box-shadow: 0 0 0 2px var(--gold) !important;
+}
+
+/* Duel banners: small clean pill in the system font */
+.banner,
+.banner *,
+.fx-banner,
+.fx-banner * {
+  font-family: var(--font) !important;
+}
+
+/* Phone portrait: keep the opponent's hand clear of their life points */
+.stage--tall .hand-opp {
+  top: calc(var(--ch) * 0.04) !important;
+  --hw: calc(var(--cw) * 0.7) !important;
+}
+
+/* Empty zones: thin outlines only, no ornaments */
+.zone--m::before,
+.zone--s::before,
+.zone--m::after,
+.zone--s::after,
+.zone--f .zone-label,
+.zone--pile .zone-label {
+  opacity: 0 !important;
+}
+.pp--opp .pp-bar-fill {
+  background: #b98080 !important;
+}
+.btn--phase:disabled {
+  opacity: 0.35 !important;
+}
+.phasebar-turn span {
+  color: var(--gold) !important;
+}
+
+@media (max-width: 600px) and (orientation: portrait) {
+  .icon-btn {
+    width: 32px !important;
+    height: 32px !important;
+    padding: 7px !important;
+    background: transparent !important;
+    border-color: rgba(255, 255, 255, 0.08) !important;
+  }
+  .duel-tools .icon-btn:nth-child(3) {
+    display: none !important; /* sound: in Settings */
+  }
+  .pp-lp {
+    font-size: 18px !important;
+  }
+  .stage--tall .hand-opp {
+    --hw: calc(var(--cw) * 0.6) !important;
+  }
+}
+
+@media (max-width: 760px) {
+  .cb-cell > .yc {
+    --yc-w: 100% !important;
+    width: 100% !important;
+  }
+}
+.dbx-sheet .cd-card .yc {
+  --yc-w: min(240px, 62vw) !important;
+}
+
+@media (orientation: landscape) and (max-height: 500px) {
+  .dbx-sheet .cd-card .yc {
+    --yc-w: 120px !important;
+  }
+}
+:where(button, [role='button'], a[href], summary, label, input, select, .chip, .tile, .cb-row, .ios-row) {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* One press state for buttons, rows, tiles and chips: a little smaller and dimmer, at once.
+   `.is-pressed` is set on pointerdown by press.ts (iOS only applies :active late or not at all;
+   the class makes the feedback land on the same frame as the touch). Zero specificity, so a
+   component can still tune it with --press-scale / --press-dim. `scale` (not `transform`)
+   composes with whatever transform the element already has. */
+:where(button, [role='button'], a[href], summary, .chip, .tile, .cb-row, .ios-row--nav, .ios-row--action, .duel-root .dc):where(:active, .is-pressed):where(:not(:disabled, [aria-disabled='true'], .is-disabled, .dc-ghost)) {
+  scale: var(--press-scale, 0.97);
+  filter: brightness(var(--press-dim, 0.82));
+}
+
+/* Full-width rows dim without shrinking (a shrinking row looks like it came loose) */
+:where(.ios-row, .home-row, .ps-row, .cb-row, .ctx-item, .lob-link, .ban-item, .declare-item, .btn--option, .frame-back, .tab, .seg-btn) {
+  --press-scale: 1;
+}
+
+/* Cards on the duel board */
+:where(.duel-root .dc) {
+  --press-scale: 0.96;
+  --press-dim: 0.86;
+}
+
+/* Released: ease back */
+:where(button, [role='button'], a[href], summary, .chip, .tile, .cb-row, .ios-row--nav, .ios-row--action) {
+  transition-property: scale, filter;
+  transition-duration: var(--dur-fast);
+  transition-timing-function: var(--ease-out);
+}
+.result,
+.lx-tape {
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+.dc.dc-moving,
+.dc-ghost,
+.fx-showcase,
+.fx-shard {
+  will-change: transform, translate, scale, opacity;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :where(button, [role='button'], a[href], summary, .chip, .tile, .cb-row, .ios-row--nav, .ios-row--action):where(:active, .is-pressed) {
+    scale: none;
+  }
+}
+.ios-row--nav,
+.ios-row--action {
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-out);
+}
+.ios-row--nav:active,
+.ios-row--action:active {
+  background: var(--grp-hi);
+}
+
+@media (hover: hover) {
+  .ios-row--nav:hover,
+  .ios-row--action:hover {
+    background: rgba(255, 255, 255, 0.025);
+  }
+}
+.chip-tab::after,
+.chip::after {
+  content: '';
+  position: absolute;
+  inset: -4px 0;
+}
+.home-stack-card:not(:last-child) .yc { box-shadow: 0 1px 0 rgba(0, 0, 0, 0.6); }
+.db-selcard .yc {
+  --yc-w: 30px;
+  box-shadow: none;
+}
+.home-stack-card {
+  position: absolute;
+  inset: 0;
+  /* a few cards' thickness, each a hair up and to the left of the one below */
+  transform: translate(calc(var(--i) * -1.2px), calc(var(--i) * -1.4px));
+}
+.db-selcard {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 0;
+  background: none;
+  color: var(--text);
+  text-align: left;
+  font: inherit;
+  cursor: zoom-in;
+  padding: 0;
+}

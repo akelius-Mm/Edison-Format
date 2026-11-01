@@ -811,3 +811,22 @@
   height: 15px;
   opacity: 0.6;
 }
+.cta:hover {
+  background: #fff;
+}
+.cta.cta--dark:hover {
+  background: #2a2b30;
+}
+.ym-file .ios-label {
+  font-size: 15px;
+}
+
+@media (orientation: landscape) and (max-height: 500px) {
+  .lob-bar .cta {
+    min-height: 48px;
+  }
+}
+.ym-file {
+  min-height: 44px;
+  padding-left: 32px;
+}

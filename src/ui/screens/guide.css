@@ -237,3 +237,25 @@
   line-height: 1.4;
   color: var(--muted);
 }
+.rules-screen .rules-grid {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+}
+
+@media (min-width: 900px) {
+  .rules-screen {
+    --page-max: 1100px;
+  }
+  .rules-screen .rules-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (orientation: landscape) and (max-height: 500px) {
+  .settings-screen .ios-group {
+    break-inside: avoid;
+  }
+}
+.bt-list .ios-group {
+  margin-bottom: 14px;
+}

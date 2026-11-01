@@ -3,60 +3,6 @@
    system font (SF Pro on iPhone), flat graphite surfaces, one muted champagne accent,
    no glows, no gradient lettering, no decorative motion.
    ========================================================================== */
-:root {
-  --bg-0: #0b0c0e;
-  --bg-1: #101113;
-  --bg-2: #16171a;
-  --bg-3: #1d1e22;
-  --panel: rgba(21, 22, 25, 0.94);
-  --panel-solid: #151619;
-  --panel-hi: #1c1d21;
-  --line: rgba(255, 255, 255, 0.07);
-  --line-2: rgba(255, 255, 255, 0.12);
-  --gold: #c9b68e;
-  --gold-hi: #e7dcc2;
-  --gold-lo: #8d7d5c;
-  --gold-glow: transparent;
-  --gold-line: rgba(201, 182, 142, 0.22);
-  --gold-grad: linear-gradient(#e7dcc2, #e7dcc2);
-  --text: #ecebe7;
-  --text-2: #c5c4bf;
-  --muted: #8f9095;
-  --faint: #5f6066;
-  --radius: 12px;
-  --radius-sm: 8px;
-  --shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
-  --shadow-sm: 0 4px 12px rgba(0, 0, 0, 0.35);
-  --font: -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-  --font-display: -apple-system, BlinkMacSystemFont, 'SF Pro Display', system-ui, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-
-  --ef-bg-0: #0b0c0e;
-  --ef-bg-1: #111214;
-  --ef-bg-2: #17181b;
-  --ef-panel: rgba(21, 22, 25, 0.94);
-  --ef-panel-solid: #151619;
-  --ef-panel-border: rgba(255, 255, 255, 0.09);
-  --ef-gold: #c9b68e;
-  --ef-gold-hi: #e7dcc2;
-  --ef-gold-lo: #8d7d5c;
-  --ef-text: #ecebe7;
-  --ef-text-dim: #9a9ba0;
-  --ef-text-faint: #64656b;
-  --ef-me: #8fb3d9;
-  --ef-opp: #d98f8f;
-  --ef-font-ui: var(--font);
-}
-
-body {
-  background: var(--bg-0);
-  -webkit-font-smoothing: antialiased;
-  text-rendering: optimizeLegibility;
-}
-
-/* No glowing or gradient lettering anywhere in the interface (card faces keep their own styling). */
-:where(body) :not(.yc):not(.yc *) {
-  text-shadow: none !important;
-}
 .frame-title,
 .res-headline,
 .pp-lp,
@@ -76,83 +22,9 @@ body {
 }
 .pp-lp.dmg { color: #e38b8b !important; }
 .pp-lp.heal { color: #8fd1a8 !important; }
-
-/* Headings: quiet, sentence-case, tight tracking */
-.frame-title {
-  font-family: var(--font-display);
-  font-weight: 600;
-  letter-spacing: -0.01em;
-  text-transform: none;
-  font-size: clamp(18px, 2.2vw, 22px);
-}
 .section-title h2 {
   font-family: var(--font);
   letter-spacing: 0.02em;
-}
-
-/* Title screen: no floating cards or crest; a plain wordmark */
-.title-floaters,
-.title-emblem,
-.emblem.title-emblem {
-  display: none !important;
-}
-.title-eyebrow {
-  letter-spacing: 0.12em;
-  color: var(--muted);
-}
-.title-tag {
-  color: var(--text-2);
-}
-
-/* Buttons and selection: flat */
-.ui-btn,
-.ui-btn-primary,
-.ui-btn-gold,
-.btn,
-.btn--primary,
-.btn--phase,
-.btn--end,
-.chip-btn,
-.icon-btn {
-  box-shadow: none !important;
-  text-shadow: none !important;
-}
-.ui-btn-primary,
-.ui-btn-gold {
-  border-color: transparent !important;
-}
-
-/* Duel chrome */
-.pp,
-.phasebar,
-.chain,
-.log,
-.preview,
-.duel-left,
-.duel-right {
-  box-shadow: none !important;
-}
-.pp.is-turn .pp-avatar > .avatar,
-.pp.is-turn .pp-avatar {
-  animation: none !important;
-}
-.pp-lp {
-  font-family: var(--font-display) !important;
-  font-weight: 700;
-  letter-spacing: -0.02em;
-}
-.ph.is-current {
-  background: rgba(255, 255, 255, 0.14) !important;
-  color: #f2efe8 !important;
-  box-shadow: none !important;
-  transform: none !important;
-}
-.duel-root {
-  background: var(--bg-0) !important;
-}
-.banner,
-.result-box {
-  font-family: var(--font-display);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -164,116 +36,11 @@ body {
   }
 }
 
-/* iPhone safe areas (the installed app draws under the status bar / home indicator) */
-.frame-head {
-  box-shadow: none;
-}
-.frame-head::after {
-  display: none;
-}
-.frame {
-  padding-bottom: env(safe-area-inset-bottom, 0px);
-}
-.title-screen {
-  padding-top: env(safe-area-inset-top, 0px);
-  padding-bottom: env(safe-area-inset-bottom, 0px);
-  padding-left: env(safe-area-inset-left, 0px);
-  padding-right: env(safe-area-inset-right, 0px);
-  background: var(--bg-0) !important;
-}
-.duel-root {
-  padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
-}
-
-/* Background: plain graphite, no coloured haze or grid */
-body::before {
-  background: linear-gradient(180deg, #0e0f12 0%, #0b0c0e 100%) !important;
-}
-body::after {
-  display: none !important;
-}
-
-/* Badges: thin neutral ring */
-.avatar-ring {
-  background: rgba(255, 255, 255, 0.14) !important;
-  box-shadow: none !important;
-  padding: 2px;
-}
-.pp-avatar,
-.pp.is-turn .pp-avatar {
-  background: none !important;
-  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.14) !important;
-  border: 0 !important;
-}
-.pp.is-turn .pp-avatar {
-  box-shadow: 0 0 0 2px var(--gold) !important;
-}
-
-/* Menu rows: flat, sentence case */
-.menu-item {
-  background: var(--bg-2) !important;
-  border-color: var(--line) !important;
-  box-shadow: none !important;
-}
-.menu-item::before,
-.menu-item::after {
-  display: none !important;
-}
-.menu-item:hover,
-.menu-item:focus-visible {
-  background: var(--bg-3) !important;
-  border-color: var(--line-2) !important;
-  transform: none !important;
-}
-.menu-primary {
-  background: var(--bg-3) !important;
-  border-color: var(--gold-line) !important;
-}
-.menu-primary .menu-icon,
-.menu-icon {
-  background: rgba(255, 255, 255, 0.05) !important;
-  color: var(--text) !important;
-  border-color: var(--line-2) !important;
-  box-shadow: none !important;
-}
-.menu-primary .menu-icon {
-  background: var(--gold) !important;
-  color: #141210 !important;
-}
-.menu-primary .menu-label {
-  font-family: var(--font) !important;
-  font-size: 17px;
-  letter-spacing: 0 !important;
-  text-transform: none !important;
-  color: var(--text) !important;
-}
-.menu-label {
-  font-weight: 600;
-}
-.menu-key {
-  display: none;
-}
-
-/* Small caps labels: muted instead of gold */
-.setup-role,
-.field-label,
-.section-title h2 {
-  color: var(--muted) !important;
-}
-
 /* Panels with gold haze → flat */
 .card,
 .panel,
 .setup-card {
   background-image: none !important;
-}
-
-/* Duel banners: small clean pill in the system font */
-.banner,
-.banner *,
-.fx-banner,
-.fx-banner * {
-  font-family: var(--font) !important;
 }
 .fx-banner.banner--phase b,
 .banner--phase b {
@@ -283,29 +50,10 @@ body::after {
   text-transform: none !important;
   color: var(--text) !important;
 }
-.banner--phase .fx-banner-in {
-  background: rgba(14, 15, 18, 0.92) !important;
-  border-color: var(--line-2) !important;
-  box-shadow: none !important;
-}
 .banner--turn b {
   font-weight: 700 !important;
   letter-spacing: -0.02em !important;
   text-transform: none !important;
-}
-.rule-hero,
-.lobby-hero,
-.br-champ.set {
-  background: var(--bg-2) !important;
-  box-shadow: none !important;
-}
-
-/* Duel setup / menus: remove decorative VS disc and haze */
-.setup-vs {
-  display: none !important;
-}
-.setup-label {
-  color: var(--muted) !important;
 }
 .setup-panel,
 .setup-bar {
@@ -313,12 +61,6 @@ body::after {
   background-image: none !important;
   box-shadow: none !important;
   border-color: var(--line) !important;
-}
-.setup-panel::before,
-.setup-panel::after,
-.setup-bar::before,
-.setup-bar::after {
-  display: none !important;
 }
 .setup-bar {
   background: rgba(21, 22, 25, 0.94) !important;
@@ -343,108 +85,10 @@ body::after {
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.08);
 }
 
-/* Phone portrait: keep the opponent's hand clear of their life points */
-.stage--tall .hand-opp {
-  top: calc(var(--ch) * 0.04) !important;
-  --hw: calc(var(--cw) * 0.7) !important;
-}
-
 /* ---------------------------------------------------------------- sleek duel board */
-/* Empty zones: thin outlines only, no ornaments */
-.zone--m::before,
-.zone--s::before,
-.zone--m::after,
-.zone--s::after,
-.zone--f .zone-label,
-.zone--pile .zone-label {
-  opacity: 0 !important;
-}
 .zone {
-  border-width: 1px !important;
-  border-radius: 6px !important;
   box-shadow: none !important;
   background: var(--zone-fill) !important;
-}
-.duel-mat::before {
-  outline: none !important;
-}
-.duel-mat {
-  border-radius: 14px !important;
-}
-.duel-mat::after {
-  box-shadow: none !important;
-  border-color: rgba(255, 255, 255, 0.06) !important;
-}
-/* Player strips: one slim line each */
-.pp {
-  border-radius: 12px !important;
-  background: rgba(18, 19, 22, 0.94) !important;
-  border: 1px solid rgba(255, 255, 255, 0.07) !important;
-}
-.pp::before {
-  display: none !important;
-}
-.pp.is-turn {
-  border-color: rgba(201, 182, 142, 0.5) !important;
-}
-.pp-lplabel {
-  color: var(--muted) !important;
-  font-weight: 600 !important;
-}
-.pp-stats {
-  color: var(--muted) !important;
-}
-.pp-bar-fill {
-  background: var(--gold) !important;
-  box-shadow: none !important;
-}
-.pp--opp .pp-bar-fill {
-  background: #b98080 !important;
-}
-/* Phase bar: quiet buttons */
-.phasebar {
-  background: rgba(18, 19, 22, 0.94) !important;
-  border: 1px solid rgba(255, 255, 255, 0.07) !important;
-}
-.btn--phase {
-  background: rgba(255, 255, 255, 0.04) !important;
-  border: 1px solid rgba(255, 255, 255, 0.08) !important;
-  color: var(--text) !important;
-  font-weight: 600 !important;
-}
-.btn--phase:disabled {
-  opacity: 0.35 !important;
-}
-.phasebar-turn span {
-  color: var(--gold) !important;
-}
-/* Pile counters */
-.pile-count {
-  background: rgba(10, 10, 12, 0.85) !important;
-  border: 1px solid rgba(255, 255, 255, 0.12) !important;
-  color: var(--text) !important;
-  box-shadow: none !important;
-}
-@media (max-width: 600px) and (orientation: portrait) {
-  .icon-btn {
-    width: 32px !important;
-    height: 32px !important;
-    padding: 7px !important;
-    background: transparent !important;
-    border-color: rgba(255, 255, 255, 0.08) !important;
-  }
-  .duel-tools .icon-btn:nth-child(3) {
-    display: none !important; /* sound: in Settings */
-  }
-  .pp {
-    padding: 6px 12px !important;
-  }
-  .pp-lp {
-    font-size: 18px !important;
-  }
-  .stage--tall .hand-opp {
-    --hw: calc(var(--cw) * 0.6) !important;
-  }
 }
 
 /* "Update ready" note: only on Home, just above the tab bar */

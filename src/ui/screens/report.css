@@ -414,3 +414,17 @@ body.in-duel .err-toast {
   max-height: 60vh;
   overflow-y: auto;
 }
+
+@media (max-width: 600px) {
+  .modal-foot {
+    display: grid !important;
+    grid-auto-flow: row;
+    justify-content: stretch !important;
+    gap: 8px !important;
+  }
+  .modal-foot .ui-btn-primary,
+  .modal-foot .ui-btn-gold,
+  .modal-foot .ui-btn-danger {
+    order: -1;
+  }
+}

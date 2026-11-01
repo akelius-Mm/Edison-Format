@@ -533,3 +533,185 @@
 .result-box .result-rematch[disabled] {
   opacity: 0.55;
 }
+.lob-sec {
+  display: grid;
+  gap: 10px;
+  margin: 0 0 22px;
+  min-width: 0;
+}
+.duel-flow .lob-sec {
+  margin-bottom: 14px;
+  gap: 8px;
+}
+.flow-opp .lob-sec:has(.opp-group) .lob-h {
+  display: none;
+}
+.flow-roomy .lob-sec {
+  margin-bottom: 20px;
+}
+
+@media (orientation: landscape) and (max-height: 500px) {
+  .flow-opp > .lob-sec {
+    grid-column: 1;
+    grid-row: 2;
+    min-width: 0;
+    overflow: hidden; /* the deck row scrolls inside its own column, not under the right one */
+  }
+}
+.flow-opp .mu {
+  padding: 8px;
+  margin-bottom: 14px;
+}
+.flow-opp .opp-row {
+  min-height: 50px;
+}
+.flow-opp .opp-diff:last-child {
+  padding-bottom: 10px;
+}
+.flow-opp .dkc-box {
+  width: 124px;
+}
+.flow-opp .opp-group {
+  margin-bottom: 8px;
+}
+.flow-roomy .dkc-box {
+  width: 148px;
+  aspect-ratio: 3 / 4;
+}
+
+@media (orientation: landscape) and (max-height: 500px) {
+  .flow-pane:not(.flow-opp) .dkc {
+    margin: 0;
+  }
+  .flow-pane:not(.flow-opp) .dkc-box,
+  .flow-roomy .dkc-box {
+    width: auto !important;
+    aspect-ratio: 16 / 11 !important;
+  }
+  /* duel setup step 2: decks on the left, opponent and the action on the right */
+  .flow-opp {
+    grid-template-columns: minmax(0, 1fr) 280px;
+    column-gap: 20px;
+    align-items: start;
+  }
+  .flow-opp > .mu {
+    grid-column: 1;
+    grid-row: 1;
+    margin-bottom: 10px;
+  }
+  .flow-opp > .opp-group {
+    grid-column: 2;
+    grid-row: 1;
+  }
+  .flow-opp .flow-opts {
+    grid-template-columns: 1fr;
+  }
+  .flow-opp .dkc-box {
+    width: 112px !important;
+    aspect-ratio: 1 / 1 !important;
+  }
+}
+
+@media (min-width: 900px) {
+  .flow-pane:not(.flow-opp) .dkc {
+    margin: 0;
+  }
+  .flow-pane:not(.flow-opp) .dkc-box,
+  .duel-flow .flow-roomy .dkc-box {
+    width: auto !important;
+    aspect-ratio: 4 / 5;
+  }
+}
+.opp-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 54px;
+  padding: 0 6px 0 14px;
+  border-bottom: 1px solid var(--sep);
+}
+.opp-row:focus-within {
+  background: rgba(255, 255, 255, 0.02);
+}
+.opp-diff {
+  padding: 10px 12px 12px;
+}
+
+/* deck carousel (swipeable deck boxes) */
+.dkc {
+  margin: 0 calc(-1 * var(--gutter-r)) 0 calc(-1 * var(--gutter));
+  min-width: 0;
+}
+.dkc-box {
+  --deck: #555;
+  position: relative;
+  flex: 0 0 auto;
+  width: 136px;
+  aspect-ratio: 3 / 4;
+  padding: 0;
+  border: 0;
+  border-radius: 16px;
+  overflow: hidden;
+  scroll-snap-align: start;
+  background: #1b1c20;
+  color: var(--text);
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.07);
+  transition:
+    transform var(--dur-base) var(--ease-out),
+    box-shadow var(--dur-base) var(--ease-out);
+}
+
+@media (min-width: 700px) {
+  .dkc-box {
+    width: 156px;
+  }
+}
+.flow-pane {
+  display: grid;
+  min-width: 0;
+}
+
+/* matchup strip (step 2) */
+.mu {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  margin: 2px 0 18px;
+  padding: 10px;
+  border-radius: 20px;
+  background: var(--grp);
+}
+.opp-diff + .opp-diff {
+  padding-top: 0;
+}
+.flow-opp .opp-diff {
+  padding: 8px 10px 8px;
+}
+.flow-opts {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  gap: 8px;
+}
+
+@media (max-width: 360px) {
+  .flow-opts {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (orientation: landscape) and (max-height: 500px) {
+  .flow-opp > .lob-bar {
+    grid-column: 2;
+    grid-row: 2;
+    position: sticky;
+    top: 60px;
+    bottom: auto !important;
+    margin: 0;
+    padding: 0;
+    background: none;
+  }
+}
