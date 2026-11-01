@@ -30,6 +30,7 @@ import { haptic } from '../haptics';
 import { dpChip, fmtDP, foilCard, rarityPill } from './collectionUi';
 import { button, confirmDialog, h, icon, segmented, toast } from './dom';
 import { avatar } from './locals';
+import { coverStyle, regularBinder } from '../theme/binders';
 import { frame, go, type Params, type Screen } from './nav';
 import { listCustomDecks } from './store';
 import './shop.css';
@@ -349,7 +350,8 @@ export function shopScreen(params: Params): Screen {
     return h(
       'button',
       { type: 'button', class: 'sh-trader', onclick: () => go('trade', { id: t.regular.id }) },
-      avatar(t.regular, 44),
+      // their binder, their name on the label
+      h('span', { class: 'bd-cover bd-cover--sm sh-trader-binder', style: coverStyle(regularBinder(t.regular.id)) }, h('span', { class: 'bd-cover-label' }, h('b', null, t.regular.name.split(' ').slice(-2).map((w) => w[0]).join('')))),
       h(
         'div',
         { class: 'sh-trader-text' },
@@ -401,7 +403,18 @@ export function tradeScreen(params: Params): Screen {
   let reply: { text: string; ok: boolean } | null = null;
 
   const chipHost = h('div', { class: 'ps-dp' }, dpChip(dp()));
-  const theirs = h('div', { class: 'sh-list' });
+  // their binder: pages of 9 pockets you swipe through, like the Binder screen
+  const theirs = h('div', { class: 'bd-pages sh-binder' });
+  const pageN = h('div', { class: 'bd-page-n' });
+  theirs.addEventListener(
+    'scroll',
+    () => {
+      const w = (theirs.firstElementChild as HTMLElement | null)?.offsetWidth ?? 1;
+      const pages = theirs.children.length;
+      if (pages > 1) pageN.textContent = `Page ${Math.min(pages, Math.round(theirs.scrollLeft / Math.max(1, w)) + 1)} of ${pages}`;
+    },
+    { passive: true },
+  );
   const wantsHost = h('div', { class: 'sh-wants' });
   const yours = h('div', { class: 'sh-list' });
   const dpHost = h('div', { class: 'sh-dp-row' });
@@ -422,8 +435,15 @@ export function tradeScreen(params: Params): Screen {
     t.regular.name,
     { cls: 'sh-frame sh-trade', eyebrow: `Trading · ${t.regular.title}`, actions: chipHost, backTo: () => go('shop', { tab: 'trade' }), backLabel: 'Shop' },
     h('div', { class: 'sh-intro' }, avatar(t.regular, 44), h('div', { class: 'sh-muted' }, t.regular.blurb)),
-    h('h2', { class: 'sh-h' }, 'Their binder', h('span', { class: 'sh-sub' }, ' · tap the cards you want')),
+    h(
+      'h2',
+      { class: 'sh-h sh-binder-h' },
+      h('span', { class: 'bd-cover bd-cover--xs', style: coverStyle(regularBinder(t.regular.id)), 'aria-hidden': 'true' }),
+      'Their binder',
+      h('span', { class: 'sh-sub' }, ' · tap the cards you want'),
+    ),
     theirs,
+    pageN,
     h('h2', { class: 'sh-h' }, 'They’re looking for', h('span', { class: 'sh-sub' }, ` · worth ×${WANT_BONUS} to them`)),
     wantsHost,
     h('h2', { class: 'sh-h' }, 'Your side'),
@@ -434,31 +454,47 @@ export function tradeScreen(params: Params): Screen {
   );
 
   function drawTheirs() {
+    const keep = theirs.scrollLeft;
+    const cards = t!.binder;
+    if (!cards.length) {
+      theirs.replaceChildren(h('div', { class: 'sh-empty' }, 'Their binder is empty this week. Come back Friday.'));
+      pageN.textContent = '';
+      return;
+    }
+    const pocket = (c: TradeCard) => {
+      const on = get.has(k(c.name, c.rarity));
+      const have = ownedCount(c.name);
+      return h(
+        'button',
+        {
+          type: 'button',
+          class: ['bd-pocket', 'bd-cell', 'sh-pocket', on && 'on'],
+          'data-name': c.name,
+          'aria-pressed': String(on),
+          'aria-label': `${c.name}, ${RARITY_NAMES[c.rarity]}, ${c.value} DP${have ? `, you have ${have}` : ''}`,
+          onclick: () => {
+            on ? get.delete(k(c.name, c.rarity)) : get.add(k(c.name, c.rarity));
+            reply = null;
+            haptic('selection');
+            drawTheirs();
+            drawBar();
+          },
+        },
+        foilCard(c.name, c.rarity, { lazy: true }),
+        h('span', { class: 'sh-pocket-val' }, c.value.toLocaleString('en-US')),
+        on ? h('span', { class: 'sh-pocket-check', 'aria-hidden': 'true' }, icon('check')) : null,
+        have ? h('span', { class: 'sh-pocket-have' }, `you have ${have}`) : null,
+      );
+    };
+    const pages = Math.ceil(cards.length / 9);
     theirs.replaceChildren(
-      ...(t!.binder.length
-        ? t!.binder.map((c: TradeCard) => {
-            const on = get.has(k(c.name, c.rarity));
-            return h(
-              'button',
-              {
-                type: 'button',
-                class: ['sh-row', 'sh-pick', on && 'on'],
-                'aria-pressed': String(on),
-                onclick: () => {
-                  on ? get.delete(k(c.name, c.rarity)) : get.add(k(c.name, c.rarity));
-                  reply = null;
-                  haptic('selection');
-                  drawTheirs();
-                  drawBar();
-                },
-              },
-              h('span', { class: 'sh-check', 'aria-hidden': 'true' }, on ? icon('check') : null),
-              h('span', { class: 'sh-name' }, h('span', { class: 'sh-title' }, rarityPill(c.rarity), ' ', c.name), h('span', { class: 'sh-sub' }, `${kindLabel(c.name)}${ownedCount(c.name) ? ` · you have ${ownedCount(c.name)}` : ''}`)),
-              h('b', { class: 'sh-val' }, c.value.toLocaleString('en-US')),
-            );
-          })
-        : [h('div', { class: 'sh-empty' }, 'Their binder is empty this week. Come back Friday.')]),
+      ...Array.from({ length: pages }, (_, p) => {
+        const slice = cards.slice(p * 9, p * 9 + 9);
+        return h('div', { class: 'bd-page' }, ...slice.map(pocket), ...Array.from({ length: 9 - slice.length }, () => h('div', { class: 'bd-pocket bd-pocket--empty', 'aria-hidden': 'true' })));
+      }),
     );
+    theirs.scrollLeft = keep;
+    if (!pageN.textContent) pageN.textContent = pages > 1 ? `Page 1 of ${pages} · swipe` : 'Page 1 of 1';
   }
 
   function drawWants() {
