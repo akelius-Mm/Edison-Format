@@ -1,0 +1,80 @@
+/* "Judge!" sheet over the duel (judge.ts). Its own file so it stays out of the global stylesheets. */
+.jd-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 85;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.5);
+  animation: jd-fade 0.16s ease-out;
+}
+.jd-layer.is-closing { opacity: 0; transition: opacity 0.15s; }
+@keyframes jd-fade { from { opacity: 0; } }
+.jd-sheet {
+  width: min(560px, 100%);
+  max-height: 86%;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 16px 16px calc(16px + env(safe-area-inset-bottom, 0px));
+  border-radius: 18px 18px 0 0;
+  background: #15161a;
+  color: #ecebe7;
+  box-shadow: 0 -12px 40px rgba(0, 0, 0, 0.55);
+  font: 400 14px/1.4 var(--ef-font-ui, system-ui, sans-serif);
+  animation: jd-up 0.22s cubic-bezier(0.2, 0.9, 0.3, 1);
+}
+@media (min-width: 700px) {
+  .jd-layer { align-items: center; }
+  .jd-sheet { border-radius: 18px; max-height: 80%; }
+}
+@keyframes jd-up { from { transform: translateY(40px); opacity: 0; } }
+.jd-head { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+.jd-head b { display: block; font-size: 17px; }
+.jd-head small { display: block; color: rgba(236, 235, 231, 0.65); font-size: 13px; }
+.jd-head > div { flex: 1; min-width: 0; }
+/* the black-and-white stripes of a judge's shirt */
+.jd-badge {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+  background: repeating-linear-gradient(90deg, #f2f2f2 0 6px, #1a1a1a 6px 12px);
+  color: #c33;
+  font: 900 18px var(--ef-font-ui, system-ui, sans-serif);
+  text-shadow: 0 0 3px #fff, 0 0 3px #fff;
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.25);
+}
+.jd-close { flex: none; width: 34px; height: 34px; border: 0; border-radius: 999px; background: rgba(255, 255, 255, 0.08); color: inherit; font-size: 14px; cursor: pointer; }
+.jd-ask input {
+  width: 100%;
+  height: 40px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.07);
+  color: inherit;
+  font: inherit;
+  font-size: 15px;
+}
+.jd-answer { margin-top: 10px; }
+.jd-h { margin: 16px 2px 8px; font-size: 12px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: rgba(236, 235, 231, 0.55); }
+.jd-list { display: grid; gap: 10px; }
+.jd-card { padding: 12px; border-radius: 12px; background: rgba(255, 255, 255, 0.05); }
+.jd-card header { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.jd-card header b { font-size: 15px; }
+.jd-text { flex: none; padding: 4px 10px; border: 0; border-radius: 999px; background: rgba(255, 255, 255, 0.08); color: inherit; font: 500 12px var(--ef-font-ui, system-ui, sans-serif); cursor: pointer; }
+.jd-card ul { margin: 8px 0 0; padding-left: 18px; display: grid; gap: 8px; }
+.jd-card li { color: rgba(236, 235, 231, 0.9); }
+.jd-src { display: block; margin-top: 2px; font-size: 11.5px; color: #d8b45a; text-decoration: none; }
+a.jd-src::after { content: ' ↗'; }
+.jd-none { margin: 6px 0 0; color: rgba(236, 235, 231, 0.6); }
+.jd-foot { margin: 14px 2px 0; font-size: 11.5px; color: rgba(236, 235, 231, 0.45); }
+
+/* Phones held upright: the Judge button takes the sound toggle's place in the top bar (sound stays in Settings),
+   so the opponent's name and LP keep their room. */
+@media (max-width: 600px) and (orientation: portrait) {
+  .duel-root .icon-btn--sound { display: none; }
+}
