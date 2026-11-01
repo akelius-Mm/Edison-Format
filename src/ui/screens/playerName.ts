@@ -1,5 +1,5 @@
 // The player name: what friends see at an online table (Play a friend, Friends Locals). Edited in
-// Settings, on the Profile (tap the name) and in Sleeves & Playmat; online play asks for it first
+// Settings, on the Profile (tap the name) and in Your table; online play asks for it first
 // while it is still the default and was never confirmed.
 import { NAME_MAX, cleanName } from '../../net/protocol';
 import { getSettings, updateSettings } from '../settings';

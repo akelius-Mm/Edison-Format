@@ -119,9 +119,9 @@ function yourTable(): HTMLElement {
     h(
       'div',
       { class: 'home-table-cards' },
-      stack(3, 'home-extra', 'Extra Deck · Sleeves & Playmat'),
+      stack(3, 'home-extra', 'Extra Deck · Your table'),
       ace ? h('button', { type: 'button', class: 'home-ace', 'aria-label': `${ace.name} · choose decks`, onclick: () => go('duel') }, renderCard(ace, { size: 'md' })) : null,
-      stack(6, 'home-deck', 'Your deck · Sleeves & Playmat'),
+      stack(6, 'home-deck', 'Your deck · Your table'),
     ),
   );
   return table;

@@ -38,7 +38,7 @@ function tabsSection() {
           [b('Play a friend'), ': a 1-on-1 online duel with a room code.'],
           [b('Friends Locals'), `: a Swiss tournament for ${MIN_PLAYERS}–${MAX_PLAYERS} people, each on their own phone. One person hosts and runs it as organiser.`],
           [b('Watch AI vs AI'), ': two AI decks play each other, handy for testing a matchup.'],
-          [b('Profile and Settings'), ' (top corner): your ratings and record; your name, Sleeves & Playmat, How to Play & Banlist, Rules updates, sound, ', b('Report a problem'), ' and this Guide.'],
+          [b('Profile and Settings'), ' (the gear, top corner of every tab): your ratings and record; your name, Your table (playmat, sleeves and binder), How to Play & Banlist, Rules updates, sound, ', b('Report a problem'), ' and this Guide.'],
         ),
       ),
       tab('Events', 'trophy', h('p', null, 'Locals Night at the card shop, Regional Qualifiers, Shonen Jump Championships and Nationals, the 12-week Circuit season, and an unranked practice Tournament with your own field size.')),
