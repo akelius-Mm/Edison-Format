@@ -80,7 +80,7 @@ body.dr-immersive.has-tabbar .dr-root .frame {
 .dr-btn-wide {
   width: 100%;
   min-height: 50px !important;
-  border-radius: 14px !important;
+  border-radius: 14px;
   font-size: 16px;
 }
 .dr-btn-row {

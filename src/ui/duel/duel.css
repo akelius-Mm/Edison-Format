@@ -59,7 +59,7 @@
   inset: 8px;
   overflow: visible;
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06), inset 0 0 80px rgba(0, 0, 0, 0.65), 0 10px 40px rgba(0, 0, 0, 0.5);
-  border-radius: 14px !important;
+  border-radius: 14px;
 }
 .duel-mat::after {
   content: '';
@@ -81,7 +81,7 @@
   position: relative;
   flex: none;
   transition: border-color var(--dur-slow), box-shadow var(--dur-slow);
-  border-radius: 12px !important;
+  border-radius: 12px;
   background: rgba(18, 19, 22, 0.94) !important;
   border: 1px solid rgba(255, 255, 255, 0.07) !important;
 }
@@ -97,7 +97,7 @@
   border-radius: 4px;
   background: var(--pc);
   box-shadow: 0 0 10px var(--pc);
-  display: none !important;
+  display: none;
 }
 .pp.is-turn {
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--pc) 40%, transparent), 0 0 24px color-mix(in srgb, var(--pc) 35%, transparent);
@@ -896,7 +896,7 @@
 .flash--heal.is-opp { background: linear-gradient(180deg, rgba(60, 220, 140, 0.35), transparent); }
 @keyframes sideFlash { from { opacity: 1; } to { opacity: 0; } }
 
-.fx-shard { position: absolute !important; pointer-events: none; }
+.fx-shard { position: absolute; pointer-events: none; }
 .fx-cross { position: absolute; width: var(--sz); height: var(--sz); margin: calc(var(--sz) / -2) 0 0 calc(var(--sz) / -2); animation: cross calc(700ms * var(--sp)) var(--ease-out) forwards; }
 .fx-cross::before,
 .fx-cross::after {
@@ -1269,7 +1269,7 @@
     margin: 4px 6px;
     gap: 8px;
     pointer-events: auto;
-    padding: 6px 12px !important;
+    padding: 6px 12px;
   }
   .pp-avatar .avatar { width: 30px !important; height: 30px !important; }
   .pp-info { flex-direction: row; align-items: center; gap: 10px; }
@@ -2659,8 +2659,8 @@
 @media (max-width: 600px) and (orientation: portrait) {
   .icon-btn {
     width: 32px !important;
-    height: 32px !important;
-    padding: 7px !important;
+    height: 32px;
+    padding: 7px;
     background: transparent !important;
     border-color: rgba(255, 255, 255, 0.08) !important;
   }

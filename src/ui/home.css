@@ -342,7 +342,7 @@ body.in-duel .tabbar {
 /* tab bar: no underline, gentle press */
 .tabbar .tab::after,
 .tabbar .tab.on::after {
-  display: none !important;
+  display: none;
 }
 .tabbar .tab {
   min-height: 48px;
@@ -371,18 +371,18 @@ body.in-duel .tabbar {
 @media (orientation: landscape) and (max-height: 500px) {
   /* compact tab bar: icon beside label */
   .tabbar {
-    padding: 2px max(12px, env(safe-area-inset-left, 0px)) calc(2px + env(safe-area-inset-bottom, 0px)) max(12px, env(safe-area-inset-right, 0px)) !important;
+    padding: 2px max(12px, env(safe-area-inset-left, 0px)) calc(2px + env(safe-area-inset-bottom, 0px)) max(12px, env(safe-area-inset-right, 0px));
   }
   .home-hero {
     position: sticky;
     top: 0;
-    height: calc(100dvh - var(--tabbar-h)) !important;
+    height: calc(100dvh - var(--tabbar-h));
   }
   .home-hero-shade {
     background: linear-gradient(180deg, rgba(11, 12, 14, 0.1) 0%, rgba(11, 12, 14, 0.35) 45%, rgba(11, 12, 14, 0.94) 92%) !important;
   }
   .home-hero-body {
-    padding: 0 20px 18px max(20px, calc(env(safe-area-inset-left, 0px) + 8px)) !important;
+    padding: 0 20px 18px max(20px, calc(env(safe-area-inset-left, 0px) + 8px));
   }
   .home-title {
     font-size: 44px;
@@ -391,10 +391,10 @@ body.in-duel .tabbar {
     height: 50px;
   }
   .home-body {
-    padding: calc(14px + env(safe-area-inset-top, 0px)) max(20px, calc(env(safe-area-inset-right, 0px) + 8px)) 20px 20px !important;
+    padding: calc(14px + env(safe-area-inset-top, 0px)) max(20px, calc(env(safe-area-inset-right, 0px) + 8px)) 20px 20px;
   }
   .home-h {
-    margin-top: 0 !important;
+    margin-top: 0;
   }
   .home-tiles {
     grid-template-columns: repeat(2, minmax(0, 1fr));

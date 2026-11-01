@@ -498,7 +498,7 @@ input[type='range'] {
     opacity var(--dur-slow) var(--ease-out),
     transform var(--dur-slow) var(--ease-out);
   border: 0 !important;
-  border-radius: 14px !important;
+  border-radius: 14px;
   background: rgba(40, 41, 46, 0.94) !important;
   -webkit-backdrop-filter: blur(16px);
   backdrop-filter: blur(16px);
@@ -619,7 +619,7 @@ input[type='range'] {
   min-width: 74px;
   border: 0;
   background: var(--fill) !important;
-  border-radius: 12px !important;
+  border-radius: 12px;
   box-shadow: none;
 }
 .stat-chip b {
@@ -718,8 +718,8 @@ input[type='range'] {
   box-shadow: none;
   top: 0;
   z-index: 40;
-  height: calc(52px + env(safe-area-inset-top, 0px)) !important;
-  padding: env(safe-area-inset-top, 0px) var(--gutter-r) 0 max(6px, env(safe-area-inset-left, 0px)) !important;
+  height: calc(52px + env(safe-area-inset-top, 0px));
+  padding: env(safe-area-inset-top, 0px) var(--gutter-r) 0 max(6px, env(safe-area-inset-left, 0px));
   display: grid !important;
   grid-template-columns: minmax(max-content, 1fr) minmax(0, auto) minmax(max-content, 1fr);
   align-items: center;
@@ -783,13 +783,13 @@ input[type='range'] {
   max-width: 40vw;
 }
 .modal::before {
-  display: none !important;
+  display: none;
 }
 
 @media (max-width: 600px) {
   .modal-backdrop {
     align-items: flex-end;
-    padding: 0 !important;
+    padding: 0;
   }
   .modal-backdrop.in .modal {
     transform: none !important;

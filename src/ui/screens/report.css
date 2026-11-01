@@ -171,7 +171,7 @@
     gap: 10px;
   }
   .rp-sheet .modal-foot {
-    display: flex !important;
+    display: flex;
     grid-auto-flow: column;
   }
   .rp-sheet .modal-foot .ui-btn {

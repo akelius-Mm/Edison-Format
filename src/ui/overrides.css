@@ -224,7 +224,7 @@ a,
   flex: 1 1 0;
   min-width: 0;
   min-height: 36px;
-  padding: 0 8px !important;
+  padding: 0 8px;
   border: 0;
   border-radius: 8px !important;
   background: transparent !important;
@@ -251,8 +251,8 @@ a,
 }
 .toggle-track {
   width: 51px !important;
-  height: 31px !important;
-  border-radius: 999px !important;
+  height: 31px;
+  border-radius: 999px;
   background: var(--fill-2) !important;
   border: 0 !important;
   box-shadow: none;
@@ -772,7 +772,7 @@ a,
   place-items: center;
   width: 26px;
   height: 26px;
-  border-radius: 8px !important;
+  border-radius: 8px;
   font: 700 12px var(--font) !important;
   background: var(--fill) !important;
   color: var(--text-2) !important;
@@ -916,9 +916,9 @@ a,
   color: var(--text-2);
 }
 .rule-card {
-  padding: 16px 18px !important;
+  padding: 16px 18px;
   border: 0;
-  border-radius: 16px !important;
+  border-radius: 16px;
   background: var(--grp) !important;
 }
 .rule-card ul {
@@ -995,7 +995,7 @@ a,
   height: 17px;
 }
 .tour-tabs {
-  margin: 0 0 18px !important;
+  margin: 0 0 18px;
   border: 0 !important;
 }
 .mm2-art {
@@ -1189,7 +1189,7 @@ a,
   height: 24px;
 }
 .db-switch {
-  width: auto !important;
+  width: auto;
   max-width: 34vw;
   min-height: 36px !important;
   padding: 0 28px 0 12px !important;
@@ -1204,7 +1204,7 @@ a,
 .database .frame-body {
   --app-h: calc(100dvh - 52px - env(safe-area-inset-top, 0px) - var(--tabbar-h));
   max-width: 1720px !important;
-  height: var(--app-h) !important;
+  height: var(--app-h);
   min-height: 420px !important;
   padding: 10px var(--gutter-r) 10px var(--gutter) !important;
   display: flex !important;
@@ -1237,7 +1237,7 @@ a,
   margin: 0 -12px;
   padding: 0 12px;
   scrollbar-width: none;
-  flex-basis: auto !important;
+  flex-basis: auto;
 }
 .db-tool .icon {
   width: 15px;
@@ -1323,11 +1323,11 @@ a,
   padding: 0 2px;
 }
 .cb-kind.chip {
-  flex: none !important;
+  flex: none;
   min-height: 34px;
-  padding: 0 14px !important;
+  padding: 0 14px;
   border: 0;
-  border-radius: 999px !important;
+  border-radius: 999px;
   font: 500 14px var(--font) !important;
   background: var(--fill) !important;
   color: var(--text-2) !important;
@@ -1340,7 +1340,7 @@ a,
 }
 .cb-sort {
   min-height: 34px !important;
-  width: auto !important;
+  width: auto;
   border-radius: 999px !important;
   font: 500 13.5px var(--font) !important;
   padding: 0 28px 0 12px !important;
@@ -1368,7 +1368,7 @@ a,
 .modal-head h2 {
   font: 700 19px var(--font-display) !important;
   letter-spacing: -0.02em !important;
-  text-transform: none !important;
+  text-transform: none;
   color: var(--text) !important;
 }
 .modal-foot {
@@ -1379,7 +1379,7 @@ a,
   .modal {
     width: 100% !important;
     max-width: none !important;
-    max-height: 88dvh !important;
+    max-height: 88dvh;
     border-radius: 22px 22px 0 0 !important;
     padding-bottom: env(safe-area-inset-bottom, 0px) !important;
     transform: translateY(24px);
