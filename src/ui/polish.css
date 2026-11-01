@@ -47,18 +47,7 @@ a,
 
 /* Screens transition: short slide, no blur */
 .screen {
-  transition:
-    opacity var(--dur-slow) var(--ease-out),
-    transform var(--dur-slow) var(--ease-out) !important;
   filter: none !important;
-}
-.screen-enter {
-  opacity: 0;
-  transform: translateY(10px);
-}
-.screen-leave {
-  opacity: 0;
-  transform: none;
 }
 
 /* ---------------------------------------------------------------- frame: iOS large title */
@@ -88,9 +77,6 @@ body.has-tabbar .frame {
 }
 .frame.is-scrolled .frame-head,
 .frame--compact .frame-head {
-  background: rgba(14, 15, 18, 0.78) !important;
-  -webkit-backdrop-filter: saturate(180%) blur(20px);
-  backdrop-filter: saturate(180%) blur(20px);
   border-bottom-color: var(--sep) !important;
 }
 .frame-back {
@@ -822,8 +808,6 @@ body.has-tabbar .frame:has(.lob-bar) {
   margin: 0 calc(-1 * var(--gutter-r)) 6px calc(-1 * var(--gutter));
   padding: 8px var(--gutter-r) 10px var(--gutter);
   background: rgba(11, 12, 14, 0.9);
-  -webkit-backdrop-filter: saturate(180%) blur(20px);
-  backdrop-filter: saturate(180%) blur(20px);
 }
 .duel-flow .frame-body {
   padding-top: 0 !important;
@@ -1004,9 +988,6 @@ button.mu-side {
   margin-bottom: 14px;
   border: 0 !important;
 }
-.flow-opp .dkc-box {
-  width: 112px;
-}
 .flow-opp .mu {
   padding: 8px;
   margin-bottom: 14px;
@@ -1059,7 +1040,6 @@ button.mu-side {
   place-items: normal !important;
   padding: 0 0 calc(var(--tabbar-h) + 24px) !important;
   background: var(--bg-0) !important;
-  overflow: hidden;
 }
 .results .res-rays,
 .results .res-crown {
@@ -1161,7 +1141,6 @@ button.mu-side {
 .res-side {
   display: grid !important;
   gap: 2px !important;
-  min-width: 0;
   justify-items: start !important;
   opacity: 0.7;
   padding: 0 !important;
@@ -2930,7 +2909,6 @@ a.ios-row {
   letter-spacing: -0.02em !important;
   margin: 0 !important;
   font: 700 22px/1.2 var(--font-display) !important;
-  letter-spacing: -0.02em;
   color: var(--text);
 }
 .final-screen .res-sub {
@@ -3535,11 +3513,6 @@ body.has-tabbar .database.frame {
 }
 
 /* ---------------------------------------------------------------- modals: sheet on phones */
-.modal-backdrop {
-  background: rgba(0, 0, 0, 0.55) !important;
-  -webkit-backdrop-filter: blur(6px);
-  backdrop-filter: blur(6px);
-}
 .modal {
   border: 0 !important;
   border-radius: 20px !important;
@@ -3806,7 +3779,6 @@ body.in-duel .ui-toast-host {
   .results {
     display: grid !important;
     grid-template-columns: minmax(0, 42%) minmax(0, 1fr);
-    align-items: start;
   }
   .res-hero {
     position: sticky;
@@ -3831,7 +3803,6 @@ body.in-duel .ui-toast-host {
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     grid-auto-flow: dense;
     align-content: center;
-    column-gap: 28px;
     overflow-y: auto;
   }
   .inter > .inter-caption,

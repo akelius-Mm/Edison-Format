@@ -139,13 +139,7 @@ body {
 }
 .ui-btn-primary,
 .ui-btn-gold {
-  background: var(--gold) !important;
-  color: #141210 !important;
   border-color: transparent !important;
-}
-.ui-btn-primary:hover,
-.ui-btn-gold:hover {
-  background: var(--gold-hi) !important;
 }
 
 /* Duel chrome */
@@ -192,13 +186,7 @@ body {
 
 /* iPhone safe areas (the installed app draws under the status bar / home indicator) */
 .frame-head {
-  height: calc(var(--head-h) + env(safe-area-inset-top, 0px));
-  padding-top: env(safe-area-inset-top, 0px);
-  padding-left: max(16px, env(safe-area-inset-left, 0px));
-  padding-right: max(16px, env(safe-area-inset-right, 0px));
-  background: rgba(11, 12, 14, 0.92);
   box-shadow: none;
-  border-bottom: 1px solid var(--line);
 }
 .frame-head::after {
   display: none;
@@ -361,8 +349,6 @@ body::after {
   display: none !important;
 }
 .setup-bar {
-  -webkit-backdrop-filter: blur(12px);
-  backdrop-filter: blur(12px);
   background: rgba(21, 22, 25, 0.94) !important;
 }
 
