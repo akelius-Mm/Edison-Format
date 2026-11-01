@@ -1412,7 +1412,7 @@
     radial-gradient(ellipse at 50% 50%, rgba(255, 255, 255, 0.035), transparent 70%),
     linear-gradient(180deg, #16171a, #0d0e10);
 }
-.duel-mat.mats-split::after { border-color: rgba(255, 255, 255, 0.05) !important; }
+.duel-mat.mats-split::after { border-color: rgba(255, 255, 255, 0.05); }
 /* each mat has its own stitched edge; the table itself has none */
 .duel-mat.mats-split::before { outline: none; }
 .mats-split .side::before {
@@ -1719,7 +1719,7 @@
 
 /* =====================================================================
    Duel chrome, clean style: graphite surfaces, system font, no gold glows.
-   Prefixed with .duel-root so it wins over the older rules above and in app/clean.css.
+   Prefixed with .duel-root so it wins over the older rules above and in app.css.
    ===================================================================== */
 .duel-root {
   --dl-surface: rgba(20, 21, 24, 0.97);
@@ -1777,7 +1777,7 @@
 .duel-root .btn--xs { min-height: 30px; padding: 4px 10px; font-size: 12.5px; border-radius: 8px; }
 
 /* Phase bar: current phase is a quiet filled chip, not a gold one */
-.duel-root .ph.is-current { background: rgba(255, 255, 255, 0.14) !important; color: var(--dl-ink) !important; }
+.duel-root .ph.is-current { background: rgba(255, 255, 255, 0.14) !important; color: var(--dl-ink); }
 
 /* Chain: a compact list of links with small neutral number badges */
 .duel-root .chain {
@@ -2575,11 +2575,6 @@
 .sp-col small.is-heal { color: #1f7a3a; }
 .sp-foot { margin-top: 6px; font: 500 11px var(--ef-font-ui, system-ui, sans-serif); color: rgba(29, 42, 74, 0.55); text-align: center; }
 
-/* No glowing or gradient lettering anywhere in the interface (card faces keep their own styling). */
-:where(body) :not(.yc):not(.yc *) {
-  text-shadow: none !important;
-}
-
 /* Buttons and selection: flat */
 .ui-btn,
 .ui-btn-primary,
@@ -2676,7 +2671,7 @@
     font-size: 18px !important;
   }
   .stage--tall .hand-opp {
-    --hw: calc(var(--cw) * 0.6) !important;
+    --hw: calc(var(--cw) * 0.6);
   }
 }
 
@@ -2695,38 +2690,6 @@
     --yc-w: 120px !important;
   }
 }
-:where(button, [role='button'], a[href], summary, label, input, select, .chip, .tile, .cb-row, .ios-row) {
-  touch-action: manipulation;
-  -webkit-tap-highlight-color: transparent;
-}
-
-/* One press state for buttons, rows, tiles and chips: a little smaller and dimmer, at once.
-   `.is-pressed` is set on pointerdown by press.ts (iOS only applies :active late or not at all;
-   the class makes the feedback land on the same frame as the touch). Zero specificity, so a
-   component can still tune it with --press-scale / --press-dim. `scale` (not `transform`)
-   composes with whatever transform the element already has. */
-:where(button, [role='button'], a[href], summary, .chip, .tile, .cb-row, .ios-row--nav, .ios-row--action, .duel-root .dc):where(:active, .is-pressed):where(:not(:disabled, [aria-disabled='true'], .is-disabled, .dc-ghost)) {
-  scale: var(--press-scale, 0.97);
-  filter: brightness(var(--press-dim, 0.82));
-}
-
-/* Full-width rows dim without shrinking (a shrinking row looks like it came loose) */
-:where(.ios-row, .home-row, .ps-row, .cb-row, .ctx-item, .lob-link, .ban-item, .declare-item, .btn--option, .frame-back, .tab, .seg-btn) {
-  --press-scale: 1;
-}
-
-/* Cards on the duel board */
-:where(.duel-root .dc) {
-  --press-scale: 0.96;
-  --press-dim: 0.86;
-}
-
-/* Released: ease back */
-:where(button, [role='button'], a[href], summary, .chip, .tile, .cb-row, .ios-row--nav, .ios-row--action) {
-  transition-property: scale, filter;
-  transition-duration: var(--dur-fast);
-  transition-timing-function: var(--ease-out);
-}
 .result,
 .lx-tape {
   -webkit-backdrop-filter: none !important;
@@ -2737,12 +2700,6 @@
 .fx-showcase,
 .fx-shard {
   will-change: transform, translate, scale, opacity;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  :where(button, [role='button'], a[href], summary, .chip, .tile, .cb-row, .ios-row--nav, .ios-row--action):where(:active, .is-pressed) {
-    scale: none;
-  }
 }
 .ios-row--nav,
 .ios-row--action {

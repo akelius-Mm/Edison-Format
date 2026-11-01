@@ -4,10 +4,9 @@ import { startApp } from './ui/app';
 import { music } from './ui/audio/music';
 import { loadSfxSamples } from './ui/audio/samples';
 import { startUpdater } from './ui/updater';
-import './ui/clean.css';
 import './ui/home.css';
-import './ui/polish.css';
-import './ui/motion.css';
+// last: rules that must win over the screens' own stylesheets by order
+import './ui/overrides.css';
 import { installPressFeedback } from './ui/press';
 import { installErrorCapture } from './ui/diag';
 import { installErrorToast } from './ui/screens/report';

@@ -1,5 +1,17 @@
-/* Shared design tokens for the duel UI and card graphics. Prefixed to avoid clashing with the app shell. */
+/* Design tokens for the whole app: the app shell's (--bg-*, --gold, --text, --font...), the duel UI's and
+   card graphics' (--ef-*), motion, spacing and radii. */
 :root {
+  --blue: #5aa9ff;
+  --violet: #9b7bff;
+  --green: #44c486;
+  --red: #ef5b5b;
+  --orange: #f0a04b;
+  --monster: #c9873a;
+  --spell: #1f9e8f;
+  --trap: #b0407e;
+  --ease: var(--ease-out);
+  --head-h: 64px;
+
   --ef-blue: #4d8dff;
   --ef-red: #ff4d5e;
   --ef-green: #3fdc8a;
@@ -11,8 +23,9 @@
   --ef-ease-out: var(--ease-out);
   --ef-ease-spring: var(--ease-spring);
 
-  /* Motion: one set of curves and lengths for the whole app (see also src/ui/motion.css)
+  /* Motion: one set of curves and lengths for the whole app (the shared press state is in src/ui/app.css)
      (mirrored for Web Animations in src/ui/motion.ts: keep the two in step) */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1); /* things arriving, settling */
   --ease-in: cubic-bezier(0.55, 0, 0.75, 0.2); /* things leaving, falling away */
   --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1); /* moves from A to B, loops */
   --ease-spring: cubic-bezier(0.34, 1.4, 0.64, 1); /* a small overshoot: lifts, pops */
@@ -37,7 +50,7 @@
   --radius-xl: 20px;
   --radius-pill: 999px;
 
-  /* The shared press state (motion.css): shrink a little and dim, instantly */
+  /* The shared press state (end of app.css): shrink a little and dim, instantly */
   --press-scale: 0.97;
   --press-dim: 0.82;
   --bg-0: #0b0c0e;
@@ -83,15 +96,14 @@
   --tabbar-h: calc(61px + env(safe-area-inset-bottom, 0px));
   --gutter: max(16px, env(safe-area-inset-left, 0px));
   --gutter-r: max(16px, env(safe-area-inset-right, 0px));
-  --grp: #17181b;
+  --grp: #17181b; /* grouped list surface */
   --grp-hi: #202125;
   --sep: rgba(255, 255, 255, 0.07);
-  --fill: rgba(118, 118, 128, 0.2);
+  --fill: rgba(118, 118, 128, 0.2); /* iOS fill (segmented track, search field) */
   --fill-2: rgba(118, 118, 128, 0.32);
   --cta: #f2efe8;
   --cta-text: #111;
   --win: #8fd1a8;
   --loss: #e38b8b;
-  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
-  --page-max: 760px; /* iOS fill (segmented track, search field) */ /* grouped list surface */
+  --page-max: 760px;
 }

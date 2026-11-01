@@ -1,8 +1,124 @@
 /* ==========================================================================
-   Screen polish (Duel Links / iOS-client look). Loaded last, after clean.css and home.css.
-   Phone portrait first; wider layouts are added with min-width queries.
+   Late overrides: loaded after every other stylesheet (src/main.ts imports it last).
+   Each screen's styles live in its own stylesheet; what is left here are rules that must
+   come after those: they win over a screen's rule of equal specificity by order (shared
+   components such as .ui-btn, .cta, .seg-btn, iOS grouped lists, modals and toasts restyled
+   for the clean iOS look), the !important flat-look overrides of older duel and result
+   styles, and the reduced-motion switches. Moving any of them into an earlier file changes
+   which rule wins somewhere (scripts/css-snapshot.cjs checks that), so new screen styles go
+   in the screen's own file, not here.
    ========================================================================== */
 
+/* ---------------------------------------------------------------- flat look (was clean.css) */
+.frame-title,
+.res-headline,
+.pp-lp,
+.pp-lp.dmg,
+.pp-lp.heal,
+.banner b,
+.banner--turn.is-opp b,
+.result-title,
+.result.is-lose .result-title,
+.result.is-draw .result-title {
+  background: none !important;
+  -webkit-background-clip: border-box;
+  background-clip: border-box !important;
+  -webkit-text-fill-color: currentColor !important;
+  color: var(--text) !important;
+  filter: none !important;
+}
+.pp-lp.dmg { color: #e38b8b !important; }
+.pp-lp.heal { color: #8fd1a8 !important; }
+.section-title h2 {
+  font-family: var(--font);
+  letter-spacing: 0.02em;
+}
+
+/* Panels with gold haze → flat */
+.card,
+.panel,
+.setup-card {
+  background-image: none !important;
+}
+.fx-banner.banner--phase b,
+.banner--phase b {
+  font-size: 15px !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.04em !important;
+  text-transform: none !important;
+  color: var(--text) !important;
+}
+.banner--turn b {
+  font-weight: 700 !important;
+  letter-spacing: -0.02em !important;
+  text-transform: none !important;
+}
+.setup-panel,
+.setup-bar {
+  background: var(--bg-2) !important;
+  background-image: none !important;
+  box-shadow: none !important;
+  border-color: var(--line) !important;
+}
+.setup-bar {
+  background: rgba(21, 22, 25, 0.94) !important;
+}
+
+/* No duelist badges anywhere */
+.avatar,
+.avatar-ring,
+.pp-avatar,
+.pt-player > .avatar {
+  display: none !important;
+}
+
+/* App mark on the title screen (Dark Armed Dragon artwork, hosted site only) */
+.title-mark {
+  width: clamp(84px, 22vw, 120px);
+  aspect-ratio: 1;
+  border-radius: 22%;
+  object-fit: cover;
+  display: block;
+  margin: 0 auto 18px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
+/* ---------------------------------------------------------------- sleek duel board */
+.zone {
+  box-shadow: none !important;
+  background: var(--zone-fill) !important;
+}
+
+/* "Update ready" note: only on Home, just above the tab bar */
+.update-banner {
+  position: fixed;
+  z-index: 9999;
+  left: 50%;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 90px);
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: calc(100vw - 24px);
+  padding: 8px 8px 8px 14px;
+  border-radius: 12px;
+  background: rgba(18, 19, 22, 0.97);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  font: 500 13px/1.3 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  color: #e9e6df;
+}
+.update-banner button {
+  flex: none;
+  border: 0;
+  border-radius: 8px;
+  padding: 7px 12px;
+  font: 600 13px/1 inherit;
+  background: #c9b68e;
+  color: #111;
+}
+
+/* ---------------------------------------------------------------- screen polish (was polish.css) */
 /* No hover-lift / tap flashes on touch */
 button,
 a,
@@ -25,23 +141,11 @@ a,
 .frame--large .frame-head .frame-title {
   opacity: 0;
 }
-/* a tab's own screen: an empty slot where the back button would be */
-.frame-back-none {
-  display: block;
-  min-width: 1px;
-}
 .frame-large {
   width: 100%;
   max-width: var(--page-max);
   margin: 0 auto;
   padding: 2px var(--gutter-r) 6px var(--gutter);
-}
-.frame-eyebrow {
-  font: 600 12px/1 var(--font);
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--muted);
-  margin-bottom: 6px;
 }
 .frame-large-title {
   margin: 0;
@@ -66,7 +170,6 @@ a,
   --b-bg: var(--grp-hi);
   --b-border: transparent;
   --b-color: var(--text);
-  border: 0 !important;
   box-shadow: none !important;
 }
 
@@ -164,7 +267,7 @@ a,
   height: 27px !important;
   border-radius: 50% !important;
   background: #fff !important;
-  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.3) !important;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.3);
   transform: none;
   transition: transform var(--dur-base) var(--ease-out) !important;
 }
@@ -203,9 +306,6 @@ a,
   outline: none;
   box-shadow: none !important;
 }
-::selection {
-  background: rgba(201, 182, 142, 0.32);
-}
 
 /* ---------------------------------------------------------------- lobby sections */
 .lob-h {
@@ -238,17 +338,6 @@ a,
   width: 14px;
   height: 14px;
 }
-.lob-group {
-  border-radius: 14px;
-  background: var(--grp);
-  overflow: hidden;
-}
-
-/* opponent editor */
-.opp-editor {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-}
 .opp-row-icon {
   display: grid;
   place-items: center;
@@ -277,38 +366,9 @@ a,
 .opp-name-input:focus {
   outline: none;
 }
-.opp-shuffle {
-  display: grid;
-  place-items: center;
-  width: 44px;
-  height: 44px;
-  flex: none;
-  border: 0;
-  border-radius: 12px;
-  background: none;
-  color: var(--text-2);
-  cursor: pointer;
-}
-.opp-shuffle:active {
-  background: rgba(255, 255, 255, 0.06);
-}
 .opp-shuffle .icon {
   width: 22px;
   height: 22px;
-}
-.dkc-track {
-  display: flex;
-  gap: 10px;
-  overflow-x: auto;
-  overscroll-behavior-x: contain;
-  scroll-snap-type: x mandatory;
-  scroll-padding: 0 var(--gutter);
-  padding: 4px var(--gutter-r) 8px var(--gutter);
-  scrollbar-width: none;
-  -webkit-overflow-scrolling: touch;
-}
-.dkc-track::-webkit-scrollbar {
-  display: none;
 }
 .dkc-art {
   position: absolute;
@@ -331,33 +391,9 @@ a,
   margin-bottom: 26px;
   opacity: 0.75;
 }
-.dkc-shade {
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(180deg, rgba(0, 0, 0, 0) 38%, rgba(8, 8, 10, 0.9) 92%);
-}
-.dkc-warn {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  color: #e8b77a;
-}
 .dkc-warn .icon {
   width: 12px;
   height: 12px;
-}
-.dkc-tag {
-  position: absolute;
-  top: 8px;
-  left: 8px;
-  padding: 3px 8px;
-  border-radius: 999px;
-  background: rgba(10, 10, 12, 0.55);
-  -webkit-backdrop-filter: blur(8px);
-  backdrop-filter: blur(8px);
-  font: 600 10.5px var(--font);
-  letter-spacing: 0.02em;
-  color: rgba(255, 255, 255, 0.86);
 }
 .dkc-check .icon {
   width: 14px;
@@ -366,16 +402,6 @@ a,
 .dkc-box.on .dkc-check {
   opacity: 1;
   transform: none;
-}
-.dkc-empty {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 18px;
-  border-radius: 16px;
-  background: var(--grp);
-  color: var(--muted);
-  width: 100%;
 }
 .lob-bar-in {
   max-width: var(--page-max);
@@ -404,14 +430,6 @@ a,
 }
 
 /* ---------------------------------------------------------------- deck carousel extras */
-.lob-count {
-  font: 500 15px var(--font);
-  color: var(--faint);
-}
-.dkc-tag--event {
-  background: rgba(242, 239, 232, 0.92);
-  color: #111;
-}
 .dkc-new .dkc-art .icon {
   width: 34px;
   height: 34px;
@@ -420,9 +438,6 @@ a,
 .shelf {
   display: grid;
   gap: 10px;
-  min-width: 0;
-}
-.shelf-rows {
   min-width: 0;
 }
 
@@ -447,12 +462,6 @@ a,
   background: var(--fill);
   max-width: 120px;
 }
-.flow-fwd {
-  animation: flowIn var(--dur-slow) var(--ease-out);
-}
-.flow-back {
-  animation: flowBack var(--dur-slow) var(--ease-out);
-}
 @keyframes flowIn {
   from {
     opacity: 0;
@@ -464,27 +473,6 @@ a,
     opacity: 0;
     transform: translateX(-28px);
   }
-}
-.mu-side {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-width: 0;
-  min-height: 44px;
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--text);
-  font: inherit;
-  text-align: left;
-}
-.mu-side:last-child {
-  flex-direction: row-reverse;
-  text-align: right;
-}
-button.mu-side {
-  cursor: pointer;
-  border-radius: 12px;
 }
 
 .mu-art {
@@ -508,35 +496,12 @@ button.mu-side {
   width: 22px;
   height: 22px;
 }
-.mu-text {
-  display: grid;
-  min-width: 0;
-}
-.mu-who {
-  font-size: 12px;
-  color: var(--muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
 .mu-text b {
   font: 600 15px/1.2 var(--font);
   letter-spacing: -0.01em;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-.mu-vs {
-  font: 700 12px var(--font);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--faint);
-}
-.flow-build {
-  border-radius: 14px;
-  background: var(--grp) !important;
-  margin-bottom: 14px;
-  border: 0 !important;
 }
 .flow-opp .mu-art {
   width: 40px;
@@ -548,17 +513,6 @@ button.mu-side {
 .results {
   min-height: 100dvh;
   background: var(--bg-0) !important;
-}
-.res-hero {
-  position: relative;
-  height: clamp(220px, 34vh, 380px);
-  overflow: hidden;
-  background: radial-gradient(120% 90% at 50% 10%, #24262c 0%, #0e0f12 70%);
-}
-.res-shade {
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(180deg, rgba(11, 12, 14, 0.25) 0%, rgba(11, 12, 14, 0.35) 40%, rgba(11, 12, 14, 0.94) 85%, var(--bg-0) 100%);
 }
 .res-hero-body {
   position: absolute;
@@ -572,12 +526,6 @@ button.mu-side {
   gap: 4px;
   text-align: left;
 }
-.res-context {
-  font: 600 12px/1.3 var(--font);
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: rgba(236, 235, 231, 0.72);
-}
 .res-headline {
   color: #fff !important;
 }
@@ -587,35 +535,9 @@ button.mu-side {
     transform: translateY(12px);
   }
 }
-.res-board {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
-  align-items: center;
-  gap: 12px;
-  padding: 16px;
-  border-radius: 20px;
-  background: var(--grp);
-}
 .res-side.right {
-  justify-items: end !important;
+  justify-items: end;
   text-align: right;
-}
-.res-name {
-  font: 600 16px/1.2 var(--font);
-  letter-spacing: -0.01em;
-  color: var(--text);
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.res-deck {
-  font-size: 13px !important;
-  color: var(--muted) !important;
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 .res-score {
   display: flex;
@@ -627,36 +549,6 @@ button.mu-side {
 .res-score span {
   font-weight: 400;
   color: var(--faint);
-}
-.game-main {
-  display: grid;
-  min-width: 0;
-}
-.game-res {
-  font: 600 15px var(--font) !important;
-  color: var(--text) !important;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.game-why {
-  font-size: 13px !important;
-  color: var(--muted) !important;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.res-stat {
-  display: grid;
-  justify-items: center;
-  gap: 2px;
-  padding: 10px 6px;
-  border-right: 1px solid var(--sep);
-  min-width: 0;
-  text-align: center;
-}
-.res-stat:last-child {
-  border-right: 0;
 }
 .res-stat b {
   font: 700 19px var(--font-display);
@@ -701,23 +593,8 @@ button.mu-side {
   grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
 }
 .inter-side.right {
-  justify-items: end !important;
+  justify-items: end;
   text-align: right;
-}
-.inter-name {
-  font: 600 16px var(--font);
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.inter-deck {
-  font-size: 13px;
-  color: var(--muted);
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 .inter-nums {
   display: flex;
@@ -740,9 +617,6 @@ button.mu-side {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 10px;
-}
-.inter-concede {
-  justify-self: center;
 }
 
 /* ---------------------------------------------------------------- iOS grouped lists */
@@ -812,12 +686,6 @@ button.mu-side {
   width: 18px;
   height: 18px;
 }
-.ios-detail {
-  flex: none;
-  font-size: 15px;
-  color: var(--muted);
-  font-variant-numeric: tabular-nums;
-}
 .ios-chev {
   flex: none;
   width: 14px !important;
@@ -830,14 +698,6 @@ button.mu-side {
 .ios-row--action.danger .ios-label {
   color: var(--loss);
 }
-
-/* range slider */
-.ios-range-wrap {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  width: 100%;
-}
 .ios-range {
   --v: 50%;
   flex: 1;
@@ -847,46 +707,6 @@ button.mu-side {
   -webkit-appearance: none;
   appearance: none;
   cursor: pointer;
-}
-.ios-range::-webkit-slider-runnable-track {
-  height: 4px;
-  border-radius: 4px;
-  background: linear-gradient(90deg, var(--cta) var(--v), var(--fill-2) var(--v));
-}
-.ios-range::-moz-range-track {
-  height: 4px;
-  border-radius: 4px;
-  background: linear-gradient(90deg, var(--cta) var(--v), var(--fill-2) var(--v));
-}
-.ios-range::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  width: 26px;
-  height: 26px;
-  margin-top: -11px;
-  border-radius: 50%;
-  background: #fff;
-  border: 0;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
-}
-.ios-range::-moz-range-thumb {
-  width: 26px;
-  height: 26px;
-  border-radius: 50%;
-  background: #fff;
-  border: 0;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
-}
-.ios-range-wrap .ios-detail {
-  min-width: 42px;
-  text-align: right;
-}
-.sr-only {
-  position: absolute !important;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip: rect(0 0 0 0);
-  white-space: nowrap;
 }
 
 /* inputs inside grouped rows */
@@ -904,14 +724,8 @@ button.mu-side {
   color: var(--text);
   font: 400 16px var(--font);
 }
-.ios-input::placeholder {
-  color: var(--faint);
-}
 .ios-input:focus {
   outline: none;
-}
-.ios-row--input:focus-within {
-  background: rgba(255, 255, 255, 0.02);
 }
 .ios-inline-btn {
   flex: none;
@@ -924,89 +738,19 @@ button.mu-side {
   font: 600 14px var(--font);
   cursor: pointer;
 }
-.ios-ext {
-  transform: rotate(45deg);
-}
 .ios-ctl-res {
   display: inline-flex;
   align-items: center;
   gap: 10px;
 }
-
-/* Settings → Your music */
-.ym-ctl {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.ym-ctl .ios-inline-btn:disabled {
-  opacity: 0.5;
-}
 .ym-remove {
   color: var(--loss);
-}
-.ym-desc {
-  display: block;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
-.ym-name {
-  color: var(--text-2);
-}
-.ym-file-name {
-  display: block;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
-.np-row .ym-name {
-  color: var(--text);
-}
-.np-skip:disabled,
-.ym-add:disabled {
-  opacity: 0.45;
-}
-
-/* Audio credits sheet */
-.credits-list {
-  display: grid;
-  gap: 14px;
-  max-height: min(64vh, 640px);
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
-  overscroll-behavior: contain;
 }
 .credits-intro {
   margin: 0;
   font-size: 14px;
   line-height: 1.45;
   color: var(--muted);
-}
-.credit {
-  display: grid;
-  gap: 4px;
-  padding-top: 12px;
-  border-top: 1px solid var(--sep);
-  min-width: 0;
-}
-.credit-use {
-  font-size: 12px;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--muted);
-}
-.credit-title {
-  font-weight: 600;
-  color: var(--text);
-  overflow-wrap: anywhere;
-}
-.credit-meta,
-.credit-edit,
-.credit-files {
-  font-size: 13px;
-  line-height: 1.4;
-  color: var(--text-2);
 }
 .credit a {
   color: var(--gold-hi);
@@ -1022,9 +766,6 @@ button.mu-side {
   font-size: 12px;
   line-height: 1.5;
   overflow-wrap: anywhere;
-}
-.credit code {
-  font-size: 12px;
 }
 .pf-res {
   display: inline-grid !important;
@@ -1053,11 +794,6 @@ button.mu-side {
 }
 .customize-screen .cz-stack .yc {
   --yc-w: 96px;
-}
-.cz-grid-wrap {
-  border-radius: 14px;
-  background: var(--grp);
-  padding: 12px;
 }
 .cz-pick {
   display: grid;
@@ -1102,33 +838,9 @@ button.mu-side {
 .cz-opt.on .cz-tick {
   display: grid;
 }
-.cz-remove {
-  position: absolute;
-  top: 2px;
-  left: 2px;
-  display: grid;
-  place-items: center;
-  width: 32px;
-  height: 32px;
-  border: 0;
-  border-radius: 50%;
-  background: rgba(10, 10, 12, 0.72);
-  color: #fff;
-  cursor: pointer;
-}
 .cz-remove .icon {
   width: 14px;
   height: 14px;
-}
-.cz-stats {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  row-gap: 0;
-}
-.cz-stats .res-stat:nth-child(3) {
-  border-right: 0;
-}
-.cz-stats .res-stat:nth-child(n + 4) {
-  border-top: 1px solid var(--sep);
 }
 @media (min-width: 1000px) {
   .customize-screen {
@@ -1140,11 +852,6 @@ button.mu-side {
     order: 2;
   }
 }
-@media (max-width: 999px) {
-  .cz-grid-wrap {
-    padding: 12px 0;
-  }
-}
 
 /* ---------------------------------------------------------------- chip tabs (scrollable segmented) */
 .chip-tabs {
@@ -1154,9 +861,6 @@ button.mu-side {
   margin: 0 calc(-1 * var(--gutter-r)) 16px calc(-1 * var(--gutter));
   padding: 2px var(--gutter-r) 2px var(--gutter);
   scrollbar-width: none;
-}
-.chip-tabs::-webkit-scrollbar {
-  display: none;
 }
 .chip-tab,
 .chip {
@@ -1240,17 +944,8 @@ button.mu-side {
   background-size: cover;
   background-position: center 30%;
 }
-.pool-deck-main {
-  display: grid;
-  gap: 2px;
-  min-width: 0;
-}
 .pool-deck-head b {
   font: 600 16px var(--font);
-}
-.pool-deck-arch {
-  font-size: 13px;
-  color: var(--muted);
 }
 .ban-top .input {
   width: 100%;
@@ -1265,16 +960,8 @@ button.mu-side {
   text-transform: none !important;
   margin: 0;
 }
-@media (min-width: 900px) {
-  .pool-decks {
-    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
-  }
-}
 
 /* ---------------------------------------------------------------- tournament */
-.tour-circuit {
-  margin-bottom: 22px;
-}
 .place-pill {
   flex: none;
   display: inline-grid;
@@ -1298,22 +985,6 @@ button.mu-side {
   font: 600 11px/1.5 var(--font);
   vertical-align: 1px;
 }
-.diff-tag {
-  flex: none;
-  padding: 3px 8px;
-  border-radius: 999px;
-  font: 600 12px var(--font);
-  background: var(--fill);
-  color: var(--text-2);
-}
-.diff-tag.hard {
-  background: rgba(227, 139, 139, 0.14);
-  color: var(--loss);
-}
-.diff-tag.easy {
-  background: rgba(143, 209, 168, 0.14);
-  color: var(--win);
-}
 .cta--sm {
   min-height: 44px;
   font-size: 15px;
@@ -1326,25 +997,6 @@ button.mu-side {
 .tour-tabs {
   margin: 0 0 18px !important;
   border: 0 !important;
-}
-.mm2-label {
-  font: 600 12px var(--font);
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: rgba(236, 235, 231, 0.7);
-}
-.mm2-face {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
-  align-items: center;
-  gap: 8px;
-}
-.mm2-side {
-  display: grid;
-  justify-items: center;
-  text-align: center;
-  gap: 2px;
-  min-width: 0;
 }
 .mm2-art {
   --deck: #555;
@@ -1360,37 +1012,6 @@ button.mu-side {
     0 8px 20px rgba(0, 0, 0, 0.45),
     inset 0 0 0 1px rgba(255, 255, 255, 0.1);
 }
-.mm2-name {
-  font: 700 17px/1.2 var(--font-display);
-  letter-spacing: -0.015em;
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.mm2-deck {
-  font-size: 13.5px;
-  color: var(--text-2);
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.mm2-meta {
-  font-size: 12px;
-  color: var(--muted);
-}
-.mm2-mid {
-  display: grid;
-  justify-items: center;
-  gap: 2px;
-}
-.mm2-vs {
-  font: 700 13px var(--font);
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--faint);
-}
 .mm2-score {
   font: 700 30px var(--font-display);
   letter-spacing: -0.03em;
@@ -1399,15 +1020,6 @@ button.mu-side {
 .mm2-res {
   font: 600 12px var(--font);
   color: var(--muted);
-}
-.mm2-actions {
-  display: grid;
-  gap: 10px;
-}
-.mm2-alt {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
 }
 .mm2-alt .cta {
   background: rgba(255, 255, 255, 0.08);
@@ -1457,22 +1069,10 @@ button.mu-side {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.pr-deck {
-  font-size: 12.5px;
-  color: var(--muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
 .pr-score {
   font: 700 15px var(--font);
   text-align: right;
   font-variant-numeric: tabular-nums;
-}
-.pr-p.lose .pr-name,
-.pr-p.lose .pr-score {
-  color: var(--muted);
-  font-weight: 500;
 }
 .pr-row.pending .pr-score {
   color: var(--faint);
@@ -1500,13 +1100,6 @@ button.mu-side {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-
-/* lobby */
-.lobby {
-  display: grid !important;
-  grid-template-columns: minmax(0, 1fr) !important;
-  gap: 22px !important;
-}
 .lobby-art {
   position: absolute;
   inset: 0;
@@ -1514,22 +1107,11 @@ button.mu-side {
   background-size: cover;
   background-position: center 30%;
 }
-.lobby-shade {
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(180deg, rgba(15, 16, 19, 0.1) 0%, rgba(15, 16, 19, 0.75) 50%, #15161a 92%);
-}
-.lobby-body {
-  position: relative;
-  display: grid;
-  gap: 6px;
-  padding: 100px 16px 16px;
-}
 .lobby-body h2 {
   margin: 0;
   font: 700 26px/1.1 var(--font-display) !important;
   letter-spacing: -0.02em !important;
-  text-transform: none !important;
+  text-transform: none;
   color: var(--text) !important;
 }
 .lobby-body p {
@@ -1541,32 +1123,12 @@ button.mu-side {
   display: flex;
   margin-bottom: 8px;
 }
-.meta-list {
-  display: grid;
-  padding: 6px 0;
-}
-.meta-name {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.meta-track {
-  height: 6px !important;
-  border-radius: 6px !important;
-  background: var(--fill) !important;
-  overflow: hidden;
-}
 .meta-track i {
   display: block;
   height: 100%;
   border-radius: 6px;
   background: var(--deck) !important;
   box-shadow: none !important;
-}
-.meta-pct {
-  color: var(--muted);
-  text-align: right;
-  font-size: 13px;
 }
 
 /* entrants */
@@ -1622,26 +1184,9 @@ button.mu-side {
 }
 
 /* ---------------------------------------------------------------- compact header extras */
-.head-icon-btn {
-  display: grid;
-  place-items: center;
-  width: 44px;
-  height: 44px;
-  border: 0;
-  border-radius: 12px;
-  background: none;
-  color: var(--text);
-  cursor: pointer;
-}
 .head-icon-btn .icon {
   width: 24px;
   height: 24px;
-}
-
-.head-count {
-  font-size: 13px;
-  color: var(--muted);
-  white-space: nowrap;
 }
 .db-switch {
   width: auto !important;
@@ -1694,33 +1239,12 @@ button.mu-side {
   scrollbar-width: none;
   flex-basis: auto !important;
 }
-.db-tool {
-  flex: none;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-height: 36px;
-  padding: 0 12px;
-  border: 0;
-  border-radius: 999px;
-  background: var(--fill);
-  color: var(--text-2);
-  font: 500 13.5px var(--font);
-  cursor: pointer;
-  white-space: nowrap;
-}
 .db-tool .icon {
   width: 15px;
   height: 15px;
 }
 .db-tool.danger {
   color: var(--loss);
-}
-.db-tool:active {
-  background: var(--fill-2);
-}
-.db-secseg {
-  flex: none;
 }
 .dk-head h3 {
   margin: 0;
@@ -1734,21 +1258,6 @@ button.mu-side {
   box-shadow: 0 0 0 2px var(--cta) !important;
 }
 .db-hint .icon {
-  display: none;
-}
-
-/* selection bar */
-.db-selbar {
-  flex: none;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px;
-  border-radius: 14px;
-  background: var(--grp-hi);
-  animation: selIn var(--dur-base) var(--ease-out);
-}
-.db-selbar[hidden] {
   display: none;
 }
 @keyframes selIn {
@@ -1770,22 +1279,6 @@ button.mu-side {
 .db-seltext span {
   font-size: 12px;
   color: var(--muted);
-}
-.db-selbtn {
-  flex: none;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-  min-width: 44px;
-  height: 40px;
-  padding: 0 10px;
-  border: 0;
-  border-radius: 10px;
-  background: var(--fill-2);
-  color: var(--text);
-  font: 600 13px var(--font);
-  cursor: pointer;
 }
 .db-selbtn:disabled {
   opacity: 0.35;
@@ -1821,10 +1314,6 @@ button.mu-side {
   width: 17px;
   height: 17px;
 }
-.cb-search {
-  min-height: 40px !important;
-  padding-left: 34px !important;
-}
 .cb-chiprow {
   display: flex;
   gap: 6px;
@@ -1832,14 +1321,6 @@ button.mu-side {
   scrollbar-width: none;
   margin: 0 -2px;
   padding: 0 2px;
-}
-.cb-chiprow::-webkit-scrollbar {
-  display: none;
-}
-.cb-kinds {
-  display: flex !important;
-  flex-wrap: nowrap;
-  gap: 6px !important;
 }
 .cb-kind.chip {
   flex: none !important;
@@ -1879,8 +1360,6 @@ button.mu-side {
     width: 100%;
   }
 }
-
-/* ---------------------------------------------------------------- card database */
 
 /* ---------------------------------------------------------------- modals: sheet on phones */
 .modal {
@@ -1980,15 +1459,6 @@ button.mu-side {
     display: grid !important;
     grid-template-columns: minmax(0, 42%) minmax(0, 1fr);
   }
-  .res-hero {
-    position: sticky;
-    top: 0;
-    height: calc(100dvh - var(--tabbar-h)) !important;
-  }
-  .res-hero-body {
-    padding-left: max(20px, calc(env(safe-area-inset-left, 0px) + 8px)) !important;
-    padding-bottom: 18px !important;
-  }
 
   /* tournament */
   .mm2-face {
@@ -1996,20 +1466,9 @@ button.mu-side {
     margin: 0 auto;
     width: 100%;
   }
-  .mm2-actions {
-    grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
-    align-items: stretch;
-  }
   .lobby {
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) !important;
     align-items: start;
-  }
-  .lobby-body {
-    padding-top: 60px;
-  }
-  .pr-list {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   .pr-name {
     max-width: 26vw;
@@ -2084,4 +1543,19 @@ button.mu-side {
 .modal :focus-visible {
   outline: 2px solid rgba(242, 239, 232, 0.55);
   outline-offset: 2px;
+}
+
+/* ---------------------------------------------------------------- reduced motion (was motion.css)
+   Outside the duel: no movement, things simply appear. (The duel has its own fade-only rules in
+   duel.css, and fx.ts skips shakes and flying cards.) */
+@media (prefers-reduced-motion: reduce) {
+  :not(.duel-root, .duel-root *, .spinner),
+  :not(.duel-root, .duel-root *, .spinner)::before,
+  :not(.duel-root, .duel-root *, .spinner)::after {
+    animation-duration: 1ms !important;
+    animation-delay: 0ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+    transition-delay: 0ms !important;
+  }
 }

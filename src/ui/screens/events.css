@@ -1,6 +1,6 @@
 /* ==========================================================================
    Events hub, live events, the Circuit season and the Profile.
-   Builds on the Locals Night sheet (locals.css) and the iOS grouped lists (polish.css);
+   Builds on the Locals Night sheet (locals.css) and the iOS grouped lists (overrides.css);
    only what those do not cover lives here. All selectors are ev-*, pf-* or home-profile.
    ========================================================================== */
 .ev-screen .frame-body {

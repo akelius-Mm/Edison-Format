@@ -1,5 +1,5 @@
 /* ==========================================================================
-   Draft mode — phone-first. Uses the clean theme tokens from clean.css.
+   Draft mode — phone-first. Uses the design tokens from theme/theme.css.
    ========================================================================== */
 .dr-root,
 .dr-dock {
@@ -1964,22 +1964,6 @@ body.has-tabbar .database.frame {
     width: 19px !important;
     height: 19px !important;
   }
-}
-
-/* Big cards and artwork shrink a touch less */
-:where(.home-tile, .home-resume, .ps-slot, .dr-pack-btn, .po-card, .bd-cell, .dkc-box) {
-  --press-scale: 0.975;
-}
-.tabbar,
-.frame.is-scrolled .frame-head,
-.frame--compact .frame-head,
-.flow-steps,
-.dr-dock,
-.sd-bar,
-.sd-opp,
-.setup-bar {
-  -webkit-backdrop-filter: blur(12px);
-  backdrop-filter: blur(12px);
 }
 .home-resume {
   display: flex;

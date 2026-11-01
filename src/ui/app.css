@@ -1,18 +1,8 @@
 /* ==========================================================================
-   Edison Format Simulator — app shell theme
-   Dark, premium, gold accents. All colours are custom properties.
+   Edison Format Simulator — app shell: base elements and shared components.
+   The design tokens (colours, type, motion, spacing) are custom properties in theme/theme.css.
    ========================================================================== */
 :root {
-  --blue: #5aa9ff;
-  --violet: #9b7bff;
-  --green: #44c486;
-  --red: #ef5b5b;
-  --orange: #f0a04b;
-  --monster: #c9873a;
-  --spell: #1f9e8f;
-  --trap: #b0407e;
-  --ease: var(--ease-out);
-  --head-h: 64px;
   color-scheme: dark;
 }
 
@@ -277,6 +267,7 @@ a {
     background var(--dur-fast) var(--ease-out),
     opacity var(--dur-fast) var(--ease-out);
   font-family: var(--font) !important;
+  border: 0 !important;
 }
 .ui-btn:hover {
   --b-bg: rgba(255, 255, 255, 0.09);
@@ -808,7 +799,7 @@ input[type='range'] {
 @media (orientation: landscape) and (max-height: 500px) {
   /* modals: centered card rather than a tall sheet */
   .modal-backdrop {
-    align-items: center !important;
+    align-items: center;
     padding: 12px !important;
   }
 }
@@ -868,5 +859,85 @@ input[type='range'] {
   .pr-row + .pr-row {
     box-shadow: none;
   }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: var(--dur-fast) !important;
+  }
+}
+::selection {
+  background: rgba(201, 182, 142, 0.32);
+}
+html {
+  touch-action: manipulation;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+}
+
+/* No glowing or gradient lettering anywhere in the interface (card faces keep their own styling). */
+:where(body) :not(.yc):not(.yc *) {
+  text-shadow: none !important;
+}
+:where(button, [role='button'], a[href], summary, label, input, select, .chip, .tile, .cb-row, .ios-row) {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* One press state for buttons, rows, tiles and chips: a little smaller and dimmer, at once.
+   `.is-pressed` is set on pointerdown by press.ts (iOS only applies :active late or not at all;
+   the class makes the feedback land on the same frame as the touch). Zero specificity, so a
+   component can still tune it with --press-scale / --press-dim. `scale` (not `transform`)
+   composes with whatever transform the element already has. */
+:where(button, [role='button'], a[href], summary, .chip, .tile, .cb-row, .ios-row--nav, .ios-row--action, .duel-root .dc):where(:active, .is-pressed):where(:not(:disabled, [aria-disabled='true'], .is-disabled, .dc-ghost)) {
+  scale: var(--press-scale, 0.97);
+  filter: brightness(var(--press-dim, 0.82));
+}
+
+/* Full-width rows dim without shrinking (a shrinking row looks like it came loose) */
+:where(.ios-row, .home-row, .ps-row, .cb-row, .ctx-item, .lob-link, .ban-item, .declare-item, .btn--option, .frame-back, .tab, .seg-btn) {
+  --press-scale: 1;
+}
+
+/* Cards on the duel board */
+:where(.duel-root .dc) {
+  --press-scale: 0.96;
+  --press-dim: 0.86;
+}
+
+/* Released: ease back */
+:where(button, [role='button'], a[href], summary, .chip, .tile, .cb-row, .ios-row--nav, .ios-row--action) {
+  transition-property: scale, filter;
+  transition-duration: var(--dur-fast);
+  transition-timing-function: var(--ease-out);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :where(button, [role='button'], a[href], summary, .chip, .tile, .cb-row, .ios-row--nav, .ios-row--action):where(:active, .is-pressed) {
+    scale: none;
+  }
+}
+
+/* Big cards and artwork shrink a touch less */
+:where(.home-tile, .home-resume, .ps-slot, .dr-pack-btn, .po-card, .bd-cell, .dkc-box) {
+  --press-scale: 0.975;
+}
+.tabbar,
+.frame.is-scrolled .frame-head,
+.frame--compact .frame-head,
+.flow-steps,
+.dr-dock,
+.sd-bar,
+.sd-opp,
+.setup-bar {
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
 }
 
