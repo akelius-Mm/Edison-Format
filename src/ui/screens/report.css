@@ -152,10 +152,10 @@
 @media (max-width: 600px) {
   .rp-sheet .modal-foot {
     grid-template-columns: 1fr 1fr;
-    grid-auto-flow: column !important;
+    grid-auto-flow: column;
   }
   .rp-sheet .modal-foot .ui-btn-primary {
-    order: 1 !important;
+    order: 1;
   }
 }
 /* phones in landscape: little height, so a compact sheet */
@@ -419,8 +419,8 @@ body.in-duel .err-toast {
   .modal-foot {
     display: grid !important;
     grid-auto-flow: row;
-    justify-content: stretch !important;
-    gap: 8px !important;
+    justify-content: stretch;
+    gap: 8px;
   }
   .modal-foot .ui-btn-primary,
   .modal-foot .ui-btn-gold,

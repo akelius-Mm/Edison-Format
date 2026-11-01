@@ -81,7 +81,7 @@ body.dr-immersive.has-tabbar .dr-root .frame {
   width: 100%;
   min-height: 50px !important;
   border-radius: 14px !important;
-  font-size: 16px !important;
+  font-size: 16px;
 }
 .dr-btn-row {
   display: flex;
@@ -1897,8 +1897,8 @@ body.has-tabbar .frame {
   border-radius: 10px !important;
   background: var(--fill) !important;
   border: 0 !important;
-  box-shadow: none !important;
-  flex-wrap: nowrap !important;
+  box-shadow: none;
+  flex-wrap: nowrap;
 }
 .seg-btn:focus-visible {
   outline: 2px solid var(--gold);
@@ -1978,8 +1978,8 @@ body.has-tabbar .database.frame {
 .sd-bar,
 .sd-opp,
 .setup-bar {
-  -webkit-backdrop-filter: blur(12px) !important;
-  backdrop-filter: blur(12px) !important;
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
 }
 .home-resume {
   display: flex;

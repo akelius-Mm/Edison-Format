@@ -26,7 +26,7 @@ html {
    duel.css, and fx.ts skips shakes and flying cards.) */
 @media (prefers-reduced-motion: reduce) {
   html {
-    scroll-behavior: auto !important;
+    scroll-behavior: auto;
   }
   :not(.duel-root, .duel-root *, .spinner),
   :not(.duel-root, .duel-root *, .spinner)::before,

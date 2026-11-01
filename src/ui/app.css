@@ -298,7 +298,7 @@ a {
   --b-bg: var(--gold-grad);
   --b-border: rgba(255, 230, 160, 0.55);
   --b-color: #1d1504;
-  border-color: transparent !important;
+  border-color: transparent;
   background: var(--cta) !important;
   color: var(--cta-text) !important;
 }
@@ -318,7 +318,7 @@ a {
   --b-border: transparent;
   --b-color: var(--text-2);
   background: transparent !important;
-  color: var(--text-2) !important;
+  color: var(--text-2);
 }
 .ui-btn-subtle:hover {
   --b-color: var(--gold-hi);
@@ -496,7 +496,7 @@ input[type='range'] {
   gap: 8px;
   pointer-events: none;
   width: min(92vw, 420px);
-  bottom: calc(var(--tabbar-h) + 12px) !important;
+  bottom: calc(var(--tabbar-h) + 12px);
 }
 .ui-toast {
   padding: 12px 18px;
@@ -511,8 +511,8 @@ input[type='range'] {
   background: rgba(40, 41, 46, 0.94) !important;
   -webkit-backdrop-filter: blur(16px);
   backdrop-filter: blur(16px);
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45) !important;
-  color: var(--text) !important;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+  color: var(--text);
 }
 .ui-toast.in {
   opacity: 1;
@@ -600,7 +600,7 @@ input[type='range'] {
   border-radius: 50%;
   flex: none;
   background: rgba(255, 255, 255, 0.14) !important;
-  box-shadow: none !important;
+  box-shadow: none;
   padding: 2px;
 }
 .avatar-ring > * {
@@ -626,10 +626,10 @@ input[type='range'] {
   gap: 2px;
   padding: 8px 14px;
   min-width: 74px;
-  border: 0 !important;
+  border: 0;
   background: var(--fill) !important;
   border-radius: 12px !important;
-  box-shadow: none !important;
+  box-shadow: none;
 }
 .stat-chip b {
   font-size: 20px;
@@ -734,7 +734,7 @@ input[type='range'] {
   align-items: center;
   gap: 8px;
   background: transparent !important;
-  border-bottom: 1px solid transparent !important;
+  border-bottom: 1px solid transparent;
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
   transition:
@@ -746,8 +746,8 @@ input[type='range'] {
   border-bottom-color: var(--sep) !important;
 }
 .frame-head .frame-title {
-  font: 600 17px/1.2 var(--font-display) !important;
-  letter-spacing: -0.01em !important;
+  font: 600 17px/1.2 var(--font-display);
+  letter-spacing: -0.01em;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -797,7 +797,7 @@ input[type='range'] {
 
 @media (max-width: 600px) {
   .modal-backdrop {
-    align-items: flex-end !important;
+    align-items: flex-end;
     padding: 0 !important;
   }
   .modal-backdrop.in .modal {
@@ -854,7 +854,7 @@ input[type='range'] {
   box-shadow: inset 0 1px 0 var(--sep);
 }
 .ui-toast {
-  font: 500 15px var(--font) !important;
+  font: 500 15px var(--font);
 }
 
 @media (orientation: landscape) and (max-height: 500px) {

@@ -68,8 +68,8 @@
   border-radius: inherit;
   pointer-events: none;
   border: 1px solid color-mix(in srgb, var(--mat-accent) 35%, transparent);
-  box-shadow: none !important;
-  border-color: rgba(255, 255, 255, 0.06) !important;
+  box-shadow: none;
+  border-color: rgba(255, 255, 255, 0.06);
 }
 
 /* ---------------------------------------------------------------- player panels */
@@ -114,7 +114,7 @@
 .pp-name { font-weight: 800; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; letter-spacing: 0.02em; }
 .pp-title { font-size: 11px; color: var(--ef-text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .pp-lprow { display: flex; align-items: baseline; gap: 6px; margin-top: 2px; }
-.pp-lplabel { font: 800 11px var(--ef-font-ui); letter-spacing: 0.1em; color: var(--muted) !important; font-weight: 600 !important; }
+.pp-lplabel { font: 800 11px var(--ef-font-ui); letter-spacing: 0.1em; color: var(--muted); font-weight: 600 !important; }
 .pp-lp {
   font: 900 26px/1 var(--font);
   font-variant-numeric: tabular-nums;
@@ -149,7 +149,7 @@
   box-shadow: none !important;
 }
 .pp.is-low .pp-bar-fill { background: linear-gradient(90deg, #7a0f1a, #ff4d5e); box-shadow: 0 0 10px #ff4d5e; }
-.pp-stats { display: flex; gap: 10px; font-size: 11px; margin-top: 3px; color: var(--muted) !important; }
+.pp-stats { display: flex; gap: 10px; font-size: 11px; margin-top: 3px; color: var(--muted); }
 
 /* ---------------------------------------------------------------- preview */
 .preview {
@@ -540,7 +540,7 @@
   background: rgba(10, 10, 12, 0.85) !important;
   border: 1px solid rgba(255, 255, 255, 0.12) !important;
   color: var(--text) !important;
-  box-shadow: none !important;
+  box-shadow: none;
 }
 .pile-count[hidden] { display: none; }
 .zone--deck.is-low .pile-count { border-color: var(--ef-red); color: #ffb3ba; }
@@ -1548,9 +1548,9 @@
 .result-title,
 .result.is-lose .result-title,
 .result.is-draw .result-title {
-  font: 700 40px/1.05 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
-  letter-spacing: -0.01em !important;
-  text-transform: none !important;
+  font: 700 40px/1.05 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  letter-spacing: -0.01em;
+  text-transform: none;
   animation: none !important;
 }
 .result-reason { font-size: 14px; letter-spacing: 0; }
@@ -1879,7 +1879,7 @@
 .duel-root .dc.is-target .dc-fx::before { border-color: rgba(240, 176, 176, 0.75); }
 .duel-root .dc.is-attacker .yc { box-shadow: 0 0 0 2px var(--dl-me), 0 0 0 5px rgba(143, 179, 217, 0.22); }
 .duel-root .dc.is-candidate .yc { box-shadow: 0 0 0 2px var(--dl-ink), 0 0 0 5px rgba(242, 239, 232, 0.16); }
-.duel-root .zone.can-act { border-color: rgba(201, 182, 142, 0.9) !important; box-shadow: none !important; }
+.duel-root .zone.can-act { border-color: rgba(201, 182, 142, 0.9); box-shadow: none !important; }
 .duel-root .zone--pile:hover { border-color: rgba(255, 255, 255, 0.4); box-shadow: none; }
 
 /* Card effects: light, no coloured glows */
@@ -2591,7 +2591,7 @@
 .chip-btn,
 .icon-btn {
   box-shadow: none !important;
-  text-shadow: none !important;
+  text-shadow: none;
 }
 
 /* Duel chrome */
@@ -2610,7 +2610,7 @@
 }
 .ph.is-current {
   background: rgba(255, 255, 255, 0.14) !important;
-  color: #f2efe8 !important;
+  color: #f2efe8;
   box-shadow: none !important;
   transform: none !important;
 }
@@ -2639,7 +2639,7 @@
 /* Phone portrait: keep the opponent's hand clear of their life points */
 .stage--tall .hand-opp {
   top: calc(var(--ch) * 0.04) !important;
-  --hw: calc(var(--cw) * 0.7) !important;
+  --hw: calc(var(--cw) * 0.7);
 }
 
 /* Empty zones: thin outlines only, no ornaments */

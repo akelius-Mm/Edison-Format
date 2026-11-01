@@ -385,7 +385,7 @@ body.in-duel .tabbar {
     padding: 0 20px 18px max(20px, calc(env(safe-area-inset-left, 0px) + 8px)) !important;
   }
   .home-title {
-    font-size: 44px !important;
+    font-size: 44px;
   }
   .home-cta {
     height: 50px;
@@ -400,7 +400,7 @@ body.in-duel .tabbar {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   .home-tile {
-    aspect-ratio: 16 / 10 !important;
+    aspect-ratio: 16 / 10;
   }
 }
 .dkc-random .dkc-art {
