@@ -515,6 +515,15 @@ body::after {
 .update-banner[hidden] {
   display: none;
 }
+/* on the event screen the bottom holds the round's action bar, so the note sits under the header */
+.update-banner.is-top {
+  top: calc(env(safe-area-inset-top, 0px) + 64px);
+  bottom: auto;
+  left: 12px;
+  right: 12px;
+  transform: none;
+  justify-content: space-between;
+}
 .update-banner button {
   flex: none;
   border: 0;

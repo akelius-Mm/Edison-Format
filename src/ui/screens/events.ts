@@ -59,6 +59,7 @@ import { reconcileActiveDuel } from '../duel/resume';
 import { eventRunScreen, eventScope } from './eventRun';
 import { endRisky, installCrashGuard, interruptedStep, type RiskyMark } from '../crashGuard';
 import { reportError } from '../diag';
+import { eventSafePoint } from '../updater';
 import { AVATAR_PRESETS, SLEEVES } from './ext';
 import { avatar, packIcon } from './locals';
 import { frame, go, type Screen } from './nav';
@@ -104,6 +105,8 @@ export function eventsScreen(params: Record<string, string>): Screen {
  */
 function openEventRun(run: EventRun, autoResume: boolean): Screen {
   installCrashGuard();
+  // between rounds: a waiting app update installs here (the event is saved; pagehide clears the crash mark)
+  eventSafePoint();
   const scope = eventScope(run);
   const damaged = validateEvent(run);
   if (damaged) return eventRecoveryScreen(run, { damaged });
