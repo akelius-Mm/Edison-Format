@@ -18,6 +18,14 @@ function h<K extends keyof HTMLElementTagNameMap>(tag: K, cls = '', html = ''): 
 }
 
 // ---------------------------------------------------------------- player panel
+const svg = (d: string) => `<svg class="pp-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
+/** Cards fanned in a hand. */
+const ICON_HAND = svg('<rect x="3" y="6" width="9" height="13" rx="1.5" transform="rotate(-12 7.5 12.5)"/><rect x="12" y="5" width="9" height="13" rx="1.5" transform="rotate(10 16.5 11.5)"/>');
+/** A deck: a stack of cards. */
+const ICON_DECK = svg('<rect x="6" y="3" width="12" height="16" rx="1.5"/><path d="M6 21h12"/><path d="M7 23h10" opacity=".5"/>');
+/** The Graveyard: a card face up with a discard mark. */
+const ICON_GY = svg('<rect x="6" y="3" width="12" height="18" rx="1.5"/><path d="m9.5 9 5 5m0-5-5 5"/>');
+
 export class PlayerPanel {
   readonly el: HTMLElement;
   private lpNum: HTMLElement;
@@ -28,6 +36,11 @@ export class PlayerPanel {
   private targetLp: number;
   private raf = 0;
   readonly avatarEl: HTMLElement;
+  readonly name: string;
+  /** Every Life Point total this duel, with the turn it changed on (the scorepad). */
+  readonly lpHistory: { lp: number; turn: number }[];
+  /** Tap on the Life Points: open the scorepad. */
+  onLpTap?: () => void;
   /** Called when the LP number starts rolling, with the roll length in ms (for the counter sound). */
   onLpRoll?: (ms: number, up: boolean, amount: number) => void;
 
@@ -46,7 +59,15 @@ export class PlayerPanel {
     name.textContent = side.name;
     const title = h('div', 'pp-title');
     title.textContent = side.title ?? (side.control === 'human' ? 'Duelist' : `AI · ${side.control[0].toUpperCase()}${side.control.slice(1)}`);
+    this.name = side.name;
+    this.lpHistory = [{ lp: startLp, turn: 0 }];
     const lpRow = h('div', 'pp-lprow');
+    lpRow.title = 'Scorepad';
+    lpRow.addEventListener('click', (ev) => {
+      if (!this.onLpTap) return;
+      ev.stopPropagation();
+      this.onLpTap();
+    });
     const lpLabel = h('span', 'pp-lplabel', 'LP');
     this.lpNum = h('span', 'pp-lp');
     lpRow.append(lpLabel, this.lpNum);
@@ -65,8 +86,9 @@ export class PlayerPanel {
   update(game: Game) {
     const ps = game.players[this.p];
     this.el.classList.toggle('is-turn', game.turnPlayer === this.p && game.turn > 0);
-    const s = `<span title="Hand">✋ ${ps.hand.length}</span><span title="Deck">▤ ${ps.deck.length}</span><span title="Graveyard">⚱ ${ps.grave.length}</span>`;
+    const s = `<span title="Hand" aria-label="Hand ${ps.hand.length}">${ICON_HAND}${ps.hand.length}</span><span title="Deck" aria-label="Deck ${ps.deck.length}">${ICON_DECK}${ps.deck.length}</span><span title="Graveyard" aria-label="Graveyard ${ps.grave.length}">${ICON_GY}${ps.grave.length}</span>`;
     if (this.stats.innerHTML !== s) this.stats.innerHTML = s;
+    if (ps.lp !== this.lpHistory[this.lpHistory.length - 1].lp) this.lpHistory.push({ lp: ps.lp, turn: game.turn });
     this.setLp(ps.lp);
   }
 
@@ -381,4 +403,41 @@ function safe<T>(fn: () => T, fb: T): T {
   } catch {
     return fb;
   }
+}
+
+// ---------------------------------------------------------------- scorepad
+/**
+ * The Life Points written down the way duelists kept score at a 2010 event: a notepad with a column per player,
+ * each new total under the last and the old ones crossed out, with the change and the turn beside it.
+ */
+export function openScorepad(host: HTMLElement, panels: PlayerPanel[], me: PlayerId) {
+  host.querySelector('.scorepad-layer')?.remove();
+  const order = [panels[me], panels[me === 0 ? 1 : 0]];
+  const col = (p: PlayerPanel) => {
+    const rows = p.lpHistory.map((e, i) => {
+      const prev = i ? p.lpHistory[i - 1].lp : null;
+      const d = prev === null ? '' : `<small class="${e.lp < prev ? 'is-dmg' : 'is-heal'}">${e.lp < prev ? '−' : '+'}${Math.abs(e.lp - prev)}${e.turn ? ` · T${e.turn}` : ''}</small>`;
+      const last = i === p.lpHistory.length - 1;
+      return `<li class="${last ? 'is-now' : 'is-old'}"><span>${e.lp}</span>${d}</li>`;
+    });
+    return `<div class="sp-col"><h3>${esc(p.name)}</h3><ol>${rows.join('')}</ol></div>`;
+  };
+  const layer = h('div', 'scorepad-layer');
+  layer.setAttribute('role', 'dialog');
+  layer.setAttribute('aria-label', 'Scorepad');
+  const pad = h('div', 'scorepad', `<div class="sp-head">Life Points</div><div class="sp-cols">${order.map(col).join('')}</div><div class="sp-foot">Tap to close</div>`);
+  layer.appendChild(pad);
+  const close = () => {
+    layer.classList.add('is-closing');
+    window.setTimeout(() => layer.remove(), 160);
+    window.removeEventListener('keydown', onKey);
+  };
+  const onKey = (e: KeyboardEvent) => {
+    if (e.key === 'Escape') close();
+  };
+  layer.addEventListener('click', close);
+  window.addEventListener('keydown', onKey);
+  host.appendChild(layer);
+  // newest totals in view on a long duel
+  pad.querySelectorAll<HTMLElement>('.sp-col ol').forEach((ol) => (ol.scrollTop = ol.scrollHeight));
 }

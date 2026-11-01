@@ -6,8 +6,12 @@ import { backupFileName, createBackup, describeBackup, parseBackup, restoreBacku
 import { BUILD } from '../diag';
 import { builtInTracksRow, nowPlayingRow, showAudioCredits, yourMusicGroup } from './audioSettings';
 import { iosAction, iosGroup, iosNav, iosRow } from './components';
+import { applyPlaymat, playmatById } from '../theme/playmats';
+import { sleeveById } from '../theme/sleeves';
+import { binderById } from '../theme/binders';
+import { sleevePreview } from './ext';
 import { packsDraftSettingsGroup } from './draftSetup';
-import { confirmDialog, h, segmented, toast, toggle } from './dom';
+import { confirmDialog, h, icon, segmented, toast, toggle } from './dom';
 import { frame, go, type Screen } from './nav';
 import { getProfile, resetAllData } from './store';
 // Play a friend: connection server (advanced).
@@ -31,9 +35,9 @@ export function settingsScreen(): Screen {
   const el = frame(
     'Settings',
     { cls: 'settings-screen', backTo: () => go('title'), backLabel: 'Play' },
+    tableCard(),
     iosGroup('Profile', [nameNav], 'Friends see this name when you play online.'),
-    iosGroup('Your table', [
-      iosNav('Sleeves & Playmat', () => go('customize'), { icon: 'palette' }),
+    iosGroup('Rules', [
       iosNav('How to Play & Banlist', () => go('rules'), { icon: 'book' }),
       iosNav('Rules updates', () => openRulesNotes(), { icon: 'scroll' }),
     ]),
@@ -115,6 +119,28 @@ export function settingsScreen(): Screen {
     ),
   );
   return { el };
+}
+
+/** Your table at the top of Settings: your mat with your sleeves on it and your binder; tap to change them. */
+function tableCard(): HTMLElement {
+  const s = getSettings();
+  const mat = h('span', { class: 'st-mat' });
+  applyPlaymat(mat, s.playmat);
+  const cover = binderById(s.binder);
+  return h(
+    'button',
+    { type: 'button', class: 'st-table', 'data-test': 'settings-table', onclick: () => go('customize') },
+    mat,
+    h('span', { class: 'st-sleeves' }, sleevePreview(s.sleeve, 'sm'), sleevePreview(s.sleeve, 'sm')),
+    h('span', { class: 'bd-cover bd-cover--sm st-binder', style: { background: cover.css, '--stitch': cover.stitch, '--spine': cover.color } }),
+    h(
+      'span',
+      { class: 'st-table-text' },
+      h('b', null, 'Your table'),
+      h('span', null, `${playmatById(s.playmat).name} · ${sleeveById(s.sleeve).name} sleeves · ${cover.name} binder`),
+    ),
+    icon('chevron', 'icon ios-chev'),
+  );
 }
 
 /** Saves every deck, card, stat and setting as one .json file: the share sheet on phones ("Save to Files"), a download elsewhere. */

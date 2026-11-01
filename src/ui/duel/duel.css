@@ -2340,8 +2340,9 @@
   .duel-root.is-spectator .spec-speed { flex: 1 1 100%; order: -1; }
   .duel-root .chip-btn { height: 28px; padding: 2px; }
 }
-.duel-root .banner--turn .fx-banner-in { max-width: calc(100vw - 32px); }
-.duel-root .banner--turn b { overflow: hidden; text-overflow: ellipsis; }
+/* The turn banner fits the phone: a long name wraps instead of being cut off ("ALPHA BOT'S TU…") */
+.duel-root .banner--turn .fx-banner-in { width: max-content; max-width: calc(100vw - 32px); white-space: normal; }
+.duel-root .banner--turn b { text-transform: none; letter-spacing: -0.01em; overflow-wrap: anywhere; font-size: clamp(20px, 6.6vw, 28px) !important; }
 /* Phones held sideways: shorter prompt rows so two or three choices fit without scrolling */
 @media (orientation: landscape) and (max-height: 500px) {
   .duel-root .dlg-head { padding: 10px 14px 8px; }
@@ -2610,3 +2611,79 @@
   .duel-root .phasebar .btn--undo { position: absolute; top: 3px; right: 8px; width: auto; min-height: 26px; padding: 2px 10px; font-size: 11.5px; border-radius: 999px; }
   .duel-root .phasebar .btn--undo svg { width: 13px; height: 13px; }
 }
+
+/* ---------------------------------------------------------------- hand / deck / graveyard counts */
+.pp-stats span { display: inline-flex; align-items: center; gap: 3px; font-variant-numeric: tabular-nums; }
+.pp-ic { width: 12px; height: 12px; flex: none; opacity: 0.8; }
+
+/* Tap the Life Points to open the scorepad */
+.pp-lprow { cursor: pointer; }
+
+/* ---------------------------------------------------------------- phase track on portrait phones
+   All six phases sit small on the "Turn n" line (the current one lit, the past ones dimmer), so the
+   phase buttons get the whole row below, with Undo as an icon at its start. */
+@media (max-width: 600px) and (orientation: portrait) {
+  .duel-root .phasebar {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas: 'turn list' 'btns btns';
+  }
+  .phasebar-list { display: flex; gap: 2px; }
+  .phasebar-list .ph,
+  .phasebar-list .ph.is-current { display: block; padding: 3px 5px; border-radius: 6px; }
+  .phasebar-list .ph b,
+  .phasebar-list .ph.is-current b { display: block; font-size: 9.5px; letter-spacing: 0.03em; }
+  .phasebar-list .ph span,
+  .phasebar-list .ph.is-current span { display: none; }
+  .phasebar-list .ph.is-current { transform: none; box-shadow: 0 0 8px color-mix(in srgb, var(--tc) 60%, transparent); }
+  .phasebar-btns .btn--phase { flex: 1 1 0; min-width: 0; }
+  .duel-root .phasebar .btn--undo { position: static; flex: 0 0 auto; min-height: 36px; padding: 4px 10px; border-radius: 10px; }
+  .duel-root .phasebar .btn--undo span { display: none; }
+  .duel-root .phasebar .btn--undo svg { width: 16px; height: 16px; }
+}
+
+/* ---------------------------------------------------------------- scorepad
+   The Life Points on a notepad, the way they were kept at a 2010 event. */
+.scorepad-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  padding: 24px 16px;
+  background: rgba(0, 0, 0, 0.45);
+  animation: sp-in 0.16s ease-out;
+}
+.scorepad-layer.is-closing { opacity: 0; transition: opacity 0.15s; }
+@keyframes sp-in { from { opacity: 0; } }
+.scorepad {
+  width: min(340px, 100%);
+  max-height: min(560px, 82dvh);
+  display: flex;
+  flex-direction: column;
+  padding: 14px 16px 12px 40px;
+  border-radius: 4px 4px 8px 8px;
+  color: #1d2a4a;
+  font-family: 'Noteworthy', 'Bradley Hand', 'Segoe Print', 'Chalkboard SE', 'Marker Felt', cursive;
+  /* ruled paper with a red margin line */
+  background:
+    linear-gradient(90deg, transparent 27px, rgba(214, 70, 70, 0.55) 27px, rgba(214, 70, 70, 0.55) 29px, transparent 29px),
+    repeating-linear-gradient(180deg, transparent 0 27px, rgba(70, 110, 170, 0.28) 27px 28px),
+    #fbf8ee;
+  background-position: 0 0, 0 6px, 0 0;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.55), inset 0 6px 0 rgba(0, 0, 0, 0.06);
+  transform: rotate(-1deg);
+  animation: sp-pad 0.22s cubic-bezier(0.2, 0.9, 0.3, 1.2);
+}
+@keyframes sp-pad { from { transform: rotate(-4deg) translateY(30px); opacity: 0; } }
+.sp-head { font-size: 15px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; opacity: 0.7; line-height: 28px; }
+.sp-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; min-height: 0; }
+.sp-col { display: flex; flex-direction: column; min-height: 0; }
+.sp-col h3 { margin: 0; font-size: 17px; line-height: 28px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; border-bottom: 1.5px solid currentColor; }
+.sp-col ol { list-style: none; margin: 0; padding: 0; overflow-y: auto; min-height: 0; }
+.sp-col li { display: flex; align-items: baseline; gap: 6px; line-height: 28px; font-size: 21px; }
+.sp-col li.is-old span { text-decoration: line-through; text-decoration-thickness: 2px; opacity: 0.55; }
+.sp-col li.is-now span { font-weight: 700; }
+.sp-col small { font-size: 12px; white-space: nowrap; }
+.sp-col small.is-dmg { color: #b3261e; }
+.sp-col small.is-heal { color: #1f7a3a; }
+.sp-foot { margin-top: 6px; font: 500 11px var(--ef-font-ui, system-ui, sans-serif); color: rgba(29, 42, 74, 0.55); text-align: center; }

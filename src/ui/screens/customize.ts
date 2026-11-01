@@ -4,7 +4,8 @@ import { addCustom, linkIntoCollection, listCustom, pickIntoCollection, removeCu
 import { clear, h, icon, toast } from './dom';
 import { iosAction, iosGroup, iosRow } from './components';
 import { PLAYMATS, SLEEVES, applyPlaymat, sleevePreview } from './ext';
-import { frame, type Screen } from './nav';
+import { frame, go, type Screen } from './nav';
+import { BINDERS } from '../theme/binders';
 import { getProfile, ordinal, tournamentSummary, winRate } from './store';
 import { playerName, saveName } from './playerName';
 import { NAME_MAX } from '../../net/protocol';
@@ -54,8 +55,8 @@ export function customizeScreen(): Screen {
   drawPreview();
 
   const el = frame(
-    'Sleeves & Playmat',
-    { subtitle: 'Bring your real sleeves and mat. Changes save automatically.', cls: 'customize-screen' },
+    'Your table',
+    { subtitle: 'Your playmat, sleeves and binder. Changes save automatically.', cls: 'customize-screen', backTo: () => go('settings'), backLabel: 'Settings' },
     h(
       'div',
       { class: 'cz-layout' },
@@ -66,6 +67,7 @@ export function customizeScreen(): Screen {
         iosGroup('Duelist name', [h('div', { class: 'ios-row ios-row--input' }, nameIn)]),
         mats,
         sleeves,
+        binderPicker(),
         profileStats(),
       ),
     ),
@@ -228,6 +230,36 @@ function picker(kind: CustomKind, onChange: () => void): HTMLElement {
 }
 
 void addCustom;
+
+/** Binder covers (the Binder screen shows yours; tapping it there opens the same choice). */
+function binderPicker(): HTMLElement {
+  const grid = h('div', { class: 'bd-cover-grid cz-binders', role: 'radiogroup', 'aria-label': 'Binder' });
+  const draw = () => {
+    const cur = getSettings().binder;
+    grid.replaceChildren(
+      ...BINDERS.map((b) =>
+        h(
+          'button',
+          {
+            type: 'button',
+            class: ['bd-cover-opt', b.id === cur && 'on'],
+            role: 'radio',
+            'aria-checked': String(b.id === cur),
+            title: b.description,
+            onclick: () => {
+              updateSettings({ binder: b.id });
+              draw();
+            },
+          },
+          h('span', { class: 'bd-cover bd-cover--sm', style: { background: b.css, '--stitch': b.stitch, '--spine': b.color } }),
+          h('span', { class: 'bd-cover-name' }, b.name),
+        ),
+      ),
+    );
+  };
+  draw();
+  return h('section', { class: 'ios-group' }, h('h2', { class: 'ios-group-h' }, 'Binder'), h('div', { class: 'cz-binders-wrap' }, grid));
+}
 
 function profileStats() {
   const p = getProfile();

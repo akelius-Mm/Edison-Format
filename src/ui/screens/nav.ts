@@ -176,7 +176,13 @@ export function frame(
     { class: 'frame-head' },
     back,
     h('div', { class: 'frame-titles' }, compact ? h('h1', { class: 'frame-title' }, title) : h('div', { class: 'frame-title', 'aria-hidden': 'true' }, cloneText(title))),
-    h('div', { class: 'frame-actions' }, opts.actions ?? null),
+    h(
+      'div',
+      { class: 'frame-actions' },
+      opts.actions ?? null,
+      // every tab's own screen has Settings one tap away (the Play tab has it in its hero's corner)
+      opts.root ? h('button', { type: 'button', class: 'head-icon-btn frame-gear', 'aria-label': 'Settings', title: 'Settings', 'data-test': 'tab-settings', onclick: () => go('settings') }, icon('gear')) : null,
+    ),
   );
   const large = compact
     ? null
