@@ -151,11 +151,14 @@ export function startRouter(el: HTMLElement) {
  */
 export function frame(
   title: Child,
-  opts: { subtitle?: Child; actions?: Child; cls?: string; backTo?: () => void; backLabel?: string; compact?: boolean; eyebrow?: Child },
+  opts: { subtitle?: Child; actions?: Child; cls?: string; backTo?: () => void; backLabel?: string; compact?: boolean; eyebrow?: Child; root?: boolean },
   ...body: Child[]
 ) {
   const compact = !!opts.compact;
-  const back = h(
+  // a tab's own screen has no back button: the tab bar is right there
+  const back = opts.root
+    ? h('span', { class: 'frame-back-none', 'aria-hidden': 'true' })
+    : h(
     'button',
     {
       type: 'button',

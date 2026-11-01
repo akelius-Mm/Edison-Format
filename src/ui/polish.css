@@ -140,6 +140,11 @@ body.has-tabbar .frame {
 .frame-head .frame-sub {
   display: none;
 }
+/* a tab's own screen: an empty slot where the back button would be */
+.frame-back-none {
+  display: block;
+  min-width: 1px;
+}
 .frame-actions {
   justify-self: end;
   display: flex;
@@ -162,15 +167,15 @@ body.has-tabbar .frame {
 }
 .frame-large-title {
   margin: 0;
-  font: 700 34px/1.12 var(--font-display);
+  font: 700 30px/1.12 var(--font-display);
   letter-spacing: -0.025em;
   color: var(--text);
   overflow-wrap: anywhere;
 }
 .frame-large .frame-sub {
   display: block !important;
-  margin-top: 4px;
-  font: 400 15px/1.35 var(--font);
+  margin-top: 2px;
+  font: 400 14px/1.35 var(--font);
   color: var(--muted);
   white-space: normal;
 }

@@ -37,12 +37,11 @@ function tabsSection() {
         list(
           [b('Play a friend'), ': a 1-on-1 online duel with a room code.'],
           [b('Friends Locals'), `: a Swiss tournament for ${MIN_PLAYERS}–${MAX_PLAYERS} people, each on their own phone. One person hosts and runs it as organiser.`],
-          [b('Tournament'), ': a practice Swiss against AI duelists, unranked.'],
           [b('Watch AI vs AI'), ': two AI decks play each other, handy for testing a matchup.'],
           [b('Profile and Settings'), ' (top corner): your ratings and record; your name, Sleeves & Playmat, How to Play & Banlist, Rules updates, sound, ', b('Report a problem'), ' and this Guide.'],
         ),
       ),
-      tab('Events', 'trophy', h('p', null, 'Locals Night at the card shop, Regional Qualifiers, Shonen Jump Championships and Nationals, and the 12-week Circuit season.')),
+      tab('Events', 'trophy', h('p', null, 'Locals Night at the card shop, Regional Qualifiers, Shonen Jump Championships and Nationals, the 12-week Circuit season, and an unranked practice Tournament with your own field size.')),
       tab('Draft', 'cards', h('p', null, 'Draft and Sealed from 2010-era packs. Forbidden cards never show up in packs.')),
       tab('Collection', 'store', h('p', null, 'Open Packs, buy and sell singles at the Card Shop, trade with the Locals regulars, and see your Binder.')),
       tab('Decks', 'edit', h('p', null, 'Build and edit decks, and search every card in the Card Database. The builder checks each deck against the banlist and the deck-size rules (40–60 Main, up to 15 Extra, up to 15 Side) and tells you what to fix.')),

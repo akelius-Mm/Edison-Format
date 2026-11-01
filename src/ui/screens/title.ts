@@ -1,5 +1,5 @@
 // Play tab (route `title`, also `play`): the hero with Duel vs AI, anything in progress, this week's event,
-// playing friends and practice modes. Settings and Profile sit in the hero's corner. Also the Collection tab.
+// playing friends and Watch AI vs AI (the practice Tournament lives under Events). Settings and Profile sit in the hero's corner. Also the Collection tab.
 import { getSettings } from '../settings';
 import { loadActiveTournament, currentRoundLabel } from '../../tournament/tournament';
 import { h, icon, type Child } from './dom';
@@ -52,7 +52,6 @@ export function titleScreen(): Screen {
   );
 
   const { duelCard, resume } = resumeRows();
-  const tour = loadActiveTournament();
   const fl = friendsLocalsLive();
   const flLive = !!fl && fl.phase !== 'done';
 
@@ -68,11 +67,12 @@ export function titleScreen(): Screen {
       flLive ? 'Live' : undefined,
     ),
   );
-  const practice = h(
-    'section',
-    { class: 'home-tiles' },
-    tile('tournament', 'Tournament', tour ? `${tour.name} · ${currentRoundLabel(tour)}` : 'Practice Swiss · unranked', 'Gladiator Beast Gyzarus', tour ? 'Live' : undefined),
-    tile('exhibition', 'Watch AI vs AI', 'Spectate two AI duelists', 'Cyber Dragon'),
+  const watch = h(
+    'button',
+    { type: 'button', class: 'home-resume home-week', onclick: () => go('exhibition') },
+    icon('eye'),
+    h('span', { class: 'home-resume-text' }, h('b', null, 'Watch AI vs AI'), h('span', null, 'Spectate two decks, handy for testing a matchup')),
+    icon('chevron'),
   );
 
   const el = h(
@@ -82,14 +82,13 @@ export function titleScreen(): Screen {
     h(
       'div',
       { class: 'home-body' },
-      browserBanner(),
       duelCard,
       resume,
       thisWeekCard(),
       h('h2', { class: 'home-h' }, 'With friends'),
       friends,
-      h('h2', { class: 'home-h' }, 'Practice'),
-      practice,
+      watch,
+      browserBanner(),
       rulesNotesCard(),
       banlistCard(),
       h('p', { class: 'home-foot' }, 'Fan-made, non-commercial simulator. Not affiliated with the card game’s publisher.'),
@@ -104,7 +103,7 @@ export function collectionScreen(): Screen {
   const unopened = totalUnopened();
   const el = frame(
     'Collection',
-    { cls: 'collection-screen', actions: h('span', { class: 'col-dp' }, `${dp()} DP`), backTo: () => go('title'), backLabel: 'Play' },
+    { cls: 'collection-screen', actions: h('span', { class: 'col-dp' }, `${dp()} DP`), root: true },
     h(
       'section',
       { class: 'home-tiles' },
