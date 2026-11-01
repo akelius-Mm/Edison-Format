@@ -171,8 +171,8 @@ export function duelSetupScreen(params: Record<string, string> = {}): Screen {
           segmented<Difficulty>(
             [
               { value: 'easy', label: 'Easy', hint: 'Makes mistakes, plays loosely' },
-              { value: 'normal', label: 'Normal', hint: 'Solid, straightforward play' },
-              { value: 'hard', label: 'Hard', hint: 'Careful and punishing' },
+              { value: 'normal', label: 'Normal', hint: 'Thinks a few plays ahead' },
+              { value: 'hard', label: 'Hard', hint: 'Reads your set cards, plans two turns ahead' },
             ],
             st.persona.difficulty,
             (v) => ((st.persona.difficulty = v), changed()),

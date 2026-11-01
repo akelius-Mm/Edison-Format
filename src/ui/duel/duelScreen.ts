@@ -2,7 +2,7 @@
 import '../theme/theme.css';
 import '../cards/cards.css';
 import './duel.css';
-import { createAI } from '../../ai/ai';
+import { createPlayerAI, planGame } from '../../ai/planner';
 import type { CardData, CardInstance, EffectDef } from '../../engine/card';
 import type { Action, Activation, ConfirmRequest, OptionRequest, PlayerController, ResponseRequest, SelectRequest } from '../../engine/controller';
 import { Ctx } from '../../engine/ctx';
@@ -167,12 +167,13 @@ class DuelScreen implements HumanUI {
         this.recorder ??= rec;
         return rec;
       }
-      const ai = createAI(side.control, seed + i * 7919);
+      const ai = createPlayerAI(side.control, seed + i * 7919);
       const paced = new PacedController(ai, { pace: (ms) => this.aiPace(ms) });
       return this.undo ? this.undo.watchOpponent(paced) : paced;
     }) as [any, any];
 
-    this.game = new Game([opts.sides[0].deck, opts.sides[1].deck], controllers, {
+    // planGame records both seats' decisions so the AI can look ahead (ai/planner.ts)
+    this.game = planGame([opts.sides[0].deck, opts.sides[1].deck], controllers, {
       seed,
       names: [opts.sides[0].name, opts.sides[1].name],
       firstPlayer: typeof opts.firstPlayer === 'number' ? opts.firstPlayer : undefined,

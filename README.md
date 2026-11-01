@@ -37,8 +37,11 @@ and works offline.
   Blackwings, Zombies, X-Sabers, Gladiator Beasts, Frog Monarchs, Tele-DAD, Hero Beat, Six
   Samurai, Machina Gadgets, Gravekeeper's and many more) and 31 real tournament decklists from
   SJC Edison and the Edison community.
-- **AI opponents**: easy, normal and hard. The AI summons, synchros, chains traps, plays around set
-  cards and uses card-specific hints.
+- **AI opponents**: easy, normal and hard. Normal and Hard look ahead (`src/ai/planner.ts`): before a Main
+  Phase play or a response they try their best few options in copies of the duel, play on through the next turn,
+  and keep the one that leaves the better board. They don't cheat: in the copies the Decks are reshuffled and your
+  hand and set cards are guesses drawn from your deck's unseen cards. In mirror matches Hard beats the old AI 66%
+  of the time and Normal 59% (`npm run test:ai`).
 - **Duel screen**: portrait and landscape layouts, card previews, chain display, duel log,
   graveyard viewer that says when a card's effect can be used, a target picker that shows whose
   card and which zone, and an explanation when a card can't be used right now. "Smart" response

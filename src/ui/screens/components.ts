@@ -579,8 +579,8 @@ export function personaEditor(p: PersonaState, onChange: () => void, opts: { hid
   const diff = segmented<Difficulty>(
     [
       { value: 'easy', label: 'Easy', hint: 'Makes mistakes, plays loosely' },
-      { value: 'normal', label: 'Normal', hint: 'Solid, straightforward play' },
-      { value: 'hard', label: 'Hard', hint: 'Careful and punishing' },
+      { value: 'normal', label: 'Normal', hint: 'Thinks a few plays ahead' },
+      { value: 'hard', label: 'Hard', hint: 'Reads your set cards, plans two turns ahead' },
     ],
     p.difficulty,
     (v) => {
@@ -624,8 +624,8 @@ export function opponentEditor(p: PersonaState, onChange: () => void, opts: { hi
   const diff = segmented<Difficulty>(
     [
       { value: 'easy', label: 'Easy', hint: 'Makes mistakes, plays loosely' },
-      { value: 'normal', label: 'Normal', hint: 'Solid, straightforward play' },
-      { value: 'hard', label: 'Hard', hint: 'Careful and punishing' },
+      { value: 'normal', label: 'Normal', hint: 'Thinks a few plays ahead' },
+      { value: 'hard', label: 'Hard', hint: 'Reads your set cards, plans two turns ahead' },
     ],
     p.difficulty,
     (v) => {
