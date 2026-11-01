@@ -24,7 +24,7 @@ const { spawn } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 
-const OUT = process.argv[2] || path.join(require('os').tmpdir(), 'edison-routes-shots');
+const OUT = (require.main === module && process.argv[2]) || path.join(require('os').tmpdir(), 'edison-routes-shots');
 fs.mkdirSync(OUT, { recursive: true });
 const DIST = path.join(__dirname, '..', 'dist');
 const APP_PORT = 8383;
@@ -452,7 +452,10 @@ async function reportAndBanner(browser, viewport, tag, progress) {
 
 // ------------------------------------------------------------------ main
 
-(async () => {
+// scripts/css-snapshot.cjs reuses the route list and the saved-progress builder
+module.exports = { ROUTES, buildProgress, pickDecks, BASE, APP_PORT, PEER_PORT, DIST };
+
+if (require.main === module) (async () => {
   if (!fs.existsSync(path.join(DIST, 'index.html'))) {
     console.log('Build first: npm run build');
     process.exit(1);

@@ -1,6 +1,6 @@
 /* ==========================================================================
    Events hub, live events, the Circuit season and the Profile.
-   Builds on the Locals Night sheet (locals.css) and the iOS grouped lists (polish.css);
+   Builds on the Locals Night sheet (locals.css) and the iOS grouped lists (overrides.css);
    only what those do not cover lives here. All selectors are ev-*, pf-* or home-profile.
    ========================================================================== */
 .ev-screen .frame-body {
@@ -48,15 +48,6 @@
 .ev-opp-meta {
   font-size: 12.5px;
   color: var(--muted);
-}
-.ev-sleeve {
-  display: block;
-  width: 100%;
-  height: 100%;
-  border-radius: 6px;
-  background:
-    repeating-linear-gradient(135deg, rgba(255, 255, 255, 0.04) 0 6px, transparent 6px 12px),
-    #2a2b30;
 }
 .ev-gap {
   padding: 2px 0;
@@ -819,4 +810,23 @@
   width: 15px;
   height: 15px;
   opacity: 0.6;
+}
+.cta:hover {
+  background: #fff;
+}
+.cta.cta--dark:hover {
+  background: #2a2b30;
+}
+.ym-file .ios-label {
+  font-size: 15px;
+}
+
+@media (orientation: landscape) and (max-height: 500px) {
+  .lob-bar .cta {
+    min-height: 48px;
+  }
+}
+.ym-file {
+  min-height: 44px;
+  padding-left: 32px;
 }

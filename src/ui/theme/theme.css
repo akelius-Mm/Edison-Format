@@ -1,32 +1,29 @@
-/* Shared design tokens for the duel UI and card graphics. Prefixed to avoid clashing with the app shell. */
+/* Design tokens for the whole app: the app shell's (--bg-*, --gold, --text, --font...), the duel UI's and
+   card graphics' (--ef-*), motion, spacing and radii. */
 :root {
-  --ef-bg-0: #06080f;
-  --ef-bg-1: #0d1222;
-  --ef-bg-2: #161d33;
-  --ef-panel: rgba(14, 19, 36, 0.86);
-  --ef-panel-solid: #11172b;
-  --ef-panel-border: rgba(216, 180, 90, 0.28);
-  --ef-gold: #d8b45a;
-  --ef-gold-hi: #f6dc8e;
-  --ef-gold-lo: #8a6420;
-  --ef-text: #e9ecf5;
-  --ef-text-dim: #9aa3bd;
-  --ef-text-faint: #646d88;
+  --blue: #5aa9ff;
+  --violet: #9b7bff;
+  --green: #44c486;
+  --red: #ef5b5b;
+  --orange: #f0a04b;
+  --monster: #c9873a;
+  --spell: #1f9e8f;
+  --trap: #b0407e;
+  --ease: var(--ease-out);
+  --head-h: 64px;
+
   --ef-blue: #4d8dff;
   --ef-red: #ff4d5e;
   --ef-green: #3fdc8a;
   --ef-violet: #b07bff;
-  --ef-me: #4da3ff;
-  --ef-opp: #ff5d6c;
   --ef-radius: 10px;
   --ef-radius-sm: 6px;
   --ef-shadow: 0 10px 30px rgba(0, 0, 0, 0.55);
-  --ef-font-ui: 'Segoe UI', system-ui, -apple-system, 'Helvetica Neue', Arial, sans-serif;
   --ef-font-display: 'Palatino Linotype', 'Book Antiqua', Palatino, Georgia, 'Times New Roman', serif;
   --ef-ease-out: var(--ease-out);
   --ef-ease-spring: var(--ease-spring);
 
-  /* Motion: one set of curves and lengths for the whole app (see also src/ui/motion.css)
+  /* Motion: one set of curves and lengths for the whole app (the shared press state is in src/ui/app.css)
      (mirrored for Web Animations in src/ui/motion.ts: keep the two in step) */
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1); /* things arriving, settling */
   --ease-in: cubic-bezier(0.55, 0, 0.75, 0.2); /* things leaving, falling away */
@@ -48,13 +45,65 @@
   --space-5: 24px;
   --space-6: 32px;
   --radius-xs: 4px;
-  --radius-sm: 8px;
   --radius-md: 12px;
   --radius-lg: 16px;
   --radius-xl: 20px;
   --radius-pill: 999px;
 
-  /* The shared press state (motion.css): shrink a little and dim, instantly */
+  /* The shared press state (end of app.css): shrink a little and dim, instantly */
   --press-scale: 0.97;
   --press-dim: 0.82;
+  --bg-0: #0b0c0e;
+  --bg-1: #101113;
+  --bg-2: #16171a;
+  --bg-3: #1d1e22;
+  --panel: rgba(21, 22, 25, 0.94);
+  --panel-solid: #151619;
+  --panel-hi: #1c1d21;
+  --line: rgba(255, 255, 255, 0.07);
+  --line-2: rgba(255, 255, 255, 0.12);
+  --gold: #c9b68e;
+  --gold-hi: #e7dcc2;
+  --gold-lo: #8d7d5c;
+  --gold-glow: transparent;
+  --gold-line: rgba(201, 182, 142, 0.22);
+  --gold-grad: linear-gradient(#e7dcc2, #e7dcc2);
+  --text: #ecebe7;
+  --text-2: #c5c4bf;
+  --muted: #8f9095;
+  --faint: #5f6066;
+  --radius: 12px;
+  --radius-sm: 8px;
+  --shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+  --shadow-sm: 0 4px 12px rgba(0, 0, 0, 0.35);
+  --font: -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-display: -apple-system, BlinkMacSystemFont, 'SF Pro Display', system-ui, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --ef-bg-0: #0b0c0e;
+  --ef-bg-1: #111214;
+  --ef-bg-2: #17181b;
+  --ef-panel: rgba(21, 22, 25, 0.94);
+  --ef-panel-solid: #151619;
+  --ef-panel-border: rgba(255, 255, 255, 0.09);
+  --ef-gold: #c9b68e;
+  --ef-gold-hi: #e7dcc2;
+  --ef-gold-lo: #8d7d5c;
+  --ef-text: #ecebe7;
+  --ef-text-dim: #9a9ba0;
+  --ef-text-faint: #64656b;
+  --ef-me: #8fb3d9;
+  --ef-opp: #d98f8f;
+  --ef-font-ui: var(--font);
+  --tabbar-h: calc(61px + env(safe-area-inset-bottom, 0px));
+  --gutter: max(16px, env(safe-area-inset-left, 0px));
+  --gutter-r: max(16px, env(safe-area-inset-right, 0px));
+  --grp: #17181b; /* grouped list surface */
+  --grp-hi: #202125;
+  --sep: rgba(255, 255, 255, 0.07);
+  --fill: rgba(118, 118, 128, 0.2); /* iOS fill (segmented track, search field) */
+  --fill-2: rgba(118, 118, 128, 0.32);
+  --cta: #f2efe8;
+  --cta-text: #111;
+  --win: #8fd1a8;
+  --loss: #e38b8b;
+  --page-max: 760px;
 }

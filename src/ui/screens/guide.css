@@ -1,4 +1,4 @@
-/* Guide screen (route `guide`) and the in-duel Settings sheet. Uses the app's tokens (polish.css / app.css). */
+/* Guide screen (route `guide`) and the in-duel Settings sheet. Uses the app's tokens (theme/theme.css). */
 .guide-screen .frame-body {
   display: grid;
   gap: 16px;
@@ -236,4 +236,26 @@
   font-size: 13px;
   line-height: 1.4;
   color: var(--muted);
+}
+.rules-screen .rules-grid {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+}
+
+@media (min-width: 900px) {
+  .rules-screen {
+    --page-max: 1100px;
+  }
+  .rules-screen .rules-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (orientation: landscape) and (max-height: 500px) {
+  .settings-screen .ios-group {
+    break-inside: avoid;
+  }
+}
+.bt-list .ios-group {
+  margin-bottom: 14px;
 }

@@ -95,19 +95,6 @@
   letter-spacing: -0.02em;
   color: var(--text);
 }
-.home-resume {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 14px 16px;
-  border-radius: 16px;
-  border: 1px solid var(--gold-line);
-  background: var(--bg-2);
-  color: var(--text);
-  text-align: left;
-  cursor: pointer;
-  font: inherit;
-}
 .home-resume-text {
   flex: 1;
   display: grid;
@@ -282,10 +269,8 @@
   display: grid;
   grid-template-columns: repeat(5, 1fr);
   padding: 6px max(8px, env(safe-area-inset-left, 0px)) calc(6px + env(safe-area-inset-bottom, 0px)) max(8px, env(safe-area-inset-right, 0px));
-  background: rgba(14, 15, 18, 0.86);
-  -webkit-backdrop-filter: saturate(160%) blur(18px);
-  backdrop-filter: saturate(160%) blur(18px);
   border-top: 1px solid rgba(255, 255, 255, 0.07);
+  background: rgba(14, 15, 18, 0.9) !important;
 }
 .tab {
   display: grid;
@@ -307,9 +292,6 @@
 }
 body.in-duel .tabbar {
   display: none;
-}
-body.has-tabbar .frame {
-  padding-bottom: calc(76px + env(safe-area-inset-bottom, 0px));
 }
 
 /* Collection tab: the DP balance in the header */
@@ -352,14 +334,130 @@ body.has-tabbar .frame {
   background: none;
   cursor: pointer;
 }
-.home-stack-card {
-  position: absolute;
-  inset: 0;
-  /* a few cards' thickness, each a hair up and to the left of the one below */
-  transform: translate(calc(var(--i) * -1.2px), calc(var(--i) * -1.4px));
-}
-.home-stack-card:not(:last-child) .yc { box-shadow: 0 1px 0 rgba(0, 0, 0, 0.6); }
 .home-deck { transform: rotate(2deg); }
 .home-extra { transform: rotate(-3deg); }
 .home-ace { transform: rotate(-1.5deg) translateY(10px); }
 .home-ace .yc { box-shadow: 0 10px 22px rgba(0, 0, 0, 0.55); }
+
+/* tab bar: no underline, gentle press */
+.tabbar .tab::after,
+.tabbar .tab.on::after {
+  display: none;
+}
+.tabbar .tab {
+  min-height: 48px;
+  -webkit-tap-highlight-color: transparent;
+}
+.tabbar .tab:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: -2px;
+  border-radius: 10px;
+}
+.dkc-art.has-art {
+  background-size: cover;
+}
+.res-art.has-art {
+  opacity: 0.85;
+  transform: scale(1);
+}
+.results-defeat .res-art.has-art {
+  opacity: 0.45;
+  filter: grayscale(0.7);
+}
+.mm2-bg.has-art {
+  opacity: 0.35;
+}
+
+@media (orientation: landscape) and (max-height: 500px) {
+  /* compact tab bar: icon beside label */
+  .tabbar {
+    padding: 2px max(12px, env(safe-area-inset-left, 0px)) calc(2px + env(safe-area-inset-bottom, 0px)) max(12px, env(safe-area-inset-right, 0px));
+  }
+  .home-hero {
+    position: sticky;
+    top: 0;
+    height: calc(100dvh - var(--tabbar-h));
+  }
+  .home-hero-shade {
+    background: linear-gradient(180deg, rgba(11, 12, 14, 0.1) 0%, rgba(11, 12, 14, 0.35) 45%, rgba(11, 12, 14, 0.94) 92%) !important;
+  }
+  .home-hero-body {
+    padding: 0 20px 18px max(20px, calc(env(safe-area-inset-left, 0px) + 8px));
+  }
+  .home-title {
+    font-size: 44px;
+  }
+  .home-cta {
+    height: 50px;
+  }
+  .home-body {
+    padding: calc(14px + env(safe-area-inset-top, 0px)) max(20px, calc(env(safe-area-inset-right, 0px) + 8px)) 20px 20px;
+  }
+  .home-h {
+    margin-top: 0;
+  }
+  .home-tiles {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .home-tile {
+    aspect-ratio: 16 / 10;
+  }
+}
+.dkc-random .dkc-art {
+  background: radial-gradient(120% 80% at 50% 20%, #2a2b31, #141518);
+  color: var(--text-2);
+}
+.dkc-new .dkc-art {
+  background: transparent;
+  color: var(--muted);
+}
+.res-art {
+  position: absolute;
+  inset: -4%;
+  background-size: cover;
+  background-position: center 30%;
+  opacity: 0;
+  transform: scale(1.08);
+  transition:
+    opacity calc(var(--dur-big) * 1.33) var(--ease-out),
+    transform 5s var(--ease-out);
+}
+.mm2-bg {
+  position: absolute;
+  inset: 0;
+  background-size: cover;
+  background-position: center 30%;
+  opacity: 0;
+  transition: opacity var(--dur-big) var(--ease-out);
+}
+.dkc-new {
+  background: transparent;
+  box-shadow: inset 0 0 0 1.5px rgba(255, 255, 255, 0.14);
+}
+.dkc-new .dkc-text b {
+  color: var(--text-2);
+}
+.dkc-text {
+  position: absolute;
+  left: 11px;
+  right: 11px;
+  bottom: 10px;
+  display: grid;
+  gap: 1px;
+}
+.dkc-text b {
+  font: 700 15px/1.2 var(--font-display);
+  letter-spacing: -0.015em;
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.dkc-text > span {
+  font-size: 12px;
+  color: rgba(236, 235, 231, 0.72);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

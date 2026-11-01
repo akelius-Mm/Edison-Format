@@ -1,6 +1,6 @@
 // Immediate press feedback. Mobile browsers apply :active late (Chromium waits to rule out a
 // scroll) or not at all (iOS Safari, without a touchstart listener), so the shared press state in
-// motion.css is also driven by an `is-pressed` class set right on pointerdown. It stays at least a
+// app.css is also driven by an `is-pressed` class set right on pointerdown. It stays at least a
 // few frames, so even a quick tap shows it, and is dropped as soon as the finger moves (a scroll).
 const PRESSABLE = "button, [role='button'], a[href], summary, .chip, .tile, .cb-row, .ios-row--nav, .ios-row--action, .duel-root .dc";
 const MIN_SHOWN_MS = 90;

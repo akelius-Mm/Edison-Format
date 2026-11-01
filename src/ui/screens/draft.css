@@ -1,5 +1,5 @@
 /* ==========================================================================
-   Draft mode — phone-first. Uses the clean theme tokens from clean.css.
+   Draft mode — phone-first. Uses the design tokens from theme/theme.css.
    ========================================================================== */
 .dr-root,
 .dr-dock {
@@ -80,8 +80,8 @@ body.dr-immersive.has-tabbar .dr-root .frame {
 .dr-btn-wide {
   width: 100%;
   min-height: 50px !important;
-  border-radius: 14px !important;
-  font-size: 16px !important;
+  border-radius: 14px;
+  font-size: 16px;
 }
 .dr-btn-row {
   display: flex;
@@ -101,8 +101,6 @@ body.dr-immersive.has-tabbar .dr-root .frame {
   z-index: 60;
   padding: 10px var(--dr-gutter-r) calc(10px + env(safe-area-inset-bottom, 0px)) var(--dr-gutter);
   background: rgba(13, 14, 17, 0.9);
-  -webkit-backdrop-filter: saturate(150%) blur(18px);
-  backdrop-filter: saturate(150%) blur(18px);
   border-top: 1px solid var(--line);
   display: grid;
   gap: 10px;
@@ -1520,19 +1518,6 @@ body.dr-immersive.has-tabbar .dr-root .frame {
 }
 
 /* deck list modal */
-.dr-modal-grid {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 12px 8px;
-  max-height: 60vh;
-  overflow-y: auto;
-  padding: 6px 4px 10px;
-}
-@media (min-width: 560px) {
-  .dr-modal-grid {
-    grid-template-columns: repeat(6, minmax(0, 1fr));
-  }
-}
 
 @media (prefers-reduced-motion: reduce) {
   .dr-pack-btn .dr-pack,
@@ -1894,4 +1879,169 @@ body.dr-immersive.has-tabbar .dr-root .frame {
   min-width: 36px;
   min-height: 36px;
   padding: 0;
+}
+body.has-tabbar .frame {
+  padding-bottom: calc(var(--tabbar-h) + 20px);
+}
+
+@media (hover: none) {
+  .ui-btn:hover {
+    background: var(--b-bg);
+  }
+}
+.seg {
+  display: flex !important;
+  width: 100%;
+  gap: 2px !important;
+  padding: 2px !important;
+  border-radius: 10px !important;
+  background: var(--fill) !important;
+  border: 0 !important;
+  box-shadow: none;
+  flex-wrap: nowrap;
+}
+.seg-btn:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: -2px;
+}
+.dkc-check .icon svg {
+  stroke-width: 2.6;
+}
+body.has-tabbar .lob-bar {
+  bottom: var(--tabbar-h);
+}
+body.has-tabbar .frame:has(.lob-bar) {
+  padding-bottom: var(--tabbar-h);
+}
+.ios-list {
+  border-radius: 14px;
+  background: var(--grp);
+  overflow: hidden;
+}
+.ios-row + .ios-row::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 16px;
+  height: 1px;
+  background: var(--sep);
+}
+.ios-row:has(.ios-icon) + .ios-row::before {
+  left: 58px;
+}
+.ios-row--stack .ios-ctl {
+  flex: 1 0 100%;
+}
+.ios-row:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: -2px;
+  border-radius: 14px;
+}
+.seg:has(> .seg-btn:nth-child(5)) .seg-btn {
+  padding: 0 2px !important;
+  font-size: 13px !important;
+}
+a.ios-row {
+  text-decoration: none;
+}
+.ym-slot + .ym-slot > .ios-row:first-child::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 16px;
+  height: 1px;
+  background: var(--sep);
+}
+body.has-tabbar .deck-builder.frame,
+body.has-tabbar .database.frame {
+  padding-bottom: var(--tabbar-h) !important;
+}
+
+@media (orientation: landscape) and (max-height: 500px) {
+  .tab .icon {
+    width: 19px !important;
+    height: 19px !important;
+  }
+}
+.home-resume {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: 16px;
+  border: 1px solid var(--gold-line);
+  background: var(--bg-2);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+}
+.dkc-check {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--cta);
+  color: #111;
+  opacity: 0;
+  transform: scale(0.6);
+  transition:
+    opacity var(--dur-base) var(--ease-out),
+    transform var(--dur-base) var(--ease-out);
+}
+
+/* sticky action bar above the tab bar */
+.lob-bar {
+  position: sticky;
+  bottom: 0;
+  z-index: 30;
+  margin: 8px calc(-1 * var(--gutter-r)) 0 calc(-1 * var(--gutter));
+  padding: 26px var(--gutter-r) 12px var(--gutter);
+  background: linear-gradient(180deg, rgba(11, 12, 14, 0) 0, var(--bg-0) 24px);
+}
+.flow-steps {
+  position: sticky;
+  top: calc(52px + env(safe-area-inset-top, 0px));
+  z-index: 35;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 calc(-1 * var(--gutter-r)) 6px calc(-1 * var(--gutter));
+  padding: 8px var(--gutter-r) 10px var(--gutter);
+  background: rgba(11, 12, 14, 0.9);
+}
+.ios-ctl {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.ym-slot {
+  display: contents;
+}
+
+@media (orientation: landscape) and (max-height: 500px) {
+  /* sticky action bars stay compact */
+  .lob-bar {
+    padding-top: 16px;
+    padding-bottom: 8px;
+  }
+}
+.cb-toolbar .ui-btn {
+  min-height: 34px !important;
+  min-width: 40px;
+  border-radius: 999px !important;
+  background: var(--fill) !important;
+}
+.cb-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }

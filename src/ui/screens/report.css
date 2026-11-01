@@ -152,10 +152,10 @@
 @media (max-width: 600px) {
   .rp-sheet .modal-foot {
     grid-template-columns: 1fr 1fr;
-    grid-auto-flow: column !important;
+    grid-auto-flow: column;
   }
   .rp-sheet .modal-foot .ui-btn-primary {
-    order: 1 !important;
+    order: 1;
   }
 }
 /* phones in landscape: little height, so a compact sheet */
@@ -171,7 +171,7 @@
     gap: 10px;
   }
   .rp-sheet .modal-foot {
-    display: flex !important;
+    display: flex;
     grid-auto-flow: column;
   }
   .rp-sheet .modal-foot .ui-btn {
@@ -413,4 +413,18 @@ body.in-duel .err-toast {
 .rn-sheet .rn-list {
   max-height: 60vh;
   overflow-y: auto;
+}
+
+@media (max-width: 600px) {
+  .modal-foot {
+    display: grid !important;
+    grid-auto-flow: row;
+    justify-content: stretch;
+    gap: 8px;
+  }
+  .modal-foot .ui-btn-primary,
+  .modal-foot .ui-btn-gold,
+  .modal-foot .ui-btn-danger {
+    order: -1;
+  }
 }

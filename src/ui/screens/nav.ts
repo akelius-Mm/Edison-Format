@@ -104,7 +104,7 @@ function mount(screen: Screen, key: string) {
     } catch (e) {
       console.error(e);
     }
-    // the leaving screen fades out (motion.css): remove it once that has played
+    // the leaving screen fades out (.screen-leave in app.css): remove it once that has played
     setTimeout(() => old.el.remove(), DUR.base + 20);
   }
   screen.onShow?.();

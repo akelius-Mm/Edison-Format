@@ -1,0 +1,1558 @@
+/* ==========================================================================
+   Late overrides: loaded after every other stylesheet (src/main.ts imports it last).
+   Each screen's styles live in its own stylesheet; what is left here are rules that must
+   come after those: they win over a screen's rule of equal specificity by order (shared
+   components such as .ui-btn, .cta, .seg-btn, iOS grouped lists, modals and toasts restyled
+   for the clean iOS look), the !important flat-look overrides of older duel and result
+   styles, and the reduced-motion switches. Moving any of them into an earlier file changes
+   which rule wins somewhere (scripts/css-snapshot.cjs checks that), so new screen styles go
+   in the screen's own file, not here.
+   ========================================================================== */
+
+/* ---------------------------------------------------------------- flat look (was clean.css) */
+.frame-title,
+.res-headline,
+.pp-lp,
+.pp-lp.dmg,
+.pp-lp.heal,
+.banner b,
+.banner--turn.is-opp b,
+.result-title,
+.result.is-lose .result-title,
+.result.is-draw .result-title {
+  background: none !important;
+  -webkit-background-clip: border-box;
+  background-clip: border-box !important;
+  -webkit-text-fill-color: currentColor !important;
+  color: var(--text) !important;
+  filter: none !important;
+}
+.pp-lp.dmg { color: #e38b8b !important; }
+.pp-lp.heal { color: #8fd1a8 !important; }
+.section-title h2 {
+  font-family: var(--font);
+  letter-spacing: 0.02em;
+}
+
+/* Panels with gold haze → flat */
+.card,
+.panel,
+.setup-card {
+  background-image: none !important;
+}
+.fx-banner.banner--phase b,
+.banner--phase b {
+  font-size: 15px !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.04em !important;
+  text-transform: none !important;
+  color: var(--text) !important;
+}
+.banner--turn b {
+  font-weight: 700 !important;
+  letter-spacing: -0.02em !important;
+  text-transform: none !important;
+}
+.setup-panel,
+.setup-bar {
+  background: var(--bg-2) !important;
+  background-image: none !important;
+  box-shadow: none !important;
+  border-color: var(--line) !important;
+}
+.setup-bar {
+  background: rgba(21, 22, 25, 0.94) !important;
+}
+
+/* No duelist badges anywhere */
+.avatar,
+.avatar-ring,
+.pp-avatar,
+.pt-player > .avatar {
+  display: none !important;
+}
+
+/* App mark on the title screen (Dark Armed Dragon artwork, hosted site only) */
+.title-mark {
+  width: clamp(84px, 22vw, 120px);
+  aspect-ratio: 1;
+  border-radius: 22%;
+  object-fit: cover;
+  display: block;
+  margin: 0 auto 18px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
+/* ---------------------------------------------------------------- sleek duel board */
+.zone {
+  box-shadow: none !important;
+  background: var(--zone-fill) !important;
+}
+
+/* "Update ready" note: only on Home, just above the tab bar */
+.update-banner {
+  position: fixed;
+  z-index: 9999;
+  left: 50%;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 90px);
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: calc(100vw - 24px);
+  padding: 8px 8px 8px 14px;
+  border-radius: 12px;
+  background: rgba(18, 19, 22, 0.97);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  font: 500 13px/1.3 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  color: #e9e6df;
+}
+.update-banner button {
+  flex: none;
+  border: 0;
+  border-radius: 8px;
+  padding: 7px 12px;
+  font: 600 13px/1 inherit;
+  background: #c9b68e;
+  color: #111;
+}
+
+/* ---------------------------------------------------------------- screen polish (was polish.css) */
+/* No hover-lift / tap flashes on touch */
+button,
+a,
+[role='button'] {
+  -webkit-tap-highlight-color: transparent;
+}
+:focus-visible {
+  outline: 2px solid rgba(242, 239, 232, 0.55);
+  outline-offset: 2px;
+}
+
+/* ---------------------------------------------------------------- frame: iOS large title */
+.frame {
+  background: var(--bg-0);
+}
+.frame-back .icon {
+  width: 26px;
+  height: 26px;
+}
+.frame--large .frame-head .frame-title {
+  opacity: 0;
+}
+.frame-large {
+  width: 100%;
+  max-width: var(--page-max);
+  margin: 0 auto;
+  padding: 2px var(--gutter-r) 6px var(--gutter);
+}
+.frame-large-title {
+  margin: 0;
+  font: 700 30px/1.12 var(--font-display);
+  letter-spacing: -0.025em;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+.frame-body {
+  margin: 0 auto;
+}
+@media (min-width: 900px) {
+  .frame-large-title {
+    font-size: 40px;
+  }
+}
+
+/* ---------------------------------------------------------------- buttons */
+.ui-btn {
+  min-height: 44px;
+  --b-bg: var(--grp-hi);
+  --b-border: transparent;
+  --b-color: var(--text);
+  box-shadow: none !important;
+}
+
+.ui-btn-sm {
+  min-height: 36px;
+  font-size: 14px;
+}
+.ui-btn-lg {
+  min-height: 52px;
+}
+
+/* The main call to action: off-white like the home screen's Duel button */
+.cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 54px;
+  padding: 0 22px;
+  border: 0;
+  border-radius: 16px;
+  background: var(--cta);
+  color: var(--cta-text);
+  font: 700 17px var(--font);
+  letter-spacing: -0.01em;
+  cursor: pointer;
+  transition:
+    transform var(--dur-fast) var(--ease-out),
+    background var(--dur-base) var(--ease-out),
+    opacity var(--dur-base) var(--ease-out);
+}
+.cta .icon {
+  width: 20px;
+  height: 20px;
+}
+
+.cta:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  transform: none;
+}
+.cta.cta--dark {
+  background: var(--grp-hi);
+  color: var(--text);
+}
+
+/* ---------------------------------------------------------------- segmented control (iOS) */
+.seg-btn {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 36px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 8px !important;
+  background: transparent !important;
+  color: var(--text) !important;
+  font: 500 14px var(--font) !important;
+  letter-spacing: -0.005em;
+  text-transform: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  box-shadow: none;
+  cursor: pointer;
+  transition: background var(--dur-base) var(--ease-out);
+}
+
+/* ---------------------------------------------------------------- toggle (iOS switch) */
+.toggle {
+  position: relative;
+  display: inline-flex;
+  min-width: 51px;
+  min-height: 44px;
+  align-items: center;
+  cursor: pointer;
+}
+.toggle-track {
+  width: 51px !important;
+  height: 31px;
+  border-radius: 999px;
+  background: var(--fill-2) !important;
+  border: 0 !important;
+  box-shadow: none;
+  position: relative;
+  transition: background var(--dur-base) var(--ease-out);
+}
+.toggle-thumb {
+  position: absolute;
+  top: 2px !important;
+  left: 2px !important;
+  width: 27px !important;
+  height: 27px;
+  border-radius: 50%;
+  background: #fff !important;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.3);
+  transform: none;
+  transition: transform var(--dur-base) var(--ease-out) !important;
+}
+
+/* ---------------------------------------------------------------- inputs */
+.input,
+.select {
+  min-height: 44px;
+  border-radius: 10px !important;
+  background: var(--fill) !important;
+  border: 1px solid transparent !important;
+  color: var(--text);
+  font: 400 16px var(--font) !important; /* 16px: no zoom on iOS */
+  box-shadow: none !important;
+}
+.input:focus,
+.select:focus {
+  border-color: rgba(255, 255, 255, 0.22) !important;
+  outline: none;
+  box-shadow: none !important;
+}
+.select {
+  padding-right: 30px;
+}
+/* decklist boxes: same quiet field, monospace; 16px so iOS doesn't zoom */
+.textarea {
+  border-radius: 12px !important;
+  background: var(--fill) !important;
+  border: 1px solid transparent !important;
+  box-shadow: none !important;
+  font-size: 16px !important;
+}
+.textarea:focus,
+.textarea:focus-visible {
+  border-color: rgba(255, 255, 255, 0.22) !important;
+  outline: none;
+  box-shadow: none !important;
+}
+
+/* ---------------------------------------------------------------- lobby sections */
+.lob-h {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 24px;
+}
+.lob-h h2 {
+  margin: 0;
+  font: 700 20px/1.2 var(--font-display);
+  letter-spacing: -0.02em;
+  color: var(--text);
+}
+.lob-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  min-height: 44px;
+  margin: -12px -6px -10px 0;
+  padding: 0 6px;
+  border: 0;
+  background: none;
+  color: var(--gold-hi);
+  font: 500 15px var(--font);
+  cursor: pointer;
+}
+.lob-link .icon {
+  width: 14px;
+  height: 14px;
+}
+.opp-row-icon {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  flex: none;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-2);
+}
+.opp-row-icon .icon {
+  width: 18px;
+  height: 18px;
+}
+.opp-name-input {
+  flex: 1;
+  min-width: 0;
+  min-height: 44px;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font: 600 17px var(--font);
+  letter-spacing: -0.01em;
+  padding: 0;
+}
+.opp-name-input:focus {
+  outline: none;
+}
+.opp-shuffle .icon {
+  width: 22px;
+  height: 22px;
+}
+.dkc-art {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background:
+    radial-gradient(120% 70% at 50% 18%, color-mix(in srgb, var(--deck) 55%, transparent), transparent 70%),
+    linear-gradient(180deg, color-mix(in srgb, var(--deck) 22%, #16171a), #121316);
+  background-size: cover;
+  background-position: center 30%;
+  transition: transform var(--dur-slow) var(--ease-out);
+}
+.dkc-box.on .dkc-art {
+  transform: scale(1.04);
+}
+.dkc-random .dkc-art .icon {
+  width: 40px;
+  height: 40px;
+  margin-bottom: 26px;
+  opacity: 0.75;
+}
+.dkc-warn .icon {
+  width: 12px;
+  height: 12px;
+}
+.dkc-check .icon {
+  width: 14px;
+  height: 14px;
+}
+.dkc-box.on .dkc-check {
+  opacity: 1;
+  transform: none;
+}
+.lob-bar-in {
+  max-width: var(--page-max);
+  margin: 0 auto;
+  display: grid;
+  gap: 10px;
+}
+.lob-bar-sum {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 0 4px;
+  font-size: 13px;
+  color: var(--muted);
+  text-align: center;
+  min-width: 0;
+}
+.lob-bar-sum b {
+  color: var(--text-2);
+  font-weight: 600;
+}
+.lob-bar-sum .icon {
+  width: 15px;
+  height: 15px;
+}
+
+/* ---------------------------------------------------------------- deck carousel extras */
+.dkc-new .dkc-art .icon {
+  width: 34px;
+  height: 34px;
+  margin-bottom: 30px;
+}
+.shelf {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+/* ---------------------------------------------------------------- duel setup: two-step flow */
+.flow-step-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 4px;
+  border: 0;
+  background: none;
+  color: var(--faint);
+  font: 600 15px var(--font);
+  cursor: pointer;
+  transition: color var(--dur-base) var(--ease-out);
+}
+.flow-line {
+  flex: 1;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--fill);
+  max-width: 120px;
+}
+@keyframes flowIn {
+  from {
+    opacity: 0;
+    transform: translateX(28px);
+  }
+}
+@keyframes flowBack {
+  from {
+    opacity: 0;
+    transform: translateX(-28px);
+  }
+}
+
+.mu-art {
+  --deck: #555;
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  border-radius: 12px;
+  background: linear-gradient(160deg, color-mix(in srgb, var(--deck) 60%, #222), #141518);
+  background-size: cover;
+  background-position: center 30%;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+.mu-art--random {
+  background: #26272c;
+  color: var(--text-2);
+}
+.mu-art--random .icon {
+  width: 22px;
+  height: 22px;
+}
+.mu-text b {
+  font: 600 15px/1.2 var(--font);
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.flow-opp .mu-art {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+}
+
+/* ---------------------------------------------------------------- results (after a match) */
+.results {
+  min-height: 100dvh;
+  background: var(--bg-0) !important;
+}
+.res-hero-body {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  max-width: 600px;
+  margin: 0 auto;
+  padding: 0 var(--gutter-r) 8px var(--gutter);
+  display: grid;
+  gap: 4px;
+  text-align: left;
+}
+.res-headline {
+  color: #fff !important;
+}
+@keyframes resIn {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+}
+.res-side.right {
+  justify-items: end;
+  text-align: right;
+}
+.res-score {
+  display: flex;
+  align-items: baseline;
+}
+.res-score b {
+  font-weight: 700;
+}
+.res-score span {
+  font-weight: 400;
+  color: var(--faint);
+}
+.res-stat b {
+  font: 700 19px var(--font-display);
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+.res-stat span {
+  font-size: 12px;
+  color: var(--muted);
+}
+.res-actions {
+  margin: 6px calc(-1 * var(--gutter-r)) 0 calc(-1 * var(--gutter));
+}
+.res-actions .cta {
+  width: 100%;
+  min-width: 0;
+}
+.res-actions .cta span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ---------------------------------------------------------------- between games */
+.inter {
+  margin: 0 auto;
+}
+.inter-caption {
+  font: 600 12px/1.35 var(--font) !important;
+}
+.inter-title {
+  font: 600 17px var(--font) !important;
+  letter-spacing: -0.01em;
+  color: var(--muted);
+  margin-top: 6px;
+}
+.inter-score {
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+}
+.inter-side.right {
+  justify-items: end;
+  text-align: right;
+}
+.inter-nums {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font: 700 32px/1 var(--font-display);
+  font-variant-numeric: tabular-nums;
+}
+.inter-nums span {
+  font-weight: 400;
+  color: var(--faint);
+}
+.inter-next {
+  font: 600 12px var(--font) !important;
+}
+.inter-msg {
+  margin: 0 0 10px;
+}
+.inter-choice {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+/* ---------------------------------------------------------------- iOS grouped lists */
+.ios-group {
+  margin: 0 0 26px;
+  min-width: 0;
+}
+.ios-group-h {
+  margin: 0 0 7px 16px;
+  font: 400 13px var(--font) !important;
+  letter-spacing: 0.02em !important;
+  text-transform: uppercase;
+  color: var(--muted) !important;
+}
+.ios-foot {
+  margin: 8px 16px 0;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--muted);
+}
+.ios-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 52px;
+  padding: 8px 16px;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+}
+.ios-row--stack {
+  flex-wrap: wrap;
+  padding-top: 12px;
+  padding-bottom: 12px;
+}
+.ios-row-text {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+.ios-label {
+  font: 400 16px/1.3 var(--font);
+  letter-spacing: -0.01em;
+  color: var(--text);
+}
+.ios-desc {
+  font-size: 13px;
+  line-height: 1.35;
+  color: var(--muted);
+}
+.ios-icon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--text-2);
+}
+.ios-icon .icon {
+  width: 18px;
+  height: 18px;
+}
+.ios-chev {
+  flex: none;
+  width: 14px !important;
+  height: 14px !important;
+  color: var(--faint);
+}
+.ios-row--action .ios-label {
+  color: var(--gold-hi);
+}
+.ios-row--action.danger .ios-label {
+  color: var(--loss);
+}
+.ios-range {
+  --v: 50%;
+  flex: 1;
+  height: 44px;
+  margin: 0;
+  background: none;
+  -webkit-appearance: none;
+  appearance: none;
+  cursor: pointer;
+}
+
+/* inputs inside grouped rows */
+.ios-row--input {
+  padding-top: 4px;
+  padding-bottom: 4px;
+}
+.ios-input {
+  flex: 1;
+  min-width: 0;
+  min-height: 44px;
+  border: 0;
+  padding: 0;
+  background: none;
+  color: var(--text);
+  font: 400 16px var(--font);
+}
+.ios-input:focus {
+  outline: none;
+}
+.ios-inline-btn {
+  flex: none;
+  min-height: 36px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--fill-2);
+  color: var(--text);
+  font: 600 14px var(--font);
+  cursor: pointer;
+}
+.ios-ctl-res {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+.ym-remove {
+  color: var(--loss);
+}
+.credits-intro {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--muted);
+}
+.credit a {
+  color: var(--gold-hi);
+}
+.credit-src summary {
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--muted);
+}
+.credit-src ul {
+  margin: 4px 0 0;
+  padding-left: 18px;
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.pf-res {
+  display: inline-grid !important;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  font: 700 12px var(--font) !important;
+  background: var(--fill) !important;
+  color: var(--text-2) !important;
+}
+
+/* ---------------------------------------------------------------- customize */
+.customize-screen .cz-side {
+  position: static;
+  padding: 0;
+  border: 0;
+  background: none;
+}
+.customize-screen .cz-preview {
+  aspect-ratio: 16 / 10;
+  border-radius: 20px;
+  box-shadow:
+    0 12px 36px rgba(0, 0, 0, 0.5),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+.customize-screen .cz-stack .yc {
+  --yc-w: 96px;
+}
+.cz-pick {
+  display: grid;
+  gap: 6px;
+  justify-items: center;
+  width: 100%;
+  padding: 6px 4px 4px;
+  border: 0;
+  border-radius: 12px;
+  background: none;
+  color: var(--text-2);
+  font: 500 12.5px var(--font);
+  cursor: pointer;
+}
+.cz-pick:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 0;
+}
+.customize-screen .cz-sleeve .yc {
+  --yc-w: 64px;
+}
+.cz-opt.on .cz-label {
+  color: var(--text);
+  font-weight: 600;
+}
+.cz-tick {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  display: none;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--cta);
+  color: #111;
+}
+.cz-tick .icon {
+  width: 13px;
+  height: 13px;
+}
+.cz-opt.on .cz-tick {
+  display: grid;
+}
+.cz-remove .icon {
+  width: 14px;
+  height: 14px;
+}
+@media (min-width: 1000px) {
+  .customize-screen {
+    --page-max: 1080px;
+  }
+  .customize-screen .cz-side {
+    position: sticky;
+    top: 72px;
+    order: 2;
+  }
+}
+
+/* ---------------------------------------------------------------- chip tabs (scrollable segmented) */
+.chip-tabs {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  margin: 0 calc(-1 * var(--gutter-r)) 16px calc(-1 * var(--gutter));
+  padding: 2px var(--gutter-r) 2px var(--gutter);
+  scrollbar-width: none;
+}
+.chip-tab,
+.chip {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--fill);
+  color: var(--text-2);
+  font: 500 14px var(--font);
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out);
+  position: relative;
+}
+.chip-tab.on,
+.chip.on {
+  background: var(--cta);
+  color: #111;
+  font-weight: 600;
+}
+.chip .icon {
+  width: 15px;
+  height: 15px;
+}
+
+/* ---------------------------------------------------------------- how to play */
+.rule-hero-art {
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 230px;
+  background: radial-gradient(120% 90% at 50% 10%, #2a2c33 0%, var(--grp) 75%);
+  background-size: cover;
+  background-position: center 30%;
+  -webkit-mask-image: linear-gradient(180deg, #000 30%, transparent 100%);
+  mask-image: linear-gradient(180deg, #000 30%, transparent 100%);
+  opacity: 0.9;
+}
+.rule-hero > :not(.rule-hero-art) {
+  position: relative;
+}
+.rule-hero p,
+.rule-card p,
+.rule-card li {
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--text-2);
+}
+.rule-card {
+  padding: 16px 18px;
+  border: 0;
+  border-radius: 16px;
+  background: var(--grp) !important;
+}
+.rule-card ul {
+  padding-left: 18px;
+  margin: 0;
+  display: grid;
+  gap: 6px;
+}
+.rule-cta {
+  gap: 10px;
+}
+.pool-decks {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0;
+  margin: 0 -18px -16px;
+}
+.pool-art {
+  width: 56px;
+  height: 56px;
+  border-radius: 12px;
+  background: linear-gradient(160deg, color-mix(in srgb, var(--deck) 60%, #222), #141518);
+  background-size: cover;
+  background-position: center 30%;
+}
+.pool-deck-head b {
+  font: 600 16px var(--font);
+}
+.ban-top .input {
+  width: 100%;
+}
+.ban-top p {
+  margin: 0;
+  font-size: 13.5px;
+}
+.ban-col h3 {
+  font: 700 17px var(--font-display) !important;
+  letter-spacing: -0.01em !important;
+  text-transform: none !important;
+  margin: 0;
+}
+
+/* ---------------------------------------------------------------- tournament */
+.place-pill {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  min-width: 40px;
+  height: 28px;
+  padding: 0 8px;
+  border-radius: 8px;
+  background: var(--fill);
+  color: var(--text-2);
+  font: 700 13px var(--font);
+  font-variant-numeric: tabular-nums;
+}
+.you-tag {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: rgba(201, 182, 142, 0.18);
+  color: var(--gold-hi);
+  font: 600 11px/1.5 var(--font);
+  vertical-align: 1px;
+}
+.cta--sm {
+  min-height: 44px;
+  font-size: 15px;
+  border-radius: 12px;
+}
+.cta--sm .icon {
+  width: 17px;
+  height: 17px;
+}
+.tour-tabs {
+  margin: 0 0 18px;
+  border: 0 !important;
+}
+.mm2-art {
+  --deck: #555;
+  display: block;
+  width: 72px;
+  height: 72px;
+  margin-bottom: 8px;
+  border-radius: 20px;
+  background: linear-gradient(160deg, color-mix(in srgb, var(--deck) 60%, #222), #141518);
+  background-size: cover;
+  background-position: center 30%;
+  box-shadow:
+    0 8px 20px rgba(0, 0, 0, 0.45),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.1);
+}
+.mm2-score {
+  font: 700 30px var(--font-display);
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+}
+.mm2-res {
+  font: 600 12px var(--font);
+  color: var(--muted);
+}
+.mm2-alt .cta {
+  background: rgba(255, 255, 255, 0.08);
+}
+.mm2-idle-title {
+  margin: 0;
+  font: 700 20px var(--font-display);
+  letter-spacing: -0.02em;
+}
+.mm2-idle-text {
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+/* pairings */
+.pr-row {
+  position: relative;
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px 10px 10px;
+}
+.pr-table {
+  font: 600 12px var(--font);
+  color: var(--faint);
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.pr-players {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+.pr-p {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) 22px;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+.pr-name {
+  font: 600 15px var(--font);
+  white-space: nowrap;
+  max-width: 52vw;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pr-score {
+  font: 700 15px var(--font);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.pr-row.pending .pr-score {
+  color: var(--faint);
+}
+.standings-table .rank {
+  color: var(--muted);
+  width: 30px;
+}
+.pt-player {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.pt-who {
+  display: grid;
+  min-width: 0;
+}
+.pt-name {
+  font-weight: 600;
+}
+.pt-deck {
+  font-size: 12.5px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.lobby-art {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(120% 90% at 50% 10%, #2a2c33 0%, #15161a 75%);
+  background-size: cover;
+  background-position: center 30%;
+}
+.lobby-body h2 {
+  margin: 0;
+  font: 700 26px/1.1 var(--font-display) !important;
+  letter-spacing: -0.02em !important;
+  text-transform: none;
+  color: var(--text) !important;
+}
+.lobby-body p {
+  margin: 0 0 8px;
+  color: var(--text-2);
+  font-size: 14px;
+}
+.lobby-me {
+  display: flex;
+  margin-bottom: 8px;
+}
+.meta-track i {
+  display: block;
+  height: 100%;
+  border-radius: 6px;
+  background: var(--deck) !important;
+  box-shadow: none !important;
+}
+
+/* entrants */
+.ent-art {
+  --deck: #555;
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: linear-gradient(160deg, color-mix(in srgb, var(--deck) 60%, #222), #141518);
+  background-size: cover;
+  background-position: center 30%;
+}
+.br-note {
+  font-size: 13.5px;
+}
+.br-note .icon {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin-top: 2px;
+}
+.bracket {
+  margin: 0 calc(-1 * var(--gutter-r)) 0 calc(-1 * var(--gutter));
+}
+.br-match {
+  background: var(--grp) !important;
+}
+.br-champ b {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+.br-champ-art {
+  --deck: #555;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: linear-gradient(160deg, color-mix(in srgb, var(--deck) 60%, #222), #141518);
+  background-size: cover;
+  background-position: center 30%;
+}
+@media (min-width: 900px) {
+  .tour-screen,
+  .tour-hub {
+    --page-max: 980px;
+  }
+  .lobby {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) !important;
+    align-items: start;
+  }
+}
+
+/* ---------------------------------------------------------------- compact header extras */
+.head-icon-btn .icon {
+  width: 24px;
+  height: 24px;
+}
+.db-switch {
+  width: auto;
+  max-width: 34vw;
+  min-height: 36px !important;
+  padding: 0 28px 0 12px !important;
+  border-radius: 999px !important;
+  font: 600 14px var(--font) !important;
+  background-color: var(--fill) !important;
+  text-overflow: ellipsis;
+}
+
+/* ---------------------------------------------------------------- app-like full-height screens */
+.deck-builder .frame-body,
+.database .frame-body {
+  --app-h: calc(100dvh - 52px - env(safe-area-inset-top, 0px) - var(--tabbar-h));
+  max-width: 1720px !important;
+  height: var(--app-h);
+  min-height: 420px !important;
+  padding: 10px var(--gutter-r) 10px var(--gutter) !important;
+  display: flex !important;
+  flex-direction: column;
+}
+.db-name {
+  width: 100%;
+  min-height: 40px;
+  padding: 0 !important;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font: 700 20px var(--font-display) !important;
+  letter-spacing: -0.02em;
+  text-overflow: ellipsis;
+}
+.db-name:focus {
+  outline: none;
+  border-bottom: 1px solid var(--line-2);
+}
+.db-legal .icon {
+  width: 13px;
+  height: 13px;
+}
+.db-tools {
+  display: flex !important;
+  flex-wrap: nowrap;
+  gap: 6px;
+  overflow-x: auto;
+  margin: 0 -12px;
+  padding: 0 12px;
+  scrollbar-width: none;
+  flex-basis: auto;
+}
+.db-tool .icon {
+  width: 15px;
+  height: 15px;
+}
+.db-tool.danger {
+  color: var(--loss);
+}
+.dk-head h3 {
+  margin: 0;
+  font: 600 13px var(--font) !important;
+  letter-spacing: 0.02em !important;
+  text-transform: none !important;
+  color: var(--text-2) !important;
+}
+.dk-slot.sel > *,
+.dk-slot:focus-visible > * {
+  box-shadow: 0 0 0 2px var(--cta) !important;
+}
+.db-hint .icon {
+  display: none;
+}
+@keyframes selIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+.db-seltext {
+  display: grid;
+  min-width: 0;
+}
+.db-seltext b {
+  font: 600 14px var(--font);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.db-seltext span {
+  font-size: 12px;
+  color: var(--muted);
+}
+.db-selbtn:disabled {
+  opacity: 0.35;
+}
+.db-selbtn .icon {
+  width: 18px;
+  height: 18px;
+}
+.st-track i,
+.st-track .k-monster,
+.st-track .k-spell,
+.st-track .k-trap {
+  background-image: none !important;
+}
+.st-col i {
+  background: var(--text-2) !important;
+}
+@media (max-width: 760px) {
+  .db-sections[data-section='main'] > :not(.dk-main),
+  .db-sections[data-section='extra'] > :not(.dk-extra),
+  .db-sections[data-section='side'] > :not(.dk-side) {
+    display: none;
+  }
+}
+@media (min-width: 761px) {
+  .db-secseg {
+    display: none !important;
+  }
+}
+
+/* ---------------------------------------------------------------- card browser */
+.cb-search-wrap > .icon {
+  width: 17px;
+  height: 17px;
+}
+.cb-chiprow {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  margin: 0 -2px;
+  padding: 0 2px;
+}
+.cb-kind.chip {
+  flex: none;
+  min-height: 34px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 999px;
+  font: 500 14px var(--font) !important;
+  background: var(--fill) !important;
+  color: var(--text-2);
+}
+.cb-field span {
+  font: 500 12px var(--font) !important;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--muted) !important;
+}
+.cb-sort {
+  min-height: 34px !important;
+  width: auto;
+  border-radius: 999px !important;
+  font: 500 13.5px var(--font) !important;
+  padding: 0 28px 0 12px !important;
+}
+.cb-cell {
+  border-radius: 6px;
+}
+.cb-row {
+  background: none !important;
+  min-height: 52px;
+}
+.cb-row + .cb-row {
+  box-shadow: inset 0 1px 0 var(--sep);
+}
+@media (max-width: 760px) {
+  .cb-cell {
+    width: 100%;
+  }
+}
+
+/* ---------------------------------------------------------------- modals: sheet on phones */
+.modal {
+  background: #1a1b1f !important;
+}
+.modal-head h2 {
+  font: 700 19px var(--font-display) !important;
+  letter-spacing: -0.02em !important;
+  text-transform: none;
+  color: var(--text) !important;
+}
+.modal-foot {
+  border-top: 0 !important;
+  background: none !important;
+}
+@media (max-width: 600px) {
+  .modal {
+    width: 100% !important;
+    max-width: none !important;
+    max-height: 88dvh;
+    border-radius: 22px 22px 0 0 !important;
+    padding-bottom: env(safe-area-inset-bottom, 0px) !important;
+    transform: translateY(24px);
+    transition: transform var(--dur-slow) var(--ease-out) !important;
+  }
+  .modal-foot .ui-btn {
+    width: 100%;
+    min-height: 50px;
+  }
+}
+@media (max-width: 600px) {
+  .db-switch {
+    max-width: 52vw;
+  }
+}
+
+/* ==========================================================================
+   Landscape phones (about 844 x 390): wide layouts instead of one stretched column
+   ========================================================================== */
+@media (orientation: landscape) and (max-height: 500px) {
+  :root {
+    --tabbar-h: calc(44px + env(safe-area-inset-bottom, 0px));
+    --gutter: max(20px, calc(env(safe-area-inset-left, 0px) + 8px));
+    --gutter-r: max(20px, calc(env(safe-area-inset-right, 0px) + 8px));
+  }
+  .tab {
+    grid-auto-flow: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px !important;
+    min-height: 40px !important;
+    padding: 0 !important;
+    font-size: 12px !important;
+  }
+  .frame-large {
+    max-width: 920px;
+  }
+  .frame-large-title {
+    font-size: 28px;
+  }
+  .settings-screen,
+  .customize-screen,
+  .rules-screen {
+    --page-max: 680px;
+  }
+  .deck-builder .frame-body,
+  .database .frame-body {
+    --app-h: calc(100dvh - 44px - env(safe-area-inset-top, 0px) - var(--tabbar-h));
+    min-height: 0 !important;
+    padding-top: 6px !important;
+    padding-bottom: 6px !important;
+  }
+
+  /* home: artwork on the left, menu on the right */
+  .home {
+    display: grid;
+    grid-template-columns: minmax(0, 42%) minmax(0, 1fr);
+    align-items: start;
+    padding-bottom: var(--tabbar-h);
+  }
+  .flow-pane:not(.flow-opp) .dkc-track {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 10px;
+    overflow: visible;
+    padding: 2px 0 6px;
+  }
+  .flow-opp .lob-sec .lob-h {
+    display: none;
+  }
+  .lob-bar-in {
+    max-width: 520px;
+  }
+
+  /* results and final standings: hero left, details right */
+  .results {
+    display: grid !important;
+    grid-template-columns: minmax(0, 42%) minmax(0, 1fr);
+  }
+
+  /* tournament */
+  .mm2-face {
+    max-width: 560px;
+    margin: 0 auto;
+    width: 100%;
+  }
+  .lobby {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) !important;
+    align-items: start;
+  }
+  .pr-name {
+    max-width: 26vw;
+  }
+
+  /* settings: two columns of groups */
+  .settings-screen .frame-body {
+    max-width: 920px !important;
+    columns: 2;
+    column-gap: 20px;
+  }
+  .customize-screen .cz-side {
+    position: sticky;
+    top: 56px;
+  }
+  .customize-screen {
+    --page-max: 900px;
+  }
+  .modal {
+    width: min(640px, 100%) !important;
+    max-height: calc(100dvh - 24px);
+    border-radius: 20px !important;
+  }
+}
+@media (min-width: 1101px) {
+  .db-tabs {
+    display: none !important;
+  }
+}
+@media (min-width: 900px) {
+  .flow-pane:not(.flow-opp) .dkc-track {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 12px;
+    overflow: visible;
+    padding: 2px 0 6px;
+  }
+  .duel-flow {
+    --page-max: 980px;
+  }
+}
+.db-start-title h2 {
+  margin: 0;
+  font: 700 24px var(--font-display) !important;
+  letter-spacing: -0.02em !important;
+  text-transform: none;
+}
+.db-start-actions .ui-btn {
+  width: 100%;
+}
+
+/* Badges: quiet filled tags, no outlines; colour only where it carries meaning */
+.badge {
+  height: 22px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-2);
+  font: 600 12px/1 var(--font);
+  letter-spacing: 0;
+}
+.badge-gold,
+.badge-blue,
+.badge-violet,
+.badge-green {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-2);
+}
+
+/* Dialogs focus their main button when they open: show that with a quiet light ring, not a gold one */
+.modal :focus-visible {
+  outline: 2px solid rgba(242, 239, 232, 0.55);
+  outline-offset: 2px;
+}
+
+/* ---------------------------------------------------------------- reduced motion (was motion.css)
+   Outside the duel: no movement, things simply appear. (The duel has its own fade-only rules in
+   duel.css, and fx.ts skips shakes and flying cards.) */
+@media (prefers-reduced-motion: reduce) {
+  :not(.duel-root, .duel-root *, .spinner),
+  :not(.duel-root, .duel-root *, .spinner)::before,
+  :not(.duel-root, .duel-root *, .spinner)::after {
+    animation-duration: 1ms !important;
+    animation-delay: 0ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+    transition-delay: 0ms !important;
+  }
+}
