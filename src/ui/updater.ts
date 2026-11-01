@@ -1,8 +1,9 @@
 // Keeps the installed app up to date: checks for a newer published version when the app opens,
 // when it comes back to the foreground, and every 15 minutes. A new version never interrupts play:
 // it installs right away only while the app is still starting up on Home, otherwise quietly the next
-// time the app goes to the background (outside a duel or an online room), or when the player taps
-// "Restart" on the small note on Home.
+// time the app goes to the background (outside a duel or an online room), between rounds of an event
+// (as the event screen opens: the event is saved and no duel is running), or when the player taps
+// "Restart" on the small note on Home or the event screen.
 declare const __BUILD_ID__: string;
 
 const CHECK_EVERY_MS = 15 * 60 * 1000;
@@ -15,6 +16,10 @@ const startedAt = Date.now();
 let interacted = false;
 const STARTUP_MS = 8000;
 const TRIED_KEY = 'edison.updateTried';
+let started = false;
+/** When the live event screen last opened (between rounds); an update found just then installs at once. */
+let hubArrivedAt = 0;
+const HUB_WINDOW_MS = 4000;
 
 /** The version we last reloaded for. If a reload didn't bring it, don't keep reloading for it. */
 function triedFor(id: string) {
@@ -41,21 +46,34 @@ function reloadNow() {
 }
 
 const onHome = () => /^#?\/?(title)?$/.test(location.hash.replace(/\?.*$/, ''));
+const onEvent = () => /^#\/?events(\?|$)/.test(location.hash);
 
 /** Apply at launch on Home; otherwise wait for the background (or the player's tap), never mid-play. */
 function applyWhenSafe() {
   pending = true;
   if (!busy() && !interacted && Date.now() - startedAt < STARTUP_MS && onHome()) return reloadNow();
+  if (!busy() && onEvent() && Date.now() - hubArrivedAt < HUB_WINDOW_MS) return reloadNow();
   showBanner();
 }
 
-/** A small note, shown only on Home (never over a duel): the update installs next time, or now on a tap. */
+/**
+ * The live event screen is opening (after a match, or between rounds): the event is saved and no duel
+ * is running, so a waiting update installs now, and the app checks for one it hasn't seen yet.
+ */
+export function eventSafePoint() {
+  if (!started) return;
+  hubArrivedAt = Date.now();
+  if (pending && !busy()) return reloadNow();
+  void check();
+}
+
+/** A small note on Home or the event screen (never over a duel): the update installs later, or now on a tap. */
 function showBanner() {
   if (!banner) {
     banner = document.createElement('div');
     banner.className = 'update-banner';
     banner.setAttribute('role', 'status');
-    banner.innerHTML = '<span>Update ready. It installs next time you open the app.</span>';
+    banner.append(document.createElement('span'));
     const now = document.createElement('button');
     now.type = 'button';
     now.textContent = 'Restart';
@@ -63,7 +81,9 @@ function showBanner() {
     banner.append(now);
     document.body.append(banner);
   }
-  banner.hidden = busy() || !onHome();
+  banner.firstElementChild!.textContent = onEvent() ? 'Update ready. It installs between rounds; your event is saved.' : 'Update ready. It installs next time you open the app.';
+  banner.classList.toggle('is-top', onEvent());
+  banner.hidden = busy() || !(onHome() || onEvent());
 }
 
 async function check() {
@@ -82,9 +102,10 @@ async function check() {
 
 export function startUpdater() {
   if (location.protocol !== 'https:' || location.hostname.endsWith('claude.ai')) return;
+  started = true;
 
   for (const ev of ['pointerdown', 'keydown']) window.addEventListener(ev, () => (interacted = true), { once: true, capture: true });
-  // The note only shows on Home, outside duels.
+  // The note only shows on Home and the event screen, outside duels.
   window.addEventListener('hashchange', () => pending && showBanner());
   new MutationObserver(() => pending && showBanner()).observe(document.body, { attributes: true, attributeFilter: ['class'] });
 
