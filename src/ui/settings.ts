@@ -11,6 +11,8 @@ export interface Settings {
   sleeve: string;
   /** Playmat id from PLAYMATS registry. */
   playmat: string;
+  /** Binder cover id (theme/binders.ts). */
+  binder: string;
   /** 0.25 = very fast … 2 = slow. 1 is normal. 0 = instant. */
   animationSpeed: number;
   sound: boolean;
@@ -44,6 +46,7 @@ export const DEFAULT_SETTINGS: Settings = {
   avatar: 'avatar-1',
   sleeve: 'matte-black',
   playmat: 'tournament-black',
+  binder: 'padded-black',
   animationSpeed: 1,
   sound: true,
   haptics: true,

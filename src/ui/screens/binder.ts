@@ -1,5 +1,7 @@
 // Binder: every card you own, by set (with completion) or by card type, plus the
 // Collection-mode switch for deck building and the "trade extras for DP" action.
+// It looks and turns like a real side-loading binder: your cover on top (tap to change it), and each section as
+// pages of 9 pockets (3 × 3) that you swipe through; a missing card is an empty pocket with its name pencilled in.
 import {
   bestOwnedRarity,
   convertExtras,
@@ -19,8 +21,9 @@ import { RARITY_NAMES, RARITY_ORDER, type Rarity } from '../../collection/types'
 import { findCard } from '../../cards';
 import type { CardData } from '../../engine/card';
 import { zoomCard } from '../cards/zoom';
-import { loadJSON, saveJSON } from '../settings';
-import { button, confirmDialog, h, icon, segmented, toast, toggle } from './dom';
+import { getSettings, loadJSON, saveJSON, updateSettings } from '../settings';
+import { BINDERS, binderById } from '../theme/binders';
+import { button, confirmDialog, h, icon, modal, segmented, toast, toggle } from './dom';
 import { dpChip, fmtDP, packArt, rarityPill, releaseLabel, foilCard } from './collectionUi';
 import { frame, go, type Params, type Screen } from './nav';
 
@@ -134,11 +137,19 @@ export function binderScreen(_params: Params): Screen {
     const names = ownedNames();
     const foils = names.filter((n) => rarityRank(bestOwnedRarity(n) ?? 'C') >= rarityRank('SR')).length;
     const s = getCollection().stats;
+    const cover = binderById(getSettings().binder);
     summary.replaceChildren(
       h(
-        'div',
-        { class: 'bd-ring', style: { '--p': String(pct) }, 'aria-label': `${pct}% of era booster cards collected` },
-        h('b', null, `${pct}%`),
+        'button',
+        {
+          type: 'button',
+          class: 'bd-cover',
+          style: { background: cover.css, '--stitch': cover.stitch, '--ink': cover.ink, '--spine': cover.color },
+          'aria-label': `${cover.name} binder, ${pct}% collected. Change the binder`,
+          'data-test': 'binder-cover',
+          onclick: pickCover,
+        },
+        h('span', { class: 'bd-cover-label' }, h('b', null, `${pct}%`), h('small', null, getSettings().playerName || 'Duelist')),
       ),
       h(
         'div',
@@ -146,6 +157,37 @@ export function binderScreen(_params: Params): Screen {
         h('div', { class: 'bd-summary-main' }, `${have} of ${all.size} era booster cards`),
         h('div', { class: 'bd-stats' }, stat(totalOwned(), 'cards'), stat(names.length, 'unique'), stat(foils, 'foils'), stat(s.packsOpened, 'packs opened')),
       ),
+    );
+  }
+  function pickCover() {
+    const cur = getSettings().binder;
+    const m = modal(
+      'Your binder',
+      h(
+        'div',
+        { class: 'bd-cover-grid', role: 'radiogroup', 'aria-label': 'Binder' },
+        BINDERS.map((b) =>
+          h(
+            'button',
+            {
+              type: 'button',
+              class: ['bd-cover-opt', b.id === cur && 'on'],
+              role: 'radio',
+              'aria-checked': String(b.id === cur),
+              title: b.description,
+              onclick: () => {
+                updateSettings({ binder: b.id });
+                m.close();
+                drawSummary();
+              },
+            },
+            h('span', { class: 'bd-cover bd-cover--sm', style: { background: b.css, '--stitch': b.stitch, '--spine': b.color } }),
+            h('span', { class: 'bd-cover-name' }, b.name),
+          ),
+        ),
+      ),
+      [],
+      { dismissable: true },
     );
   }
   const stat = (n: number, label: string) => h('span', { class: 'bd-stat' }, h('b', null, n.toLocaleString('en-US')), ` ${label}`);
@@ -268,8 +310,28 @@ export function binderScreen(_params: Params): Screen {
     }
     sectionsHost.replaceChildren(
       ...list.map((s) => {
-        const grid = h('div', { class: 'bd-grid', style: { '--rows': String(Math.ceil(s.names.length / 4)) } }) as HTMLElement & { fill?: () => void };
-        grid.fill = () => grid.replaceChildren(...s.names.map(cell));
+        // 9 pockets a page; the last page is padded with empty pockets like a real one
+        const pageCount = Math.ceil(s.names.length / 9);
+        const pages = h('div', { class: 'bd-pages', role: 'group', 'aria-label': `${s.title}: ${pageCount} page${pageCount === 1 ? '' : 's'}` }) as HTMLElement & { fill?: () => void };
+        const counter = h('div', { class: 'bd-page-n' }, pageCount > 1 ? `Page 1 of ${pageCount} · swipe` : 'Page 1 of 1');
+        pages.fill = () =>
+          pages.replaceChildren(
+            ...Array.from({ length: pageCount }, (_, p) => {
+              const slice = s.names.slice(p * 9, p * 9 + 9);
+              return h('div', { class: 'bd-page' }, ...slice.map(cell), ...Array.from({ length: 9 - slice.length }, () => h('div', { class: 'bd-pocket bd-pocket--empty', 'aria-hidden': 'true' })));
+            }),
+          );
+        let shown = 0;
+        pages.addEventListener(
+          'scroll',
+          () => {
+            const w = pages.firstElementChild ? (pages.firstElementChild as HTMLElement).offsetWidth : 1;
+            const n = Math.min(pageCount, Math.round(pages.scrollLeft / Math.max(1, w)) + 1);
+            if (n !== shown) counter.textContent = `Page ${(shown = n)} of ${pageCount}`;
+          },
+          { passive: true },
+        );
+        const grid = pages;
         io!.observe(grid);
         const pct = s.completion && s.completion.playable ? Math.round((s.completion.owned / s.completion.playable) * 100) : null;
         return h(
@@ -291,6 +353,7 @@ export function binderScreen(_params: Params): Screen {
               : h('div', { class: 'bd-sec-comp' }, h('span', null, `${s.names.length}`)),
           ),
           grid,
+          counter,
         );
       }),
     );
@@ -300,20 +363,16 @@ export function binderScreen(_params: Params): Screen {
     const have = ownedCount(name);
     const c = findCard(name);
     if (!have) {
-      return h(
-        'button',
-        { type: 'button', class: 'bd-cell bd-cell--missing', 'aria-label': `${name}, not owned`, onclick: () => c && zoomCard(c) },
-        h('div', { class: 'bd-pocket' }, h('span', null, name)),
-      );
+      return h('button', { type: 'button', class: 'bd-pocket bd-cell--missing', 'aria-label': `${name}, not owned`, onclick: () => c && zoomCard(c) }, h('span', null, name));
     }
     const best = bestOwnedRarity(name) ?? 'C';
     const rs = ownedRarities(name);
     const parts = RARITY_ORDER.filter((r) => rs[r]).map((r) => `${rs[r]} ${RARITY_NAMES[r]}`);
     return h(
       'button',
-      { type: 'button', class: 'bd-cell', 'aria-label': `${name}: ${parts.join(', ')}`, title: parts.join(' · '), onclick: () => c && zoomCard(c) },
+      { type: 'button', class: 'bd-pocket bd-cell', 'aria-label': `${name}: ${parts.join(', ')}`, title: parts.join(' · '), onclick: () => c && zoomCard(c) },
       foilCard(name, best as Rarity, { lazy: true }),
-      h('div', { class: 'bd-badges' }, best !== 'C' ? rarityPill(best as Rarity) : h('span'), h('span', { class: 'bd-n' }, `×${have}`)),
+      h('div', { class: 'bd-badges' }, best !== 'C' ? rarityPill(best as Rarity) : null, have > 1 ? h('span', { class: 'bd-n' }, `×${have}`) : null),
     );
   }
 
