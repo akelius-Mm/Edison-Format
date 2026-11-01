@@ -38,10 +38,10 @@ export class AIController implements PlayerController {
   private seen = new Map<number, number>();
 
   /** Remember the identity of opponent monsters that were face-up (until they move). */
-  private observe(game: Game, p: PlayerId) {
+  protected observe(game: Game, p: PlayerId) {
     for (const m of game.monsters(game.opp(p))) if (m.faceUp) this.seen.set(m.uid, m.moveId);
   }
-  private knows(c: CardInstance) {
+  protected knows(c: CardInstance) {
     return this.seen.get(c.uid) === c.moveId;
   }
 
@@ -60,7 +60,7 @@ export class AIController implements PlayerController {
     return ctx;
   }
 
-  private bump(game: Game, key: string) {
+  protected bump(game: Game, key: string) {
     if (this.usageTurn !== game.turn) {
       this.usage.clear();
       this.usageTurn = game.turn;
@@ -69,7 +69,7 @@ export class AIController implements PlayerController {
     this.usage.set(key, n);
     return n;
   }
-  private used(game: Game, key: string) {
+  protected used(game: Game, key: string) {
     if (this.usageTurn !== game.turn) return 0;
     return this.usage.get(key) ?? 0;
   }
@@ -201,7 +201,7 @@ export class AIController implements PlayerController {
     return best;
   }
 
-  private actionKey(a: Action) {
+  protected actionKey(a: Action) {
     switch (a.type) {
       case 'activate':
       case 'proc':
@@ -215,7 +215,7 @@ export class AIController implements PlayerController {
     }
   }
 
-  private scoreAction(game: Game, p: PlayerId, a: Action): number {
+  protected scoreAction(game: Game, p: PlayerId, a: Action): number {
     const opp = game.opp(p);
     switch (a.type) {
       case 'phase': {
