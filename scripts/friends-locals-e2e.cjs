@@ -217,7 +217,7 @@ async function restartTable(phones) {
     await hana.page.goto(url(hana, 'friend'));
     await hana.page.click('[data-test=friends-locals]');
     await hana.page.waitForSelector('[data-test=fl-create]');
-    ok((await hana.page.locator('.tabbar .tab.on').textContent()).includes('Duel'), 'Duel tab highlighted on Friends Locals');
+    ok((await hana.page.locator('.tabbar .tab.on').textContent()).includes('Play'), 'Play tab highlighted on Friends Locals');
     await shot(hana, 'fl-landing-portrait.png');
     await hana.page.click('[data-test=fl-create]');
     const codeEl = hana.page.locator('[data-test=fl-code]');

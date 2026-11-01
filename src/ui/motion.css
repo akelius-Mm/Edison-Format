@@ -33,7 +33,7 @@ html {
   --press-dim: 0.86;
 }
 /* Big cards and artwork shrink a touch less */
-:where(.home-tile, .home-resume, .play-quick, .ps-slot, .dr-pack-btn, .po-card, .bd-cell, .dkc-box) {
+:where(.home-tile, .home-resume, .ps-slot, .dr-pack-btn, .po-card, .bd-cell, .dkc-box) {
   --press-scale: 0.975;
 }
 /* Released: ease back */

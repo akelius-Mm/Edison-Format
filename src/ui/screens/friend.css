@@ -374,19 +374,6 @@
   font-weight: 600;
 }
 
-/* ---------------------------------------------------------------- Duel hub tile */
-.play-tiles--friend {
-  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
-  margin-top: 12px;
-}
-.play-tiles--friend .home-tile {
-  aspect-ratio: auto;
-  min-height: 112px;
-}
-.play-tiles--friend .home-tile-art {
-  background-position: center 22%;
-}
-
 /* ---------------------------------------------------------------- on the duel board */
 .duel-root .phasebar:has(.fr-chip) {
   position: relative;

@@ -135,7 +135,7 @@ function createScreen(): Screen {
   const stat = (v: string, l: string) => h('div', { class: 'res-stat' }, h('b', null, v), h('span', null, l));
   const el = frame(
     'Tournament',
-    { subtitle: 'Swiss rounds, a top cut and a title on the line', cls: 'tour-screen', backTo: () => go('play'), backLabel: 'Duel' },
+    { subtitle: 'Swiss rounds, a top cut and a title on the line', cls: 'tour-screen', backTo: () => go('title'), backLabel: 'Play' },
     h('div', { class: 'res-stats tour-circuit' }, stat(String(ts.played), 'Events'), stat(String(ts.wins), 'Titles'), stat(ts.best ? ordinal(ts.best) : '—', 'Best finish')),
     lobbySection('Your deck', linkButton('Deck Builder', () => go('deck-builder')), deckShelf(decks, st.deck, (d) => ((st.deck = d?.key ?? null), persist()), { label: 'Your deck', newDeck: () => go('deck-builder') })),
     iosGroup('Event', [
@@ -716,8 +716,8 @@ function hubScreen(t: Tournament, autoResume = false): Screen {
       subtitle: subtitle(),
       cls: 'tour-hub',
       actions: headActions,
-      backTo: () => go('play'),
-      backLabel: 'Duel',
+      backTo: () => go('title'),
+      backLabel: 'Play',
     },
     stepper,
     tabsEl,

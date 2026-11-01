@@ -457,9 +457,8 @@ async function tapLatency(page, selector, o = {}) {
 const TAPS = [
   ['title', 'home: tab bar', '.tabbar .tab:not(.on)'],
   ['title', 'home: tile', '.home-tile'],
-  ['title', 'home: row', '.home-row'],
   ['title', 'home: CTA', '.home-cta'],
-  ['play', 'duel hub: tile', '.home-tile'],
+  ['collection', 'collection: tile', '.home-tile'],
   ['settings', 'settings: segmented', '.seg-btn:not(.on)'],
   ['settings', 'settings: list row', '.ios-row--nav'],
   ['database', 'database: card', '.cb-row, .cb-cell'],

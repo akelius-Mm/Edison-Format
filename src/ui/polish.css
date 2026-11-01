@@ -3718,34 +3718,6 @@ body.in-duel .ui-toast-host {
   .home-tile {
     aspect-ratio: 16 / 10 !important;
   }
-  /* Duel hub: header on top, Quick Duel and the four modes in one wide column */
-  .home.play {
-    display: block;
-  }
-  .play .play-head,
-  .play .home-body {
-    max-width: 1000px;
-  }
-  .play .play-head {
-    padding-top: calc(env(safe-area-inset-top, 0px) + 12px);
-    padding-left: max(20px, calc(env(safe-area-inset-left, 0px) + 8px));
-  }
-  .play .play-title {
-    font-size: 28px;
-  }
-  .play .home-body {
-    padding: 4px max(20px, calc(env(safe-area-inset-right, 0px) + 8px)) 20px max(20px, calc(env(safe-area-inset-left, 0px) + 8px)) !important;
-  }
-  .play .play-tiles {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-  }
-  .play .play-tiles .home-tile {
-    aspect-ratio: 1 / 1.1 !important;
-  }
-  .play .play-quick {
-    min-height: 150px;
-  }
-
   /* duel setup step 1: deck tiles in a grid */
   .duel-flow .flow-steps {
     position: static;

@@ -12,9 +12,8 @@ import { registerRoute, startRouter } from './screens/nav';
 import { rulesScreen } from './screens/rules';
 import { guideScreen } from './screens/guide';
 import { settingsScreen } from './screens/settingsScreen';
-import { titleScreen } from './screens/title';
+import { collectionScreen, titleScreen } from './screens/title';
 import { tournamentScreen } from './screens/tournament';
-import { playScreen } from './screens/play';
 import { mountTabBar } from './screens/tabbar';
 import { loadActiveDuel } from './duel/resume';
 import { bootGuard } from './crashGuard';
@@ -27,7 +26,8 @@ import { friendLocalsScreen, restoreFriendsLocals } from './screens/friendLocals
 
 export function startApp(root: HTMLElement) {
   registerRoute('title', titleScreen);
-  registerRoute('play', playScreen);
+  registerRoute('play', titleScreen);
+  registerRoute('collection', collectionScreen);
   registerRoute('duel', duelSetupScreen);
   registerRoute('exhibition', exhibitionScreen);
   registerRoute('deck-builder', deckBuilderScreen);

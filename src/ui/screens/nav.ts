@@ -160,12 +160,12 @@ export function frame(
     {
       type: 'button',
       class: 'frame-back',
-      'aria-label': `Back to ${opts.backLabel ?? 'Home'}`,
+      'aria-label': `Back to ${opts.backLabel ?? 'Play'}`,
       title: 'Back (Esc)',
       onclick: opts.backTo ?? (() => go('title')),
     },
     icon('back'),
-    h('span', { class: 'frame-back-label' }, opts.backLabel ?? 'Home'),
+    h('span', { class: 'frame-back-label' }, opts.backLabel ?? 'Play'),
   );
   const sub = opts.subtitle ? h('div', { class: 'frame-sub' }, opts.subtitle) : null;
   const head = h(

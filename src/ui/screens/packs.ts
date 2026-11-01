@@ -61,7 +61,7 @@ export function packsScreen(params: Params): Screen {
     },
     'Packs or shop',
   );
-  const el = frame('Packs', { actions: chipHost, cls: 'ps-frame' }, h('div', { class: 'ps-seg' }, seg), body);
+  const el = frame('Packs', { actions: chipHost, cls: 'ps-frame', backTo: () => go('collection'), backLabel: 'Collection' }, h('div', { class: 'ps-seg' }, seg), body);
 
   let stage: Stage | null = null;
   const off = onCollectionChange(() => {

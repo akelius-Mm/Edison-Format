@@ -754,11 +754,32 @@
 }
 
 /* ---------------------------------------------------------------- home: profile chip (title.ts) */
-.home-profile {
+/* Play tab: profile chip and the Settings gear in the hero's top corner */
+.home-corner {
   position: absolute;
   z-index: 3;
   top: max(14px, env(safe-area-inset-top, 0px));
   right: max(16px, env(safe-area-inset-right, 0px));
+  display: flex;
+  gap: 8px;
+}
+.home-gear {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(23, 24, 27, 0.72);
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+  color: var(--text);
+  cursor: pointer;
+}
+.home-gear .icon { width: 19px; height: 19px; }
+.home-profile {
   display: inline-flex;
   align-items: center;
   gap: 8px;

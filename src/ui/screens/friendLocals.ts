@@ -109,7 +109,7 @@ export function friendsLocalsLive(): TView | null {
 }
 
 export function friendLocalsScreen(params: Record<string, string>): Screen {
-  const el = frame('Friends Locals', { cls: 'fl-screen lx-screen friend-screen lobby-screen', compact: true, backTo: () => go('play'), backLabel: 'Duel' });
+  const el = frame('Friends Locals', { cls: 'fl-screen lx-screen friend-screen lobby-screen', compact: true, backTo: () => go('title'), backLabel: 'Play' });
   const body = el.querySelector('.frame-body') as HTMLElement;
   const screen: Screen = {
     el,

@@ -240,13 +240,13 @@ async function screenshots(browser) {
   await host.page.screenshot({ path: path.join(OUT, 'friend-join-portrait.png') });
   ok((await host.page.inputValue('[data-test=join-code]')) === 'KQTM-4825', 'code entry formats as KQTM-4825');
   await host.page.goto(url(host, 'play'));
-  await host.page.waitForSelector('.play-tiles--friend');
+  await host.page.waitForSelector('.home-tile');
   await sleep(600);
-  await host.page.locator('.play-tiles--friend').scrollIntoViewIfNeeded();
+  await host.page.locator('.home-tile', { hasText: 'Play a friend' }).scrollIntoViewIfNeeded();
   await host.page.screenshot({ path: path.join(OUT, 'duel-hub-portrait.png') });
-  ok((await host.page.locator('.tabbar .tab.on').textContent()).includes('Duel'), 'Duel tab highlighted on the hub');
+  ok((await host.page.locator('.tabbar .tab.on').textContent()).includes('Play'), 'Play tab highlighted on the hub');
   await host.page.goto(url(host, 'friend'));
-  ok((await host.page.locator('.tabbar .tab.on').textContent()).includes('Duel'), 'Duel tab highlighted on the friend screen');
+  ok((await host.page.locator('.tabbar .tab.on').textContent()).includes('Play'), 'Play tab highlighted on the friend screen');
   const code = await createAndJoin(host, guest);
   void code;
   await host.page.screenshot({ path: path.join(OUT, 'lobby-host-portrait.png') });

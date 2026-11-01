@@ -64,7 +64,7 @@ export function databaseScreen(): Screen {
   const total = allCards().length;
   const el = frame(
     'Card Database',
-    { subtitle: `${total} cards in the Edison card pool`, cls: 'database frame-wide', compact: true, actions: h('span', { class: 'head-count' }, `${total} cards`) },
+    { subtitle: `${total} cards in the Edison card pool`, cls: 'database frame-wide', compact: true, backTo: () => go('deck-builder'), backLabel: 'Decks', actions: h('span', { class: 'head-count' }, `${total} cards`) },
     h('div', { class: 'dbx-layout' }, h('section', { class: 'dbx-browser' }, browser.el), detail),
   );
   return { el, onShow: () => setTimeout(() => !narrow() && browser.focusSearch(), 80) };

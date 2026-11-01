@@ -1,4 +1,4 @@
-// Settings ("More" tab): shortcuts to the other modes, then iOS-style grouped settings.
+// Settings (the gear on the Play tab): your sleeves, mat and the rules, then iOS-style grouped settings.
 import type { Difficulty } from '../../ai/ai';
 import { clearOfficialArtCache } from '../cards/officialArt';
 import { DEFAULT_SETTINGS, getSettings, updateSettings, type Settings } from '../settings';
@@ -10,7 +10,6 @@ import { packsDraftSettingsGroup } from './draftSetup';
 import { confirmDialog, h, segmented, toast, toggle } from './dom';
 import { frame, go, type Screen } from './nav';
 import { getProfile, resetAllData } from './store';
-import { loadActiveTournament, currentRoundLabel } from '../../tournament/tournament';
 // Play a friend: connection server (advanced).
 import { onlineSettingsGroup } from './friend';
 import { openReportSheet } from './report';
@@ -23,7 +22,6 @@ export function settingsScreen(): Screen {
   const set = (patch: Partial<Settings>) => updateSettings(patch);
 
   const p = getProfile();
-  const active = loadActiveTournament();
   const games = p.games.w + p.games.l + p.games.d;
 
   const nameDetail = h('span', null, playerName());
@@ -32,12 +30,9 @@ export function settingsScreen(): Screen {
 
   const el = frame(
     'Settings',
-    { cls: 'settings-screen' },
+    { cls: 'settings-screen', backTo: () => go('title'), backLabel: 'Play' },
     iosGroup('Profile', [nameNav], 'Friends see this name when you play online.'),
-    iosGroup('More', [
-      iosNav('Tournament', () => go('tournament'), { icon: 'trophy', detail: active ? currentRoundLabel(active) : undefined }),
-      iosNav('Watch AI vs AI', () => go('exhibition'), { icon: 'eye' }),
-      iosNav('Card Database', () => go('database'), { icon: 'search' }),
+    iosGroup('Your table', [
       iosNav('Sleeves & Playmat', () => go('customize'), { icon: 'palette' }),
       iosNav('How to Play & Banlist', () => go('rules'), { icon: 'book' }),
       iosNav('Rules updates', () => openRulesNotes(), { icon: 'scroll' }),

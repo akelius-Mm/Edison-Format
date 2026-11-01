@@ -755,6 +755,7 @@ export function deckBuilderScreen(params: Params): Screen {
       },
       icon('plus'),
     ),
+    h('button', { type: 'button', class: 'head-icon-btn', title: 'Card Database', 'aria-label': 'Card Database', onclick: () => go('database') }, icon('search')),
   );
   void renameDeck;
 

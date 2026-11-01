@@ -220,7 +220,7 @@ export function duelSetupScreen(params: Record<string, string> = {}): Screen {
     await playVsAI(mine, opp, { ...st.persona }, st.bestOf, !!st.ranked);
   }
 
-  const el = frame('Duel vs AI', { cls: 'lobby-screen duel-flow', compact: true, backTo: () => (step === 2 ? show(1) : go('play')), backLabel: 'Duel' }, steps, stage);
+  const el = frame('Duel vs AI', { cls: 'lobby-screen duel-flow', compact: true, backTo: () => (step === 2 ? show(1) : go('title')), backLabel: 'Play' }, steps, stage);
   show(1);
   return {
     el,
@@ -353,7 +353,7 @@ export function exhibitionScreen(): Screen {
 
   const el = frame(
     'Watch AI vs AI',
-    { subtitle: 'Spectate an exhibition between two AI duelists', cls: 'lobby-screen', backTo: () => go('play'), backLabel: 'Duel' },
+    { subtitle: 'Spectate an exhibition between two AI duelists', cls: 'lobby-screen', backTo: () => go('title'), backLabel: 'Play' },
     side(st.a, 'Duelist A'),
     side(st.b, 'Duelist B'),
     lobbySection(

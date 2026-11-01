@@ -222,7 +222,7 @@ function hubScreen(): Screen {
 
   const el = frame(
     'Events',
-    { eyebrow: 'Organized Play · Spring 2010', cls: 'lobby-screen ev-screen ev-hub', backTo: () => go('play'), backLabel: 'Duel' },
+    { eyebrow: 'Organized Play · Spring 2010', cls: 'lobby-screen ev-screen ev-hub', backTo: () => go('title'), backLabel: 'Play' },
     resume,
     circuitCard(season),
     iosGroup(
