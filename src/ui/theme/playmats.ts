@@ -44,6 +44,8 @@ const FELT = `${noiseTile(200, '1.4 .9', 0.12, 4)} 0 0 / 200px 200px repeat`;
 const PAPER = `${noiseTile(180, '1.6', 0.06, 2)} 0 0 / 180px 180px repeat`;
 /** Overhead light: a soft hot spot and darker edges, like a photo of a mat on a table. */
 const LIGHT = 'radial-gradient(ellipse at 50% 38%, rgba(255,255,255,.07), rgba(255,255,255,0) 60%), radial-gradient(ellipse at 50% 50%, rgba(0,0,0,0) 55%, rgba(0,0,0,.5) 100%)';
+/** Where an art mat's picture is anchored when it is cropped: centred across, near the top (heads and faces). */
+export const ART_FOCUS = 'center 15%';
 /** Keeps zone lines readable over busy artwork. */
 const ART_SCRIM = 'linear-gradient(rgba(0,0,0,.30), rgba(0,0,0,.30))';
 
@@ -303,7 +305,9 @@ function cssOf(d: Def): string {
   layers.push(LIGHT);
   if (d.print) layers.push(printLayer(d.print, d.edge ?? d.accent));
   const url = artUrl(d.art);
-  if (url) layers.push(ART_SCRIM, `url("${url}") center / cover no-repeat`);
+  // A mat half is about twice as wide as the (square) artwork, so cover crops its top and bottom. Anchor near the
+  // top, where card art keeps the head and face, instead of the middle (which cut Judgment Dragon's head off).
+  if (url) layers.push(ART_SCRIM, `url("${url}") ${ART_FOCUS} / cover no-repeat`);
   layers.push(d.surface);
   return layers.join(', ');
 }
