@@ -268,6 +268,7 @@ a {
     opacity var(--dur-fast) var(--ease-out);
   font-family: var(--font) !important;
   border: 0 !important;
+  border-radius: 12px !important;
 }
 .ui-btn:hover {
   --b-bg: rgba(255, 255, 255, 0.09);
@@ -283,6 +284,7 @@ a {
 .ui-btn-sm {
   padding: 0 11px;
   gap: 6px;
+  border-radius: 10px !important;
 }
 .ui-btn-primary,
 .ui-btn-gold {
@@ -333,6 +335,7 @@ a {
   letter-spacing: 0.06em;
   text-transform: uppercase;
   font-size: 17px !important;
+  border-radius: 14px !important;
 }
 
 /* ---------------------------------------------------------------- form controls */
@@ -800,7 +803,7 @@ input[type='range'] {
   /* modals: centered card rather than a tall sheet */
   .modal-backdrop {
     align-items: center;
-    padding: 12px !important;
+    padding: 12px;
   }
 }
 .screen-enter {
@@ -851,7 +854,7 @@ input[type='range'] {
 @media (orientation: landscape) and (max-height: 500px) {
   /* headers */
   .frame-head {
-    height: calc(44px + env(safe-area-inset-top, 0px)) !important;
+    height: calc(44px + env(safe-area-inset-top, 0px));
   }
   .frame-large .frame-sub {
     font-size: 14px;
