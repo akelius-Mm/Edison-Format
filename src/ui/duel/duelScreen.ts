@@ -37,7 +37,7 @@ import { SwipePlay } from './swipe';
 import { FxDirector, sleep } from './fx';
 import { FAST_FORWARD, setupHurry } from './hurry';
 import { HumanController, type HumanUI, PacedController } from './human';
-import { ChainStack, LogPanel, PhaseBar, PlayerPanel, PreviewPanel } from './panels';
+import { ChainStack, LogPanel, PhaseBar, PlayerPanel, PreviewPanel, openScorepad } from './panels';
 import { Sfx } from './sound';
 import { music } from '../audio/music';
 import { haptic } from '../haptics';
@@ -195,6 +195,7 @@ class DuelScreen implements HumanUI {
     const p0 = new PlayerPanel(opts.sides[0], 0, this.me === 0, startLp, () => this.speed());
     const p1 = new PlayerPanel(opts.sides[1], 1, this.me === 1, startLp, () => this.speed());
     this.panels = [p0, p1];
+    for (const p of this.panels) p.onLpTap = () => openScorepad(this.root, this.panels, this.me);
     for (const p of this.panels) p.onLpRoll = (ms, up, amount) => this.sfx.lpTicker(ms, up, amount);
     this.phaseBar = new PhaseBar(this.me);
     if (this.spectator) this.phaseBar.setSpectatorLabels([opts.sides[0].name, opts.sides[1].name]);

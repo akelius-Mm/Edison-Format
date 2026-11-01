@@ -319,3 +319,47 @@ body.has-tabbar .frame {
   color: var(--text-2);
 }
 .collection-screen .home-tiles { margin-top: 4px; }
+
+/* ---- Play tab: your table (your mat, your sleeved deck and its ace) in the hero */
+.home-table {
+  inset: 0;
+  transform: none;
+  transition: none;
+  outline: 1.5px dashed var(--mat-edge, transparent);
+  outline-offset: -8px;
+}
+.home-table-cards {
+  --w: clamp(62px, 17vw, 92px);
+  position: absolute;
+  left: 50%;
+  top: calc(max(14px, env(safe-area-inset-top, 0px)) + 58px);
+  transform: translateX(-50%);
+  display: flex;
+  align-items: flex-start;
+  gap: calc(var(--w) * 0.32);
+}
+.home-table-cards .yc {
+  --yc-w: var(--w);
+  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.5);
+}
+.home-stack,
+.home-ace {
+  position: relative;
+  width: var(--w);
+  height: calc(var(--w) * 1.4576);
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+}
+.home-stack-card {
+  position: absolute;
+  inset: 0;
+  /* a few cards' thickness, each a hair up and to the left of the one below */
+  transform: translate(calc(var(--i) * -1.2px), calc(var(--i) * -1.4px));
+}
+.home-stack-card:not(:last-child) .yc { box-shadow: 0 1px 0 rgba(0, 0, 0, 0.6); }
+.home-deck { transform: rotate(2deg); }
+.home-extra { transform: rotate(-3deg); }
+.home-ace { transform: rotate(-1.5deg) translateY(10px); }
+.home-ace .yc { box-shadow: 0 10px 22px rgba(0, 0, 0, 0.55); }

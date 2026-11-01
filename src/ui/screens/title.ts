@@ -1,6 +1,11 @@
 // Play tab (route `title`, also `play`): the hero with Duel vs AI, anything in progress, this week's event,
 // playing friends and Watch AI vs AI (the practice Tournament lives under Events). Settings and Profile sit in the hero's corner. Also the Collection tab.
-import { getSettings } from '../settings';
+import { getSettings, loadJSON } from '../settings';
+import { applyPlaymat } from '../theme/playmats';
+import { renderCard, sleevePreview } from './ext';
+import { signatureCard } from './components';
+import { allDeckInfos } from './store';
+import { findCard } from '../../cards';
 import { loadActiveTournament, currentRoundLabel } from '../../tournament/tournament';
 import { h, icon, type Child } from './dom';
 import { frame, go, type Screen } from './nav';
@@ -22,9 +27,9 @@ export function titleScreen(): Screen {
   const ts = tournamentSummary();
   const gp = profile.games.w + profile.games.l + profile.games.d;
 
-  // ---- hero: Dark Armed Dragon artwork with the main call to action; profile and settings in the corner
-  const heroArt = h('div', { class: 'home-hero-art' });
-  artInto(heroArt, 'Dark Armed Dragon');
+  // ---- hero: your table (your mat, your sleeved deck and its ace) with the main call to action; profile and
+  // settings in the corner
+  const heroArt = yourTable();
   const hero = h(
     'section',
     { class: 'home-hero' },
@@ -96,6 +101,38 @@ export function titleScreen(): Screen {
   );
 
   return { el };
+}
+
+/** Your mat with your sleeved deck on it and the ace of the deck you last chose, face up. Tap to change them. */
+function yourTable(): HTMLElement {
+  const st = getSettings();
+  const table = h('div', { class: 'home-hero-art home-table has-art' });
+  applyPlaymat(table, st.playmat);
+  const stack = (n: number, cls: string, label: string) =>
+    h(
+      'button',
+      { type: 'button', class: ['home-stack', cls], 'aria-label': label, 'data-test': cls, onclick: () => go('customize') },
+      ...Array.from({ length: n }, (_, i) => h('span', { class: 'home-stack-card', style: { '--i': i } }, sleevePreview(st.sleeve, 'md'))),
+    );
+  const ace = lastDeckAce();
+  table.append(
+    h(
+      'div',
+      { class: 'home-table-cards' },
+      stack(3, 'home-extra', 'Extra Deck · Sleeves & Playmat'),
+      ace ? h('button', { type: 'button', class: 'home-ace', 'aria-label': `${ace.name} · choose decks`, onclick: () => go('duel') }, renderCard(ace, { size: 'md' })) : null,
+      stack(6, 'home-deck', 'Your deck · Sleeves & Playmat'),
+    ),
+  );
+  return table;
+}
+
+/** The signature card of the deck you last picked for Duel vs AI (or Dark Armed Dragon before you have). */
+function lastDeckAce() {
+  const key = loadJSON<{ myDeck?: string | null }>('edison.duelSetup.v1', {}).myDeck;
+  const deck = key ? allDeckInfos().find((d) => d.key === key) : undefined;
+  const name = (deck && signatureCard(deck)) ?? 'Dark Armed Dragon';
+  return findCard(name) ?? findCard('Dark Armed Dragon');
 }
 
 /** Collection tab: packs, the Card Shop, trades and your binder. */
