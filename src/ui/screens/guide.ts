@@ -56,6 +56,7 @@ function duelSection() {
     list(
       [b('Tap a card'), ' to see what you can do with it. If something can’t be used right now, it shows ', b('greyed out with the reason'), ', for example “your monster can’t be Tributed”.'],
       [b('Press and hold a card'), ' to read it full size. In card lists, tap the magnifier or hold the card.'],
+      [b('Judge'), ' (the raised hand at the top): a floor judge reads out the 2010 rulings on the cards in play, with their sources, and answers about any card you type.'],
       [b('Swipe a card up'), ' from your hand onto the field to play it. If it can be played more than one way, you pick. Settings → Swipe up to play turns it off.'],
       [
         b('Response prompts'),

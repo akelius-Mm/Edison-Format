@@ -301,6 +301,10 @@ export class PreviewPanel {
   private cardHost: HTMLElement;
   private details: HTMLElement;
   private current: { data: CardData; inst?: CardInstance } | null = null;
+  /** The card shown now, when it's a card in this duel (the judge looks at it). */
+  get shownCard(): CardInstance | undefined {
+    return this.current?.inst;
+  }
   private sig = '';
 
   /** `canSee`: whether the viewer may see this card now; a shown card that turns hidden (bounced, Set, shuffled) is cleared. */

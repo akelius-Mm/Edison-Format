@@ -187,9 +187,10 @@ export class PlannerAI extends AIController {
    * one's index, or null when no copy could be made.
    */
   private async decide(game: Game, plan: Plannable, p: PlayerId, kind: 'act' | 'resp', cands: { i: number; s: number; name: string }[], n: number): Promise<number | null> {
-    // the duel, the seat, where in the duel, and the board right now (two duels can share a seed)
+    // the duel, the seat, where in the duel, the board right now (two duels can share a seed), and which AI is asking
+    // (two look-ahead AIs in one duel, or the same duel replayed with the seats swapped, must not share answers)
     const last = (l: Decision[]) => (l.length ? l[l.length - 1].h : '');
-    const key = `${kind}:${game.options.seed}:${p}:${plan.logs[0].length}:${plan.logs[1].length}:${last(plan.logs[0])}:${last(plan.logs[1])}:${stateDigest(game)}:${this.width}:${n}`;
+    const key = `${kind}:${game.options.seed}:${p}:${plan.logs[0].length}:${plan.logs[1].length}:${last(plan.logs[0])}:${last(plan.logs[1])}:${stateDigest(game)}:${n}:${this.seed}:${this.width}.${this.guesses}.${this.horizon}.${this.fromDeck ? 1 : 0}`;
     const duel = `${game.options.seed}:${plan.decks[0].main.length}:${plan.decks[1].main.length}`;
     const memo = memoGet(duel, key);
     if (memo !== undefined) return memo;

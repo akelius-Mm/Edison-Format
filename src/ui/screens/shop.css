@@ -365,3 +365,43 @@
     transition: none;
   }
 }
+
+/* ---- the regulars' binders: a cover on each trader row, their cards in 9-pocket pages on the trade table */
+.sh-trader-binder { flex: none; width: 50px; height: 64px; }
+.sh-trader-binder .bd-cover-label { left: 13px; right: 5px; bottom: 8px; padding: 2px 4px; }
+.sh-trader-binder .bd-cover-label b { font-size: 11px; letter-spacing: 0.04em; text-align: center; }
+.bd-cover--xs { display: inline-block; flex: none; width: 18px; height: 23px; margin-right: 8px; vertical-align: -4px; border-radius: 2px 4px 4px 2px; }
+.bd-cover--xs::after { display: none; }
+.sh-binder-h { display: flex; align-items: center; flex-wrap: wrap; }
+.sh-binder { margin-bottom: 2px; }
+.sh-binder .sh-empty { grid-column: 1 / -1; }
+.sh-pocket { cursor: pointer !important; }
+.sh-pocket.on { box-shadow: inset 0 0 0 2px var(--gold, #d8b45a), 0 0 0 1px var(--gold, #d8b45a); background: rgba(216, 180, 90, 0.12); }
+.sh-pocket-val,
+.sh-pocket-have {
+  position: absolute;
+  z-index: 2;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: rgba(10, 11, 13, 0.88);
+  color: var(--text);
+  font: 600 10.5px var(--font);
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+.sh-pocket-val { right: 5px; bottom: 5px; }
+.sh-pocket-have { left: 5px; top: 5px; color: var(--text-2); font-weight: 500; }
+.sh-pocket-check {
+  position: absolute;
+  z-index: 3;
+  right: 5px;
+  top: 5px;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  background: var(--gold, #d8b45a);
+  color: #1a1206;
+}
+.sh-pocket-check .icon { width: 14px; height: 14px; }

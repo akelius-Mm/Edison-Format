@@ -103,12 +103,14 @@ const noSideScroll = (page) => page.evaluate(() => document.documentElement.scro
     check((await page.locator('.sh-trader').count()) >= 9, 'every regular is at the trade table');
     await page.screenshot({ path: path.join(OUT, 'shop-traders.png') });
     await page.locator('.sh-trader', { hasText: 'Felix' }).click();
-    await page.waitForSelector('.sh-pick');
+    await page.waitForSelector('.sh-pocket');
     check(await noSideScroll(page), 'no sideways scrolling on the trade table');
-    // the cheapest card in their binder, so the starting DP can cover it
-    const pick = page.locator('.sh-pick').last();
-    const name = (await pick.locator('.sh-title').innerText()).replace(/^\S+\s+/, '').trim();
+    // the cheapest card in their binder (the last pocket), so the starting DP can cover it
+    const pick = page.locator('.sh-pocket').last();
+    const name = await pick.getAttribute('data-name');
+    await pick.scrollIntoViewIfNeeded();
     await pick.click();
+    check(await pick.getAttribute('aria-pressed') === 'true', 'tapping a pocket picks the card');
     await page.getByRole('button', { name: 'Offer trade' }).click();
     await sleep(300);
     check(/short|add a little/i.test(await page.locator('.sh-reply').innerText()), 'nothing for something is refused, with how much is missing');
@@ -121,7 +123,7 @@ const noSideScroll = (page) => page.evaluate(() => document.documentElement.scro
     await page.getByRole('button', { name: 'Trade', exact: true }).click();
     await sleep(500);
     check(/sweet|deal/i.test(await page.locator('.sh-reply').innerText()), 'enough DP gets the deal');
-    check(!(await page.locator('.sh-pick', { hasText: name }).count()), `${name} left their binder`);
+    check(!(await page.locator(`.sh-pocket[data-name="${name}"]`).count()), `${name} left their binder`);
     await page.screenshot({ path: path.join(OUT, 'trade-done.png') });
 
     check(!errors.length, `no page errors${errors.length ? `: ${errors.join(' | ')}` : ''}`);

@@ -85,3 +85,27 @@ export const DEFAULT_BINDER = 'padded-black';
 export function binderById(id: string | undefined): BinderCover {
   return BINDERS.find((b) => b.id === id) ?? BINDERS[0];
 }
+
+/** Each Locals regular carries their own binder (the trade screens show it). */
+const REGULAR_BINDERS: Record<string, string> = {
+  marcus: 'padded-black', // store champion: all business
+  priya: 'padded-purple',
+  dave: 'zip-black', // the phone-book-sized trade binder
+  theo: 'padded-white', // Lightsworn
+  nadia: 'padded-red',
+  kenji: 'padded-blue',
+  jonah: 'padded-green',
+  felix: 'padded-orange',
+  gus: 'vinyl-blue', // a plain 3-ring from the drugstore
+};
+
+export function regularBinder(id: string): BinderCover {
+  const known = REGULAR_BINDERS[id];
+  if (known) return binderById(known);
+  let h = 0;
+  for (const ch of id) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  return BINDERS[h % BINDERS.length];
+}
+
+/** Inline style for a cover element (`.bd-cover`). */
+export const coverStyle = (b: BinderCover) => ({ background: b.css, '--stitch': b.stitch, '--ink': b.ink, '--spine': b.color });
