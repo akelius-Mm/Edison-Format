@@ -11,6 +11,10 @@ import { RecordingController, type Decision } from '../../engine/replay';
 import { UndoTracker } from '../../engine/undo';
 import type { BattlePos, PlayerId } from '../../engine/types';
 import { ICONS } from '../cards/icons';
+import { openJudge } from './judge';
+
+/** A raised hand: calling a judge over. */
+const JUDGE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 13V5.5a1.5 1.5 0 0 1 3 0V12"/><path d="M11 11.5v-7a1.5 1.5 0 0 1 3 0V12"/><path d="M14 11.5V6.5a1.5 1.5 0 0 1 3 0V15a6 6 0 0 1-6 6h-.6a6 6 0 0 1-4.6-2.2L3.6 16a1.6 1.6 0 0 1 2.4-2.1L8 16"/></svg>';
 import { prefetchOfficialImages } from '../cards/officialArt';
 import { zoomCard } from '../cards/zoom';
 import { getSettings, onSettingsChange, updateSettings } from '../settings';
@@ -435,11 +439,21 @@ class DuelScreen implements HumanUI {
       this.root.classList.remove('show-log-sheet');
       this.root.classList.toggle('show-preview-sheet');
     };
-    this.soundBtn = h('button', 'icon-btn') as HTMLButtonElement;
+    this.soundBtn = h('button', 'icon-btn icon-btn--sound') as HTMLButtonElement;
     this.soundBtn.title = 'Toggle sound';
     this.soundBtn.onclick = () => updateSettings({ sound: !getSettings().sound });
     this.updateSoundBtn();
-    btns.append(infoBtn, logBtn, this.soundBtn);
+    // "Judge!": the 2010 rulings on the cards in play (judge.ts)
+    const judgeBtn = h('button', 'icon-btn icon-btn--judge', JUDGE_ICON) as HTMLButtonElement;
+    judgeBtn.title = 'Call a judge';
+    judgeBtn.setAttribute('aria-label', 'Call a judge');
+    judgeBtn.dataset.test = 'judge';
+    judgeBtn.onclick = (ev) => {
+      ev.stopPropagation();
+      this.root.classList.remove('show-log-sheet', 'show-preview-sheet');
+      openJudge(this.root, this.game, this.preview.shownCard);
+    };
+    btns.append(infoBtn, judgeBtn, logBtn, this.soundBtn);
     const canSurrender = !this.spectator && (this.opts.allowSurrender ?? true);
     if (canSurrender || this.spectator) {
       const sur = h('button', 'icon-btn icon-btn--danger', ICONS.flag) as HTMLButtonElement;
