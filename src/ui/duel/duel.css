@@ -1482,7 +1482,7 @@
   border-radius: inherit;
   pointer-events: none;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 .07 0'/%3E%3C/filter%3E%3Crect width='220' height='220' filter='url(%23n)'/%3E%3C/svg%3E");
-  outline: 2px dashed rgba(255, 255, 255, 0.13);
+  outline: 2px dashed var(--mat-edge, rgba(255, 255, 255, 0.13));
   outline-offset: -7px;
 }
 
@@ -1516,6 +1516,8 @@
     linear-gradient(180deg, #16171a, #0d0e10);
 }
 .duel-mat.mats-split::after { border-color: rgba(255, 255, 255, 0.05) !important; }
+/* each mat has its own stitched edge; the table itself has none */
+.duel-mat.mats-split::before { outline: none; }
 .mats-split .side::before {
   content: '';
   position: absolute;
@@ -1523,10 +1525,17 @@
   border-radius: calc(var(--gap) * 1.6);
   background: var(--mat-bg);
   box-shadow: 0 1px 0 rgba(255, 255, 255, 0.05) inset, 0 8px 22px rgba(0, 0, 0, 0.55);
+  /* the stitched edge of a real neoprene mat */
+  outline: 1.5px dashed var(--mat-edge, rgba(255, 255, 255, 0.13));
+  outline-offset: -5px;
   pointer-events: none;
 }
 /* The opponent's mat faces them. */
 .mats-split .side-opp::before { transform: rotate(180deg); }
+/* A real mat is bigger than its zones: each mat runs on toward its player's edge of the table, where the
+   deck box and hand sit. (The box keeps its place when rotated, so the opponent's mat grows at the top.) */
+.mats-split .side-me::before { bottom: calc(var(--gap) * -1.4 - var(--zh) * 0.9); }
+.mats-split .side-opp::before { top: calc(var(--gap) * -1.4 - var(--zh) * 0.9); }
 .mats-split .midline-glow { display: none; }
 /* Wide boards show the banished pile beside the grid: the mat extends to cover it. */
 /* Both mats extend on both sides so they stay lined up with each other. */

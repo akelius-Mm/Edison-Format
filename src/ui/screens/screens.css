@@ -2134,6 +2134,8 @@ i.k-monster,
   aspect-ratio: 16 / 9;
   border-radius: 8px;
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1);
+  outline: 1px dashed var(--mat-edge, transparent);
+  outline-offset: -4px;
 }
 .cz-side {
   position: sticky;
@@ -2153,6 +2155,8 @@ i.k-monster,
 .cz-mat {
   position: absolute;
   inset: 0;
+  outline: 1.5px dashed var(--mat-edge, transparent);
+  outline-offset: -7px;
 }
 .cz-preview-inner {
   position: absolute;

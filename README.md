@@ -6,8 +6,9 @@ opponents, a deck builder, booster packs and a collection, Draft and Sealed, a s
 tournament scene, and online duels and tournaments with friends. It installs to your home screen
 and works offline.
 
-> Fan-made, non-commercial project. Card names belong to their owners; card art, sleeves and
-> playmats are procedurally generated, and card texts are paraphrased.
+> Fan-made, non-commercial project. Card names and artwork belong to their owners; official card images
+> load from YGOPRODeck when enabled (Settings → Official card images), otherwise card art is drawn by the
+> app, and card texts are paraphrased.
 
 <p align="center">
   <img src="docs/screenshots/home.png" width="200" alt="Home screen">
@@ -79,7 +80,9 @@ and works offline.
 - **Sound and music**: card and impact sound effects, haptics, and shuffled lo-fi playlists for
   the menu, duels and the pinch. All bundled audio is CC0; Settings → Audio credits lists every
   file. Settings → Your music plays your own audio files instead.
-- **Customization**: sleeves, playmats (or a photo of your own), player name, animation speed.
+- **Customization**: real-world sleeves and playmats: matte, gloss and foil sleeves, plain neoprene, felt
+  and the starter-deck paper mat, and art mats and art sleeves printed with any card's official artwork (or a
+  photo of your own). Six event mats are earned at Regionals, the SJC and Nationals. Player name, animation speed.
 - **Official card images (optional)**: Settings → "Load official card images" fetches artwork
   from the public YGOPRODeck database when online, and falls back to generated art.
 - **Back up and restore**: Settings → Data saves your decks, collection, stats and settings as one
