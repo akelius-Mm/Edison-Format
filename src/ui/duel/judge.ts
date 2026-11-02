@@ -5,39 +5,12 @@
 // updates (screens/rulesNotes.ts). You can also ask about any card by name. Read-only: nothing here changes the duel.
 import type { CardInstance } from '../../engine/card';
 import type { Game } from '../../engine/game';
-import { allCards, findCard } from '../../cards';
-import { RULINGS, type RulingNote } from '../../cards/rulings.generated';
-import { RULES_NOTES } from '../screens/rulesNotes';
+import type { PlayerId } from '../../engine/types';
+import { findCard } from '../../cards';
+import { cardsInQuestion, rulingsFor, searchCards } from './judgeBook';
 import { zoomCard } from '../cards/zoom';
 import { esc } from '../theme/util';
 import './judge.css';
-
-/** Everything on record for a card: cited 2010 rulings, then the Rules updates that mention it. */
-export function rulingsFor(name: string): { notes: RulingNote[]; updates: string[] } {
-  const notes = RULINGS[name] ?? [];
-  const updates: string[] = [];
-  for (const g of RULES_NOTES) for (const it of g.items) if (it.includes(name) && !updates.includes(it)) updates.push(it);
-  return { notes, updates };
-}
-
-/** The cards a judge would look at right now, most relevant first (at most `max`, by name). */
-export function cardsInQuestion(game: Game, focus: CardInstance | null | undefined, max = 6): string[] {
-  const out: string[] = [];
-  const add = (c: CardInstance | null | undefined) => {
-    if (!c || c.isToken || out.includes(c.name) || out.length >= max) return;
-    out.push(c.name);
-  };
-  // the Chain, newest link first
-  for (const l of [...game.chain].reverse()) add(l.card);
-  add(focus);
-  // the last things that happened (cards that moved, were summoned, activated, attacked…)
-  const recent = game.eventLog.slice(-30).reverse();
-  for (const ev of recent) {
-    add(ev.card as CardInstance | undefined);
-    add((ev as { other?: CardInstance }).other);
-  }
-  return out;
-}
 
 const host = (url: string) => (url.includes('edisonrul.ing') ? 'edisonrul.ing (2010 rulings)' : 'edisonformat.com');
 
@@ -59,8 +32,8 @@ function cardBlock(name: string): HTMLElement {
   return el;
 }
 
-/** Open the judge sheet over the duel. */
-export function openJudge(root: HTMLElement, game: Game, focus: CardInstance | null | undefined) {
+/** Open the judge sheet over the duel. `viewer` is the seat looking (null for a spectator). */
+export function openJudge(root: HTMLElement, game: Game, focus: CardInstance | null | undefined, viewer: PlayerId | null) {
   root.querySelector('.jd-layer')?.remove();
   const layer = document.createElement('div');
   layer.className = 'jd-layer';
@@ -68,15 +41,14 @@ export function openJudge(root: HTMLElement, game: Game, focus: CardInstance | n
   layer.setAttribute('aria-label', 'Judge');
   const sheet = document.createElement('div');
   sheet.className = 'jd-sheet';
-  const names = cardsInQuestion(game, focus);
-  const listId = `jd-cards-${Math.random().toString(36).slice(2, 8)}`;
+  const names = cardsInQuestion(game, focus, viewer);
   sheet.innerHTML = `
     <div class="jd-head">
       <span class="jd-badge" aria-hidden="true">J</span>
       <div><b>Floor judge</b><small>“Judge here. What’s the question?”</small></div>
       <button type="button" class="jd-close" aria-label="Close">✕</button>
     </div>
-    <label class="jd-ask"><input type="search" list="${listId}" placeholder="Ask about any card…" autocomplete="off" spellcheck="false" aria-label="Ask about a card"><datalist id="${listId}"></datalist></label>
+    <form class="jd-ask" action="#"><input type="search" enterkeyhint="search" placeholder="Ask about any card…" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" aria-label="Ask about a card"><div class="jd-sugg" role="listbox"></div></form>
     <div class="jd-answer" hidden></div>
     <h3 class="jd-h">${names.length ? 'On the table right now' : 'Nothing has happened yet'}</h3>
     <div class="jd-list"></div>
@@ -85,32 +57,38 @@ export function openJudge(root: HTMLElement, game: Game, focus: CardInstance | n
   for (const n of names) list.appendChild(cardBlock(n));
   const answer = sheet.querySelector<HTMLElement>('.jd-answer')!;
   const input = sheet.querySelector<HTMLInputElement>('input')!;
-  const dl = sheet.querySelector<HTMLDataListElement>('datalist')!;
-  input.addEventListener(
-    'focus',
-    () => {
-      if (dl.childElementCount) return;
-      for (const n of [...new Set(allCards().map((c) => c.name))].sort()) {
-        const o = document.createElement('option');
-        o.value = n;
-        dl.appendChild(o);
-      }
-    },
-    { once: true },
-  );
-  const ask = () => {
-    const q = input.value.trim().toLowerCase();
-    if (!q) return;
-    const all = [...new Set(allCards().map((c) => c.name))];
-    const name = all.find((n) => n.toLowerCase() === q) ?? all.find((n) => n.toLowerCase().startsWith(q)) ?? all.find((n) => n.toLowerCase().includes(q));
+  const sugg = sheet.querySelector<HTMLElement>('.jd-sugg')!;
+  const form = sheet.querySelector<HTMLFormElement>('form')!;
+  const show = (name: string | undefined) => {
+    sugg.replaceChildren();
     answer.hidden = false;
     answer.replaceChildren(name ? cardBlock(name) : Object.assign(document.createElement('p'), { className: 'jd-none', textContent: 'No Edison-era card by that name.' }));
+    // put the keyboard away: on iPhone a focused field keeps the page pushed up
+    input.blur();
   };
-  input.addEventListener('change', ask);
-  input.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') ask();
+  input.addEventListener('input', () => {
+    sugg.replaceChildren(
+      ...searchCards(input.value).map((n) => {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'jd-sugg-item';
+        b.textContent = n;
+        b.onclick = () => {
+          input.value = n;
+          show(n);
+        };
+        return b;
+      }),
+    );
+  });
+  form.addEventListener('submit', (e) => {
+    e.preventDefault();
+    if (input.value.trim()) show(searchCards(input.value, 1)[0]);
   });
   const close = () => {
+    input.blur();
+    // iPhone scrolls the page to make room for the keyboard; put it back so the duel isn't left off-screen
+    window.scrollTo(0, 0);
     layer.classList.add('is-closing');
     window.removeEventListener('keydown', onKey);
     window.setTimeout(() => layer.remove(), 160);
