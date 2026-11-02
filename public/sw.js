@@ -2,7 +2,10 @@
 // Sound effects (./audio/sfx/, about 0.4 MB) are pre-cached in their own cache, which survives app
 // updates. Music (./audio/music/) is cached the first time each track plays, keeping at most about
 // 8 MB of it (the least recently played tracks are dropped first).
-const VERSION = 'edison-v7';
+const VERSION = 'edison-v8';
+// v2: v1 kept whatever came back, including the image host's errors (rate limit, blocked), so a card could stay
+// broken for good. Only pictures that loaded are kept now.
+const CARDS_CACHE = 'edison-cards-v2';
 const SHELL = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './apple-touch-icon.png'];
 // Bump when any file in public/audio/sfx/ changes.
 const SFX_CACHE = 'edison-sfx-v2';
@@ -90,7 +93,7 @@ self.addEventListener('activate', (e) => {
   e.waitUntil(
     caches
       .keys()
-      .then((keys) => Promise.all(keys.filter((k) => k !== VERSION && k !== SFX_CACHE && k !== MUSIC_CACHE && k !== 'edison-cards').map((k) => caches.delete(k))))
+      .then((keys) => Promise.all(keys.filter((k) => k !== VERSION && k !== SFX_CACHE && k !== MUSIC_CACHE && k !== CARDS_CACHE).map((k) => caches.delete(k))))
       .then(() => self.clients.claim()),
   );
 });
@@ -126,17 +129,22 @@ self.addEventListener('fetch', (e) => {
     return;
   }
 
-  // Card images: keep a copy so each picture is only downloaded once.
+  // Card images: keep a copy so each picture is only downloaded once, but only one that actually loaded. An <img>
+  // request is no-cors, whose answer can't be checked, so ask with CORS first and fall back to the page's request
+  // (shown, not kept) if the host doesn't allow it.
   if (url.hostname === 'images.ygoprodeck.com' || url.hostname === 'ms.yugipedia.com') {
     e.respondWith(
-      caches.open('edison-cards').then((c) =>
-        c.match(req).then(
+      caches.open(CARDS_CACHE).then((c) =>
+        c.match(req.url).then(
           (hit) =>
             hit ||
-            fetch(req).then((res) => {
-              c.put(req, res.clone());
-              return res;
-            }),
+            fetch(req.url, { mode: 'cors', credentials: 'omit' })
+              .then((res) => {
+                if (!res.ok) return fetch(req);
+                c.put(req.url, res.clone());
+                return res;
+              })
+              .catch(() => fetch(req)),
         ),
       ),
     );
