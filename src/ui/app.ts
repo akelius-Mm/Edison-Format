@@ -1,4 +1,5 @@
 // Application shell: registers every screen with the router and boots the app.
+import { pauseOfficialArtThisLaunch } from './cards/officialArt';
 import { clear } from './screens/dom';
 import { databaseScreen } from './screens/database';
 import { customizeScreen } from './screens/customize';
@@ -47,17 +48,20 @@ export function startApp(root: HTMLElement) {
   clear(root);
   // The app was killed while on screen last time (iPhone: "A problem repeatedly occurred", nearly
   // always memory). Open on Home instead of the screen that died, and turn off the two biggest memory
-  // users (music, official card scans) so the same screen does not die again the same way.
+  // users (music, official card scans) so the same screen does not die again the same way. Card images are
+  // off for this launch only: the mats, sleeves and cards are official art, and switching the setting off for
+  // good left everything on the drawn art until the player found the toggle.
   const crashed = bootGuard();
   if (crashed) {
     const s = getSettings();
     const lighter = s.music || s.officialImages;
-    if (lighter) updateSettings({ music: false, officialImages: false });
+    if (s.music) updateSettings({ music: false });
+    if (s.officialImages) pauseOfficialArtThisLaunch();
     if (!/^#?\/?(title)?$/.test(location.hash) && !location.hash.startsWith('#/friend?join=') && !location.hash.startsWith('#/friend-locals?join=')) history.replaceState(null, '', '#/title');
     setTimeout(
       () =>
         toast(
-          lighter ? 'The app closed unexpectedly last time. Music and official card images are now off to save memory (Settings turns them back on).' : 'The app closed unexpectedly last time, so it opened on Home.',
+          lighter ? 'The app closed unexpectedly last time. To save memory, music is off (Settings turns it back on) and card images are off until you reopen the app.' : 'The app closed unexpectedly last time, so it opened on Home.',
           'info',
           6500,
         ),

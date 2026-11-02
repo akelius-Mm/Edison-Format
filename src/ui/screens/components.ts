@@ -7,7 +7,7 @@ import { PREMADE_DECKS } from '../../decks';
 import { randomPersona } from '../../tournament/personas';
 import { badge, button, clear, h, icon, modal, segmented, type Child } from './dom';
 import { AVATAR_PRESETS, renderAvatar, renderCard } from './ext';
-import { getOfficialImage } from '../cards/officialArt';
+import { getOfficialImage, officialArtEnabled } from '../cards/officialArt';
 import { getSettings } from '../settings';
 import { coverCard, deckCount, getCustomDeck, getProfile, type DeckInfo } from './store';
 import { haptic } from '../haptics';
@@ -170,7 +170,7 @@ export function signatureForDeckName(name: string | undefined, main?: { name: st
 
 /** Fill an element with a card's official artwork as a background (fails quietly). */
 export function artInto(el: HTMLElement, cardName: string | undefined) {
-  if (!cardName || !getSettings().officialImages) return el;
+  if (!cardName || !officialArtEnabled()) return el;
   void getOfficialImage(cardName).then((img) => {
     if (!img) return;
     const pre = new Image();

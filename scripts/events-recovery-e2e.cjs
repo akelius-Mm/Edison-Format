@@ -239,7 +239,8 @@ async function scenario(browser, name, storage, { hash, tapResume, until, then }
     ok(!after['edison.events.active.v1'] && !after['edison.duel.active.v1'], 'E: the event and its saved duel are gone');
 
     // F. the app was killed while on the event screen (the open mark is still there): it opens on Home,
-    // says so, and turns music and official card scans off so the same screen does not die again
+    // says so, and turns music off and official card scans off for this launch only (the setting stays on: the mats,
+    // sleeves and cards are official art, and losing it for good left everything on the drawn art)
     const killed = { ...withDuel((d) => (d.live = false)), 'edison.boot.v1': JSON.stringify({ hash: '#/events?view=run', at: Date.now() }) };
     killed['edison.settings.v1'] = JSON.stringify({ ...JSON.parse(killed['edison.settings.v1']), music: true, officialImages: true });
     await scenario(browser, 'F killed on screen', killed, {
@@ -249,7 +250,9 @@ async function scenario(browser, name, storage, { hash, tapResume, until, then }
         ok(/#\/title/.test(page.url()), `F: opens on Home (${page.url()})`);
         ok(/closed unexpectedly/.test(await page.locator('.ui-toast').first().textContent()), 'F: says the app closed unexpectedly');
         const st = await page.evaluate(() => JSON.parse(localStorage.getItem('edison.settings.v1')));
-        ok(st.music === false && st.officialImages === false, 'F: music and official images are off');
+        ok(st.music === false, 'F: music is off');
+        ok(st.officialImages === true, 'F: the official images setting stays on (paused for this launch only)');
+        ok(/until you reopen/.test(await page.locator('.ui-toast').first().textContent()), 'F: says card images come back on reopen');
         ok(!!(await page.locator('.home-resume--duel').count()), 'F: the duel can still be resumed from Home');
       },
     });

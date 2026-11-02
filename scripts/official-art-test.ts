@@ -68,6 +68,13 @@ check(art.cachedOfficialImage('Not A Real Card') === null, 'unknown card remembe
 check(JSON.parse(mem.get('edison.officialArt.miss.v2') ?? '{}')['Not A Real Card'] > 0, 'with the time it was learned');
 Date.now = realNow;
 
+// after a crash, art is paused for one launch without touching the setting; switching it on in Settings resumes it
+art.pauseOfficialArtThisLaunch();
+check(!art.officialArtEnabled(), 'paused for this launch');
+check(JSON.parse(mem.get('edison.settings.v1') ?? '{}').officialImages === true, 'the setting itself stays on');
+art.resumeOfficialArt();
+check(art.officialArtEnabled(), 'resumed');
+
 if (failures.length) {
   console.log(`official-art-test: ${passed} passed, ${failures.length} FAILED`);
   for (const f of failures) console.log('  ✗ ' + f);
