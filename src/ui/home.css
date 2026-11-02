@@ -9,7 +9,8 @@
 .home-hero {
   position: relative;
   /* tall enough for the artwork and the Duel button, short enough that what's on this week shows without scrolling */
-  height: clamp(300px, 44vh, 480px);
+  height: calc(clamp(300px, 44vh, 480px) + env(safe-area-inset-top, 0px));
+  /* on an iPhone home-screen app the status bar pushes your table down (.home-table-cards); grow by the same amount */
   overflow: hidden;
   background: radial-gradient(120% 90% at 50% 20%, #23252b 0%, #0e0f12 70%);
 }

@@ -17,7 +17,12 @@ let cache: Record<string, OfficialImage | null> | null = null;
 const inflight = new Map<string, Promise<OfficialImage | null>>();
 let queue: { name: string; resolve: (v: OfficialImage | null) => void }[] = [];
 let timer: ReturnType<typeof setTimeout> | null = null;
-let apiDown = false;
+/** When a lookup last failed on the network (0 = never). New lookups wait a while after a failure, but art already
+ *  looked up keeps showing: one dropped request (a phone switching networks, the API's rate limit) must not switch
+ *  every mat, sleeve and card back to the drawn art for the rest of the session. */
+let downSince = 0;
+const RETRY_MS = 60_000;
+const apiDown = () => downSince > 0 && Date.now() - downSince < RETRY_MS;
 
 function store() {
   if (!cache) cache = loadJSON<Record<string, OfficialImage | null>>(CACHE_KEY, {});
@@ -25,7 +30,7 @@ function store() {
 }
 
 export function officialArtEnabled() {
-  return getSettings().officialImages && !apiDown;
+  return getSettings().officialImages;
 }
 
 /** Synchronous cache read (undefined = not looked up yet). */
@@ -39,6 +44,8 @@ export function getOfficialImage(name: string): Promise<OfficialImage | null> {
   if (hit !== undefined) return Promise.resolve(hit);
   const pending = inflight.get(name);
   if (pending) return pending;
+  // the API just failed: don't look up now (and don't remember a miss), try again on a later call
+  if (apiDown()) return Promise.resolve(null);
   const p = new Promise<OfficialImage | null>((resolve) => {
     queue.push({ name, resolve });
     if (!timer) timer = setTimeout(flush, 40);
@@ -54,6 +61,7 @@ async function flush() {
   if (!batch.length) return;
   const names = [...new Set(batch.map((b) => b.name))];
   const found: Record<string, OfficialImage> = {};
+  let failed = false;
   try {
     const res = await fetch(API + encodeURIComponent(names.join('|')));
     if (res.ok) {
@@ -62,7 +70,10 @@ async function flush() {
         const img = c.card_images?.[0];
         if (img) found[String(c.name).toLowerCase()] = { full: img.image_url, art: img.image_url_cropped ?? img.image_url };
       }
-    } else if (res.status === 400 && names.length > 1) {
+    } else if (res.status !== 400) {
+      // rate limited or the server is having trouble: not an answer about these names
+      failed = true;
+    } else if (names.length > 1) {
       // One unknown name fails the whole batch: retry individually.
       for (const b of batch) {
         inflight.delete(b.name);
@@ -73,39 +84,45 @@ async function flush() {
       return;
     }
   } catch {
-    // Network blocked (e.g. sandboxed preview): stop trying for this session.
-    apiDown = true;
+    // offline, or blocked (e.g. a sandboxed preview)
+    failed = true;
   }
+  if (failed) downSince = Date.now();
   const c = store();
   for (const b of batch) {
     const v = found[b.name.toLowerCase()] ?? null;
-    if (!apiDown) c[b.name] = v;
+    if (!failed) c[b.name] = v;
     inflight.delete(b.name);
     b.resolve(v);
   }
-  if (!apiDown) saveJSON(CACHE_KEY, c);
+  if (!failed) saveJSON(CACHE_KEY, c);
 }
 
 let singleMode = false;
 async function flushSingles() {
   timer = null;
   const items = queue.splice(0);
-  for (const b of items) {
+  for (const [i, b] of items.entries()) {
     let v: OfficialImage | null = null;
-    try {
-      const res = await fetch(API + encodeURIComponent(b.name));
-      if (res.ok) {
-        const img = (await res.json()).data?.[0]?.card_images?.[0];
-        if (img) v = { full: img.image_url, art: img.image_url_cropped ?? img.image_url };
+    let failed = apiDown();
+    // one at a time, well under the API's rate limit (it blocks clients that send more than 20 a second)
+    if (i > 0 && !failed) await new Promise((r) => setTimeout(r, 120));
+    if (!failed)
+      try {
+        const res = await fetch(API + encodeURIComponent(b.name));
+        if (res.ok) {
+          const img = (await res.json()).data?.[0]?.card_images?.[0];
+          if (img) v = { full: img.image_url, art: img.image_url_cropped ?? img.image_url };
+        } else if (res.status !== 400) failed = true;
+      } catch {
+        failed = true;
       }
-    } catch {
-      apiDown = true;
-    }
-    if (!apiDown) store()[b.name] = v;
+    if (failed) downSince ||= Date.now();
+    else store()[b.name] = v;
     inflight.delete(b.name);
     b.resolve(v);
   }
-  if (!apiDown) saveJSON(CACHE_KEY, store());
+  saveJSON(CACHE_KEY, store());
   void singleMode;
 }
 
