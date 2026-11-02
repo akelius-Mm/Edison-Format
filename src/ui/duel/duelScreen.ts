@@ -451,7 +451,13 @@ class DuelScreen implements HumanUI {
     judgeBtn.onclick = (ev) => {
       ev.stopPropagation();
       this.root.classList.remove('show-log-sheet', 'show-preview-sheet');
-      openJudge(this.root, this.game, this.preview.shownCard);
+      try {
+        openJudge(this.root, this.game, this.preview.shownCard, this.viewer);
+      } catch (e) {
+        // the judge is read-only: whatever goes wrong there must never take the duel down
+        this.root.querySelector('.jd-layer')?.remove();
+        reportError(e, 'judge');
+      }
     };
     btns.append(infoBtn, judgeBtn, logBtn, this.soundBtn);
     const canSurrender = !this.spectator && (this.opts.allowSurrender ?? true);
