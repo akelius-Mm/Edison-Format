@@ -64,8 +64,18 @@ function persist() {
   saveJSON(MISS_KEY, misses ?? {});
 }
 
+/** Set for one launch after the app was killed (app.ts): the setting stays as the player chose it. */
+let pausedThisLaunch = false;
+export function pauseOfficialArtThisLaunch() {
+  pausedThisLaunch = true;
+}
+/** Switching the setting on in Settings ends the pause. */
+export function resumeOfficialArt() {
+  pausedThisLaunch = false;
+}
+
 export function officialArtEnabled() {
-  return getSettings().officialImages;
+  return getSettings().officialImages && !pausedThisLaunch;
 }
 
 /** Synchronous cache read (undefined = not looked up yet). */

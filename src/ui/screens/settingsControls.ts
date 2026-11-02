@@ -3,6 +3,7 @@
 // listens with onSettingsChange (sound, volume, animation speed, card images, duel log, swipe up to play), music.ts follows
 // music and volume, and response prompts, haptics and end-of-turn confirmation are read when they are used.
 // Settings are local to this device: changing them never touches an online game.
+import { resumeOfficialArt } from '../cards/officialArt';
 import { haptic } from '../haptics';
 import { getSettings, updateSettings } from '../settings';
 import { iosGroup, iosRow } from './components';
@@ -48,7 +49,14 @@ export const swipeToPlayRow = () =>
 export const showLogRow = () => iosRow('Show duel log', null, toggle(getSettings().showLog, (v) => set({ showLog: v }), 'Show duel log'));
 
 export const OFFICIAL_IMAGES_FOOT = 'Loads card artwork from the YGOPRODeck database when online. Card art is © its owners; generated art is used when it is unavailable.';
-export const officialImagesRow = () => iosRow('Official card images', null, toggle(getSettings().officialImages, (v) => set({ officialImages: v }), 'Load official card images'));
+export const officialImagesRow = () => iosRow('Official card images', null, toggle(
+    getSettings().officialImages,
+    (v) => {
+      if (v) resumeOfficialArt();
+      set({ officialImages: v });
+    },
+    'Load official card images',
+  ));
 
 export const soundRow = () => iosRow('Sound effects', null, toggle(getSettings().sound, (v) => set({ sound: v }), 'Sound effects'));
 export const musicRow = () => iosRow('Music', null, toggle(getSettings().music, (v) => set({ music: v }), 'Music'));

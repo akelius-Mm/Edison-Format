@@ -15,7 +15,7 @@ import { openJudge } from './judge';
 
 /** A raised hand: calling a judge over. */
 const JUDGE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 13V5.5a1.5 1.5 0 0 1 3 0V12"/><path d="M11 11.5v-7a1.5 1.5 0 0 1 3 0V12"/><path d="M14 11.5V6.5a1.5 1.5 0 0 1 3 0V15a6 6 0 0 1-6 6h-.6a6 6 0 0 1-4.6-2.2L3.6 16a1.6 1.6 0 0 1 2.4-2.1L8 16"/></svg>';
-import { prefetchOfficialImages } from '../cards/officialArt';
+import { officialArtEnabled, prefetchOfficialImages } from '../cards/officialArt';
 import { zoomCard } from '../cards/zoom';
 import { getSettings, onSettingsChange, updateSettings } from '../settings';
 import { applyMatVars, applyPlaymat, opponentMat } from '../theme/playmats';
@@ -307,12 +307,12 @@ class DuelScreen implements HumanUI {
         if (this.aborted && a.type !== 'negate') throw this.aborted;
       },
     };
-    let officialImages = s.officialImages;
+    let officialImages = officialArtEnabled();
     // Warm both decks' card scans on disk, one at a time, so cards played later show their real image quickly.
     if (officialImages && !this.spectator) prefetchOfficialImages(opts.sides.flatMap((d) => [...d.deck.main, ...d.deck.extra].map((c) => c.name)));
     this.unsubSettings = onSettingsChange((st) => {
-      if (st.officialImages !== officialImages) {
-        officialImages = st.officialImages;
+      if (officialArtEnabled() !== officialImages) {
+        officialImages = officialArtEnabled();
         this.board.invalidateFaces();
         this.flush();
         this.preview.invalidate();
