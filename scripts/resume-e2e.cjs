@@ -43,6 +43,7 @@ async function newPage(browser, extraSettings = {}, bestOf = 1) {
       localStorage.clear();
       localStorage.setItem('edison.settings.v1', JSON.stringify({ animationSpeed: 0.15, sound: false, confirmEndTurn: false, ...s }));
       localStorage.setItem('edison.settings.musicOn.v1', 'true');
+      localStorage.setItem('edison.settings.artOn.v1', 'true');
       localStorage.setItem('edison.hint.hold', '1');
       localStorage.setItem(
         'edison.duelSetup.v1',

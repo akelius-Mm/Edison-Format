@@ -48,6 +48,7 @@ async function newPage(browser, { landscape = false, settings = {} } = {}) {
       localStorage.clear();
       localStorage.setItem('edison.settings.v1', JSON.stringify({ animationSpeed: 0.15, sound: false, music: false, confirmEndTurn: false, officialImages: false, ...s }));
       localStorage.setItem('edison.settings.musicOn.v1', 'true');
+      localStorage.setItem('edison.settings.artOn.v1', 'true');
       localStorage.setItem('edison.settings.firstDraw.v1', 'true');
       localStorage.setItem('edison.hint.hold', '1');
       localStorage.setItem('edison.duelSetup.v1', JSON.stringify({ myDeck: deck, oppDeck: 'premade:lightsworn', persona: { name: 'Rei Mori', avatar: 'a1', difficulty: 'easy' }, bestOf: 3 }));

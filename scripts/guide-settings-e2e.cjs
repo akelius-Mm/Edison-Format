@@ -54,6 +54,7 @@ async function phone(browser, errors) {
     localStorage.setItem('e2e.init', '1');
     localStorage.setItem('edison.settings.v1', JSON.stringify({ playerName: 'Tester', nameChosen: true, ...s }));
     localStorage.setItem('edison.settings.musicOn.v1', 'true');
+    localStorage.setItem('edison.settings.artOn.v1', 'true');
     localStorage.setItem('edison.settings.firstDraw.v1', 'true');
     localStorage.setItem('edison.hint.hold', '1');
   }, SEED);

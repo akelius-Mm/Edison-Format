@@ -70,6 +70,9 @@ const KEY = 'edison.settings.v1';
 const MUSIC_ON_KEY = 'edison.settings.musicOn.v1';
 /** One-time switch: the first-turn draw used to default to the modern rule; saved profiles get the Edison rule once. */
 const EDISON_DRAW_KEY = 'edison.settings.firstDraw.v1';
+/** One-time switch: the crash breaker used to turn Official card images off for good (and mats, sleeves and cards are
+ *  official art), so saved profiles get the default (on) back once. */
+const ART_ON_KEY = 'edison.settings.artOn.v1';
 let current: Settings | null = null;
 const listeners = new Set<(s: Settings) => void>();
 
@@ -101,6 +104,10 @@ export function getSettings(): Settings {
     if (!loadJSON(EDISON_DRAW_KEY, false)) {
       delete saved.skipFirstDraw;
       saveJSON(EDISON_DRAW_KEY, true);
+    }
+    if (!loadJSON(ART_ON_KEY, false)) {
+      delete saved.officialImages;
+      saveJSON(ART_ON_KEY, true);
     }
     current = { ...DEFAULT_SETTINGS, ...saved };
   }

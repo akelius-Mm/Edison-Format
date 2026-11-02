@@ -61,6 +61,7 @@ async function phone(browser, name, deck, opts = {}) {
       localStorage.setItem('e2e.init', '1');
       localStorage.setItem('edison.settings.v1', JSON.stringify({ playerName: name, animationSpeed: 0, sound: false, music: false, haptics: false, confirmEndTurn: false, officialImages: false }));
       localStorage.setItem('edison.settings.musicOn.v1', 'true');
+      localStorage.setItem('edison.settings.artOn.v1', 'true');
       localStorage.setItem('edison.settings.firstDraw.v1', 'true');
       localStorage.setItem('edison.hint.hold', '1');
       localStorage.setItem('edison.friend.v1', JSON.stringify({ deck: `premade:${deck}`, bestOf }));
