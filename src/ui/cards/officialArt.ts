@@ -11,9 +11,16 @@ export interface OfficialImage {
 }
 
 const API = 'https://db.ygoprodeck.com/api/v7/cardinfo.php?name=';
-const CACHE_KEY = 'edison.officialArt.v1';
+/** v2: v1 could hold "no art" for every card asked about while the API was refusing requests (a 403/429 was taken
+ *  as "not found"), which kept every card on the drawn art for good. v2 starts from v1's found art only. */
+const CACHE_KEY = 'edison.officialArt.v2';
+const OLD_KEY = 'edison.officialArt.v1';
+/** When each "not found" was learned: a miss is looked up again after a week (new printings, a bad answer). */
+const MISS_KEY = 'edison.officialArt.miss.v2';
+const MISS_TTL = 7 * 24 * 3600_000;
 /** null = looked up and not found. */
 let cache: Record<string, OfficialImage | null> | null = null;
+let misses: Record<string, number> | null = null;
 const inflight = new Map<string, Promise<OfficialImage | null>>();
 let queue: { name: string; resolve: (v: OfficialImage | null) => void }[] = [];
 let timer: ReturnType<typeof setTimeout> | null = null;
@@ -25,8 +32,36 @@ const RETRY_MS = 60_000;
 const apiDown = () => downSince > 0 && Date.now() - downSince < RETRY_MS;
 
 function store() {
-  if (!cache) cache = loadJSON<Record<string, OfficialImage | null>>(CACHE_KEY, {});
+  if (!cache) {
+    let c = loadJSON<Record<string, OfficialImage | null> | null>(CACHE_KEY, null);
+    if (!c) {
+      c = {};
+      for (const [k, v] of Object.entries(loadJSON<Record<string, OfficialImage | null>>(OLD_KEY, {}))) if (v) c[k] = v;
+      saveJSON(CACHE_KEY, c);
+      try {
+        localStorage.removeItem(OLD_KEY);
+      } catch {
+        /* ignore */
+      }
+    }
+    misses = loadJSON<Record<string, number>>(MISS_KEY, {});
+    const now = Date.now();
+    for (const [k, v] of Object.entries(c)) if (v === null && !(now - (misses[k] ?? 0) < MISS_TTL)) delete c[k];
+    cache = c;
+  }
   return cache;
+}
+
+/** Remember a lookup's answer (null = the API has no such card). */
+function remember(name: string, v: OfficialImage | null) {
+  const c = store();
+  c[name] = v;
+  if (v === null) misses![name] = Date.now();
+  else delete misses![name];
+}
+function persist() {
+  saveJSON(CACHE_KEY, store());
+  saveJSON(MISS_KEY, misses ?? {});
 }
 
 export function officialArtEnabled() {
@@ -88,14 +123,13 @@ async function flush() {
     failed = true;
   }
   if (failed) downSince = Date.now();
-  const c = store();
   for (const b of batch) {
     const v = found[b.name.toLowerCase()] ?? null;
-    if (!failed) c[b.name] = v;
+    if (!failed) remember(b.name, v);
     inflight.delete(b.name);
     b.resolve(v);
   }
-  if (!failed) saveJSON(CACHE_KEY, c);
+  if (!failed) persist();
 }
 
 let singleMode = false;
@@ -118,11 +152,11 @@ async function flushSingles() {
         failed = true;
       }
     if (failed) downSince ||= Date.now();
-    else store()[b.name] = v;
+    else remember(b.name, v);
     inflight.delete(b.name);
     b.resolve(v);
   }
-  saveJSON(CACHE_KEY, store());
+  persist();
   void singleMode;
 }
 
@@ -213,5 +247,6 @@ export function prefetchOfficialImages(names: Iterable<string>) {
 /** Clear cached lookups (Settings → reset). */
 export function clearOfficialArtCache() {
   cache = {};
-  saveJSON(CACHE_KEY, {});
+  misses = {};
+  persist();
 }
