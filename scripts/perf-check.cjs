@@ -87,6 +87,7 @@ async function newPage(browser, viewport) {
     // default animation speed: whatever the app ships with
     localStorage.setItem('edison.settings.v1', JSON.stringify({ sound: false, music: false, haptics: false, confirmEndTurn: false, officialImages: false }));
     localStorage.setItem('edison.settings.musicOn.v1', 'true');
+    localStorage.setItem('edison.settings.artOn.v1', 'true');
     localStorage.setItem('edison.settings.firstDraw.v1', 'true');
     localStorage.setItem('edison.hint.hold', '1');
     localStorage.setItem(
