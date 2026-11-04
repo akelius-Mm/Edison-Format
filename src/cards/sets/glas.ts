@@ -414,6 +414,26 @@ export function glasRules(g: Game) {
     return origCAE(player, card, ef, idx, mode);
   };
 
+  // ---- Alien Hypno: control returns when it, or the monster it took, is turned face-down.
+  // 2010 rulings: "If you take control of your opponent's monster with 'Alien Hypno' and afterwards 'Alien Hypno' is
+  // flipped face-down, every monster that you are controlling with 'Alien Hypno's' effect is returned to your opponent",
+  // and "...afterwards the selected monster is flipped face-down, the selected monster is returned to your opponent."
+  // https://edisonrul.ing/cards/a/alien-hypno.html
+  const origRC = g.ruleCleanup.bind(g);
+  g.ruleCleanup = async () => {
+    await origRC();
+    for (const m of [...g.monsters(0), ...g.monsters(1)]) {
+      if (m.flags.glasHypno === undefined) continue;
+      const hyp = g.card(m.flags.glasHypno as number);
+      if (!hyp || hyp.moveId !== m.flags.glasHypnoMove || hyp.location !== 'mzone') continue; // left the field: its own trigger
+      const hypFlipped = m.flags.glasHypnoFU !== undefined && hyp.faceUpId !== m.flags.glasHypnoFU;
+      const takenFlipped = m.flags.glasHypnoTFU !== undefined && m.faceUpId !== m.flags.glasHypnoTFU;
+      if (!hypFlipped && !takenFlipped) continue;
+      delete m.flags.glasHypno;
+      if (m.controller !== m.owner) await g.returnControl(m);
+    }
+  };
+
   // ---- state sync: Superalloy Beast Raptinus, "A" Cell Incubator
   const origUpdate = g.update.bind(g);
   g.update = () => {
@@ -2131,6 +2151,8 @@ M('Alien Hypno', {
         if (await ctx.takeControl(t, false)) {
           t.flags.glasHypno = ctx.self.uid;
           t.flags.glasHypnoMove = ctx.self.moveId;
+          t.flags.glasHypnoFU = ctx.self.faceUpId;
+          t.flags.glasHypnoTFU = t.faceUpId;
         }
       },
       ai: { score: (ctx) => (ctx.monsters('opp', (c) => aCount(c) > 0 && ctx.canTarget(c)).length ? 70 : 0) },
