@@ -77,6 +77,9 @@ export type QueryKey =
   | 'cannotNormalSummon'
   | 'cannotActivateTraps'
   | 'cannotActivateSpells'
+  // player subject: cannot activate the effects of face-up Spell Cards on the field either (Cold Wave). Plain
+  // 'cannotActivateSpells' blocks only playing Spell Cards (Secret Village of the Spellcasters).
+  | 'cannotActivateSpellEffects'
   | 'noBattleDamage'
   | 'noEffectDamage'
   | 'banishInsteadOfGrave'

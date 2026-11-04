@@ -1,7 +1,7 @@
 // Card definitions: Plants & Synchron engine (Quickdraw Plant).
 // Also exports a few small helpers shared by zombies.ts / lightsworn.ts (group A files).
 import { monster, token } from '../define';
-import { cardValue } from '../helpers';
+import { cardValue, soulExchangeFodder } from '../helpers';
 import type { CardInstance, EffectDef } from '../../engine/card';
 import type { Ctx } from '../../engine/ctx';
 
@@ -13,9 +13,9 @@ export async function tributeCost(ctx: Ctx, cards: CardInstance[]) {
   return ctx.game.moveCards(cards, 'grave', { reason: 'tribute', reasons: ['tribute', 'cost'], reasonPlayer: ctx.player, reasonCard: ctx.self });
 }
 
-/** Monsters this player can Tribute as a cost. */
+/** Monsters this player can Tribute as a cost (plus the opponent's ones Soul Exchange lends this turn). */
 export function tributable(ctx: Ctx, filter: (c: CardInstance) => boolean = () => true) {
-  return ctx.monsters('me', (c) => !ctx.query(c, 'cannotBeTributed') && filter(c));
+  return [...ctx.monsters('me', (c) => !ctx.query(c, 'cannotBeTributed') && filter(c)), ...soulExchangeFodder(ctx.game, ctx.player).filter(filter)];
 }
 
 /**

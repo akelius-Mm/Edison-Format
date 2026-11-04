@@ -6,6 +6,14 @@ import type { Attribute, GameEvent, Location, PlayerId, Race } from '../engine/t
 
 export type F = (c: CardInstance) => boolean;
 
+/**
+ * Soul Exchange: the opponent's monsters player `p` may Tribute this turn "as if you controlled it" — for a Tribute
+ * Summon, or as a cost / for an effect. https://edisonrul.ing/cards/s/soul-exchange.html
+ */
+export function soulExchangeFodder(g: Game, p: PlayerId): CardInstance[] {
+  return g.monsters(g.opp(p)).filter((c) => c.flags.soulExchangeFor === p && c.flags.soulExchangeTurn === g.turn && !g.queryCard(c, 'cannotBeTributed'));
+}
+
 // ------------------------------------------------------------------ filters
 export const isMonster: F = (c) => c.isMonster;
 export const isSpell: F = (c) => c.isSpell;

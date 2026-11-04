@@ -65,6 +65,10 @@ monster('XX-Saber Faultroll', {
   aiValue: 700,
   cannotNormalSummon: true,
   nomi: true,
+  // 2010 ruling: it can only be Special Summoned (by its own procedure) from the hand — never revived from the GY
+  // (not even by "Gottoms' Emergency Call") or Summoned from the Deck / banishment.
+  // https://edisonrul.ing/cards/x/xx-saber-faultroll.html
+  noSpecialFrom: ['deck', 'grave', 'banished'],
   text: 'Cannot be Normal Summoned/Set. Must be Special Summoned (from your hand) while you control 2 or more face-up "X-Saber" monsters. Once per turn: You can target 1 Level 4 or lower "X-Saber" monster in your GY; Special Summon it.',
   effects: [
     {
@@ -160,6 +164,8 @@ monster('XX-Saber Darksoul', {
   ],
 });
 
+/** X-Saber Galahad's cost: 1 other "Saber" monster you control (X-Saber, XX-Saber...). */
+const galahadFodder = (ctx: Ctx) => ctx.monsters('me', (c) => c !== ctx.self && c.name.includes('Saber') && !ctx.query(c, 'cannotBeTributed'));
 monster('X-Saber Galahad', {
   attribute: 'EARTH',
   race: 'Warrior', // printed Type (YGOJSON), was Beast-Warrior
@@ -167,8 +173,36 @@ monster('X-Saber Galahad', {
   atk: 1800,
   def: 800,
   sets: XS,
-  text: 'If this card attacks, it gains 300 ATK during the Damage Step only. If this card is attacked, it loses 500 ATK during the Damage Step only.',
+  text: 'If this card attacks, it gains 300 ATK during the Damage Step only. If this card is attacked, it loses 500 ATK during the Damage Step only. When this card is targeted for an attack, you can Tribute 1 "Saber" monster you control, except this card, to negate the attack.',
   effects: [
+    {
+      // ③: the database's historical section has no text or rulings for this card; the Edison-accurate text and
+      // "it can activate on a replayed attack" come from the Revised section.
+      // https://edisonrul.ing/cards/x/x-saber-galahad.html
+      kind: 'trigger',
+      event: 'attackDeclared',
+      label: 'Tribute 1 other "Saber" monster: negate the attack',
+      categories: ['negateAttack'],
+      eventFilter: (ctx, ev) => ev.other === ctx.self && ctx.self.location === 'mzone' && ctx.self.faceUp,
+      canActivate: (ctx) => galahadFodder(ctx).length > 0,
+      activate: async (ctx) => {
+        const s = await ctx.select(galahadFodder(ctx), 1, 1, 'Tribute 1 other "Saber" monster you control.', 'tribute');
+        if (!s.length) return false;
+        ctx.log(`${ctx.game.players[ctx.player].name} Tributes ${s[0].name}.`);
+        await ctx.game.moveCards(s, 'grave', { reason: 'tribute', reasons: ['tribute', 'cost'], reasonPlayer: ctx.player, reasonCard: ctx.self });
+      },
+      resolve: async (ctx) => {
+        ctx.negateAttack();
+      },
+      ai: {
+        score: (ctx) => {
+          const b = ctx.battle;
+          if (!b || b.target !== ctx.self) return 0;
+          const cheapest = Math.min(...galahadFodder(ctx).map((c) => cardValue(ctx.game, c)));
+          return ctx.atk(b.attacker) > ctx.atk(ctx.self) - 500 && cheapest < cardValue(ctx.game, ctx.self) ? 40 : 0;
+        },
+      },
+    },
     {
       kind: 'continuous',
       mods: [

@@ -1,9 +1,9 @@
 // Card definitions: generic Spells (see docs/CARD_ALLOCATION.md).
 import { spell } from '../define';
-import { attr, bestTarget, cardValue, isMonster } from '../helpers';
+import { attr, bestTarget, cardValue, isMonster, soulExchangeFodder } from '../helpers';
 import { faceUpFlag, type AiHints, type CardInstance, type EffectDef } from '../../engine/card';
 import type { Ctx } from '../../engine/ctx';
-import type { Game } from '../../engine/game';
+import type { ChainLink, Game } from '../../engine/game';
 import type { Category, Location, PlayerId } from '../../engine/types';
 
 type CF = (c: CardInstance) => boolean;
@@ -18,8 +18,11 @@ const activeST = (ctx: Ctx) => ctx.self.onField && ctx.self.faceUp && ctx.self.a
 /** Cards in your hand other than this one (this card is still in hand during canActivate). */
 const otherHand = (ctx: Ctx, f?: CF) => ctx.hand('me', (c) => c !== ctx.self && (!f || f(c)));
 
-/** Monsters you control that can be Tributed by a card effect. */
-const tributable = (ctx: Ctx, f?: CF) => ctx.monsters('me', (c) => !ctx.query(c, 'cannotBeTributed') && (!f || f(c)));
+/** Monsters you control that can be Tributed by a card effect (plus the opponent's ones Soul Exchange lends you). */
+const tributable = (ctx: Ctx, f?: CF) => [
+  ...ctx.monsters('me', (c) => !ctx.query(c, 'cannotBeTributed') && (!f || f(c))),
+  ...soulExchangeFodder(ctx.game, ctx.player).filter((c) => !f || f(c)),
+];
 
 /** Tribute 1 of your monsters as a cost. */
 async function tributeCost(ctx: Ctx, cands: CardInstance[], prompt = 'Tribute 1 monster.') {
@@ -153,9 +156,9 @@ export interface FusionChoice {
 }
 
 /** Every Fusion Monster you could summon right now with its possible material sets. */
-export function fusionChoices(ctx: Ctx, o: FusionSummonOpts = {}): FusionChoice[] {
+export function fusionChoices(ctx: Ctx, o: FusionSummonOpts = {}, hooks = true): FusionChoice[] {
   if (ctx.game.queryPlayer(ctx.player, 'cannotSpecialSummon')) return [];
-  o = hookedFusionOpts(ctx, o); // PTDN
+  if (hooks) o = hookedFusionOpts(ctx, o); // PTDN
   const pool = fusionMaterialPool(ctx, o);
   if (!pool.length) return [];
   const out: FusionChoice[] = [];
@@ -181,8 +184,16 @@ export function fusionGain(ctx: Ctx, ch: FusionChoice) {
 
 /** Perform a Fusion Summon at resolution. Returns the summoned Fusion Monster (or null). */
 export async function performFusionSummon(ctx: Ctx, o: FusionSummonOpts = {}): Promise<CardInstance | null> {
-  o = hookedFusionOpts(ctx, o); // PTDN
-  const choices = fusionChoices(ctx, o);
+  const hooked = hookedFusionOpts(ctx, o); // PTDN
+  if (hooked !== o) {
+    // Chain Material: using its effect for a Fusion Summon is optional.
+    // https://edisonrul.ing/cards/c/chain-material.html
+    const plain = fusionChoices(ctx, o, false);
+    const gain = (chs: FusionChoice[]) => Math.max(-Infinity, ...chs.map((ch) => fusionGain(ctx, ch)));
+    const hookedChoices = fusionChoices(ctx, hooked, false);
+    if (!plain.length || (hookedChoices.length && (await ctx.confirm('Use the effect of "Chain Material" for this Fusion Summon?', gain(hookedChoices) > gain(plain) + 1500)))) o = hooked;
+  }
+  const choices = fusionChoices(ctx, o, false);
   if (!choices.length) return null;
   const [f] = await ctx.select(
     choices.map((c) => c.fusion),
@@ -554,15 +565,21 @@ spell('Painful Choice', 'normal', {
   ],
 });
 
+/**
+ * Magic Planter's cost: a face-up Continuous Trap you control — also a Trap Monster like "Embodiment of Apophis" in the
+ * Monster Zone (its printed card is a Continuous Trap). https://edisonrul.ing/cards/m/magic-planter.html
+ */
+const planterCosts = (ctx: Ctx) =>
+  ctx.field('me').filter((c) => c.faceUp && (c.location === 'szone' || c.location === 'mzone') && c.printedData.kind === 'trap' && c.printedData.ttype === 'continuous');
 spell('Magic Planter', 'normal', {
   text: 'Send 1 face-up Continuous Trap you control to the GY; draw 2 cards.',
   effects: [
     {
       kind: 'activate',
       categories: ['draw'],
-      canActivate: (ctx) => ctx.deck().length >= 2 && ctx.spellTraps('me', (c) => c.faceUp && c.isTrap && c.data.ttype === 'continuous').length > 0,
+      canActivate: (ctx) => ctx.deck().length >= 2 && planterCosts(ctx).length > 0,
       activate: async (ctx) => {
-        const cands = ctx.spellTraps('me', (c) => c.faceUp && c.isTrap && c.data.ttype === 'continuous');
+        const cands = planterCosts(ctx);
         const sel = await ctx.select(cands, 1, 1, 'Send 1 face-up Continuous Trap you control to the GY.', 'cost', {
           aiScore: (c) => (c.linkedTo == null && (c.data.effects?.[0]?.categories ?? []).includes('specialSummon') ? 1000 : -cardValue(ctx.game, c)),
         });
@@ -834,7 +851,20 @@ spell('Giant Trunade', 'normal', {
       categories: ['toHand'],
       canActivate: (ctx) => ctx.spellTraps('both', (c) => c !== ctx.self).length > 0,
       resolve: async (ctx) => {
-        const all = ctx.spellTraps('both', (c) => c !== ctx.self);
+        // Normal / Quick-Play Spells and Normal / Counter Traps chained to it are not returned (they are spent). The
+        // historical section has no rulings; this is from the Revised section.
+        // https://edisonrul.ing/cards/g/giant-trunade.html
+        // (The cards activated after this one in the Chain, read from the event log: their links have resolved already.)
+        const log = ctx.game.eventLog;
+        let i = log.length - 1;
+        while (i >= 0 && !(log[i].type === 'chainActivated' && (log[i].data?.link as ChainLink | undefined)?.card === ctx.self)) i--;
+        const chained = i < 0 ? [] : log.slice(i + 1).flatMap((e) => (e.type === 'chainActivated' && (e.data?.link as ChainLink | undefined)?.isCardActivation ? [e.data!.link as ChainLink] : []));
+        const spent = (c: CardInstance) =>
+          chained.some((l) => l.card === c) &&
+          !c.flags.staysOnField &&
+          !(c.isSpell && ['continuous', 'equip', 'field'].includes(c.data.stype ?? '')) &&
+          !(c.isTrap && c.data.ttype === 'continuous');
+        const all = ctx.spellTraps('both', (c) => c !== ctx.self && !spent(c));
         if (all.length) await ctx.toHand(all);
       },
       ai: {
@@ -1083,6 +1113,13 @@ spell('Overload Fusion', 'normal', {
   ],
 });
 
+/**
+ * Future Fusion cannot reveal a Contact Fusion (Gladiator Beast Gyzarus, Chimeratech Fortress Dragon) nor an Evil HERO
+ * that must be Summoned by "Dark Fusion" (both `noPoly`), nor a Fusion that lists a Fusion or Synchro Monster as
+ * material (those can never come from the Deck, so fusionMaterialSets finds none).
+ * https://edisonrul.ing/cards/f/future-fusion.html
+ */
+const futureFusionable = (c: CardInstance) => c.hasType('fusion') && !!c.data.fusion && !c.data.fusion.noPoly;
 spell('Future Fusion', 'continuous', {
   text: 'Reveal 1 Fusion Monster in your Extra Deck and send the Fusion Materials listed on it from your Deck to the GY. During your 2nd Standby Phase after this card\'s activation, Special Summon that Fusion Monster (treated as a Fusion Summon). When this card is removed from the field, destroy that monster. When the monster is destroyed, destroy this card.',
   effects: [
@@ -1094,13 +1131,13 @@ spell('Future Fusion', 'continuous', {
       canActivate: (ctx) => {
         if (!ctx.canSpecialSummon()) return false;
         const deckMons = ctx.deck('me', isMonster);
-        return ctx.extra('me', (c) => c.hasType('fusion') && !!c.data.fusion && ctx.game.fusionMaterialSets(c, deckMons).length > 0).length > 0;
+        return ctx.extra('me', (c) => futureFusionable(c) && ctx.game.fusionMaterialSets(c, deckMons).length > 0).length > 0;
       },
       resolve: async (ctx) => {
         if (!ctx.self.onField) return;
         const deckMons = ctx.deck('me', isMonster);
         const choices = ctx
-          .extra('me', (c) => c.hasType('fusion') && !!c.data.fusion)
+          .extra('me', futureFusionable)
           .map((f) => ({ f, sets: ctx.game.fusionMaterialSets(f, deckMons) }))
           .filter((x) => x.sets.length);
         if (!choices.length) return;
@@ -1334,10 +1371,7 @@ function soulExchangeRules(g: Game) {
   const orig = g.tributeCandidates.bind(g);
   g.tributeCandidates = (p: PlayerId, forCard?: CardInstance) => {
     const base = orig(p, forCard);
-    const extra = g
-      .monsters(g.opp(p))
-      .filter((c) => c.flags.soulExchangeFor === p && c.flags.soulExchangeTurn === g.turn && !g.queryCard(c, 'cannotBeTributed'));
-    return [...base, ...extra];
+    return [...base, ...soulExchangeFodder(g, p).filter((c) => !base.includes(c))];
   };
 }
 
@@ -1365,7 +1399,11 @@ function soulExchangePlan(ctx: Ctx): { target: CardInstance; score: number } | n
 }
 
 spell('Soul Exchange', 'normal', {
-  text: 'Target 1 monster your opponent controls; this turn, you can Tribute it for a Tribute Summon as if you controlled it. You cannot conduct your Battle Phase the turn you activate this card.',
+  text: 'Select 1 monster your opponent controls. This turn you can Tribute that monster as if you controlled it. You cannot conduct your Battle Phase the turn you activate this card.',
+  // The target can be Tributed for a Tribute Summon, or as a cost / for an effect (soulExchangeFodder):
+  // https://edisonrul.ing/cards/s/soul-exchange.html
+  // APPROX: only the Tribute helpers of spells.ts and plants.ts (used by plants, ptdn, tdgs) offer it as a cost;
+  // other sets' own Tribute helpers still list only your monsters.
   rules: [soulExchangeRules],
   effects: [
     {
@@ -1570,7 +1608,12 @@ spell('Emergency Provisions', 'quickplay', {
 // ======================================================================
 
 // Shrink's "already halved" mark ends when the monster is turned face-down (its effect stops applying then).
-faceUpFlag('shrunkTurn');
+faceUpFlag('shrunkTurn', 'shrinkSeq', 'shrinkAmt');
+/**
+ * Resolution order of Shrink / Megamorph: when both apply to one monster, only the one that resolved last applies.
+ * https://edisonrul.ing/cards/s/shrink.html
+ */
+let statResolveSeq = 0;
 spell('Shrink', 'quickplay', {
   text: 'Select 1 face-up monster on the field. The original ATK of that monster is halved until the end of this turn.',
   effects: [
@@ -1592,7 +1635,9 @@ spell('Shrink', 'quickplay', {
         // achieves nothing.
         if (t[0].flags.shrunkTurn === ctx.turn) return;
         t[0].flags.shrunkTurn = ctx.turn;
+        t[0].flags.shrinkSeq = ++statResolveSeq;
         const base = ctx.game.baseAtk(t[0]);
+        t[0].flags.shrinkAmt = Math.floor(base / 2);
         ctx.addTempMod(t[0], 'atk', -Math.floor(base / 2), 'turn');
       },
       ai: {
@@ -1657,6 +1702,9 @@ spell('Megamorph', 'equip', {
         if (ctx.lp < ctx.oppLp) return c.controller === ctx.player ? ctx.game.baseAtk(c) : -10000;
         return c.controller === ctx.opp ? ctx.game.baseAtk(c) : -10000;
       },
+      onEquip: async (ctx) => {
+        ctx.self.flags.megaSeq = ++statResolveSeq;
+      },
       score: (ctx) => {
         if (ctx.lp === ctx.oppLp) return 0;
         const side = ctx.lp < ctx.oppLp ? 'me' : 'opp';
@@ -1677,9 +1725,14 @@ spell('Megamorph', 'equip', {
           filter: (ctx, c) => equipped(ctx, c) && ctx.game.equipsOf(c).find((e) => e.name === 'Megamorph' && e.faceUp && !ctx.game.isNegated(e)) === ctx.self,
           value: (ctx, c) => {
             const base = ctx.game.baseAtk(c);
-            if (ctx.lp < ctx.oppLp) return base;
-            if (ctx.lp > ctx.oppLp) return -Math.floor(base / 2);
-            return 0;
+            const v = ctx.lp < ctx.oppLp ? base : ctx.lp > ctx.oppLp ? -Math.floor(base / 2) : 0;
+            // VS. "Shrink" on the same monster: the effect that resolved last is applied.
+            // https://edisonrul.ing/cards/s/shrink.html
+            if (v !== 0 && c.flags.shrunkTurn === ctx.game.turn) {
+              if ((c.flags.shrinkSeq ?? 0) > (ctx.self.flags.megaSeq ?? 0)) return 0;
+              return v + (c.flags.shrinkAmt ?? 0);
+            }
+            return v;
           },
         },
       ],
@@ -1939,7 +1992,13 @@ spell('Cold Wave', 'normal', {
       categories: ['lockdown'],
       condition: atStartOfMain1,
       resolve: async (ctx) => {
+        // 2010 ruling: besides playing Spell/Trap Cards, neither player can activate the Ignition-like / Quick-like
+        // effects of face-up Spells/Traps (Blaze Accelerator, Valhalla, Royal Oppression) nor the Normal Spell effect
+        // that Destiny Hero - Diamond Dude puts off; Continuous-like effects still apply.
+        // https://edisonrul.ing/cards/c/cold-wave.html
+        // APPROX: Trigger-like effects of face-up Spells (Black Garden, Geartown) are not stopped.
         for (const p of [ctx.player, ctx.opp]) {
+          ctx.addPlayerMod(p, 'cannotActivateSpellEffects', true, 'nextTurnEnd');
           ctx.addPlayerMod(p, 'cannotActivateSpells', true, 'nextTurnEnd');
           ctx.addPlayerMod(p, 'cannotActivateTraps', true, 'nextTurnEnd');
           ctx.addPlayerMod(p, 'cannotSetSpellTrap', true, 'nextTurnEnd');

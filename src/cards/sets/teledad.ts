@@ -368,6 +368,8 @@ function diamondDudeData(d: CardData, card: CardInstance): CardData {
       const f = ctx.self.flags.diamondDude as { player: number; turn: number } | undefined;
       if (!f || f.player !== ctx.player || f.turn !== ctx.turn || !ctx.isMyTurn) return false;
       if (ctx.phase !== 'main1' && ctx.phase !== 'main2') return false;
+      // Cold Wave stops this effect too: https://edisonrul.ing/cards/c/cold-wave.html
+      if (ctx.game.queryPlayer(ctx.player, 'cannotActivateSpellEffects')) return false;
       return !ef.condition || ef.condition(ctx);
     },
     canActivate: ef.canActivate,
