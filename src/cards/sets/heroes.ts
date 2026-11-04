@@ -285,7 +285,7 @@ monster('Elemental Hero Ocean', {
   def: 1200,
   sets: HERO_SETS,
   aiValue: 600,
-  text: 'Once per turn, during your Standby Phase: You can return 1 "HERO" monster from your field or GY to your hand.',
+  text: 'Once per turn, during your Standby Phase: You can target 1 "HERO" monster you control or in your GY; return it to the hand.',
   effects: [
     {
       kind: 'trigger',
@@ -294,13 +294,19 @@ monster('Elemental Hero Ocean', {
       label: 'Return a HERO to hand',
       categories: ['toHand'],
       eventFilter: (ctx, ev) => ev.phase === 'standby' && ctx.isMyTurn && ctx.self.location === 'mzone',
-      canActivate: (ctx) => ctx.grave('me', isHero).length > 0 || ctx.faceUpMonsters('me', isHero).length > 0,
-      resolve: async (ctx) => {
+      // It targets: "You can target 1 'HERO' monster you control or in your GY; return that target to the hand."
+      // https://edisonrul.ing/cards/e/elemental-hero-ocean.html — the historical (2010) section has no text or rulings,
+      // so this follows the edisonformat.net (Revised) Edison-accurate text.
+      canActivate: (ctx) => [...ctx.grave('me', isHero), ...ctx.faceUpMonsters('me', isHero)].some((c) => ctx.canTarget(c)),
+      activate: async (ctx) => {
         const cands = [...ctx.grave('me', isHero), ...ctx.faceUpMonsters('me', isHero)];
-        const sel = await ctx.select(cands, 1, 1, 'Return 1 "HERO" monster from your field or GY to your hand.', 'toHand', {
+        await ctx.selectTargets(cands, 1, 1, 'Target 1 "HERO" monster you control or in your GY to return to the hand.', 'toHand', {
           aiScore: (c) => (c.isExtra ? -2000 : c.location === 'grave' ? (c.data.aiValue ?? 0) + (c.data.atk ?? 0) : -3000),
         });
-        if (sel.length) await ctx.toHand(sel);
+      },
+      resolve: async (ctx) => {
+        const t = ctx.validTargets((c) => c.location === 'grave' || (c.location === 'mzone' && c.faceUp));
+        if (t.length) await ctx.toHand(t);
       },
       ai: { score: (ctx) => (ctx.grave('me', (c) => isHero(c) && !c.isExtra).length ? 10 : 0) },
     },
@@ -688,9 +694,15 @@ const gaia = heroFusion(
         await ctx.selectTargets(ctx.faceUpMonsters('opp'), 1, 1, 'Target 1 face-up monster your opponent controls.', 'target', {
           aiScore: (c) => ctx.atk(c),
         });
+        ctx.data.gaiaMoveId = ctx.self.moveId;
+        ctx.data.gaiaFaceUpId = ctx.self.faceUpId;
+        ctx.data.targetFaceUpId = ctx.targets[0]?.faceUpId;
       },
       resolve: async (ctx) => {
-        const t = ctx.validTargets((c) => c.location === 'mzone' && c.faceUp);
+        // "This effect does not apply if either Hero Gaia or the target is flipped face-down / leaves the field."
+        // https://edisonrul.ing/cards/e/elemental-hero-gaia.html
+        if (ctx.self.location !== 'mzone' || !ctx.self.faceUp || ctx.self.moveId !== ctx.data.gaiaMoveId || ctx.self.faceUpId !== ctx.data.gaiaFaceUpId) return;
+        const t = ctx.validTargets((c) => c.location === 'mzone' && c.faceUp && c.faceUpId === ctx.data.targetFaceUpId);
         if (!t.length) return;
         const lost = Math.ceil(ctx.atk(t[0]) / 2);
         ctx.addTempMod(t[0], 'atk', -lost, 'turn');

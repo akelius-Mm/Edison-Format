@@ -1498,21 +1498,8 @@ monster('Alien Dog', {
   aiValue: 100,
   text: 'When you Normal Summon an "Alien" monster, you can Special Summon this card from your hand. When you do, place 2 A-Counters on face-up monster(s) your opponent controls.',
   effects: [
-    {
-      // A-Counter rule (same as crms.ts alienBattleRule): a monster with A-Counters battling this "Alien"
-      // loses 300 ATK and DEF for each A-Counter during damage calculation.
-      kind: 'continuous',
-      mods: (['atk', 'def'] as const).map((q) => ({
-        q,
-        to: 'cards' as const,
-        filter: (ctx: Ctx, c: C) => {
-          const b = ctx.battle;
-          if (!b || !b.inDamageStep || (c.counters.A ?? 0) <= 0) return false;
-          return (b.attacker === ctx.self && b.target === c) || (b.target === ctx.self && b.attacker === c);
-        },
-        value: (_ctx: Ctx, c: C) => -300 * (c.counters.A ?? 0),
-      })),
-    },
+    // No A-Counter battle rule of its own: the 2010 text has none (https://edisonrul.ing/cards/a/alien-dog.html). Its
+    // counters weaken monsters through the cards that print the rule (Alien Kid, Alien Overlord...), field-wide.
     {
       kind: 'trigger',
       event: 'normalSummoned',

@@ -42,9 +42,18 @@ export const selfFieldToGrave: EvF = (ctx, ev) => ev.card === ctx.self && wasOnF
 /** This card was sent to the GY from anywhere. */
 export const selfToGrave: EvF = (ctx, ev) => ev.card === ctx.self && ev.to === 'grave';
 export const selfDestroyedByBattle: EvF = (ctx, ev) => ev.card === ctx.self && ev.type === 'battleDestroyed';
-/** This card destroyed an opponent's monster by battle and is still on the field. */
+/**
+ * This card destroyed an opponent's monster by battle and is still on the field. "Opponent's monster" means the monster
+ * the opponent controlled when it was destroyed, not the one they own: your own monster taken by Creature Swap counts.
+ * https://edisonrul.ing/cards/e/elemental-hero-flame-wingman.html — "If your 'Elemental Hero Flame Wingman' destroys
+ * your monster that your opponent controlled, the effect is still activated"; https://edisonrul.ing/cards/g/goyo-guardian.html
+ * — "VS. 'Creature Swap': If Goyo destroys your monster that your opponent controlled, this effect can still Special Summon it".
+ */
 export const selfDestroysByBattle: EvF = (ctx, ev) =>
-  ev.type === 'battleDestroyed' && ev.other === ctx.self && ctx.self.location === 'mzone' && (ev.card as CardInstance).owner !== ctx.self.controller;
+  ev.type === 'battleDestroyed' &&
+  ev.other === ctx.self &&
+  ctx.self.location === 'mzone' &&
+  (ev.fromController ?? (ev.card as CardInstance).owner) !== ctx.self.controller;
 export const selfSummoned =
   (...methods: NonNullable<GameEvent['method']>[]): EvF =>
   (ctx, ev) =>

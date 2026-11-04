@@ -18,7 +18,17 @@ function endPhaseMill(n: number): EffectDef {
     label: `End Phase: send top ${n} to GY`,
     categories: ['mill'],
     eventFilter: (ctx, ev) => ev.phase === 'end' && ctx.isMyTurn && ctx.self.faceUp,
+    // The monster must still be face-up on the field when this resolves: if it was removed (or flipped face-down) in
+    // response, nothing is sent. https://edisonrul.ing/cards/j/jain-lightsworn-paladin.html — "The 'Lightsworn' monster
+    // (or 'Judgment Dragon') must remain face-up on the field in order to activate and resolve this effect";
+    // https://edisonrul.ing/cards/j/judgment-dragon.html
+    activate: async (ctx) => {
+      ctx.data.millMoveId = ctx.self.moveId;
+      ctx.data.millFaceUpId = ctx.self.faceUpId;
+    },
     resolve: async (ctx) => {
+      const s = ctx.self;
+      if (s.location !== 'mzone' || !s.faceUp || s.moveId !== ctx.data.millMoveId || s.faceUpId !== ctx.data.millFaceUpId) return;
       await ctx.mill(n);
     },
   };
@@ -199,6 +209,10 @@ monster('Garoth, Lightsworn Warrior', {
         const rc = ev.reasonCard as CardInstance | undefined;
         const c = ev.card as CardInstance;
         // LODT: the Lightsworn monster must be one you control (YGOJSON).
+        // Only cards sent "by the effect of" a Lightsworn monster: Celestia's Deck-to-GY is a cost and does not trigger it.
+        // https://edisonrul.ing/cards/g/garoth-lightsworn-warrior.html (historical text "by the effect of"; the revised
+        // section states it outright: "Celestia, Lightworn Angel's effect to send cards to the GY is a cost").
+        if (ev.reason === 'cost' || ev.reasons?.includes('cost')) return false;
         return ctx.self.faceUp && c.owner === ctx.player && !!rc && rc.isMonster && rc.inSet('lightsworn') && rc.name !== 'Garoth, Lightsworn Warrior' && rc.controller === ctx.player;
       },
       resolve: async (ctx) => {

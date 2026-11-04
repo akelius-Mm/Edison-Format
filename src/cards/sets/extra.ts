@@ -232,7 +232,13 @@ monster('Red Dragon Archfiend', {
       eventFilter: (ctx, ev) => ev.phase === 'end' && ctx.isMyTurn,
       resolve: async (ctx) => {
         if (ctx.self.location !== 'mzone' || !ctx.self.faceUp) return;
-        const idle = ctx.monsters('me', (c) => c !== ctx.self && c.attacksThisTurn === 0);
+        // "A monster whose attack was negated (by 'Magic Cylinder') is destroyed by this effect."
+        // https://edisonrul.ing/cards/r/red-dragon-archfiend.html
+        const negated = (c: C) => {
+          const f = c.flags.attacksNegated as { turn: number; n: number } | undefined;
+          return f?.turn === ctx.turn ? f.n : 0;
+        };
+        const idle = ctx.monsters('me', (c) => c !== ctx.self && c.attacksThisTurn - negated(c) <= 0);
         if (idle.length) await ctx.destroy(idle);
       },
     },

@@ -2172,6 +2172,10 @@ export class Game {
   negateAttack() {
     if (this.battle) {
       this.battle.negated = true;
+      // Count this turn's negated attacks per monster (Red Dragon Archfiend treats a negated attack as not declared).
+      const a = this.battle.attacker;
+      const prev = a.flags.attacksNegated as { turn: number; n: number } | undefined;
+      a.flags.attacksNegated = { turn: this.turn, n: prev?.turn === this.turn ? prev.n + 1 : 1 };
       this.log(`The attack of ${this.battle.attacker.name} is negated.`, 'battle');
       this.beginBatch();
       this.emit({ type: 'attackNegated', card: this.battle.attacker });
