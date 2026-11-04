@@ -7194,7 +7194,7 @@ async function gladiatorDeepTests() {
     eq(h3.location, 'grave', 'the other is destroyed and sent to the GY');
   });
 
-  await test('GB audit: contact fusion — Gyzarus with Prisma named Bestiari; Heraklinos with Prisma named Laquari; never with a face-down or un-named material', async () => {
+  await test('GB audit: contact fusion — Gyzarus with Prisma named Bestiari; Heraklinos with Prisma named Laquari; a face-down material is fine, an un-named one is not', async () => {
     const a = setup();
     const prisma = a.place(0, N('Elemental Hero Prisma'), 'mzone');
     const gyz = a.place(0, N('Gladiator Beast Gyzarus'), 'extra');
@@ -7227,7 +7227,9 @@ async function gladiatorDeepTests() {
     const gyz2 = f.place(0, N('Gladiator Beast Gyzarus'), 'extra');
     f.place(0, N('Gladiator Beast Bestiari'), 'mzone', { faceUp: false, pos: 'def' });
     f.place(0, N('Gladiator Beast Laquari'), 'mzone');
-    eq(!!procAct(f.g, 0, gyz2), false, 'face-down Bestiari cannot be a material');
+    // 2010 ruling: "Face-up & face-down Fusion Material Monsters you control may be used to Summon this card. Face-down
+    // materials must be revealed" (https://edisonrul.ing/cards/g/gladiator-beast-gyzarus.html).
+    eq(!!procAct(f.g, 0, gyz2), true, 'a face-down Bestiari can be a material');
     const t = setup();
     const gyz3 = t.place(0, N('Gladiator Beast Gyzarus'), 'extra');
     t.place(0, N('Elemental Hero Prisma'), 'mzone');

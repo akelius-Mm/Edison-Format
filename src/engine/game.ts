@@ -2279,8 +2279,10 @@ export class Game {
         const sel: CardInstance[] = [];
         for (let i = 0; i < n; i++) if (mask & (1 << i)) sel.push(nonT[i]);
         if (sel.length < minN || sel.length > maxN) continue;
-        // a material that can be treated as another Level for a Synchro Summon (Tuningware) may count either way
-        const levels = [t, ...sel].map((c) => (c.data.synchroLevel != null ? [this.getLevel(c), c.data.synchroLevel] : [this.getLevel(c)]));
+        // a material that can be treated as another Level for a Synchro Summon (Tuningware) may count either way; not
+        // while its effects are negated ("This effect can be negated (by "Debris Dragon" / "Junk Synchron" / "Skill
+        // Drain")", https://edisonrul.ing/cards/t/tuningware.html)
+        const levels = [t, ...sel].map((c) => (c.data.synchroLevel != null && !this.isNegated(c) ? [this.getLevel(c), c.data.synchroLevel] : [this.getLevel(c)]));
         const totals = levels.reduce((acc, ls) => acc.flatMap((a) => ls.map((l) => a + l)), [0]);
         if (!totals.includes(lv)) continue;
         const combo = [t, ...sel];

@@ -1,7 +1,7 @@
 // Card definitions: Gladiator Beasts (archetype group B).
 import { monster, spell, trap } from '../define';
 import { cardValue } from '../helpers';
-import type { CardInstance, EffectDef } from '../../engine/card';
+import { faceUpFlag, type CardInstance, type EffectDef } from '../../engine/card';
 import type { Ctx } from '../../engine/ctx';
 import type { GameEvent } from '../../engine/types';
 
@@ -167,6 +167,12 @@ monster(BESTIARI, {
   ],
 });
 
+/** Darius' revived monster flags (gone once that monster is turned face-down). */
+faceUpFlag('dariusSrc', 'dariusSrcMove', 'dariusSrcFace');
+/** `m` is the monster this Darius (as it was at `moveId`, never turned face-down since) revived. */
+const dariusLinked = (darius: CardInstance, m: CardInstance, moveId: number) =>
+  m.flags.dariusSrc === darius.uid && m.flags.dariusSrcMove === moveId && m.flags.dariusSrcFace === darius.faceUpId;
+
 monster('Gladiator Beast Darius', {
   attribute: 'EARTH',
   race: 'Beast-Warrior', // PTDN: Darius is a Beast-Warrior (YGOJSON), not a Beast
@@ -194,16 +200,26 @@ monster('Gladiator Beast Darius', {
         if (!sel.length) return;
         const r = await ctx.specialSummon(sel[0]);
         if (!r.length) return;
-        ctx.negateEffects(r[0], 'field');
         if (ctx.self.location === 'mzone') {
+          // The negation is Darius' continuous effect below (while both stay face-up), not a lasting change on the target.
           r[0].flags.dariusSrc = ctx.self.uid;
           r[0].flags.dariusSrcMove = ctx.self.moveId;
+          r[0].flags.dariusSrcFace = ctx.self.faceUpId;
         } else {
+          ctx.negateEffects(r[0], 'field');
           // Darius already left the field: the monster goes straight back.
           await ctx.toDeck(r[0], 'shuffle');
         }
       },
     }),
+    {
+      // 2010 rulings (https://edisonrul.ing/cards/g/gladiator-beast-darius.html): "The target's effects are not
+      // negated: if the target is flipped face-down / leaves the field (by "Book of Moon" or "Bottomless Trap Hole");
+      // if Darius is flipped face-down / leaves the field". Turned face-down, either one stops being linked (the
+      // dariusSrc flags are face-up flags; Darius' faceUpId changes), so the target is not shuffled into the Deck later.
+      kind: 'continuous',
+      mods: [{ q: 'negated', to: 'cards', filter: (ctx, c: CardInstance) => c.location === 'mzone' && c.faceUp && dariusLinked(ctx.self, c, ctx.self.moveId) }],
+    },
     {
       kind: 'trigger',
       event: 'leftField',
@@ -213,9 +229,9 @@ monster('Gladiator Beast Darius', {
       categories: ['toDeck'],
       eventFilter: (ctx, ev) =>
         ev.card === ctx.self &&
-        ctx.game.monsters(ctx.player).concat(ctx.game.monsters(ctx.opp)).some((m) => m.flags.dariusSrc === ctx.self.uid && m.flags.dariusSrcMove === ctx.self.moveId - 1),
+        ctx.game.monsters(ctx.player).concat(ctx.game.monsters(ctx.opp)).some((m) => dariusLinked(ctx.self, m, ctx.self.moveId - 1)),
       activate: async (ctx) => {
-        ctx.data.mons = ctx.monsters('both', (m) => m.flags.dariusSrc === ctx.self.uid && m.flags.dariusSrcMove === ctx.self.moveId - 1);
+        ctx.data.mons = ctx.monsters('both', (m) => dariusLinked(ctx.self, m, ctx.self.moveId - 1));
         ctx.data.ids = (ctx.data.mons as CardInstance[]).map((m) => m.moveId);
       },
       resolve: async (ctx) => {
@@ -542,8 +558,21 @@ spell("Gladiator Beast's Respite", 'normal', {
 
 // ============================================================ EXTRA DECK (contact fusions)
 
-/** Face-up Gladiator Beasts the player can return for a contact fusion. */
-const fieldGBs = (ctx: Ctx) => ctx.faceUpMonsters('me', isGB);
+/**
+ * Gladiator Beasts the player can return for a contact fusion. 2010 ruling: "Face-up & face-down Fusion Material
+ * Monsters you control may be used to Summon this card. Face-down materials must be revealed before shuffling them into
+ * the Main / Extra Deck." https://edisonrul.ing/cards/g/gladiator-beast-gyzarus.html,
+ * https://edisonrul.ing/cards/g/gladiator-beast-heraklinos.html
+ */
+const fieldGBs = (ctx: Ctx) => ctx.monsters('me', isGB);
+/** Reveal the face-down contact fusion materials before they are shuffled into the Deck. */
+async function revealFaceDown(ctx: Ctx, cards: CardInstance[]) {
+  const hidden = cards.filter((c) => !c.faceUp);
+  if (!hidden.length) return;
+  for (const c of hidden) c.revealedUntil = ctx.turn;
+  ctx.log(`${ctx.game.players[ctx.player].name} reveals ${hidden.map((c) => c.name).join(', ')}.`);
+  await ctx.game.anim({ type: 'reveal', cards: hidden.map((c) => c.uid), player: ctx.player });
+}
 
 monster('Gladiator Beast Gyzarus', {
   attribute: 'DARK', // LODT: DARK per YGOJSON (was WIND)
@@ -574,6 +603,7 @@ monster('Gladiator Beast Gyzarus', {
           aiScore: (c) => -cardValue(ctx.game, c) + (c.flags.dariusSrc ? 3000 : 0),
         });
         if (!o.length) return false;
+        await revealFaceDown(ctx, [b[0], o[0]]);
         ctx.log(`${ctx.game.players[ctx.player].name} shuffles ${b[0].name} and ${o[0].name} into the Deck.`);
         await ctx.toDeck([b[0], o[0]], 'shuffle', 'material');
         return true;
@@ -633,6 +663,7 @@ monster('Gladiator Beast Heraklinos', {
           aiScore: (c) => -cardValue(ctx.game, c) + (c.flags.dariusSrc ? 3000 : 0),
         });
         if (o.length < 2) return false;
+        await revealFaceDown(ctx, [l[0], ...o]);
         ctx.log(`${ctx.game.players[ctx.player].name} shuffles ${[l[0], ...o].map((c) => c.name).join(', ')} into the Deck.`);
         await ctx.toDeck([l[0], ...o], 'shuffle', 'material');
         return true;

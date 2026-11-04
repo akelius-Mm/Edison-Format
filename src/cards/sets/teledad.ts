@@ -3,7 +3,7 @@
 import { monster, spell } from '../define';
 import { attr, cardValue, selfSummoned } from '../helpers';
 import { Ctx } from '../../engine/ctx';
-import type { CardInstance } from '../../engine/card';
+import type { CardData, CardInstance, EffectDef } from '../../engine/card';
 import { GameOver, type BattleState } from '../../engine/game';
 
 // ------------------------------------------------------------------ helpers
@@ -340,6 +340,53 @@ monster('Destiny Hero - Disk Commander', {
   ],
 });
 
+/**
+ * Diamond Dude: the Normal Spell it sent to the GY gets its effect as an Ignition Effect usable once during the Main
+ * Phase of its owner's next turn. 2010 rulings (https://edisonrul.ing/cards/d/destiny-hero-diamond-dude.html): it can be
+ * used "during your next turn's Main Phase even if Diamond Dude leaves the field"; the Normal Spell "MUST still be in
+ * your Graveyard in order to activate its effect, starting a chain"; the card itself is not activated, only its effect
+ * (no face-up card, no once-per-turn of its own); timing requirements still apply (its own `condition`).
+ * APPROX: the Normal Spell's activation code pays its costs too ("Activation costs are bypassed" — e.g. Trade-in's
+ * discard) and checks its general requirements (`canActivate`, e.g. Burst Stream's Blue-Eyes): the card scripts do not
+ * separate costs from targets.
+ */
+const diamondDudeCache = new WeakMap<CardData, CardData>();
+const diamondDudePatched = new WeakSet<CardInstance>();
+/** Card flags (reset when the card moves): diamondDudeGrant = it has the granted effect, diamondDude = not used yet. */
+function diamondDudeData(d: CardData, card: CardInstance): CardData {
+  if (!card.flags.diamondDudeGrant) return d;
+  const hit = diamondDudeCache.get(d);
+  if (hit) return hit;
+  const ef = (d.effects ?? []).find((e) => e.kind === 'activate');
+  if (!ef) return d;
+  const granted: EffectDef = {
+    kind: 'ignition',
+    range: ['grave'],
+    label: 'Apply its effect (Diamond Dude)',
+    categories: ef.categories,
+    condition: (ctx) => {
+      const f = ctx.self.flags.diamondDude as { player: number; turn: number } | undefined;
+      if (!f || f.player !== ctx.player || f.turn !== ctx.turn || !ctx.isMyTurn) return false;
+      if (ctx.phase !== 'main1' && ctx.phase !== 'main2') return false;
+      return !ef.condition || ef.condition(ctx);
+    },
+    canActivate: ef.canActivate,
+    activate: async (ctx) => {
+      const f = ctx.self.flags.diamondDude;
+      delete ctx.self.flags.diamondDude;
+      ctx.log(`${ctx.game.players[ctx.player].name} activates the effect of ${ctx.self.name} in the GY (Destiny Hero - Diamond Dude).`);
+      const r = ef.activate ? await ef.activate(ctx) : undefined;
+      if (r === false) ctx.self.flags.diamondDude = f;
+      return r;
+    },
+    resolve: ef.resolve,
+    ai: ef.ai,
+  };
+  const out: CardData = { ...d, effects: [...(d.effects ?? []), granted] };
+  diamondDudeCache.set(d, out);
+  return out;
+}
+
 monster('Destiny Hero - Diamond Dude', {
   attribute: 'DARK',
   race: 'Warrior',
@@ -348,7 +395,7 @@ monster('Destiny Hero - Diamond Dude', {
   def: 1600,
   sets: ['hero', 'destiny-hero'],
   aiValue: 400,
-  text: 'Once per turn: You can look at the top card of your Deck. If it is a Normal Spell, send it to the GY; during your next Main Phase 1 you can apply that card\'s effect. Otherwise, place it on the bottom of the Deck.',
+  text: 'Once per turn, you can reveal the top card of your Deck. If it is a Normal Spell Card, send it to the Graveyard and you can activate its effect during the Main Phase of your next turn. If the card is not a Normal Spell Card, place it on the bottom of your Deck.',
   effects: [
     {
       kind: 'ignition',
@@ -363,33 +410,13 @@ monster('Destiny Hero - Diamond Dude', {
         ctx.log(`${ctx.self.name} reveals ${top.name}.`);
         if (top.isSpell && top.data.stype === 'normal') {
           await ctx.sendToGrave(top);
-          const id = top.moveId;
-          const player = ctx.player;
-          const game = ctx.game;
-          game.addDelayed(
-            'main1',
-            async () => {
-              if (top.location !== 'grave' || top.moveId !== id || game.turnPlayer !== player) return;
-              const idx = (top.data.effects ?? []).findIndex((e) => e.kind === 'activate');
-              const ef = top.data.effects?.[idx];
-              if (!ef) return;
-              const c2 = new Ctx(game, top, ef, player);
-              c2.effectIndex = idx;
-              try {
-                if (ef.condition && !ef.condition(c2)) return;
-                if (ef.canActivate && !ef.canActivate(c2)) return;
-                const yes = await c2.confirm(`Apply the effect of ${top.name} (Destiny Hero - Diamond Dude)?`, (ef.ai?.score?.(c2) ?? 30) > 0);
-                if (!yes) return;
-                game.log(`${game.players[player].name} applies the effect of ${top.name} from the GY.`, 'action', player);
-                if (ef.activate && (await ef.activate(c2)) === false) return;
-                if (ef.resolve) await ef.resolve(c2);
-              } catch (e) {
-                if (e instanceof GameOver) throw e;
-                console.error('Diamond Dude delayed effect error', top.name, e);
-              }
-            },
-            2,
-          );
+          if (top.location !== 'grave') return;
+          // The Normal Spell's effect becomes an Ignition Effect of that card in the GY during the Main Phase of your
+          // next turn (Ignition Effect, so a Chain Link; it needs no Diamond Dude on the field). See diamondDudeData.
+          top.flags.diamondDude = { player: ctx.player, turn: ctx.turn + 2 };
+          top.flags.diamondDudeGrant = true;
+          if (!diamondDudePatched.has(top)) top.addDataPatch(diamondDudeData);
+          diamondDudePatched.add(top);
         } else {
           await ctx.toDeck(top, 'bottom');
         }
