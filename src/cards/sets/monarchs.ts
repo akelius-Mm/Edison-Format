@@ -185,7 +185,9 @@ monster('Thestalos the Firestorm Monarch', {
         const c = hand[ctx.game.rng.int(hand.length)];
         ctx.log(`${ctx.self.name} discards ${c.name} from ${ctx.game.players[ctx.opp].name}'s hand at random.`);
         const r = await ctx.discard(c);
-        if (r.length && c.isMonster) await ctx.damage(ctx.opp, (c.data.level ?? 0) * 100);
+        // Damage only if it was discarded to the GY (not banished by "Banisher of the Light"); it may leave the GY
+        // afterwards (Outstanding Dog Marron). https://edisonrul.ing/cards/t/thestalos-the-firestorm-monarch.html
+        if (r.length && c.isMonster && c.location === 'grave') await ctx.damage(ctx.opp, (c.data.level ?? 0) * 100);
       },
     }),
   ],
@@ -234,7 +236,12 @@ monster('Granmarg the Rock Monarch', {
       activate: async (ctx) => {
         await ctx.selectTargets(ctx.field('both', (c) => !c.faceUp), 1, 1, 'Target 1 Set card to destroy.', 'destroy');
       },
-      resolve: destroyTargets,
+      // A target flipped face-up in response (a chained Set Trap, "Ceasefire") is no longer a Set card: not destroyed.
+      // https://edisonrul.ing/cards/g/granmarg-the-rock-monarch.html
+      resolve: async (ctx) => {
+        const t = ctx.validTargets((c) => c.onField && !c.faceUp);
+        if (t.length) await ctx.destroy(t);
+      },
     }),
   ],
 });
@@ -254,16 +261,18 @@ monster('Swap Frog', {
   effects: [
     {
       kind: 'proc',
-      label: 'Special Summon (send 1 WATER)',
+      // The cost is a discard (2010 text: "You can discard 1 WATER monster to Special Summon this card from your hand").
+      // https://edisonrul.ing/cards/s/swap-frog.html
+      label: 'Special Summon (discard 1 WATER)',
       canActivate: (ctx) => ctx.freeMZones() > 0 && ctx.hand('me', (c) => c !== ctx.self && attr('WATER')(c)).length > 0,
       perform: async (ctx) => {
         const cands = ctx.hand('me', (c) => c !== ctx.self && attr('WATER')(c));
-        const sel = await ctx.select(cands, 1, 1, 'Send 1 WATER monster from your hand to the GY.', 'cost', {
+        const sel = await ctx.select(cands, 1, 1, 'Discard 1 WATER monster.', 'discard', {
           cancelable: true,
           aiScore: (c) => -cardValue(ctx.game, c) + (isFrog(c) ? 400 : 0) + (c.name === 'Ronintoadin' ? 300 : 0),
         });
         if (!sel.length) return false;
-        await ctx.sendToGrave(sel, 'cost');
+        await ctx.discard(sel, 'cost');
         return true;
       },
       ai: {
@@ -432,6 +441,9 @@ monster('Ronintoadin', {
   ],
 });
 
+/** Dupe Frog's search: a "Frog" monster except "Dupe Frog" or "Frog the Jam" (2010 text). */
+const dupeFrogSearchable = (c: CardInstance) => isFrog(c) && c.name !== 'Dupe Frog' && c.name !== 'Frog the Jam';
+
 monster('Dupe Frog', {
   attribute: 'WATER',
   race: 'Aqua',
@@ -440,7 +452,8 @@ monster('Dupe Frog', {
   def: 2000,
   sets: ['frog'],
   aiValue: 450,
-  text: 'This card\'s name is treated as "Des Frog" while on the field. Your opponent cannot target monsters you control for attacks, except "Dupe Frog". When this card is sent from the field to the GY: You can add 1 "Frog" monster from your Deck or GY to your hand, except "Dupe Frog".',
+  // April 2010 printing: https://edisonrul.ing/cards/d/dupe-frog.html
+  text: 'This card\'s name is treated as "Des Frog" while it is face-up on the field. Your opponent cannot select another monster as an attack target. When this card is sent from the field to the Graveyard, you can add 1 "Frog" monster except "Dupe Frog" or "Frog the Jam" from your Deck or Graveyard to your hand.',
   effects: [
     {
       kind: 'continuous',
@@ -448,7 +461,9 @@ monster('Dupe Frog', {
         {
           q: 'cannotBeAttacked',
           to: 'cards',
-          filter: (ctx, c) => c.location === 'mzone' && c.controller === ctx.player && c.name !== 'Dupe Frog',
+          // "another monster": a second face-up Dupe Frog is protected too, so with 2+ the opponent cannot attack your
+          // monsters at all. https://edisonrul.ing/cards/d/dupe-frog.html
+          filter: (ctx, c) => c.location === 'mzone' && c.controller === ctx.player && c !== ctx.self,
         },
       ],
     },
@@ -459,10 +474,10 @@ monster('Dupe Frog', {
       label: 'Add a Frog to hand',
       categories: ['search', 'toHand'],
       eventFilter: selfFieldToGrave,
-      canActivate: (ctx) => ctx.cards('me', ['deck', 'grave'], (c) => isFrog(c) && c.name !== 'Dupe Frog').length > 0,
+      canActivate: (ctx) => ctx.cards('me', ['deck', 'grave'], dupeFrogSearchable).length > 0,
       resolve: async (ctx) => {
         const blocked = ctx.game.queryPlayer(ctx.player, 'cannotAddFromDeck');
-        const cands = ctx.cards('me', ['deck', 'grave'], (c) => isFrog(c) && c.name !== 'Dupe Frog' && !(blocked && c.location === 'deck'));
+        const cands = ctx.cards('me', ['deck', 'grave'], (c) => dupeFrogSearchable(c) && !(blocked && c.location === 'deck'));
         const sel = await ctx.select(cands, 1, 1, 'Add 1 "Frog" monster from your Deck or GY to your hand.', 'toHand', {
           aiScore: (c) => frogPriority(ctx, c, 'hand') + (c.location === 'grave' && c.name !== 'Treeborn Frog' ? 50 : 0) - (c.location === 'grave' && c.name === 'Treeborn Frog' ? 2000 : 0),
         });
