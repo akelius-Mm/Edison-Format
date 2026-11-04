@@ -9,9 +9,9 @@
 // definitions are marked "RGBT:" in their files.
 //
 // Engine hooks reused (no new engine code): EffectDef.replaceDestroyOne and altTribute (ABPF), the
-// Earthbound Immortal Normal Summon rule from `ensureAnprPatches` (ANPR). Game-level rules with no engine
+// Earthbound Immortal Normal Summon rule from `anprRules` (ANPR). Game-level rules with no engine
 // hook (G.B. Hunter, Koa'ki Meiru Drago, Grave of the Super Ancient Organism, Calming Magic, King of the
-// Beasts, Miracle Locus, Crimson Fire / Spell of Pain) are installed per game by `ensureRgbtPatches`, the
+// Beasts, Miracle Locus, Crimson Fire / Spell of Pain) are installed per game (CardData.rules) by `rgbtRules`, the
 // same way anpr.ts and traps.ts wrap Game methods. Approximations are marked "APPROX:".
 import { monster, spell, token, trap } from '../define';
 import { bestTarget, cardValue, flip, selfDestroysByBattle, specialSummonBlockers } from '../helpers';
@@ -287,8 +287,8 @@ function earthboundRules(): EffectDef[] {
 }
 
 // =================================================================== per-game rule patches
-// The engine has no hook for these rules, so each game instance gets small wrappers (installed once, at the first
-// phase start, by any card that carries PATCH_LISTENER; tests can call ensureRgbtPatches directly):
+// The engine has no hook for these rules, so each game gets small wrappers (rgbtRules, installed once at the
+// start of the game, by any card that lists it in `rules`):
 //  * damage: Crimson Fire / Spell of Pain (effect damage redirected from the resolving chain link), Miracle Locus
 //    (no battle damage to the opponent from that monster's battles);
 //  * moveCards: G.B. Hunter (cards on the field cannot be returned to the Deck / Extra Deck);
@@ -1772,7 +1772,7 @@ monster('G.B. Hunter', {
   def: 2000,
   aiValue: 200,
   text: 'Cards on the field cannot be returned to the Deck.',
-  // The rule itself lives in ensureRgbtPatches (moveCards wrapper).
+  // The rule itself lives in rgbtRules (moveCards wrapper).
   rules: [rgbtRules],
   effects: [{ kind: 'continuous', label: 'Cards on the field cannot be returned to the Deck' }],
 });
@@ -3696,7 +3696,7 @@ trap('Grave of the Super Ancient Organism', 'continuous', {
         },
       },
     },
-    // "nor can players activate their effects": see ensureRgbtPatches (canActivateEffect / activate wrappers).
+    // "nor can players activate their effects": see rgbtRules (canActivateEffect / activate wrappers).
     { kind: 'continuous', mods: [{ q: 'cannotAttack', to: 'cards', filter: (ctx, c: C) => faceUpOn(c) && isSpecialSummoned(c) && ctx.level(c) >= 6 }] },
   ],
 });

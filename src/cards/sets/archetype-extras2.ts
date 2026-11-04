@@ -14,7 +14,7 @@
 // Card text is the Edison-era (pre-errata) wording; effects follow the 2010 TCG rulings as far as the engine allows.
 // Approximations are marked "APPROX:".
 //
-// Game rules the engine has no hook for are installed per game by `ensureArchetypeExtras2Patches` (the technique of
+// Game rules the engine has no hook for are installed per game (CardData.rules) by `archetypeExtras2Rules` (the technique of
 // lodt.ts / archetype-extras.ts):
 //  * Summon legality: Ancient Gear Golem cannot be Special Summoned (except by an effect that ignores the Summoning
 //    conditions, such as Ultimate Ancient Gear Golem's);

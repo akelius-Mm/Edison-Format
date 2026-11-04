@@ -7,7 +7,7 @@
 //
 // No engine change. Hooks reused: EffectDef.replaceDestroy (ANPR), EffectDef.replaceDestroyOne (ABPF), the
 // `mustBeAttacked` / `untargetable` / `extraAttacks` query keys, Game.link (Miracle Fertilizer) and the monster-as-Equip
-// technique of abpf.ts. Game rules the engine has no hook for are installed per game by `ensureCsocPatches`
+// technique of abpf.ts. Game rules the engine has no hook for are installed per game (CardData.rules) by `csocRules`
 // (the technique of lodt.ts):
 //  * events (Game.emit): Ivy Token / Horseytail Token effects (Tokens have left the field when they would trigger),
 //    Revived King Ha Des (drops the triggers of monsters it negates), direct-attack bookkeeping (Confusion Chaff),
@@ -780,7 +780,7 @@ M(MAGNEN, {
   aiValue: 200,
   text: '● While in Attack Position: If your opponent controls a face-up monster, this card can only select their highest ATK monster as an attack target.\n● While in Defense Position: Your opponent cannot select another monster as an attack target.',
   effects: [
-    // Attack Position: Game.attackTargets patch (ensureCsocPatches).
+    // Attack Position: Game.attackTargets patch (csocRules).
     { kind: 'continuous', active: (ctx) => ctx.self.pos === 'def', mods: [{ q: 'mustBeAttacked' }] },
   ],
 });
@@ -1520,7 +1520,7 @@ M(MAMMOTH, {
   aiValue: 0,
   text: 'Destroy this card if you do not have a Zombie-Type monster in your Graveyard. When this face-up card is destroyed, inflict damage to its controller equal to its original ATK.',
   effects: [
-    // The self-destruction is a state check (ensureCsocPatches).
+    // The self-destruction is a state check (csocRules).
     {
       kind: 'trigger',
       event: 'destroyed',
@@ -1759,7 +1759,7 @@ M(HA_DES, {
   aiValue: 400,
   synchro: { tuner: (c) => c.name === 'Plaguespreader Zombie', nonTuner: isZombie, desc: '"Plaguespreader Zombie" + 1 or more non-Tuner Zombie-Type monsters' },
   text: '"Plaguespreader Zombie" + 1 or more non-Tuner Zombie-Type monsters\nNegate the effects of Effect Monsters destroyed by battle with Zombie-Type monsters you control.',
-  // Effect: Game.emit patch (ensureCsocPatches). APPROX: the destroyed monster's effects stay negated until the end of the turn.
+  // Effect: Game.emit patch (csocRules). APPROX: the destroyed monster's effects stay negated until the end of the turn.
   effects: [],
 });
 
@@ -1833,7 +1833,7 @@ M(OVERDRIVE, {
   def: 1200,
   aiValue: 500,
   text: 'This card cannot be Special Summoned. You can pay 2000 Life Points to Special Summon 2 Level 3 Psychic-Type monsters from your Deck. This effect can only be used once while this card is face-up on the field.',
-  // "Cannot be Special Summoned": Summon legality patch (ensureCsocPatches).
+  // "Cannot be Special Summoned": Summon legality patch (csocRules).
   effects: [
     {
       kind: 'ignition',
@@ -1990,7 +1990,7 @@ M(UR, {
   def: 1500,
   aiValue: 300,
   text: 'This card can attack all monsters your opponent controls once each. If this card attacks or is attacked, your opponent takes no Battle Damage.',
-  // Effects: attack and battle damage patches (ensureCsocPatches).
+  // Effects: attack and battle damage patches (csocRules).
   effects: [],
 });
 
@@ -3508,7 +3508,7 @@ T('DNA Checkup', 'normal', {
 
 T(GOZEN, 'continuous', {
   text: 'Each player sends monsters they control to the Graveyard until they each control monsters of only 1 Attribute. Each player cannot control monsters with different Attributes.',
-  // The Attribute rule is a state check and a Summon restriction (ensureCsocPatches).
+  // The Attribute rule is a state check and a Summon restriction (csocRules).
   // Flip Summons of another Attribute are not offered while you control a face-up monster (legalMainActions filter):
   // "YOU CANNOT: Flip / Normal / Special Summoning a monster of a different Attribute".
   // https://edisonrul.ing/cards/g/gozen-match.html

@@ -10,7 +10,7 @@
 //
 // No engine change. Hooks reused: EffectDef.replaceDestroy (ANPR), EffectDef.replaceDestroyOne (ABPF), the per-instance
 // data override `patchData` (abpf.ts), synchro/fusion `flags.materials`. Game rules the engine has no hook for are
-// installed per game by `ensureTdgsPatches` (the technique of lodt.ts):
+// installed per game (CardData.rules) by `tdgsRules` (the technique of lodt.ts):
 //  * Tributes: Big Piece Golem / Cyber Shark (Normal Summon without Tributing), Geartown (1 less for "Ancient Gear");
 //  * Special Summons: Power Filter (monsters with 1000 or less ATK cannot be Special Summoned);
 //  * battle damage: Defense Draw; LP costs: Telekinetic Charging Cell;

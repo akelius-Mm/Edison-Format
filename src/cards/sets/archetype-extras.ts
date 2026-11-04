@@ -11,7 +11,7 @@
 // No engine change. Hooks reused: EffectDef.replaceDestroyOne (ABPF) for the Six Samurai destruction
 // substitution, the per-instance data override `patchData` (abpf.ts) for Phantom of Chaos, `nomi` for
 // "cannot be Special Summoned" (as Tsukuyomi). Game rules the engine has no hook for are installed per game by
-// `ensureArchetypeExtrasPatches` (the technique of lodt.ts / glas.ts):
+// `archetypeExtrasRules` (the technique of lodt.ts / glas.ts):
 //  * battle damage: Phantom of Chaos (the opponent takes none from attacks involving it);
 //  * Summon legality: Grandmaster of the Six Samurai (only 1 face-up under your control), Dark Dust Spirit and
 //    Vanity's Fiend (never Special Summoned, also by effects that do not check `Ctx.canSummonCard`).

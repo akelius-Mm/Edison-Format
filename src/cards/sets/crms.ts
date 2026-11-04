@@ -4,7 +4,7 @@
 // Approximations are marked "APPROX:".
 //
 // Rules the engine has no hook for are added as small per-game wrappers installed once per game by
-// `ensureCrmsPatches` (same pattern as `ensureAnprPatches` in anpr.ts and `patchGame` in traps.ts):
+// `crmsRules` (same pattern as `anprRules` in anpr.ts and `trapRules` in traps.ts):
 //  * Flying Fortress SKY FIRE: a response window after the opponent Sets a Spell/Trap;
 //  * Night Wing Sorceress: "Assault Mode Activate" can be activated the turn it is Set;
 //  * Hydra Viper: Tribute 1 Aqua-Type monster as a cost each time it declares an attack;

@@ -8,7 +8,7 @@
 //
 // No engine change. Hooks reused: EffectDef.replaceDestroy (ANPR), EffectDef.altTribute (ABPF), the per-instance
 // data override `patchData` (abpf.ts), the `atkBecomes`-style flags.setAtk of Game.getAtk. Game rules the engine has
-// no hook for are installed per game by `ensureLodtPatches` (the technique of anpr.ts / traps.ts):
+// no hook for are installed per game (CardData.rules) by `lodtRules` (the technique of anpr.ts / traps.ts):
 //  * battle damage: Arcana Force XIV - Temperance (halve / no damage), Union Attack (no damage to the opponent);
 //  * Summon legality: Guardian of Order / Miracle Flipper (only 1), Arcana Force VI - The Lovers (Tails),
 //    Tour of Doom, Summon Limit, Tualatin's Attribute lock, Fog King (0/1 Tribute), Simorgh (1 less Tribute),
@@ -2108,7 +2108,7 @@ M(FREED, {
   def: 1700,
   aiValue: 700,
   text: 'Cannot be Special Summoned. Negate any Spell effects that target a face-up DARK monster(s) you control, and if you do, destroy that Spell Card. During your Draw Phase, instead of conducting your normal draw: You can add 1 Level 4 DARK monster from your Deck to your hand. This card must be face-up on the field to activate and to resolve this effect.',
-  // APPROX: the Draw Phase search replaces the draw without starting a chain (see ensureLodtPatches).
+  // APPROX: the Draw Phase search replaces the draw without starting a chain (see lodtRules).
   effects: [
     {
       kind: 'trigger',

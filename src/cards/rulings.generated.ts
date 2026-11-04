@@ -907,7 +907,7 @@ export const RULINGS: Record<string, RulingNote[]> = {
       "url": "https://edisonrul.ing/cards/d/dna-checkup.html"
     },
     {
-      "text": "The Attribute rule is a state check and a Summon restriction (ensureCsocPatches). Flip Summons of another Attribute are not offered while you control a face-up monster (legalMainActions filter): \"YOU CANNOT: Flip / Normal / Special Summoning a monster of a different Attribute\".",
+      "text": "The Attribute rule is a state check and a Summon restriction (csocRules). Flip Summons of another Attribute are not offered while you control a face-up monster (legalMainActions filter): \"YOU CANNOT: Flip / Normal / Special Summoning a monster of a different Attribute\".",
       "url": "https://edisonrul.ing/cards/g/gozen-match.html"
     }
   ],
@@ -1425,7 +1425,7 @@ export const RULINGS: Record<string, RulingNote[]> = {
       "url": "https://edisonrul.ing/cards/g/gozen-match.html"
     },
     {
-      "text": "The Attribute rule is a state check and a Summon restriction (ensureCsocPatches). Flip Summons of another Attribute are not offered while you control a face-up monster (legalMainActions filter): \"YOU CANNOT: Flip / Normal / Special Summoning a monster of a different Attribute\".",
+      "text": "The Attribute rule is a state check and a Summon restriction (csocRules). Flip Summons of another Attribute are not offered while you control a face-up monster (legalMainActions filter): \"YOU CANNOT: Flip / Normal / Special Summoning a monster of a different Attribute\".",
       "url": "https://edisonrul.ing/cards/g/gozen-match.html"
     }
   ],

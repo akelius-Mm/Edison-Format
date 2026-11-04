@@ -6,7 +6,7 @@
 // Already scripted elsewhere: Gladiator Beast Murmillo / Bestiari / Laquari / Hoplomus / Secutor / Heraklinos,
 // Gladiator Beast's Respite, Test Tiger (gladiators.ts), Light-/Shadow-Imprisoning Mirror, Soul Taker.
 //
-// No engine change. Game rules the engine has no hook for are installed per game by `ensureGlasPatches`
+// No engine change. Game rules the engine has no hook for are installed per game (CardData.rules) by `glasRules`
 // (the technique of lodt.ts / crms.ts):
 //  * Special Summon legality: Cloudian - Ghost Fog (never), Gladiator Beast Alexander / Spartacus (only by the effect of
 //    Dimacari / Hoplomus), Dragon Ice (only 1 face-up on the field). `Ctx.canSummonCard` is wrapped once so card

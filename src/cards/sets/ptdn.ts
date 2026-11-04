@@ -9,7 +9,7 @@
 // Engine hooks reused: EffectDef.replaceDestroyOne (Armored Cybern, Vicious Claw, Battle Archfiend Shield),
 // EffectDef.altTribute (Darklord Zerato, Earth/Wind Effigy), 'tributeFodderFor' / 'noTributeSummonFodder'
 // flags (tokens, The Immortal Bushi), BattleState.calc. Game-level rules with no engine hook are installed
-// per game by `ensurePtdnPatches` (the same way anpr.ts and traps.ts wrap game methods):
+// per game by `ptdnRules` (the same way anpr.ts and traps.ts wrap game methods):
 //  * damage: Rainbow Life (damage becomes LP gain), Prime Material Dragon (effect damage becomes LP gain);
 //  * moveCards: Destiny HERO - Departed (banished instead of the GY from the hand/Deck), Transmigration Break
 //    (GY -> Deck becomes banished);

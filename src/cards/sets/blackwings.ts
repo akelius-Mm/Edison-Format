@@ -305,7 +305,7 @@ monster('Blackwing - Elphin the Raven', {
   text: 'If you control a "Blackwing" monster, you can Normal Summon this card without Tributing. When this card is Normal Summoned: You can target 1 monster your opponent controls; change that target\'s battle position.',
   effects: [
     {
-      // Workaround (see docs/engine-requests/group-b.md): the engine has no "summon without Tributing"
+      // Workaround: the engine has no "summon without Tributing"
       // hook, so this hand-range continuous effect refreshes the noTribute flag whenever Normal Summon
       // legality is checked. It never actually forbids anything.
       kind: 'continuous',

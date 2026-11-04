@@ -1,6 +1,5 @@
 // Card definitions: generic Main Deck monsters (effect + vanilla).
 // See docs/CARD_SCRIPTING.md and src/cards/sets/core.ts for the patterns used here.
-// Engine limitations and their workarounds are listed in docs/engine-requests/monsters.md.
 import { monster, normal, token } from '../define';
 import { attr, bestTarget, cardValue, destroyTargets, flip, selfFieldToGrave, selfDestroysByBattle, stRemovalScore } from '../helpers';
 import type { CardInstance, EffectDef } from '../../engine/card';
@@ -1515,7 +1514,7 @@ monster('Cyber Phoenix', {
   aiValue: 400,
   effects: [
     {
-      // Implemented as an instant check when a Spell/Trap is activated (see engine-requests).
+      // Implemented as an instant check when a Spell/Trap is activated.
       kind: 'trigger',
       event: 'chainActivated',
       label: 'Protect Machine',
@@ -2099,7 +2098,7 @@ monster('Makyura the Destructor', {
   effects: [
     {
       // Engine does not yet support Trap activation from the hand; this records the permission
-      // in turnData so an engine hook can honour it (see docs/engine-requests/monsters.md).
+      // in turnData so an engine hook can honour it.
       // 2010 ruling: a Continuous Effect (no Chain). https://edisonrul.ing/cards/m/makyura-the-destructor.html
       kind: 'trigger',
       event: 'sentToGrave',

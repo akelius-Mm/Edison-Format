@@ -9,7 +9,7 @@
 // Engine hook used: EffectDef.replaceDestroy ("if X would be destroyed, ... instead"), see the
 // `// ANPR:` comments in src/engine/game.ts. Everything else is card-level; the few game-level rules
 // (battle-damage changes, summon restrictions, Tribute requirements) are installed per game by
-// `ensureAnprPatches`, the same way traps.ts wraps `damage` for Dimension Wall.
+// `anprRules`, the same way traps.ts wraps `damage` for Dimension Wall.
 // Approximations are marked "APPROX:".
 import { monster, spell, token, trap } from '../define';
 import { bestTarget, cardValue, destroyTargets, selfDestroysByBattle } from '../helpers';

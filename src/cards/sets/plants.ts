@@ -311,7 +311,7 @@ const quickdraw = monster('Quickdraw Synchron', {
   ],
 });
 
-// MonsterOpts has no synchroMaterialCheck field yet (see docs/engine-requests/group-a.md), so set it on the data.
+// The Synchro Material restriction is set on the data.
 quickdraw.synchroMaterialCheck = (synchro) => listsSynchron(synchro);
 
 /** Debris Dragon revive target score. */
