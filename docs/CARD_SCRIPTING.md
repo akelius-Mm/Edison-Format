@@ -112,6 +112,27 @@ Extra Normal Summon: `ctx.gainNormalSummon()`.
 Per-card scratch state that must survive while on the field: `card.flags` (reset when it moves).
 Per-turn global data: `ctx.game.turnData`.
 
+### Rules the engine has no hook for (`CardData.rules`)
+Some cards change how the game itself works: replacement effects (Rainbow Life, Dimension Wall), summoning
+restrictions (Earthbound Immortals, Koa'ki Meiru Drago), "cannot" locks that apply wherever the card is. Write them as a
+**rule module**: a function that wraps `Game` methods, and list it in the card's `rules`.
+```ts
+function simochiRules(g: Game) {
+  const orig = g.recover.bind(g);
+  g.recover = async (p, amount, source) => {
+    if (/* a face-up, active Bad Reaction to Simochi applies to p */) return void (await g.damage(p, amount, 'effect'));
+    return orig(p, amount, source);
+  };
+}
+trap('Bad Reaction to Simochi', 'continuous', { text, rules: [simochiRules], effects: [...] });
+```
+`Game.registerCard` installs each module once per game, as soon as a card that lists it is in the game (so from the start
+for deck cards). The module must check that its card actually applies (face-up, active, not negated) every time: it is
+installed for the whole game. Assign `g.method = ...` with the method's own signature (no `as any`). Prefer an engine
+mechanism when one exists: `Game.preventBattleDamage(p, card)` ("you take no battle damage from this battle"),
+`replaceDestroy` / `replaceDestroyOne` (destruction replacement), `mods` (continuous effects). Scratch data about the
+current battle or chain link goes in `game.battle.flags` / `link.flags`.
+
 ### Selection purposes (AI hint)
 `destroy`, `banish`, `bounce` (opponent's card to hand), `control`, `toDeck`, `position`,
 `negate` → AI picks the **opponent's best** cards. `discard`, `tribute`, `cost`, `material`,
@@ -128,6 +149,12 @@ Write `ai.score` for anything situational: traps (when is it worth it?), quick-p
 removal (is there a worthwhile target?), cards with LP costs, discard costs, etc.
 Useful context: `ctx.battle`, `ctx.chainTop()`, `ctx.prevLink()`, `ctx.isMyTurn`, `ctx.phase`,
 `ctx.monsters('opp')`, `cardValue(ctx.game, c)`.
+
+## Rulings
+Card behaviour follows the 2010 TCG rulings in the rulings database, https://edisonrul.ing (see CLAUDE.md). Put the
+card's page URL in a comment next to the behaviour; `npm test` checks that every cited page exists
+(`scripts/rulings-db-test.ts`) and the judge shows the comments to players (`scripts/extract-rulings.ts`). Each rules fix
+gets a regression test in `scripts/rulings/` (shared harness: `scripts/lib/harness.ts`).
 
 ## Testing
 * `npx tsc --noEmit` – must be clean for your files.
