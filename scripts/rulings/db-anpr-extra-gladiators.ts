@@ -1,6 +1,6 @@
 // Rulings regression tests, database audit group 2 (ANPR, extra, gladiators, teledad, deck-extras3): each test pins a
 // behaviour to the 2010 TCG rulings on edisonrul.ing (Edisonformat.com historical section).
-// Usage: npx tsx scripts/rulings/db-audit-2.ts
+// Usage: npx tsx scripts/rulings/db-anpr-extra-gladiators.ts
 import '../../src/cards';
 import { cardByName } from '../../src/cards';
 import { normal } from '../../src/cards/define';

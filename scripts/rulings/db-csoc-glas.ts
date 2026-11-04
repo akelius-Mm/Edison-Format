@@ -1,6 +1,6 @@
 // Rulings DB audit, group 4 (CSOC / GLAS): each test pins a behaviour to the 2010 TCG rulings on edisonrul.ing
 // (Edisonformat.com historical section).
-// Usage: npx tsx scripts/rulings/db-audit-4.ts
+// Usage: npx tsx scripts/rulings/db-csoc-glas.ts
 import '../../src/cards';
 import { cardByName, findCard } from '../../src/cards';
 import { normal } from '../../src/cards/define';

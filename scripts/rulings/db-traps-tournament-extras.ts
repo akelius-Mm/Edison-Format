@@ -1,6 +1,6 @@
 // Rulings regression tests, database audit group 9 (traps, tournament extras, misc). Each test pins a behaviour fixed
 // from the edisonrul.ing card page (historical edisonformat.com section first).
-// Usage: npx tsx scripts/rulings/db-audit-9.ts
+// Usage: npx tsx scripts/rulings/db-traps-tournament-extras.ts
 import '../../src/cards';
 import { cardByName, findCard } from '../../src/cards';
 import { normal } from '../../src/cards/define';

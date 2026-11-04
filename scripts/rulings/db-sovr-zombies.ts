@@ -1,6 +1,6 @@
 // Rulings regression tests, audit group 8 (SOVR, Zombies, tournament extras 2, GY banish costs): each test pins a
 // behaviour to the 2010 TCG rulings on edisonrul.ing (Edisonformat.com historical section).
-// Usage: npx tsx scripts/rulings/db-audit-8.ts
+// Usage: npx tsx scripts/rulings/db-sovr-zombies.ts
 import '../../src/cards';
 import { cardByName, findCard } from '../../src/cards';
 import { normal } from '../../src/cards/define';

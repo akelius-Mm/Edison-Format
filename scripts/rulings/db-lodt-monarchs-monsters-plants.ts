@@ -1,6 +1,6 @@
 // Rulings database audit, group 5 (LODT, Monarchs/Frogs, generic monsters, Plants): one regression test per fix.
 // Source for every test: the edisonrul.ing card page named above it (historical 2010 TCG section).
-// Usage: npx tsx scripts/rulings/db-audit-5.ts
+// Usage: npx tsx scripts/rulings/db-lodt-monarchs-monsters-plants.ts
 import '../../src/cards';
 import { cardByName, findCard } from '../../src/cards';
 import { normal, spell } from '../../src/cards/define';

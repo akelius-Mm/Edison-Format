@@ -154,12 +154,13 @@ Browser tests (Playwright, against a `npm run build`): `test:routes-e2e`, `test:
 | `src/ui/` | Duel screen, card rendering, themes, audio, menus and every screen |
 | `scripts/` | Headless simulator, rules tests and browser tests |
 | `docs/CARD_SCRIPTING.md` | How to add or script new cards |
+| `docs/RULINGS.md` | Where the 2010 rulings come from, how they are checked, known gaps |
 | `docs/screenshots/` | README screenshots |
 
 ## Known simplifications
 
 The engine covers the format's real interactions, but a few rare mechanics are approximated
-(each is documented in `docs/engine-requests/`): Gemini monsters use a "Gemini Summon" effect
+(see `docs/RULINGS.md` and the `APPROX:` comments in the card scripts): Gemini monsters use a "Gemini Summon" effect
 that consumes the Normal Summon, effects that "end the Battle Phase" stop further attacks instead,
 Fusion Summons made by card effects can't be negated by Solemn Judgment, and some lingering effects
 (Swords of Revealing Light's countdown) use the chain.

@@ -1,6 +1,6 @@
 // Rulings regression tests from the edisonrul.ing database audit, group 3 (CRMS, HEROes, Lightsworn, Red Dragon
 // Archfiend, the shared selfDestroysByBattle helper). Each test cites the card page it pins.
-// Usage: npx tsx scripts/rulings/db-audit-3.ts
+// Usage: npx tsx scripts/rulings/db-crms-heroes-lightsworn.ts
 import '../../src/cards';
 import { cardByName, findCard } from '../../src/cards';
 import { normal } from '../../src/cards/define';

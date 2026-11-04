@@ -1,5 +1,5 @@
 // Rulings regression tests from the edisonrul.ing database audit, group 7 (rgbt.ts, tdgs.ts).
-// Usage: npx tsx scripts/rulings/db-audit-7.ts
+// Usage: npx tsx scripts/rulings/db-rgbt-tdgs.ts
 import '../../src/cards';
 import { cardByName, findCard } from '../../src/cards';
 import { normal } from '../../src/cards/define';

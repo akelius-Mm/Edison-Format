@@ -1,6 +1,6 @@
 // Rulings regression tests, DB audit group 1 (ABPF, archetype extras, Blackwings, core): each test pins a behaviour to
 // the 2010 TCG text / rulings on edisonrul.ing (Edisonformat.com historical section unless a comment says otherwise).
-// Usage: npx tsx scripts/rulings/db-audit-1.ts
+// Usage: npx tsx scripts/rulings/db-abpf-blackwings-core.ts
 import '../../src/cards';
 import { cardByName, findCard } from '../../src/cards';
 import { monster, normal, token } from '../../src/cards/define';

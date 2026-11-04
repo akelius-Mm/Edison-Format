@@ -1,5 +1,5 @@
 // Rulings regression tests for the database audit, group 6 (ptdn, sabers, sdmm, spells).
-// Usage: npx tsx scripts/rulings/db-audit-6.ts
+// Usage: npx tsx scripts/rulings/db-ptdn-sabers-spells.ts
 import '../../src/cards';
 import { cardByName } from '../../src/cards';
 import { normal } from '../../src/cards/define';
