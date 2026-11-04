@@ -37,7 +37,8 @@ export const or = (...fs: F[]): F => (c) => fs.some((f) => f(c));
 export const not = (f: F): F => (c) => !f(c);
 
 const FIELD: Location[] = ['mzone', 'szone', 'fzone'];
-export const wasOnField = (ev: GameEvent) => !!ev.from && FIELD.includes(ev.from);
+/** The card left the field. Not a monster whose Summon was negated (reason 'negated'): it was never on the field. */
+export const wasOnField = (ev: GameEvent) => !!ev.from && FIELD.includes(ev.from) && !(ev.reasons ?? []).includes('negated');
 export const evCard = (ev: GameEvent) => ev.card as CardInstance | undefined;
 export const evOther = (ev: GameEvent) => ev.other as CardInstance | undefined;
 

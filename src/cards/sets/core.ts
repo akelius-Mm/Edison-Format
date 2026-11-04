@@ -166,10 +166,11 @@ spell('Book of Moon', 'quickplay', {
     {
       kind: 'activate',
       categories: ['position'],
-      canActivate: (ctx) => ctx.faceUpMonsters('both', (c) => ctx.canTarget(c)).length > 0,
+      // 2010 ruling: a Monster Token cannot be flipped face-down. https://edisonrul.ing/cards/b/book-of-moon.html
+      canActivate: (ctx) => ctx.faceUpMonsters('both', (c) => !c.isToken && ctx.canTarget(c)).length > 0,
       activate: async (ctx) => {
         // AI: the attacker / the monster whose effect is on the chain, never our own monster (the attack or effect goes on).
-        await ctx.selectTargets(ctx.faceUpMonsters('both'), 1, 1, 'Target 1 face-up monster to flip face-down.', 'position', {
+        await ctx.selectTargets(ctx.faceUpMonsters('both', (c) => !c.isToken), 1, 1, 'Target 1 face-up monster to flip face-down.', 'position', {
           aiScore: (c) => monsterInterruptScore(ctx, c),
         });
       },
@@ -371,9 +372,17 @@ trap('Bottomless Trap Hole', 'normal', {
         const victims = (ctx.data.victims as CardInstance[]).filter(
           (c, i) => c.location === 'mzone' && c.moveId === ctx.data.ids[i] && c.faceUp && ctx.atk(c) >= 1500,
         );
-        const destroyed = await ctx.destroy(victims);
-        const inGrave = destroyed.filter((c) => c.location === 'grave');
-        if (inGrave.length) await ctx.banish(inGrave);
+        // 2010 ruling: a destroyed monster is removed from play, it is never sent to the Graveyard (no "sent to the
+        // GY" effects). https://edisonrul.ing/cards/b/bottomless-trap-hole.html
+        const prev = victims.map((c) => c.banishOnLeave);
+        for (const c of victims) c.banishOnLeave = true;
+        try {
+          await ctx.destroy(victims);
+        } finally {
+          victims.forEach((c, i) => {
+            if (c.onField) c.banishOnLeave = prev[i];
+          });
+        }
       },
       ai: {
         score: (ctx) => {
@@ -584,7 +593,10 @@ monster('Card Trooper', {
       opt: true,
       label: 'Mill up to 3',
       categories: ['mill', 'atkChange'],
-      canActivate: (ctx) => ctx.deck().length > 1,
+      // 2010 ruling: the cards are sent as a cost, so it cannot be activated while "Dimensional Fissure" / "Macro
+      // Cosmos" is active. https://edisonrul.ing/cards/c/card-trooper.html
+      canActivate: (ctx) =>
+        ctx.deck().length > 1 && !ctx.game.queryPlayer(ctx.player, 'banishInsteadOfGrave') && !ctx.game.queryCard(ctx.self, 'banishInsteadOfGrave'),
       activate: async (ctx) => {
         const max = Math.min(3, ctx.deck().length - 1);
         const opts = Array.from({ length: max }, (_, i) => `${i + 1} card(s)`);
@@ -638,6 +650,9 @@ monster('Dark Armed Dragon', {
   text: 'Cannot be Normal Summoned/Set. Must be Special Summoned (from your hand) while you have exactly 3 DARK monsters in your GY. You can banish 1 DARK monster from your GY, then target 1 card on the field; destroy that target.',
   cannotNormalSummon: true,
   nomi: true,
+  // 2010 ruling: its own procedure is the only way to Special Summon it; never from the GY or removed from play, even
+  // if properly Summoned before. https://edisonrul.ing/cards/d/dark-armed-dragon.html
+  noSpecialFrom: ['grave', 'banished'],
   aiValue: 1500,
   effects: [
     {
@@ -823,7 +838,10 @@ monster('Brionac, Dragon of the Ice Barrier', {
       // https://edisonrul.ing/cards/b/brionac-dragon-of-the-ice-barrier.html
       label: 'Discard & bounce',
       categories: ['toHand'],
-      canActivate: (ctx) => ctx.hand().length > 0 && ctx.field('both', (c) => c !== ctx.self && ctx.canTarget(c)).length > 0,
+      // 2010 ruling: discarding is a cost, so it cannot be activated while "Macro Cosmos" is active.
+      // https://edisonrul.ing/cards/b/brionac-dragon-of-the-ice-barrier.html
+      canActivate: (ctx) =>
+        ctx.hand().length > 0 && !ctx.game.queryPlayer(ctx.player, 'banishInsteadOfGrave') && ctx.field('both', (c) => c !== ctx.self && ctx.canTarget(c)).length > 0,
       activate: async (ctx) => {
         const maxN = Math.min(ctx.hand().length, ctx.field('both', (c) => c !== ctx.self && ctx.canTarget(c)).length);
         const disc = await ctx.select(ctx.hand(), 1, maxN, 'Discard any number of cards.', 'discard');

@@ -992,6 +992,8 @@ async function abpfTests() {
   await test('ABPF: Offering to the Immortals — negates the direct attack, 2 Ceremonial Tokens', async () => {
     const { g, c1, place } = setup();
     g.players[1].lp = 3000;
+    // It needs an "Earthbound Immortal" card in the Deck: https://edisonrul.ing/cards/o/offering-to-the-immortals.html
+    place(1, cardByName('Earthbound Immortal Uru'), 'deck');
     place(1, cardByName('Offering to the Immortals'), 'szone', { faceUp: false });
     const a = place(0, T.brute, 'mzone');
     c1.respond = respondWith('Offering to the Immortals');

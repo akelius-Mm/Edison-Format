@@ -64,6 +64,8 @@ export type QueryKey =
   // SOVR: numeric TempMod only (until 'field'): "this card's ATK becomes X" for as long as it stays
   // face-up on the field (Reptilianne). Read by Game.getAtk; the newest one wins.
   | 'atkBecomes'
+  // "this card's DEF becomes X" while face-up on the field (Game.lockStat: Blackwing - Gale, Inverse Universe).
+  | 'defBecomes'
   // SOVR: "If this face-up card would be sent from the field to the GY, place it on top of the
   // Deck instead" (Archlord Kristya). Read by Game.rawMove.
   | 'deckTopInsteadOfGrave'
@@ -354,6 +356,11 @@ export interface TempMod {
   until: 'turn' | 'field' | 'battle' | 'opponentEnd';
   turn: number;
   source?: number;
+  /**
+   * 'atkBecomes'/'defBecomes' set by Game.lockStat: the continuous modifiers (source keys) that applied when the value
+   * was set. They, and the TempMods added before this one, no longer change the stat; later ones still do.
+   */
+  locked?: string[];
 }
 
 let NEXT_UID = 1;

@@ -170,16 +170,19 @@ monster('Blackwing - Sirocco the Dawn', {
       },
       resolve: async (ctx) => {
         const t = ctx.validTargets((c) => c.location === 'mzone' && c.faceUp);
-        if (!t.length) return;
-        // CRMS: every face-up "Blackwing" monster on the field (either side) except the target.
-        const others = ctx.faceUpMonsters('both', isBW).filter((c) => c !== t[0]);
-        const sum = others.reduce((a, c) => a + ctx.atk(c), 0);
-        ctx.addTempMod(t[0], 'atk', sum, 'turn');
+        // 2010 ruling: if the target is no longer on the field when this resolves, your other monsters still cannot
+        // attack this turn. https://edisonrul.ing/cards/b/blackwing-sirocco-the-dawn.html
+        if (t.length) {
+          // CRMS: every face-up "Blackwing" monster on the field (either side) except the target.
+          const others = ctx.faceUpMonsters('both', isBW).filter((c) => c !== t[0]);
+          const sum = others.reduce((a, c) => a + ctx.atk(c), 0);
+          ctx.addTempMod(t[0], 'atk', sum, 'turn');
+        }
         for (const m of ctx.monsters('me')) if (m !== t[0]) m.flags.cannotAttackTurn = ctx.turn;
         // Audit: monsters Summoned later this turn cannot attack either (see the continuous effect below).
         ctx.self.flags.siroccoTurn = ctx.turn;
-        ctx.self.flags.siroccoTarget = t[0].uid;
-        ctx.self.flags.siroccoMove = t[0].moveId;
+        ctx.self.flags.siroccoTarget = t[0]?.uid ?? -1;
+        ctx.self.flags.siroccoMove = t[0]?.moveId ?? -1;
       },
       ai: {
         score: (ctx) => {
@@ -241,8 +244,13 @@ monster('Blackwing - Gale the Whirlwind', {
       resolve: async (ctx) => {
         const t = ctx.validTargets((c) => c.location === 'mzone' && c.faceUp);
         if (!t.length) return;
-        ctx.addTempMod(t[0], 'atk', -Math.floor(ctx.atk(t[0]) / 2), 'field');
-        ctx.addTempMod(t[0], 'def', -Math.floor(ctx.def(t[0]) / 2), 'field');
+        // 2010 ruling: the halved ATK/DEF is locked while the target stays face-up: modifiers already applying
+        // (Equip Spells, "Tragoedia"'s own effect, "Rush Recklessly") no longer change it, even if they leave or change.
+        // https://edisonrul.ing/cards/b/blackwing-gale-the-whirlwind.html
+        const a = Math.ceil(ctx.atk(t[0]) / 2);
+        const d = Math.ceil(ctx.def(t[0]) / 2);
+        ctx.game.lockStat(t[0], 'atk', a);
+        ctx.game.lockStat(t[0], 'def', d);
       },
       ai: {
         score: (ctx) => {
@@ -379,9 +387,10 @@ monster('Blackwing - Mistral the Silver Shield', {
       label: 'Prevent battle damage',
       categories: ['protect'],
       eventFilter: (ctx, ev) => ev.card === ctx.self && ev.from === 'mzone' && !!ev.fromFaceUp && (ev.reasons ?? []).includes('destroy'),
+      // Only the next battle damage this turn (not all of it): the first battle damage you would take becomes 0.
+      // https://edisonrul.ing/cards/b/blackwing-mistral-the-silver-shield.html
       resolve: async (ctx) => {
-        // Approximation: no battle damage for the rest of this turn (the engine has no "next damage" hook).
-        ctx.addPlayerMod(ctx.player, 'noBattleDamage', true, 'turn');
+        (ctx.game.turnData.zeroNextBattleDamage ??= {})[ctx.player] = ctx.self.name;
       },
     },
   ],
@@ -525,8 +534,9 @@ trap('Delta Crow - Anti Reverse', 'normal', {
       categories: ['destroy', 'destroyMulti'],
       condition: (ctx) => faceUpBW(ctx).length > 0 && (ctx.self.location !== 'hand' || faceUpBW(ctx).length === 3),
       canActivate: (ctx) => ctx.spellTraps('opp', (c) => !c.faceUp).length > 0 && (ctx.self.location !== 'hand' || ctx.freeSZones() > 0),
+      // 2010 ruling: the "Blackwing" count is only an activation requirement; the effect still applies if it is no
+      // longer met on resolution. https://edisonrul.ing/cards/d/delta-crow-anti-reverse.html
       resolve: async (ctx) => {
-        if (!faceUpBW(ctx).length) return;
         await ctx.destroy(ctx.spellTraps('opp', (c) => !c.faceUp));
       },
       ai: { score: (ctx) => (ctx.spellTraps('opp', (c) => !c.faceUp).length ? 50 + 10 * ctx.spellTraps('opp', (c) => !c.faceUp).length : 0) },
