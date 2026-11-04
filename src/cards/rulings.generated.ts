@@ -133,6 +133,16 @@ export const RULINGS: Record<string, RulingNote[]> = {
       "url": "https://edisonrul.ing/cards/m/montage-dragon.html"
     }
   ],
+  "Ancient Gear Beast": [
+    {
+      "text": "2010 ruling: \"This card cannot be Special Summoned\" (a Condition that cannot be negated; not even face-down by \"The Shallow Grave\").",
+      "url": "https://edisonrul.ing/cards/a/ancient-gear-beast.html"
+    },
+    {
+      "text": "2010 rulings: monsters are marked \"destroyed by battle\" at the end of damage calculation; their effects that activate in substeps 6 and 7 (Ryko, Mystic Tomato) are negated, and their effects in the GY (Treeborn Frog) stay negated until the card leaves the GY. Not monsters destroyed as substitutes (they are not marked).",
+      "url": "https://edisonrul.ing/cards/a/ancient-gear-beast.html"
+    }
+  ],
   "Ancient Gear Castle": [
     {
       "text": "Counters are placed by the card's continuous effect (no chain). 2010 ruling: Normal Summons (Tribute Summons included) and Sets from the hand count; a Set by a card effect (Book of Moon) does not.",
@@ -140,6 +150,10 @@ export const RULINGS: Record<string, RulingNote[]> = {
     }
   ],
   "Ancient Gear Engineer": [
+    {
+      "text": "2010 rulings: a Continuous Effect (no chain); Traps can still target this card but resolve without effect, and it does not apply if a chained effect (Book of Moon) flips this card face-down before the Trap resolves. Same technique as Obsidian Dragon (ptdn.ts): wrap the resolution of the Trap's chain link.",
+      "url": "https://edisonrul.ing/cards/a/ancient-gear-engineer.html"
+    },
     {
       "text": "Counters are placed by the card's continuous effect (no chain). 2010 ruling: Normal Summons (Tribute Summons included) and Sets from the hand count; a Set by a card effect (Book of Moon) does not.",
       "url": "https://edisonrul.ing/cards/a/ancient-gear-castle.html"
@@ -253,6 +267,12 @@ export const RULINGS: Record<string, RulingNote[]> = {
       "url": "https://edisonrul.ing/cards/a/aurkus-lightsworn-druid.html"
     }
   ],
+  "Backs to the Wall": [
+    {
+      "text": "2010 card text: not a monster with the same name as a monster on the field (either side).",
+      "url": "https://edisonrul.ing/cards/b/backs-to-the-wall.html"
+    }
+  ],
   "Batteryman Industrial Strength": [
     {
       "text": "[0] = the Summon procedure (banish 2 Batteryman), [1] = the destroy effect (banish 1 Thunder: a cost).",
@@ -295,6 +315,12 @@ export const RULINGS: Record<string, RulingNote[]> = {
       "url": "https://edisonrul.ing/cards/b/beckoning-light.html"
     }
   ],
+  "Berfomet": [
+    {
+      "text": "2010 rulings: an optional \"When\" effect that misses the timing if destroyed by \"Cyber Jar\"; it activates when destroyed by battle or by an effect, and also when destroyed while equipped to \"Relinquished\" (a Spell & Trap Zone card).",
+      "url": "https://edisonrul.ing/cards/c/chimera-the-flying-mythical-beast.html"
+    }
+  ],
   "Black Brutdrago": [
     {
       "text": "sending the Gemini to the GY is a cost: \"This effect cannot be activated while Dimensional Fissure is active\" (the card would be banished instead).",
@@ -331,10 +357,28 @@ export const RULINGS: Record<string, RulingNote[]> = {
       "url": "https://edisonrul.ing/cards/b/black-whirlwind.html"
     }
   ],
+  "Blackwing - Gale the Whirlwind": [
+    {
+      "text": "2010 ruling: the halved ATK/DEF is locked while the target stays face-up: modifiers already applying (Equip Spells, \"Tragoedia\"'s own effect, \"Rush Recklessly\") no longer change it, even if they leave or change.",
+      "url": "https://edisonrul.ing/cards/b/blackwing-gale-the-whirlwind.html"
+    }
+  ],
+  "Blackwing - Mistral the Silver Shield": [
+    {
+      "text": "Only the next battle damage this turn (not all of it): the first battle damage you would take becomes 0.",
+      "url": "https://edisonrul.ing/cards/b/blackwing-mistral-the-silver-shield.html"
+    }
+  ],
   "Blackwing - Silverwind the Ascendant": [
     {
       "text": "2010 TCG text (RGBT): a Synchro Summon trigger that can destroy face-up monsters on either side, plus a one-time battle protection for your \"Blackwing\" monsters during the opponent's turn (the once per turn Main Phase 1 ignition effect is the later OCG-matching text).",
       "url": "https://edisonrul.ing/cards/b/blackwing-silverwind-the-ascendant.html"
+    }
+  ],
+  "Blackwing - Sirocco the Dawn": [
+    {
+      "text": "2010 ruling: if the target is no longer on the field when this resolves, your other monsters still cannot attack this turn.",
+      "url": "https://edisonrul.ing/cards/b/blackwing-sirocco-the-dawn.html"
     }
   ],
   "Blackwing Armed Wing": [
@@ -367,6 +411,18 @@ export const RULINGS: Record<string, RulingNote[]> = {
       "url": "https://edisonrul.ing/cards/b/book-of-life.html"
     }
   ],
+  "Book of Moon": [
+    {
+      "text": "2010 ruling: a Monster Token cannot be flipped face-down.",
+      "url": "https://edisonrul.ing/cards/b/book-of-moon.html"
+    }
+  ],
+  "Bottomless Trap Hole": [
+    {
+      "text": "2010 ruling: a destroyed monster is removed from play, it is never sent to the Graveyard (no \"sent to the GY\" effects).",
+      "url": "https://edisonrul.ing/cards/b/bottomless-trap-hole.html"
+    }
+  ],
   "Brain Research Lab": [
     {
       "text": "2010 rulings: the extra Normal Summon is a Continuous-like effect (no Chain, nothing to activate). It can be used before or after your regular Normal Summon/Set, only to Normal (Tribute) Summon a Psychic-Type monster (not to Set), and only once per turn even with 2 copies (the grant is per player, see labGrant). The Psychic Counter is placed when it is used. Bookkeeping (never activates): place the Psychic Counter when the extra Normal Summon was used.",
@@ -377,9 +433,19 @@ export const RULINGS: Record<string, RulingNote[]> = {
       "url": "https://edisonrul.ing/cards/b/brain-research-lab.html"
     }
   ],
+  "Break! Draw!": [
+    {
+      "text": "2010 ruling: destroying it during your 3rd End Phase is not an effect (no Chain) and cannot be negated.",
+      "url": "https://edisonrul.ing/cards/b/break-draw.html"
+    }
+  ],
   "Brionac, Dragon of the Ice Barrier": [
     {
       "text": "2010 ruling: no once-per-turn limit, it can be activated multiple times per turn",
+      "url": "https://edisonrul.ing/cards/b/brionac-dragon-of-the-ice-barrier.html"
+    },
+    {
+      "text": "2010 ruling: discarding is a cost, so it cannot be activated while \"Macro Cosmos\" is active.",
       "url": "https://edisonrul.ing/cards/b/brionac-dragon-of-the-ice-barrier.html"
     }
   ],
@@ -431,6 +497,10 @@ export const RULINGS: Record<string, RulingNote[]> = {
   ],
   "Card Trooper": [
     {
+      "text": "2010 ruling: the cards are sent as a cost, so it cannot be activated while \"Dimensional Fissure\" / \"Macro Cosmos\" is active.",
+      "url": "https://edisonrul.ing/cards/c/card-trooper.html"
+    },
+    {
       "text": "2010 ruling: sending the cards is the cost.",
       "url": "https://edisonrul.ing/cards/c/card-trooper.html"
     }
@@ -457,6 +527,16 @@ export const RULINGS: Record<string, RulingNote[]> = {
     {
       "text": "2010 rulings: if the monster cannot be changed to Defense Position (e.g. it already is), the rest of the effect is not applied.",
       "url": "https://edisonrul.ing/cards/c/changing-destiny.html"
+    }
+  ],
+  "Chimera the Flying Mythical Beast": [
+    {
+      "text": "Not a \"Phantom Beast\" card (Revised section; the historical one is silent and the 2010 text has no such line).",
+      "url": "https://edisonrul.ing/cards/c/chimera-the-flying-mythical-beast.html"
+    },
+    {
+      "text": "2010 rulings: an optional \"When\" effect that misses the timing if destroyed by \"Cyber Jar\"; it activates when destroyed by battle or by an effect, and also when destroyed while equipped to \"Relinquished\" (a Spell & Trap Zone card).",
+      "url": "https://edisonrul.ing/cards/c/chimera-the-flying-mythical-beast.html"
     }
   ],
   "Clear Vice Dragon": [
@@ -633,6 +713,12 @@ export const RULINGS: Record<string, RulingNote[]> = {
       "url": "https://edisonrul.ing/cards/d/dandylion.html"
     }
   ],
+  "Dark Armed Dragon": [
+    {
+      "text": "2010 ruling: its own procedure is the only way to Special Summon it; never from the GY or removed from play, even if properly Summoned before.",
+      "url": "https://edisonrul.ing/cards/d/dark-armed-dragon.html"
+    }
+  ],
   "Dark Bribe": [
     {
       "text": "2010 ruling: it cannot be activated if your opponent has no cards in their Deck.",
@@ -671,6 +757,12 @@ export const RULINGS: Record<string, RulingNote[]> = {
     {
       "text": "Not if you would take no battle damage, nor with an empty Deck",
       "url": "https://edisonrul.ing/cards/d/defense-draw.html"
+    }
+  ],
+  "Delta Crow - Anti Reverse": [
+    {
+      "text": "2010 ruling: the \"Blackwing\" count is only an activation requirement; the effect still applies if it is no longer met on resolution.",
+      "url": "https://edisonrul.ing/cards/d/delta-crow-anti-reverse.html"
     }
   ],
   "Depth Amulet": [
@@ -1021,6 +1113,10 @@ export const RULINGS: Record<string, RulingNote[]> = {
   ],
   "Evil HERO Infernal Prodigy": [
     {
+      "text": "2010 rulings: no draw if Prodigy was Tributed to Set a HERO or the Tribute Summon was negated (Solemn Judgment), or if it was Special Summoned / shuffled into the Deck / added to the hand before the End Phase; it still draws if Prodigy was removed from play when Tributed (Macro Cosmos) or after (Soul Release); only once per turn.",
+      "url": "https://edisonrul.ing/cards/e/evil-hero-infernal-prodigy.html"
+    },
+    {
       "text": "its effect does not target a card in the GY and is not negated by \"Necrovalley\".",
       "url": "https://edisonrul.ing/cards/r/red-eyes-darkness-metal-dragon.html"
     },
@@ -1357,6 +1453,12 @@ export const RULINGS: Record<string, RulingNote[]> = {
       "url": "https://edisonrul.ing/cards/g/guardian-eatos.html"
     }
   ],
+  "Gundari": [
+    {
+      "text": "2010 ruling: a mandatory effect that activates at the start of the Damage Step.",
+      "url": "https://edisonrul.ing/cards/g/gundari.html"
+    }
+  ],
   "Hand Destruction": [
     {
       "text": "2010 rulings: the cards are sent to the GY (not discarded, so no \"Dark World\" effects), and if a player does not have 2 cards in hand on resolution, neither player sends nor draws.",
@@ -1497,6 +1599,12 @@ export const RULINGS: Record<string, RulingNote[]> = {
     {
       "text": "2010 ruling: the effect activates at the end of the Damage Step, so it does not activate when the attack is negated or when this card is destroyed before damage calculation; it does activate if this card is destroyed by the battle.",
       "url": "https://edisonrul.ing/cards/i/interplanetary-invader-a.html"
+    }
+  ],
+  "Inverse Universe": [
+    {
+      "text": "2010 rulings: the switched values are \"frozen\" while face-up: the monster's own ATK-calculating effects and Equip Spells already applying no longer change them (even if the Equip leaves); new Equip Spells still do.",
+      "url": "https://edisonrul.ing/cards/i/inverse-universe.html"
     }
   ],
   "Iron Chain Dragon": [
@@ -1829,6 +1937,10 @@ export const RULINGS: Record<string, RulingNote[]> = {
   ],
   "Machine Duplication": [
     {
+      "text": "2010 ruling: you cannot target a Machine-Type monster if no card in your Deck shares its name (ex: Tokens).",
+      "url": "https://edisonrul.ing/cards/m/machine-duplication.html"
+    },
+    {
       "text": "you still Special Summon from the Deck if the target was flipped face-down / left the field, has more than 500 ATK or is no longer a Machine by the time this resolves.",
       "url": "https://edisonrul.ing/cards/m/machine-duplication.html"
     }
@@ -1853,21 +1965,37 @@ export const RULINGS: Record<string, RulingNote[]> = {
   ],
   "Majestic Dragon": [
     {
+      "text": "A \"Majestic\" monster: \"Majestic Dragon\" can only be Synchro Material for one.",
+      "url": "https://edisonrul.ing/cards/m/majestic-dragon.html"
+    },
+    {
       "text": "2010 ruling: activates after damage calculation, even if this card would be destroyed in that damage calculation.",
       "url": "https://edisonrul.ing/cards/m/majestic-red-dragon.html"
     },
     {
-      "text": "2010 rulings: cannot target a non-Effect Monster; the ATK gained is the target's ATK once its effects are negated (other cards' bonuses still count).",
+      "text": "2010 rulings: cannot target a non-Effect Monster; the ATK gained is the target's ATK once its effects are negated (other cards' bonuses still count). Revised section (the historical one is silent): cannot target a monster whose effects are already negated.",
+      "url": "https://edisonrul.ing/cards/m/majestic-red-dragon.html"
+    },
+    {
+      "text": "Revised section (the historical one only says it targets): even with no \"Red Dragon Archfiend\" in the GY this card still returns to the Extra Deck.",
       "url": "https://edisonrul.ing/cards/m/majestic-red-dragon.html"
     }
   ],
   "Majestic Red Dragon": [
     {
+      "text": "A \"Majestic\" monster: \"Majestic Dragon\" can only be Synchro Material for one.",
+      "url": "https://edisonrul.ing/cards/m/majestic-dragon.html"
+    },
+    {
       "text": "2010 ruling: activates after damage calculation, even if this card would be destroyed in that damage calculation.",
       "url": "https://edisonrul.ing/cards/m/majestic-red-dragon.html"
     },
     {
-      "text": "2010 rulings: cannot target a non-Effect Monster; the ATK gained is the target's ATK once its effects are negated (other cards' bonuses still count).",
+      "text": "2010 rulings: cannot target a non-Effect Monster; the ATK gained is the target's ATK once its effects are negated (other cards' bonuses still count). Revised section (the historical one is silent): cannot target a monster whose effects are already negated.",
+      "url": "https://edisonrul.ing/cards/m/majestic-red-dragon.html"
+    },
+    {
+      "text": "Revised section (the historical one only says it targets): even with no \"Red Dragon Archfiend\" in the GY this card still returns to the Extra Deck.",
       "url": "https://edisonrul.ing/cards/m/majestic-red-dragon.html"
     }
   ],
@@ -2241,6 +2369,12 @@ export const RULINGS: Record<string, RulingNote[]> = {
       "url": "https://edisonrul.ing/cards/n/nitro-warrior.html"
     }
   ],
+  "Offering to the Immortals": [
+    {
+      "text": "2010 ruling: you cannot activate it without 2 open Monster Zones and an \"Earthbound Immortal\" card in your Deck.",
+      "url": "https://edisonrul.ing/cards/o/offering-to-the-immortals.html"
+    }
+  ],
   "Offering to the Snake Deity": [
     {
       "text": "If a chained effect removed 1 of the targets from the field, the whole effect disappears; a target that is only unaffected by Traps still lets the others be destroyed.",
@@ -2559,6 +2693,22 @@ export const RULINGS: Record<string, RulingNote[]> = {
       "url": "https://edisonrul.ing/cards/r/reptilianne-medusa.html"
     }
   ],
+  "Reptilianne Naga": [
+    {
+      "text": "2010 ruling: this applies even if \"Reptilianne Naga\" is destroyed during the Damage Step; the ATK stays 0 while that monster is face-up on the field.",
+      "url": "https://edisonrul.ing/cards/r/reptilianne-naga.html"
+    }
+  ],
+  "Reptilianne Vaskii": [
+    {
+      "text": "2010 ruling: it cannot be Special Summoned except from your hand by its own method.",
+      "url": "https://edisonrul.ing/cards/r/reptilianne-vaskii.html"
+    },
+    {
+      "text": "2010 ruling: a target that is face-down when this resolves is not destroyed.",
+      "url": "https://edisonrul.ing/cards/r/reptilianne-vaskii.html"
+    }
+  ],
   "Rescue Cat": [
     {
       "text": "it Special Summons 2 monsters at once: it cannot be activated to Summon only 1 (2 eligible Beasts and 2 free zones, counting the one Rescue Cat frees), and a Summoned monster that is flipped face-down is not destroyed in the End Phase. Sending it to the GY is the cost: it cannot be activated while \"Macro Cosmos\" is active.",
@@ -2599,6 +2749,18 @@ export const RULINGS: Record<string, RulingNote[]> = {
     {
       "text": "it activates automatically (a chain, targeting the attacker) the first time an opponent's monster with less ATK than your \"Earthbound Immortal\" monster attacks.",
       "url": "https://edisonrul.ing/cards/r/roar-of-the-earthbound-immortal.html"
+    }
+  ],
+  "Rocket Pilder": [
+    {
+      "text": "2010 ruling: it starts a Chain even if the equipped monster destroyed its attack target.",
+      "url": "https://edisonrul.ing/cards/r/rocket-pilder.html"
+    }
+  ],
+  "Rose Fairy": [
+    {
+      "text": "2010 ruling: this effect cannot be activated during the Damage Step.",
+      "url": "https://edisonrul.ing/cards/r/rose-fairy.html"
     }
   ],
   "Rose Tentacles": [
@@ -2849,7 +3011,11 @@ export const RULINGS: Record<string, RulingNote[]> = {
       "url": "https://edisonrul.ing/cards/s/spiders-lair.html"
     },
     {
-      "text": "2010 ruling: a monster flipped face-down (Book of Moon) is no longer affected.",
+      "text": "2010 ruling: a monster this card did not change to Defense Position (already in Defense Position) is not kept in Defense Position.",
+      "url": "https://edisonrul.ing/cards/s/spiders-lair.html"
+    },
+    {
+      "text": "2010 rulings: a monster kept in Defense Position that is flipped face-down (Book of Moon) is no longer affected, and a targeted Insect flipped face-down is no longer targeted (even once face-up again).",
       "url": "https://edisonrul.ing/cards/s/spiders-lair.html"
     }
   ],
@@ -3009,6 +3175,12 @@ export const RULINGS: Record<string, RulingNote[]> = {
     {
       "text": "(and -yaichi): \"This monster cannot declare an attack during the turn this effect is used\" — not usable once it has attacked this turn (even if it was flipped face-down since).",
       "url": "https://edisonrul.ing/cards/t/the-six-samurai-kamon.html"
+    }
+  ],
+  "The Six Samurai - Yaichi": [
+    {
+      "text": "2010 ruling: one substitute per protected \"Six Samurai\", and never one that is being destroyed at the same time (Mirror Force destroying all of them: no substitute).",
+      "url": "https://edisonrul.ing/cards/t/the-six-samurai-yaichi.html"
     }
   ],
   "The White Stone of Legend": [
@@ -3240,6 +3412,10 @@ export const RULINGS: Record<string, RulingNote[]> = {
   "Viser Des": [
     {
       "text": "2010 rulings: nothing is destroyed if Viser Des left the field (even temporarily) or is controlled by the opponent before then.",
+      "url": "https://edisonrul.ing/cards/v/viser-des.html"
+    },
+    {
+      "text": "2010 ruling: if your opponent takes control of \"Viser Des\" its effect no longer applies.",
       "url": "https://edisonrul.ing/cards/v/viser-des.html"
     }
   ],
