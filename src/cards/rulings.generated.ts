@@ -17,6 +17,10 @@ export const RULINGS: Record<string, RulingNote[]> = {
     {
       "text": "2010 text and rulings: 1 \"Elemental Hero\" (not \"Destiny Hero\" / \"Evil Hero\") + 1 EARTH monster, and the Fusion Summon trigger is mandatory (it targets).",
       "url": "https://edisonrul.ing/cards/e/elemental-hero-gaia.html"
+    },
+    {
+      "text": "\"This effect does not apply if either Hero Gaia or the target is flipped face-down / leaves the field.\"",
+      "url": "https://edisonrul.ing/cards/e/elemental-hero-gaia.html"
     }
   ],
   "Aegis of the Ocean Dragon Lord": [
@@ -35,6 +39,18 @@ export const RULINGS: Record<string, RulingNote[]> = {
     {
       "text": "2010 ruling: monsters whose original ATK is already 0 are not affected (no draw for them).",
       "url": "https://edisonrul.ing/cards/a/alchemy-cycle.html"
+    }
+  ],
+  "Alien Ammonite": [
+    {
+      "text": "No A-Counter battle text on this card, so no alienBattleRule.",
+      "url": "https://edisonrul.ing/cards/a/alien-ammonite.html"
+    }
+  ],
+  "Alien Dog": [
+    {
+      "text": "No A-Counter battle rule of its own: the 2010 text has none. Its counters weaken monsters through the cards that print the rule (Alien Kid, Alien Overlord...), field-wide.",
+      "url": "https://edisonrul.ing/cards/a/alien-dog.html"
     }
   ],
   "Alien Hypno": [
@@ -377,6 +393,16 @@ export const RULINGS: Record<string, RulingNote[]> = {
       "url": "https://edisonrul.ing/cards/c/codarus.html"
     }
   ],
+  "Code A Ancient Ruins": [
+    {
+      "text": "\"No A-Counter is placed on this card if an 'Alien' monster [is] face-down when an attack is declared.\"",
+      "url": "https://edisonrul.ing/cards/c/code-a-ancient-ruins.html"
+    },
+    {
+      "text": "It targets an \"Alien\" monster in your GY, removing the counters is a cost, and this card must still be face-up on the field when it resolves.",
+      "url": "https://edisonrul.ing/cards/c/code-a-ancient-ruins.html"
+    }
+  ],
   "Colosseum - Cage of the Gladiator Beasts": [
     {
       "text": "Placing the Counter starts a Chain (2010 ruling)",
@@ -503,6 +529,12 @@ export const RULINGS: Record<string, RulingNote[]> = {
     {
       "text": "Targets the attacking monster; discarding is not a cost: the discard and the negation happen together on resolution",
       "url": "https://edisonrul.ing/cards/d/depth-amulet.html"
+    }
+  ],
+  "Descending Lost Star": [
+    {
+      "text": "\"Its DEF becomes 0\" as a change applied to it (a temporary modifier), not a new printed DEF: if the monster is flipped face-down every effect of this card is wiped and its DEF is restored, and effects like \"Chorus of Sanctuary\" still raise it above 0.",
+      "url": "https://edisonrul.ing/cards/d/descending-lost-star.html"
     }
   ],
   "Desert Protector": [
@@ -715,6 +747,16 @@ export const RULINGS: Record<string, RulingNote[]> = {
     {
       "text": "2010 text and rulings: 1 \"Elemental Hero\" (not \"Destiny Hero\" / \"Evil Hero\") + 1 EARTH monster, and the Fusion Summon trigger is mandatory (it targets).",
       "url": "https://edisonrul.ing/cards/e/elemental-hero-gaia.html"
+    },
+    {
+      "text": "\"This effect does not apply if either Hero Gaia or the target is flipped face-down / leaves the field.\"",
+      "url": "https://edisonrul.ing/cards/e/elemental-hero-gaia.html"
+    }
+  ],
+  "Elemental Hero Ocean": [
+    {
+      "text": "It targets: \"You can target 1 'HERO' monster you control or in your GY; return that target to the hand.\" — the historical (2010) section has no text or rulings, so this follows the edisonformat.net (Revised) Edison-accurate text.",
+      "url": "https://edisonrul.ing/cards/e/elemental-hero-ocean.html"
     }
   ],
   "Elemental Hero Prisma": [
@@ -865,6 +907,12 @@ export const RULINGS: Record<string, RulingNote[]> = {
     {
       "text": "\"The Maintenance Cost does not activate, it simply applies during your Standby Phase. Removing 1 Rock-Type monster from play is a cost.\"",
       "url": "https://edisonrul.ing/cards/g/gaia-plate-the-earth-giant.html"
+    }
+  ],
+  "Garoth, Lightsworn Warrior": [
+    {
+      "text": "LODT: the Lightsworn monster must be one you control (YGOJSON). Only cards sent \"by the effect of\" a Lightsworn monster: Celestia's Deck-to-GY is a cost and does not trigger it. (historical text \"by the effect of\"; the revised section states it outright: \"Celestia, Lightworn Angel's effect to send cards to the GY is a cost\").",
+      "url": "https://edisonrul.ing/cards/g/garoth-lightsworn-warrior.html"
     }
   ],
   "Gateway of the Six": [
@@ -1065,6 +1113,12 @@ export const RULINGS: Record<string, RulingNote[]> = {
       "url": "https://edisonrul.ing/cards/h/horseytail.html"
     }
   ],
+  "Hyper Psychic Blaster": [
+    {
+      "text": "\"This effect activates in Substep 7 - End of the Damage Step, even if this card is no longer face-up.\" — the ruling only gives the other monster's fallback (its printed DEF); with this card off the field its printed ATK is used the same way.",
+      "url": "https://edisonrul.ing/cards/h/hyper-psychic-blaster.html"
+    }
+  ],
   "Icarus Attack": [
     {
       "text": "\"Tributing a (face-up / face-down) Winged-Beast is a cost.\"",
@@ -1157,6 +1211,12 @@ export const RULINGS: Record<string, RulingNote[]> = {
       "url": "https://edisonrul.ing/cards/j/jade-knight.html"
     }
   ],
+  "Jain, Lightsworn Paladin": [
+    {
+      "text": "The monster must still be face-up on the field when this resolves: if it was removed (or flipped face-down) in response, nothing is sent. — \"The 'Lightsworn' monster (or 'Judgment Dragon') must remain face-up on the field in order to activate and resolve this effect\";",
+      "url": "https://edisonrul.ing/cards/j/jain-lightsworn-paladin.html"
+    }
+  ],
   "Jester Confit": [
     {
       "text": "2010 rulings: it activates even if your opponent has no face-up monster (then nothing returns), and if either this card or the target is not face-up on the field, neither is returned.",
@@ -1167,6 +1227,12 @@ export const RULINGS: Record<string, RulingNote[]> = {
     {
       "text": "2010 ruling: a \"Jinzo\" flipped face-down is not destroyed in the End Phase.",
       "url": "https://edisonrul.ing/cards/j/jinzo-returner.html"
+    }
+  ],
+  "Judgment Dragon": [
+    {
+      "text": "(or 'Judgment Dragon') must remain face-up on the field in order to activate and resolve this effect\";",
+      "url": "https://edisonrul.ing/cards/j/judgment-dragon.html"
     }
   ],
   "Junk Archer": [
@@ -1615,6 +1681,10 @@ export const RULINGS: Record<string, RulingNote[]> = {
   ],
   "Morphtronic Map": [
     {
+      "text": "An optional \"When... you can\" trigger: it can miss the timing. Activating your own new Field Spell to replace it makes it miss; your opponent's Field Spell destroying it does not.",
+      "url": "https://edisonrul.ing/cards/m/morphtronic-map.html"
+    },
+    {
       "text": "2010 ruling: the Special Summon starts a Chain and targets.",
       "url": "https://edisonrul.ing/cards/m/morphtronic-map.html"
     }
@@ -1623,6 +1693,12 @@ export const RULINGS: Record<string, RulingNote[]> = {
     {
       "text": "2010 ruling: there must already be an eligible \"Morphtronic\" target in your GY to activate it (you may then target the monster you sent as the cost).",
       "url": "https://edisonrul.ing/cards/m/morphtronic-repair-unit.html"
+    }
+  ],
+  "Morphtronic Slingen": [
+    {
+      "text": "It targets: \"Tribute 1 'Morphtronic' monster, except 'Morphtronic Slingen', then target 1 card on the field; destroy it.\" — the historical (2010) section has no text or rulings, so this follows the edisonformat.net (Revised) Edison-accurate text.",
+      "url": "https://edisonrul.ing/cards/m/morphtronic-slingen.html"
     }
   ],
   "Mosaic Manticore": [
@@ -1817,6 +1893,12 @@ export const RULINGS: Record<string, RulingNote[]> = {
       "url": "https://edisonrul.ing/cards/p/psychokinesis.html"
     }
   ],
+  "Puppet King": [
+    {
+      "text": "Flipped face-down (or left the field) since: the effect resets and it is not destroyed. — \"is then flipped face-down or leaves the field temporarily and returns, its effect resets... will not destroy itself during the End Phase.\"",
+      "url": "https://edisonrul.ing/cards/p/puppet-king.html"
+    }
+  ],
   "Puppet Master": [
     {
       "text": "if a target leaves the GY, the other is still Special Summoned.",
@@ -1886,6 +1968,10 @@ export const RULINGS: Record<string, RulingNote[]> = {
   "Red Dragon Archfiend": [
     {
       "text": "this mandatory effect activates in each of your End Phases, even if all your monsters declared an attack.",
+      "url": "https://edisonrul.ing/cards/r/red-dragon-archfiend.html"
+    },
+    {
+      "text": "\"A monster whose attack was negated (by 'Magic Cylinder') is destroyed by this effect.\"",
       "url": "https://edisonrul.ing/cards/r/red-dragon-archfiend.html"
     }
   ],
@@ -2383,6 +2469,12 @@ export const RULINGS: Record<string, RulingNote[]> = {
     {
       "text": "2010 ruling: \"'Turbo Synchron' must be face-up on the field (not destroyed by battle) to activate this effect.\"",
       "url": "https://edisonrul.ing/cards/t/turbo-synchron.html"
+    }
+  ],
+  "Turret Warrior": [
+    {
+      "text": "\"Tributing a Warrior to Special Summon 'Turret Warrior' is not a cost; both the Tribute and the ATK increase are part of the effect.\"",
+      "url": "https://edisonrul.ing/cards/t/turret-warrior.html"
     }
   ],
   "Twin-Shield Defender": [
