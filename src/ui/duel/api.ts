@@ -104,9 +104,3 @@ export interface DuelResult {
   /** Card ids each player showed: face-up on the field, in the Graveyard or banished at the end. */
   seen?: [string[], string[]];
 }
-
-/**
- * Mount a duel into `container`, run it to completion and resolve with the result.
- * Implemented in ./duelScreen.ts.
- */
-export type StartDuel = (container: HTMLElement, opts: DuelOptions) => Promise<DuelResult>;

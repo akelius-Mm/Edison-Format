@@ -61,67 +61,6 @@ function recordChip(key: string) {
   return h('span', { class: 'deck-tile-rec', title: 'Your games with this deck' }, `${r.w}W ${r.l}L`);
 }
 
-/** Scrollable list of decks grouped into "My decks" and "Premade decks", with a filter box. */
-export function deckPicker(
-  decks: DeckInfo[],
-  selected: string | null,
-  onSelect: (d: DeckInfo) => void,
-  opts: { allowInvalid?: boolean; randomOption?: { selected: boolean; onSelect: () => void }; emptyText?: string } = {},
-) {
-  let cur = selected;
-  const list = h('div', { class: 'deck-list', role: 'listbox' });
-  const filter = h('input', { class: 'input deck-filter', type: 'search', placeholder: 'Filter decks…', 'aria-label': 'Filter decks' });
-  const draw = () => {
-    clear(list);
-    const q = filter.value.trim().toLowerCase();
-    const match = (d: DeckInfo) => !q || d.name.toLowerCase().includes(q) || d.archetype.toLowerCase().includes(q);
-    if (opts.randomOption && !q) {
-      list.appendChild(
-        h(
-          'button',
-          {
-            type: 'button',
-            class: ['deck-tile', 'random', opts.randomOption.selected && cur == null && 'on'],
-            onclick: () => {
-              cur = null;
-              opts.randomOption!.onSelect();
-              draw();
-            },
-          },
-          h('span', { class: 'deck-box random-box' }, icon('dice')),
-          h('span', { class: 'deck-tile-text' }, h('span', { class: 'deck-tile-name' }, 'Random deck'), h('span', { class: 'deck-tile-arch' }, 'Any premade deck, weighted by tier')),
-          opts.randomOption.selected && cur == null ? h('span', { class: 'deck-tile-check' }, icon('check')) : null,
-        ),
-      );
-    }
-    const groups: [string, DeckInfo[]][] = [
-      ['My decks', decks.filter((d) => d.ref.kind === 'custom' && match(d))],
-      ['Premade decks', decks.filter((d) => d.ref.kind === 'premade' && match(d)).sort((a, b) => a.tier - b.tier || a.name.localeCompare(b.name))],
-    ];
-    let any = false;
-    for (const [title, ds] of groups) {
-      if (!ds.length) continue;
-      any = true;
-      list.appendChild(h('div', { class: 'deck-group' }, title));
-      for (const d of ds)
-        list.appendChild(
-          deckTile(d, {
-            selected: cur === d.key,
-            onClick: () => {
-              cur = d.key;
-              onSelect(d);
-              draw();
-            },
-          }),
-        );
-    }
-    if (!any) list.appendChild(h('div', { class: 'empty' }, icon('cards'), opts.emptyText ?? (q ? 'No deck matches your filter.' : 'No decks available yet.')));
-  };
-  filter.addEventListener('input', draw);
-  draw();
-  return h('div', { class: 'deck-picker' }, filter, list);
-}
-
 // ------------------------------------------------------------------ deck art & carousel
 
 /** The card whose artwork represents each premade deck. */
@@ -543,60 +482,6 @@ export function newPersona(difficulty: Difficulty): PersonaState {
   return { name: randomPersona().name, avatar: randomAvatar(), difficulty };
 }
 
-/** Persona editor: avatar button + name input + randomise + difficulty. */
-export function personaEditor(p: PersonaState, onChange: () => void, opts: { hideDifficulty?: boolean } = {}) {
-  const avatarBtn = h('button', { type: 'button', class: 'persona-avatar avatar-ring', title: 'Change avatar', 'aria-label': 'Change avatar' });
-  const drawAvatar = () => {
-    clear(avatarBtn);
-    avatarBtn.appendChild(renderAvatar(p.avatar, 64));
-  };
-  drawAvatar();
-  avatarBtn.addEventListener('click', async () => {
-    const a = await pickAvatarModal(p.avatar);
-    if (a) {
-      p.avatar = a;
-      drawAvatar();
-      onChange();
-    }
-  });
-  const name = h('input', { class: 'input', type: 'text', value: p.name, maxlength: 28, 'aria-label': 'Opponent name' });
-  name.addEventListener('input', () => {
-    p.name = name.value.trim() || 'Rival';
-    onChange();
-  });
-  const dice = button(
-    '',
-    () => {
-      const r = newPersona(p.difficulty);
-      p.name = r.name;
-      p.avatar = r.avatar;
-      name.value = p.name;
-      drawAvatar();
-      onChange();
-    },
-    { variant: 'ghost', icon: 'dice', title: 'Randomize persona' },
-  );
-  const diff = segmented<Difficulty>(
-    [
-      { value: 'easy', label: 'Easy', hint: 'Makes mistakes, plays loosely' },
-      { value: 'normal', label: 'Normal', hint: 'Thinks a few plays ahead' },
-      { value: 'hard', label: 'Hard', hint: 'Reads your set cards, plans two turns ahead' },
-    ],
-    p.difficulty,
-    (v) => {
-      p.difficulty = v;
-      onChange();
-    },
-    'AI difficulty',
-  );
-  return h(
-    'div',
-    { class: 'persona' },
-    avatarBtn,
-    h('div', { class: 'persona-fields' }, h('div', { class: 'persona-name-row' }, name, dice), opts.hideDifficulty ? null : diff),
-  );
-}
-
 /** Opponent card for match lobbies: name with a shuffle button, and difficulty as a segmented control. */
 export function opponentEditor(p: PersonaState, onChange: () => void, opts: { hideDifficulty?: boolean; nameLabel?: string } = {}) {
   const name = h('input', { class: 'opp-name-input', type: 'text', value: p.name, maxlength: 28, 'aria-label': opts.nameLabel ?? 'Opponent name', autocomplete: 'off', spellcheck: false });
@@ -771,12 +656,4 @@ export function cardDetail(c: CardData | null, opts: { actions?: Child; size?: '
 
 function attrBadge(a: string) {
   return ({ DARK: 'violet', LIGHT: 'gold', WATER: 'blue', FIRE: 'red', EARTH: 'orange', WIND: 'green' } as Record<string, string>)[a] ?? '';
-}
-
-export function cardByNameSafe(n: string) {
-  return findCard(n) ?? null;
-}
-
-export function sectionTitle(text: string, extra?: Child) {
-  return h('div', { class: 'section-title' }, h('h2', null, text), extra ?? null);
 }

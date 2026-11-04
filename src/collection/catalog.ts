@@ -182,14 +182,4 @@ export function structureDeck(code: string) {
   return STRUCTURE_DECKS.find((d) => d.code === code.toUpperCase());
 }
 
-/** Every era set a card appears in (for the binder). */
-export function setsForCard(name: string): { code: string; rarities: Rarity[] }[] {
-  const out: { code: string; rarities: Rarity[] }[] = [];
-  for (const s of playableSets()) {
-    const rs = s.rarities.get(name);
-    if (rs) out.push({ code: s.code, rarities: rs });
-  }
-  return out;
-}
-
 export const rarityRank = (r: Rarity) => RARITY_ORDER.indexOf(r);

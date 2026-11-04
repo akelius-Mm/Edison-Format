@@ -901,8 +901,3 @@ class Stage {
     setTimeout(() => this.el.remove(), reduceMotion() ? 0 : 240);
   }
 }
-
-/** Convenience for other screens: jump straight into opening a set's pack. */
-export function openPacksScreen(set?: string) {
-  go('packs', set ? { open: set } : {});
-}

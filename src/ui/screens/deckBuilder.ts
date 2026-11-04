@@ -810,5 +810,3 @@ export function copyText(text: string, fallback?: HTMLTextAreaElement) {
     }
   }
 }
-
-export const openDeckBuilderWith = (premadeId: string) => go('deck-builder', { from: premadeId });

@@ -39,9 +39,6 @@ export class Rand {
 export function svgUri(svg: string): string {
   return `url("data:image/svg+xml;utf8,${encodeURIComponent(svg)}")`;
 }
-export function svgSrc(svg: string): string {
-  return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
-}
 
 export function esc(s: string): string {
   return s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);

@@ -330,8 +330,6 @@ function build(d: Def): Playmat {
   };
 }
 
-export const CUSTOM_MAT_ID = 'custom';
-
 /** Every offered mat: plain surfaces, the art mats, then the six event mats. */
 export const PLAYMATS: Playmat[] = [...PLAIN, ...ART_MAT_CARDS.map((c) => artDef(c)), ...PRESTIGE].map(build);
 

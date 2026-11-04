@@ -80,8 +80,6 @@ export const BINDERS: BinderCover[] = [
   },
 ];
 
-export const DEFAULT_BINDER = 'padded-black';
-
 export function binderById(id: string | undefined): BinderCover {
   return BINDERS.find((b) => b.id === id) ?? BINDERS[0];
 }

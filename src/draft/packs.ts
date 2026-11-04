@@ -9,8 +9,6 @@ import { generateSetPack } from '../collection/draft';
 import { EDISON_PACK } from './sets';
 import { cardPower, draftPool, edisonPoolFor, isExtraDeck, rarityOf, rarityRank, RARITIES, type Rarity } from './cards';
 
-export const PACK_SIZE = 15;
-
 /** Where a card in a pack came from: card id + rarity it was opened at. */
 export interface PackCard {
   id: string;

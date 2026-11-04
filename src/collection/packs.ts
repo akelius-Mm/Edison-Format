@@ -232,10 +232,3 @@ export function mixSeed(a: number, b: number) {
   h ^= h >>> 16;
   return h >>> 0;
 }
-
-/** Best rarity in a list of pulls. */
-export function bestRarity(pulls: Pull[]): Rarity | null {
-  let best: Rarity | null = null;
-  for (const p of pulls) if (!best || rarityRank(p.rarity) > rarityRank(best)) best = p.rarity;
-  return best;
-}

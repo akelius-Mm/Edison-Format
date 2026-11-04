@@ -69,7 +69,6 @@ export function showScreen(screen: Screen, key = 'adhoc') {
 export function lockNav(on: boolean) {
   locked = Math.max(0, locked + (on ? 1 : -1));
 }
-export const isNavLocked = () => locked > 0;
 
 function render() {
   const { name, params } = parseHash();

@@ -472,12 +472,3 @@ function finishSeason(s: Season) {
   const archive = loadSeasonArchive().filter((a) => a.id !== s.id);
   save(KEYS.seasonArchive, [{ ...s.summary, id: s.id, number: s.number, finishedAt: Date.now() }, ...archive].slice(0, 30));
 }
-
-/** Weeks until an event kind next appears (0 = this week), or null. */
-export function nextOf(s: Season, kind: EventKind) {
-  const e = s.events.find((x) => x.kind === kind && x.week >= s.week);
-  return e ? e.week - s.week : null;
-}
-
-/** The hidden rating of the player, for the standings sidebar. */
-export const yourRating = () => loadRatings().constructed.rating;

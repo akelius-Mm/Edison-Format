@@ -87,16 +87,3 @@ export function zoomCard(data: CardData, opts: { instance?: CardInstance; game?:
   document.body.appendChild(ov);
   open = ov;
 }
-
-/** Double-click (desktop) any face-up rendered card to enlarge it. */
-export function installGlobalCardZoom() {
-  document.addEventListener('dblclick', (ev) => {
-    const el = (ev.target as HTMLElement).closest<HTMLElement>('.yc[data-card-id]');
-    if (!el || el.closest('.card-zoom')) return;
-    const data = findCard(el.dataset.cardName ?? '');
-    if (data) {
-      ev.preventDefault();
-      zoomCard(data);
-    }
-  });
-}

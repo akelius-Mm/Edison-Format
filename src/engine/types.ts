@@ -13,8 +13,6 @@ export type Location =
   | 'extra'
   | 'none';
 
-export const FIELD_LOCS: Location[] = ['mzone', 'szone', 'fzone'];
-
 export type CardKind = 'monster' | 'spell' | 'trap';
 
 export type MonsterType =

@@ -272,9 +272,3 @@ export function bandFor(kind: EventKind, place: number, size: number, topCut: nu
   if (xOk) return { ...t.x, upTo: place, cut: false };
   return { ...t.participation, upTo: place, cut: false };
 }
-
-/** Readable placing for a band: "Top 16", "1st", "X-2", or "37th". */
-export function placingLabel(kind: EventKind, place: number, size: number, topCut: number, opts: { madeCut?: boolean; losses?: number; dropped?: boolean } = {}) {
-  const b = bandFor(kind, place, size, topCut, opts);
-  return b.label;
-}

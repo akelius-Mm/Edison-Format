@@ -102,7 +102,6 @@ export function copyOfPremade(def: DeckDef): SavedDeck {
 }
 
 // ------------------------------------------------------------------ deck refs
-export const refKey = (r: DeckRef) => `${r.kind}:${r.id}`;
 export function parseRefKey(k: string): DeckRef | null {
   const i = k.indexOf(':');
   if (i < 0) return null;

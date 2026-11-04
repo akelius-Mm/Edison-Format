@@ -159,13 +159,6 @@ export function onCollectionChange(fn: (s: CollectionState) => void): () => void
   return () => listeners.delete(fn);
 }
 
-/** Wipe everything (a new starter gift is given). */
-export function resetCollection() {
-  state = fresh();
-  giveStarter(state);
-  save();
-}
-
 // ------------------------------------------------------------------ owned cards
 
 export function ownedCount(name: string): number {
@@ -223,18 +216,6 @@ export function setCollectionMode(on: boolean) {
  */
 export function collectionCap(name: string): number {
   return isCollectionMode() ? ownedCount(name) : Infinity;
-}
-
-/** Cards a decklist uses beyond what is owned: [name, missing copies]. Empty when it is fully owned. */
-export function missingFromCollection(entries: [string, number][]): [string, number][] {
-  const need = new Map<string, number>();
-  for (const [n, c] of entries) need.set(n, (need.get(n) ?? 0) + c);
-  const out: [string, number][] = [];
-  for (const [n, c] of need) {
-    const have = ownedCount(n);
-    if (c > have) out.push([n, c - have]);
-  }
-  return out;
 }
 
 // ------------------------------------------------------------------ currency & packs

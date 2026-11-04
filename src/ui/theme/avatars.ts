@@ -69,22 +69,3 @@ export function renderAvatar(id: string, size = 64): HTMLElement {
   void size;
   return empty;
 }
-
-/** The previous badge renderer (kept for reference, not used). */
-export function renderBadge(id: string, size = 64): HTMLElement {
-  const el = document.createElement('div');
-  el.className = 'avatar';
-  el.style.width = `${size}px`;
-  el.style.height = `${size}px`;
-  el.style.borderRadius = '50%';
-  el.style.overflow = 'hidden';
-  el.style.flex = 'none';
-  el.innerHTML = avatarSVG(id);
-  const svg = el.firstElementChild as SVGElement | null;
-  if (svg) {
-    svg.style.width = '100%';
-    svg.style.height = '100%';
-    svg.style.display = 'block';
-  }
-  return el;
-}

@@ -791,27 +791,6 @@ export function bracket(t: Tournament): HTMLElement {
   return h('div', { class: 'bracket-wrap' }, h('div', { class: 'bracket' }, cols));
 }
 
-export function trophySVG(cls = 'trophy') {
-  const el = document.createElement('div');
-  el.className = cls;
-  el.setAttribute('aria-hidden', 'true');
-  el.innerHTML = `<svg viewBox="0 0 120 140">
-<defs>
-<linearGradient id="tg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fff3c4"/><stop offset=".35" stop-color="#e6bf4f"/><stop offset=".65" stop-color="#b8861f"/><stop offset="1" stop-color="#f3d27a"/></linearGradient>
-<linearGradient id="tg2" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8a6416"/><stop offset="1" stop-color="#3d2b06"/></linearGradient>
-</defs>
-<path d="M30 18h60v22c0 22-12 38-30 42-18-4-30-20-30-42Z" fill="url(#tg)" stroke="#6b4c0e" stroke-width="1.5"/>
-<path d="M30 26H14c0 20 8 30 20 32" fill="none" stroke="url(#tg)" stroke-width="6" stroke-linecap="round"/>
-<path d="M90 26h16c0 20-8 30-20 32" fill="none" stroke="url(#tg)" stroke-width="6" stroke-linecap="round"/>
-<path d="M54 82h12v16H54z" fill="url(#tg)"/>
-<path d="M40 98h40l4 12H36z" fill="url(#tg)" stroke="#6b4c0e" stroke-width="1"/>
-<rect x="30" y="110" width="60" height="16" rx="3" fill="url(#tg2)" stroke="#d4af37" stroke-width="1.2"/>
-<path d="M60 32l5 10 11 1.5-8 7.5 2 11-10-5.5-10 5.5 2-11-8-7.5 11-1.5Z" fill="#fff8dc" opacity=".9"/>
-<path d="M36 22c2 14 6 24 14 32" stroke="#fff" stroke-opacity=".45" stroke-width="3" fill="none" stroke-linecap="round"/>
-</svg>`;
-  return el;
-}
-
 // =================================================================== final screen
 
 function finalScreen(t: Tournament): Screen {

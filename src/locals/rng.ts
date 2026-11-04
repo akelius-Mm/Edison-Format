@@ -12,8 +12,6 @@ export function rand(s: RngState): number {
   return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
 }
 
-export const rngFn = (s: RngState) => () => rand(s);
-
 export function pickOne<T>(s: RngState, arr: readonly T[]): T {
   return arr[Math.floor(rand(s) * arr.length) % arr.length];
 }

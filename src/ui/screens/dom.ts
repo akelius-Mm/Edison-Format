@@ -371,18 +371,6 @@ export function promptDialog(title: string, label: string, initial = '', okLabel
   });
 }
 
-/** Choose between options; resolves with the chosen index (never rejects; not dismissable). */
-export function choiceDialog(title: string, message: Child, choices: { label: string; variant?: 'primary' | 'ghost' | 'gold'; icon?: keyof typeof ICONS }[]): Promise<number> {
-  return new Promise((res) => {
-    modal(
-      title,
-      typeof message === 'string' ? h('p', { class: 'modal-text' }, message) : message,
-      choices.map((c, i) => ({ label: c.label, variant: c.variant, icon: c.icon, onClick: () => res(i) })),
-      { dismissable: false },
-    );
-  });
-}
-
 export function uid(prefix = 'id') {
   return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
@@ -390,10 +378,4 @@ export function uid(prefix = 'id') {
 export function pct(n: number) {
   return (n * 100).toFixed(1) + '%';
 }
-
-export function escapeHtml(s: string) {
-  return s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
-}
-
-export const nextFrame = () => new Promise<void>((r) => requestAnimationFrame(() => r()));
 export const yieldToUI = () => new Promise<void>((r) => setTimeout(r, 0));

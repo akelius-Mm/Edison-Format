@@ -126,8 +126,6 @@ function build(d: Def): Sleeve {
   };
 }
 
-export const CUSTOM_ID = 'custom';
-
 export const SLEEVES: Sleeve[] = [...PLAIN, ...ART_SLEEVE_CARDS.map(artDef)].map(build);
 
 const artCache = new Map<string, Sleeve>();

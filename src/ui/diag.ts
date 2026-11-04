@@ -66,14 +66,6 @@ export function loadErrors(): CapturedError[] {
   }
 }
 
-export function clearErrors() {
-  try {
-    localStorage.removeItem(ERRORS_KEY);
-  } catch {
-    /* ignore */
-  }
-}
-
 function store(e: CapturedError) {
   try {
     const list = loadErrors();
@@ -220,8 +212,6 @@ export function duelLogLine(turn: number, text: string) {
 export function setDuelDiagExtra(f: (() => Record<string, unknown>) | undefined) {
   if (duel) duel.extra = f;
 }
-
-export const inDuelNow = () => !!duel;
 
 /**
  * The duel on screen as a resume record (resume.ts): seed, decks and the human's decisions, which

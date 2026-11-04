@@ -366,10 +366,3 @@ export function makeTrade(id: string, o: TradeOffer): MarketResult & { verdict?:
   });
   return { ok: true, verdict };
 }
-
-/** Test hook: forget the cached demand and printings (the deck and card lists are fixed at runtime). */
-export function _resetMarketCaches() {
-  printings = null;
-  older = null;
-  demandCache = null;
-}

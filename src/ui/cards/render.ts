@@ -65,10 +65,6 @@ export interface RenderCardOptions {
   lazy?: boolean;
 }
 
-export const CARD_WIDTHS: Record<CardSize, number> = { xs: 56, sm: 84, md: 124, lg: 210, xl: 320 };
-/** Height / width ratio of a card. */
-export const CARD_RATIO = 86 / 59;
-
 export type FrameKind = 'normal' | 'effect' | 'fusion' | 'synchro' | 'ritual' | 'token' | 'spell' | 'trap';
 
 export function frameOf(data: CardData): FrameKind {

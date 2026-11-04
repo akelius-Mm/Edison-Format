@@ -18,8 +18,6 @@ export type DraftPhase = 'draft' | 'build' | 'tournament' | 'done';
 /** Default table size; an event can seat 4, 6 or 8 (see DraftState.players). */
 export const SEATS = 8;
 export const SEALED_PACKS = 6;
-/** Swiss rounds (single elimination uses roundsFor). */
-export const TOURNEY_ROUNDS = 3;
 
 export interface DraftPlayer {
   id: string;
@@ -483,10 +481,4 @@ export function humanRecord(s: DraftState) {
       else d++;
     }
   return { w, l, d, text: d ? `${w}-${l}-${d}` : `${w}-${l}` };
-}
-
-/** Is the round's human match still to be played? */
-export function roundPending(s: DraftState) {
-  const m = humanMatch(s);
-  return !!m && !m.result;
 }
