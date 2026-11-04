@@ -177,7 +177,14 @@ async function removeA(ctx: Ctx, n: number) {
   ctx.game.update();
   return true;
 }
-/** "If a monster with an A-Counter battles an "Alien" monster, it loses 300 ATK and DEF for each A-Counter during damage calculation only." */
+/**
+ * "If a monster with an A-Counter battles an "Alien" monster, it loses 300 ATK and DEF for each A-Counter during damage
+ * calculation only." A Continuous Effect of each card printed with it, applying to ANY "Alien" battle while that card is
+ * face-up on the field (not only to its own battles); 2 such cards stack (1 A-Counter = -600).
+ * https://edisonrul.ing/cards/a/alien-kid.html — "If this card is not on the field, a monster with an A-Counter won't lose
+ * ATK when battling an 'Alien'"; https://edisonrul.ing/cards/a/alien-grey.html — "If 2 'Alien Grey' (or other monsters
+ * with the A-Counter text) are on the field, then a monster with 1 A-Counter will lose 600 ATK while battling an 'Alien'."
+ */
 const alienBattleRule: EffectDef = {
   kind: 'continuous',
   mods: (['atk', 'def'] as const).map((q) => ({
@@ -185,8 +192,9 @@ const alienBattleRule: EffectDef = {
     to: 'cards' as const,
     filter: (ctx: Ctx, c: C) => {
       const b = ctx.battle;
-      if (!b || !b.inDamageStep || aCount(c) <= 0) return false;
-      return (b.attacker === ctx.self && b.target === c) || (b.target === ctx.self && b.attacker === c);
+      if (!b || !b.inDamageStep || !b.target || aCount(c) <= 0) return false;
+      const foe = b.attacker === c ? b.target : b.target === c ? b.attacker : null;
+      return !!foe && foe.location === 'mzone' && isAlien(foe);
     },
     value: (_ctx: Ctx, c: C) => -300 * aCount(c),
   })),
@@ -836,6 +844,7 @@ trap('Assault Counter', 'counter', {
 
 // =================================================================== Synchro Monsters
 
+const hpbAtk = (ctx: Ctx) => (faceUpOn(ctx.self) ? ctx.atk(ctx.self) : ctx.self.data.atk ?? 0);
 monster('Hyper Psychic Blaster', {
   attribute: 'EARTH',
   race: 'Psychic',
@@ -854,18 +863,21 @@ monster('Hyper Psychic Blaster', {
       mandatory: true,
       label: 'Gain LP',
       categories: ['recover'],
+      // "This effect activates in Substep 7 - End of the Damage Step, even if this card is no longer face-up."
+      // https://edisonrul.ing/cards/h/hyper-psychic-blaster.html — the ruling only gives the other monster's fallback
+      // (its printed DEF); with this card off the field its printed ATK is used the same way.
       eventFilter: (ctx, ev) => {
         const calc = ctx.battle?.calc;
-        if (ev.card !== ctx.self || !ev.other || !calc || calc.targetPos !== 'def' || !monActive(ctx)) return false;
+        if (ev.card !== ctx.self || !ev.other || !calc || calc.targetPos !== 'def') return false;
+        if (faceUpOn(ctx.self) && ctx.game.isNegated(ctx.self)) return false;
         const t = evo(ev)!;
         const def = faceUpOn(t) ? ctx.def(t) : t.data.def ?? 0;
-        const atk = ctx.atk(ctx.self);
-        return def < atk;
+        return def < hpbAtk(ctx);
       },
       activate: async (ctx) => {
         const t = evo(ctx.event!)!;
         const def = faceUpOn(t) ? ctx.def(t) : t.data.def ?? 0;
-        ctx.data.gain = ctx.atk(ctx.self) - def;
+        ctx.data.gain = hpbAtk(ctx) - def;
       },
       resolve: async (ctx) => {
         await ctx.recover(ctx.player, ctx.data.gain ?? 0);
@@ -1188,7 +1200,10 @@ monster('Turret Warrior', {
         });
         if (!sel.length) return false;
         turretBonus.set(ctx.self, { moveId: ctx.self.moveId + 1, atk: sel[0].data.atk ?? 0 });
-        await tributeCost(ctx, sel);
+        // "Tributing a Warrior to Special Summon 'Turret Warrior' is not a cost; both the Tribute and the ATK increase are
+        // part of the effect." https://edisonrul.ing/cards/t/turret-warrior.html
+        ctx.log(`${ctx.game.players[ctx.player].name} Tributes ${sel[0].name}.`);
+        await ctx.game.moveCards(sel, 'grave', { reason: 'tribute', reasons: ['tribute', 'effect'], reasonPlayer: ctx.player, reasonCard: ctx.self });
         return true;
       },
       ai: {
@@ -1427,7 +1442,7 @@ monster('Morphtronic Slingen', {
   def: 800,
   sets: MORPH,
   aiValue: 400,
-  text: '● While in Attack Position: Once per turn, you can Tribute 1 "Morphtronic" monster, except "Morphtronic Slingen", to destroy 1 card on the field.\n● While in Defense Position: If this card would be destroyed, you can destroy another "Morphtronic" monster you control instead.',
+  text: '● While in Attack Position: Once per turn, you can Tribute 1 "Morphtronic" monster, except "Morphtronic Slingen", then target 1 card on the field; destroy it.\n● While in Defense Position: If this card would be destroyed, you can destroy another "Morphtronic" monster you control instead.',
   effects: [
     {
       kind: 'ignition',
@@ -1435,19 +1450,24 @@ monster('Morphtronic Slingen', {
       label: 'Tribute a Morphtronic: destroy 1 card',
       categories: ['destroy'],
       condition: (ctx) => ctx.self.pos === 'atk',
-      canActivate: (ctx) => tributable(ctx, (c) => isMorphMon(c) && c.name !== 'Morphtronic Slingen').length > 0 && ctx.field('both').length > 1,
+      // It targets: "Tribute 1 'Morphtronic' monster, except 'Morphtronic Slingen', then target 1 card on the field;
+      // destroy it." https://edisonrul.ing/cards/m/morphtronic-slingen.html — the historical (2010) section has no text or
+      // rulings, so this follows the edisonformat.net (Revised) Edison-accurate text.
+      canActivate: (ctx) => {
+        const fodder = tributable(ctx, (c) => isMorphMon(c) && c.name !== 'Morphtronic Slingen');
+        return fodder.length > 0 && ctx.field('both', (c) => ctx.canTarget(c) && (fodder.length > 1 || c !== fodder[0])).length > 0;
+      },
       activate: async (ctx) => {
         const sel = await ctx.select(tributable(ctx, (c) => isMorphMon(c) && c.name !== 'Morphtronic Slingen'), 1, 1, 'Tribute 1 "Morphtronic" monster.', 'tribute');
         if (!sel.length) return false;
         await tributeCost(ctx, sel);
-      },
-      resolve: async (ctx) => {
-        const f = ctx.field('both');
-        if (!f.length) return;
-        const sel = await ctx.select(f, 1, 1, 'Destroy 1 card on the field.', 'destroy', {
+        await ctx.selectTargets(ctx.field('both'), 1, 1, 'Target 1 card on the field to destroy.', 'destroy', {
           aiScore: (c) => (c.controller === ctx.opp ? cardValue(ctx.game, c) : -5000),
         });
-        if (sel.length) await ctx.destroy(sel);
+      },
+      resolve: async (ctx) => {
+        const t = ctx.validTargets((c) => c.onField);
+        if (t.length) await ctx.destroy(t);
       },
       ai: {
         score: (ctx) => {
@@ -1794,8 +1814,8 @@ monster('Alien Ammonite', {
   sets: ALIEN,
   aiValue: 400,
   text: 'When this card is Normal Summoned: You can target 1 Level 4 or lower "Alien" monster in your GY; Special Summon it, but destroy it during the End Phase.',
+  // No A-Counter battle text on this card (https://edisonrul.ing/cards/a/alien-ammonite.html), so no alienBattleRule.
   effects: [
-    alienBattleRule,
     {
       kind: 'trigger',
       event: 'normalSummoned',
@@ -2011,10 +2031,14 @@ monster('Puppet King', {
         const r = await ctx.specialSummon(ctx.self, { pos: 'choose' });
         if (!r.length) return;
         const mid = ctx.self.moveId;
+        // Flipped face-down (or left the field) since: the effect resets and it is not destroyed.
+        // https://edisonrul.ing/cards/p/puppet-king.html — "is then flipped face-down or leaves the field temporarily and
+        // returns, its effect resets ... will not destroy itself during the End Phase."
+        const fid = ctx.self.faceUpId;
         ctx.later(
           'end',
           async () => {
-            if (ctx.self.location === 'mzone' && ctx.self.moveId === mid) await ctx.destroy(ctx.self);
+            if (ctx.self.location === 'mzone' && ctx.self.moveId === mid && ctx.self.faceUpId === fid) await ctx.destroy(ctx.self);
           },
           nextOwnTurn(ctx),
         );
@@ -2290,9 +2314,14 @@ spell('Prevention Star', 'equip', {
     },
   ],
 });
+/**
+ * Changed from face-up Attack to face-up Defense Position this turn. It does not have to still be in Defense Position:
+ * https://edisonrul.ing/cards/p/prevention-star.html — "can be equipped to any monster that was changed from face-up
+ * Attack Position to face-up Defense position this turn, even if the monster is currently in Attack Position".
+ */
 function changedToDef(ctx: Ctx, c: C) {
   const r = atkToDef.get(c);
-  return !!r && r.turn === ctx.turn && r.moveId === c.moveId && c.pos === 'def' && c.faceUp;
+  return !!r && r.turn === ctx.turn && r.moveId === c.moveId && c.faceUp;
 }
 
 spell('Vengeful Servant', 'equip', {
@@ -2461,6 +2490,8 @@ spell('Morphtronic Rusty Engine', 'equip', {
   ],
 });
 
+/** Morphtronic Map: the Chain Link (or event batch) that last placed a Morph Counter on it. */
+const morphCounted = new WeakMap<C, unknown>();
 spell('Morphtronic Map', 'field', {
   text: 'Each time a monster\'s battle position is changed, place 1 Morph Counter on this card. All "Morphtronic" monsters gain 300 ATK for each Morph Counter on this card. When this card is destroyed and sent from the field to the Graveyard, you can Special Summon 1 "Morphtronic" monster from your Graveyard.',
   rules: [crmsRules],
@@ -2476,7 +2507,12 @@ spell('Morphtronic Map', 'field', {
         // battle position, so no Morph Counter is placed.
         const before = c ? prevPos.get(c) : undefined;
         if (ev.type === 'positionChanged' && c && before && before.moveId === c.moveId && before.pos === c.pos && !before.faceUp && c.faceUp) return false;
-        if (c?.location === 'mzone' && stActive(ctx)) {
+        // "If multiple monsters have their battle positions changed at the same time, only 1 Morph Counter is placed."
+        // https://edisonrul.ing/cards/m/morphtronic-map.html — "at the same time": by the same resolving Chain Link
+        // (Zero Gravity, Windstorm of Etaqua change them one by one in the engine), else in the same event batch.
+        const when = ctx.game.resolvingLink ?? ev.batch;
+        if (c?.location === 'mzone' && stActive(ctx) && morphCounted.get(ctx.self) !== when) {
+          morphCounted.set(ctx.self, when);
           ctx.self.counters.morph = (ctx.self.counters.morph ?? 0) + 1;
           ctx.game.update();
         }
@@ -2487,9 +2523,13 @@ spell('Morphtronic Map', 'field', {
     {
       kind: 'trigger',
       event: 'sentToGrave',
+      // An optional "When ... you can" trigger: it can miss the timing. Activating your own new Field Spell to replace it
+      // makes it miss; your opponent's Field Spell destroying it does not. https://edisonrul.ing/cards/m/morphtronic-map.html
+      when: true,
       label: 'Special Summon a Morphtronic',
       categories: ['specialSummon'],
-      eventFilter: (ctx, ev) => ev.card === ctx.self && ev.from === 'fzone' && reasonsOf(ev).includes('destroy'),
+      eventFilter: (ctx, ev) =>
+        ev.card === ctx.self && ev.from === 'fzone' && reasonsOf(ev).includes('destroy') && !(ev.reason === 'rule' && ev.reasonPlayer === ctx.player),
       // 2010 ruling: the Special Summon starts a Chain and targets. https://edisonrul.ing/cards/m/morphtronic-map.html
       canActivate: (ctx) => ctx.canSpecialSummon() && ctx.grave('me', (c) => isMorphMon(c) && c !== ctx.self && ctx.canSummonCard(c) && ctx.canTarget(c)).length > 0,
       activate: async (ctx) => {
@@ -2812,11 +2852,25 @@ spell('Code A Ancient Ruins', 'continuous', {
   effects: [
     { kind: 'activate', categories: [], ai: { score: (ctx) => (ctx.cards('me', ['deck', 'mzone', 'hand', 'grave'], isAlien).length >= 3 ? 25 : 0) } },
     {
+      // Note whether the attack target was face-down when the attack was declared (read by the A-Counter effect below).
+      kind: 'trigger',
+      event: 'attackDeclared',
+      eventFilter: (ctx, ev) => {
+        const t = ev.other as C | undefined;
+        if (ctx.game.battle && t) ctx.game.battle.flags.codeATargetFaceDown = !t.faceUp;
+        return false;
+      },
+    },
+    {
       kind: 'trigger',
       event: 'destroyed',
       eventFilter: (ctx, ev) => {
         const c = evc(ev);
-        if (c && isAlien(c) && ev.from === 'mzone' && ev.fromFaceUp !== false && stActive(ctx) && oncePerBatch(ctx.self, 'codea', ev)) addA(ctx, ctx.self);
+        // "No A-Counter is placed on this card if an 'Alien' monster [is] face-down when an attack is declared."
+        // https://edisonrul.ing/cards/c/code-a-ancient-ruins.html
+        const b = ctx.game.battle;
+        const setWhenAttacked = !!b && b.target === c && reasonsOf(ev).includes('battle') && (!!b.flags.codeATargetFaceDown || !!b.targetFaceDownAtStart);
+        if (c && isAlien(c) && ev.from === 'mzone' && ev.fromFaceUp !== false && !setWhenAttacked && stActive(ctx) && oncePerBatch(ctx.self, 'codea', ev)) addA(ctx, ctx.self);
         return false;
       },
     },
@@ -2825,15 +2879,18 @@ spell('Code A Ancient Ruins', 'continuous', {
       opt: true,
       label: 'Remove 2 A-Counters: revive an Alien',
       categories: ['specialSummon'],
-      canActivate: (ctx) => aOnField(ctx.game) >= 2 && ctx.canSpecialSummon() && ctx.grave('me', (c) => isAlien(c) && ctx.canSummonCard(c)).length > 0,
+      // It targets an "Alien" monster in your GY, removing the counters is a cost, and this card must still be face-up on
+      // the field when it resolves. https://edisonrul.ing/cards/c/code-a-ancient-ruins.html
+      canActivate: (ctx) => aOnField(ctx.game) >= 2 && ctx.canSpecialSummon() && ctx.grave('me', (c) => isAlien(c) && ctx.canSummonCard(c) && ctx.canTarget(c)).length > 0,
       activate: async (ctx) => {
+        const t = await ctx.selectTargets(ctx.grave('me', (c) => isAlien(c) && ctx.canSummonCard(c)), 1, 1, 'Target 1 "Alien" monster in your GY.', 'specialSummon');
+        if (!t.length) return false;
         if (!(await removeA(ctx, 2))) return false;
       },
       resolve: async (ctx) => {
-        const cands = ctx.grave('me', (c) => isAlien(c) && ctx.canSummonCard(c));
-        if (!cands.length || !ctx.canSpecialSummon()) return;
-        const sel = await ctx.select(cands, 1, 1, 'Special Summon 1 "Alien" monster from your GY.', 'specialSummon');
-        if (sel.length) await ctx.specialSummon(sel[0], { pos: 'choose' });
+        if (!ctx.self.onField || !ctx.self.faceUp) return;
+        const [t] = ctx.validTargets((c) => c.location === 'grave');
+        if (t && ctx.canSpecialSummon() && ctx.canSummonCard(t)) await ctx.specialSummon(t, { pos: 'choose' });
       },
       ai: { score: () => 55 },
     },
@@ -3036,7 +3093,10 @@ trap('Descending Lost Star', 'normal', {
         const m = r[0];
         ctx.negateEffects(m, 'field');
         ctx.addTempMod(m, 'level', -1, 'field');
-        m.flags.baseDef = 0;
+        // "Its DEF becomes 0" as a change applied to it (a temporary modifier), not a new printed DEF: if the monster is
+        // flipped face-down every effect of this card is wiped and its DEF is restored, and effects like "Chorus of
+        // Sanctuary" still raise it above 0. https://edisonrul.ing/cards/d/descending-lost-star.html
+        ctx.addTempMod(m, 'def', -ctx.game.baseDef(m), 'field');
         ctx.addTempMod(m, 'cannotChangePos', true, 'field');
         ctx.game.update();
       },
