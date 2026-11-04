@@ -231,6 +231,12 @@ export const RULINGS: Record<string, RulingNote[]> = {
       "url": "https://edisonrul.ing/cards/a/aurkus-lightsworn-druid.html"
     }
   ],
+  "Batteryman Industrial Strength": [
+    {
+      "text": "[0] = the Summon procedure (banish 2 Batteryman), [1] = the destroy effect (banish 1 Thunder: a cost).",
+      "url": "https://edisonrul.ing/cards/b/batteryman-industrial-strength.html"
+    }
+  ],
   "Battle Fader": [
     {
       "text": "\"You cannot activate multiple copies of 'Battle Fader' in response to a single attack declaration.\"",
@@ -265,6 +271,12 @@ export const RULINGS: Record<string, RulingNote[]> = {
     {
       "text": "2010 rulings: it cannot be activated with fewer LIGHT monsters in your GY than cards in your hand, and if that is the case when it resolves (Disappear), nothing happens (no discard).",
       "url": "https://edisonrul.ing/cards/b/beckoning-light.html"
+    }
+  ],
+  "Black Brutdrago": [
+    {
+      "text": "sending the Gemini to the GY is a cost: \"This effect cannot be activated while Dimensional Fissure is active\" (the card would be banished instead).",
+      "url": "https://edisonrul.ing/cards/b/black-brutdrago.html"
     }
   ],
   "Black Garden": [
@@ -321,6 +333,12 @@ export const RULINGS: Record<string, RulingNote[]> = {
     {
       "text": "2010 rulings: discarding is part of the resolution (not a cost), the effects happen in sequence, and the monsters chosen by each player (the turn player first) are targeted.",
       "url": "https://edisonrul.ing/cards/b/bone-temple-block.html"
+    }
+  ],
+  "Book of Life": [
+    {
+      "text": "\"If the target in your Graveyard is no longer a Zombie-Type monster, it is not Special Summoned, but the target in your opponent's Graveyard is still removed from play\".",
+      "url": "https://edisonrul.ing/cards/b/book-of-life.html"
     }
   ],
   "Brain Research Lab": [
@@ -413,6 +431,22 @@ export const RULINGS: Record<string, RulingNote[]> = {
     {
       "text": "2010 rulings: if the monster cannot be changed to Defense Position (e.g. it already is), the rest of the effect is not applied.",
       "url": "https://edisonrul.ing/cards/c/changing-destiny.html"
+    }
+  ],
+  "Clear Vice Dragon": [
+    {
+      "text": "③ is a Continuous Effect that applies while the opponent's effect that would destroy this card resolves; discarding is an effect, not a cost (Dark World monsters trigger), you choose the card, and it only replaces this card's destruction.",
+      "url": "https://edisonrul.ing/cards/c/clear-vice-dragon.html"
+    },
+    {
+      "text": "Spider Web's position lock ends when the monster is flipped face-down, even if it is flipped face-up again.",
+      "url": "https://edisonrul.ing/cards/s/spider-web.html"
+    }
+  ],
+  "Clear World": [
+    {
+      "text": "\"The EARTH, FIRE, and WATER effects of Clear World each start their own Chain. You do not form a single Chain with all 3 effects\" : WATER is a Chain of its own in the End Phase; FIRE (below) starts the next Chain once WATER's has resolved.",
+      "url": "https://edisonrul.ing/cards/c/clear-world.html"
     }
   ],
   "Cloudian Squall": [
@@ -649,8 +683,18 @@ export const RULINGS: Record<string, RulingNote[]> = {
   ],
   "Dimensional Alchemist": [
     {
+      "text": "An optional \"When... you can\" Trigger Effect: it can miss the timing (e.g. destroyed as Chain Link 2+).",
+      "url": "https://edisonrul.ing/cards/d/dimensional-alchemist.html"
+    },
+    {
       "text": "2010 text: \"When this card is destroyed and sent from your side of the field to the Graveyard\" (not while the opponent controls it).",
       "url": "https://edisonrul.ing/cards/d/dimensional-alchemist.html"
+    }
+  ],
+  "Dimensional Fissure": [
+    {
+      "text": "Monsters only (the card switch); Spells and Traps still go to the GY. A monster card in the Spell & Trap Zone is an Equip Card: \"If 'Dimensional Fissure' is active when an equipped Union Monster is sent to the Graveyard, it will not be banished, because it was treated as a Spell\".",
+      "url": "https://edisonrul.ing/cards/m/machina-gearframe.html"
     }
   ],
   "Disarm": [
@@ -663,6 +707,12 @@ export const RULINGS: Record<string, RulingNote[]> = {
     {
       "text": "Sending it to the GY on your 3rd End Phase does not start a Chain",
       "url": "https://edisonrul.ing/cards/d/discord.html"
+    }
+  ],
+  "Divine Grace - Northwemko": [
+    {
+      "text": "\"This effect targets\" (chosen on activation) and continuously targets the selected cards.",
+      "url": "https://edisonrul.ing/cards/d/divine-grace-northwemko.html"
     }
   ],
   "Divine Knight Ishzark": [
@@ -1323,6 +1373,18 @@ export const RULINGS: Record<string, RulingNote[]> = {
       "url": "https://edisonrul.ing/cards/i/informer-spider.html"
     }
   ],
+  "Inherited Fortune": [
+    {
+      "text": "\"The effect to Special Summon monsters starts a Chain during your Standby Phase. You can Chain 'Royal Oppression' to the effect\"; Royal Decree does not stop it (it does not activate on the field).",
+      "url": "https://edisonrul.ing/cards/i/inherited-fortune.html"
+    }
+  ],
+  "Insect Neglect": [
+    {
+      "text": "[1] = the Quick Effect, not the card activation.",
+      "url": "https://edisonrul.ing/cards/i/insect-neglect.html"
+    }
+  ],
   "Interplanetary Invader \"A\"": [
     {
       "text": "2010 ruling: the effect activates at the end of the Damage Step, so it does not activate when the attack is negated or when this card is destroyed before damage calculation; it does activate if this card is destroyed by the battle.",
@@ -1487,6 +1549,10 @@ export const RULINGS: Record<string, RulingNote[]> = {
     {
       "text": "it targets up to 2 monsters in the opponent's GY and \"cannot activate while \"Necrovalley\" is active\".",
       "url": "https://edisonrul.ing/cards/k/kycoo-the-ghost-destroyer.html"
+    },
+    {
+      "text": "Kycoo / Necrovalley lock out GY-banish costs",
+      "url": "https://edisonrul.ing/cards/k/kycoo-the-ghost-destroyer.html"
     }
   ],
   "Last Turn": [
@@ -1631,6 +1697,14 @@ export const RULINGS: Record<string, RulingNote[]> = {
     {
       "text": "\"If you have no open Monster Card Zone when this effect resolves, send this card to the Graveyard.\"",
       "url": "https://edisonrul.ing/cards/m/machina-gearframe.html"
+    },
+    {
+      "text": "\"If the equipped monster would be destroyed by battle or card effect, destroy this card instead.\" Not when this card would be destroyed at the same time (\"If an effect (ex: Black Rose Dragon) would simultaneously destroy Gearframe and the equipped Machine-Type monster; destroy both cards, you CANNOT apply this effect\": ), hence the list-wide replaceDestroy hook.",
+      "url": "https://edisonrul.ing/cards/m/machina-gearframe.html"
+    },
+    {
+      "text": "Monsters only (the card switch); Spells and Traps still go to the GY. A monster card in the Spell & Trap Zone is an Equip Card: \"If 'Dimensional Fissure' is active when an equipped Union Monster is sent to the Graveyard, it will not be banished, because it was treated as a Spell\".",
+      "url": "https://edisonrul.ing/cards/m/machina-gearframe.html"
     }
   ],
   "Machine Duplication": [
@@ -1719,6 +1793,12 @@ export const RULINGS: Record<string, RulingNote[]> = {
       "url": "https://edisonrul.ing/cards/m/master-gig.html"
     }
   ],
+  "Max Warrior": [
+    {
+      "text": "\"If you use the effect of Assault Armor to let Max Warrior attack twice and destroy two monsters, its Level will be 2 and its original ATK/DEF will be 1/4 of their printed value\": it halves the current original ATK/DEF.",
+      "url": "https://edisonrul.ing/cards/m/max-warrior.html"
+    }
+  ],
   "Megamorph": [
     {
       "text": "2010 ruling: several \"Megamorph\" on one monster are the same as one (only the first one applies).",
@@ -1804,6 +1884,10 @@ export const RULINGS: Record<string, RulingNote[]> = {
     }
   ],
   "Molting Escape": [
+    {
+      "text": "\"The equipped monster will not gain 300 ATK if it battles while it cannot be destroyed by battle due to a different effect\" : with this card's protection switched off (sovrMoltTurn is set), is the monster still indestructible? Then this effect was not applied.",
+      "url": "https://edisonrul.ing/cards/m/molting-escape.html"
+    },
     {
       "text": "\"The effect to gain 300 ATK starts a Chain\" (at the end of the Damage Step); the gains last while this card stays equipped.",
       "url": "https://edisonrul.ing/cards/m/molting-escape.html"
@@ -2277,6 +2361,16 @@ export const RULINGS: Record<string, RulingNote[]> = {
       "url": "https://edisonrul.ing/cards/r/red-eyes-wyvern.html"
     }
   ],
+  "Red-Eyes Zombie Dragon": [
+    {
+      "text": "\"Can only be Tribute Summoned by Tributing Zombie-Type monsters\".",
+      "url": "https://edisonrul.ing/cards/r/red-eyes-zombie-dragon.html"
+    },
+    {
+      "text": "A Tribute Set is not a Tribute Summon (as for Zombie World: ), so the restriction does not apply to it.",
+      "url": "https://edisonrul.ing/cards/z/zombie-world.html"
+    }
+  ],
   "Reinforce Truth": [
     {
       "text": "if its activation is negated (Seven Tools, Solemn Judgment) you can still conduct your Battle Phase; if only its effect is negated (Royal Decree) you cannot.",
@@ -2305,6 +2399,18 @@ export const RULINGS: Record<string, RulingNote[]> = {
       "url": "https://edisonrul.ing/cards/r/remote-revenge.html"
     }
   ],
+  "Reptilianne Gorgon": [
+    {
+      "text": "\"If this card destroys a monster by battle, its effect will activate but will resolve without effect\"; it applies as long as the monster is face-up on the field.",
+      "url": "https://edisonrul.ing/cards/r/reptilianne-gorgon.html"
+    }
+  ],
+  "Reptilianne Medusa": [
+    {
+      "text": "\"You cannot target a monster with 0 ATK with this effect.\"",
+      "url": "https://edisonrul.ing/cards/r/reptilianne-medusa.html"
+    }
+  ],
   "Rescue Cat": [
     {
       "text": "it Special Summons 2 monsters at once: it cannot be activated to Summon only 1 (2 eligible Beasts and 2 free zones, counting the one Rescue Cat frees), and a Summoned monster that is flipped face-down is not destroyed in the End Phase. Sending it to the GY is the cost: it cannot be activated while \"Macro Cosmos\" is active.",
@@ -2327,6 +2433,12 @@ export const RULINGS: Record<string, RulingNote[]> = {
     {
       "text": "no effect if Ribbon of Rebirth is not in the GY or the removed zone during the End Phase.",
       "url": "https://edisonrul.ing/cards/r/ribbon-of-rebirth.html"
+    }
+  ],
+  "Ritual of Grace": [
+    {
+      "text": "[1] = the GY effect: banishing this card from the GY is a cost.",
+      "url": "https://edisonrul.ing/cards/r/ritual-of-grace.html"
     }
   ],
   "Roar of the Earthbound Immortal": [
@@ -2417,7 +2529,15 @@ export const RULINGS: Record<string, RulingNote[]> = {
       "url": "https://edisonrul.ing/cards/s/seal-of-wickedness.html"
     },
     {
+      "text": "When Seal targets itself it \"will be negated for 1 turn\" (same page), so that case keeps a plain 1-turn negation.",
+      "url": "https://edisonrul.ing/cards/s/seal-of-wickedness.html"
+    },
+    {
       "text": "\"Paying 500 Life Points is a cost, not an effect. It cannot be negated by 'Royal Decree.'\" A maintenance cost: no Chain, and still due while this card is negated.",
+      "url": "https://edisonrul.ing/cards/s/seal-of-wickedness.html"
+    },
+    {
+      "text": "The negation from effect [1]: applies only while this card is face-up on the field and not negated itself.",
       "url": "https://edisonrul.ing/cards/s/seal-of-wickedness.html"
     }
   ],
@@ -2451,6 +2571,12 @@ export const RULINGS: Record<string, RulingNote[]> = {
     {
       "text": "VS. \"Shrink\" on the same monster: the effect that resolved last is applied.",
       "url": "https://edisonrul.ing/cards/s/shrink.html"
+    }
+  ],
+  "Shutendoji": [
+    {
+      "text": "Banishing 2 Zombies from the GY is a cost of the draw mode only : while GY cards cannot be banished (Necrovalley, Kycoo) the deck-top mode can still be used.",
+      "url": "https://edisonrul.ing/cards/s/shutendoji.html"
     }
   ],
   "Silver Wing": [
@@ -2505,6 +2631,10 @@ export const RULINGS: Record<string, RulingNote[]> = {
     {
       "text": "a \"Fortune Lady\" whose Level is less than 3 cannot be chosen.",
       "url": "https://edisonrul.ing/cards/s/solitaire-magician.html"
+    },
+    {
+      "text": "if the \"Fortune Lady\" is flipped face-down (Book of Moon) the effect does not apply at all; if the monster to destroy is flipped face-down, it resolves normally.",
+      "url": "https://edisonrul.ing/cards/s/solitaire-magician.html"
     }
   ],
   "Soul Exchange": [
@@ -2539,11 +2669,11 @@ export const RULINGS: Record<string, RulingNote[]> = {
   ],
   "Spider Web": [
     {
-      "text": "\"The effects of this card do not start a Chain.\"",
+      "text": "Spider Web's position lock ends when the monster is flipped face-down, even if it is flipped face-up again.",
       "url": "https://edisonrul.ing/cards/s/spider-web.html"
     },
     {
-      "text": "2010 ruling: a monster flipped face-down is no longer affected.",
+      "text": "\"The effects of this card do not start a Chain.\"",
       "url": "https://edisonrul.ing/cards/s/spider-web.html"
     }
   ],
@@ -2555,6 +2685,12 @@ export const RULINGS: Record<string, RulingNote[]> = {
     {
       "text": "2010 ruling: a monster flipped face-down (Book of Moon) is no longer affected.",
       "url": "https://edisonrul.ing/cards/s/spiders-lair.html"
+    }
+  ],
+  "Spiritual Forest": [
+    {
+      "text": "Once per turn per Spiritual Forest, not per monster: \"If the effect of Spiritual Forest is resolved once during a turn, it cannot be resolved again even if Spiritual Forest is negated and then stops being negated in the same turn\"; \"It automatically activates the first time the appropriate type of monster would be destroyed\".",
+      "url": "https://edisonrul.ing/cards/s/spiritual-forest.html"
     }
   ],
   "Star Blast": [
@@ -2889,7 +3025,7 @@ export const RULINGS: Record<string, RulingNote[]> = {
   ],
   "Vampire Lord": [
     {
-      "text": "also when destroyed in the hand or Deck by the opponent's card effect; it is Special Summoned even under \"Necrovalley\" (it does not target).",
+      "text": "Bookkeeping (never activates): destroyed by the opponent's card effect and sent to the GY. The Special Summon is a Trigger Effect that starts a Chain in the owner's next Standby Phase (Royal Oppression can negate it; it is lost if that Standby Phase is skipped) —. Also when destroyed in the hand or Deck by the opponent's card effect; it is Special Summoned even under \"Necrovalley\" (no target).",
       "url": "https://edisonrul.ing/cards/v/vampire-lord.html"
     }
   ],
@@ -3029,10 +3165,24 @@ export const RULINGS: Record<string, RulingNote[]> = {
       "url": "https://edisonrul.ing/cards/z/zeta-reticulant.html"
     }
   ],
+  "Zombie Master": [
+    {
+      "text": "\"If the target is no longer a Zombie-Type, it is not Special Summoned\".",
+      "url": "https://edisonrul.ing/cards/z/zombie-master.html"
+    }
+  ],
   "Zombie World": [
+    {
+      "text": "A Tribute Set is not a Tribute Summon (as for Zombie World: ), so the restriction does not apply to it.",
+      "url": "https://edisonrul.ing/cards/z/zombie-world.html"
+    },
     {
       "text": "Monsters in the hand keep their Type, so only Zombies can be Tribute Summoned (Tribute Sets are allowed).",
       "url": "https://edisonrul.ing/cards/n/necrovalley.html"
+    },
+    {
+      "text": "\"This effect only affects face-up monsters. Face-down monsters are unaffected.\"",
+      "url": "https://edisonrul.ing/cards/z/zombie-world.html"
     }
   ]
 };
