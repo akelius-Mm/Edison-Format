@@ -96,14 +96,11 @@ function renameUntilEndPhase(game: Game, card: C, name: string) {
 
 /**
  * Light and Darkness Dragon: after any activation, each face-up Light and Darkness Dragon (once per Chain, able to lose
- * 500 ATK/DEF) adds its mandatory negation as the next Chain Link. Effect 1 of the card is that link.
+ * 500 ATK/DEF) adds its mandatory negation as the next Chain Link. Effect 0 of the card is that link.
  */
-const LADD_PATCHED = new WeakSet<Game>();
-function ensureLaddPatch(g: Game) {
-  if (LADD_PATCHED.has(g)) return;
-  LADD_PATCHED.add(g);
+function laddRules(g: Game) {
   const orig = g.activate.bind(g);
-  (g as any).activate = async (player: PlayerId, act: Activation) => {
+  g.activate = async (player: PlayerId, act: Activation) => {
     const link = await orig(player, act);
     if (!link || g.over || link.speed >= 3) return link;
     for (const me of g.allFieldCards()) {
@@ -112,8 +109,8 @@ function ensureLaddPatch(g: Game) {
       if (me.flags.laddChain && me.flags.laddChain === first) continue;
       if (g.getAtk(me) < 500 || g.getDef(me) < 500) continue;
       me.flags.laddChain = first;
-      const ef = me.data.effects![1];
-      await g.activate(me.controller, { card: me, effect: ef, effectIndex: 1, label: ef.label ?? 'Negate activation', event: { type: 'chainActivated', seq: 0, batch: 0, card: link.card, data: { link } } });
+      const ef = me.data.effects![0];
+      await g.activate(me.controller, { card: me, effect: ef, effectIndex: 0, label: ef.label ?? 'Negate activation', event: { type: 'chainActivated', seq: 0, batch: 0, card: link.card, data: { link } } });
     }
     return link;
   };
@@ -129,18 +126,8 @@ monster('Light and Darkness Dragon', {
   nomi: true,
   aiValue: 1200,
   text: 'Cannot be Special Summoned. While face-up on the field, this card is also DARK. Once per Chain, when a Spell/Trap Card or monster effect is activated: this card loses exactly 500 ATK and DEF, and if it does, negate that activation. When this card is destroyed and sent to the GY: Target 1 monster in your GY (if possible); destroy all cards you control, then Special Summon that target.',
+  rules: [laddRules],
   effects: [
-    {
-      // Installs the per-game hook below (an inert listener from every location, like the sets' rule listeners).
-      kind: 'trigger',
-      event: 'phaseStart',
-      range: ['deck', 'hand', 'mzone', 'grave', 'banished', 'extra'],
-      label: '(rules)',
-      eventFilter: (ctx) => {
-        ensureLaddPatch(ctx.game);
-        return false;
-      },
-    },
     {
       // The mandatory negation: its own Chain Link (Spell Speed 2), added right after the activation by the hook.
       // The ATK/DEF loss happens on resolution, so if this card is no longer face-up then (Book of Moon in response),

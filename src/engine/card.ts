@@ -15,6 +15,7 @@ import type {
   TrapType,
 } from './types';
 import type { Ctx } from './ctx';
+import type { Game } from './game';
 
 // ---------------------------------------------------------------------------
 // Effect definitions
@@ -255,6 +256,9 @@ export interface FusionReq {
   desc?: string;
 }
 
+/** Rules a card set adds to a game: installs them on `g`, typically by wrapping Game methods. */
+export type RuleModule = (g: Game) => void;
+
 export interface CardData {
   id: string;
   name: string;
@@ -273,6 +277,12 @@ export interface CardData {
   synchro?: SynchroReq;
   fusion?: FusionReq;
   effects?: EffectDef[];
+  /**
+   * Rules this card adds to the game beyond its own effects (replacement effects such as Rainbow Life, summoning
+   * conditions such as Earthbound Immortals, the Effigies' double Tribute...). Each module is installed once per game,
+   * when the first card that lists it enters the game (deck cards: when the game is created). See Game.registerCard.
+   */
+  rules?: RuleModule[];
   /** Cannot be Normal Summoned/Set (must be Special Summoned by proc). */
   cannotNormalSummon?: boolean;
   /** Must be properly Special Summoned before being revived (nomi). */

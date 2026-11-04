@@ -8,7 +8,6 @@ import type { CardData, CardInstance } from '../src/engine/card';
 import type { Action, Activation, PlayerController, ResponseRequest, SelectRequest } from '../src/engine/controller';
 import { Game, GameOver } from '../src/engine/game';
 import type { BattlePos, Location, PlayerId } from '../src/engine/types';
-import { ensureArchetypeExtrasPatches } from '../src/cards/sets/archetype-extras';
 
 const T = {
   brute: findCard('Rules Test Brute') ?? normal('Rules Test Brute', 'EARTH', 'Warrior', 4, 1800, 1000),
@@ -55,7 +54,6 @@ function setup() {
   g.turn = 2;
   g.turnPlayer = 0;
   g.phase = 'main1';
-  ensureArchetypeExtrasPatches(g);
   const place = (p: PlayerId, data: CardData, loc: Location, opts: { faceUp?: boolean; pos?: BattlePos } = {}) => {
     const c = g.registerCard(new (g.allCards[0].constructor as any)(data, p)) as CardInstance;
     c.location = 'none';

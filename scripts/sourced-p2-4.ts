@@ -740,8 +740,6 @@ const nextTurn = (g: Game) => {
   await test('Power Filter: monsters with "?" ATK can be Special Summoned', async () => {
     const { g, place, live } = setup();
     live(place(1, N('Power Filter'), 'szone'));
-    const { ensureTdgsPatches } = await import('../src/cards/sets/tdgs');
-    ensureTdgsPatches(g);
     const fl = place(0, N('Fortune Lady Light'), 'hand');
     const low = place(0, X.tiny, 'hand');
     eq((await g.specialSummon([low], 0, { pos: 'atk' })).length, 0, '800 ATK: cannot be Special Summoned');

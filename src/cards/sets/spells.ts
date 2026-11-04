@@ -3,6 +3,7 @@ import { spell } from '../define';
 import { attr, bestTarget, cardValue, isMonster } from '../helpers';
 import { faceUpFlag, type AiHints, type CardInstance, type EffectDef } from '../../engine/card';
 import type { Ctx } from '../../engine/ctx';
+import type { Game } from '../../engine/game';
 import type { Category, Location, PlayerId } from '../../engine/types';
 
 type CF = (c: CardInstance) => boolean;
@@ -1328,17 +1329,14 @@ spell('Snatch Steal', 'equip', {
   ],
 });
 
-/** Soul Exchange support: let the engine accept marked opponent monsters as Tribute Summon fodder. */
-function ensureSoulExchangePatch(ctx: Ctx) {
-  const g = ctx.game as any;
-  if (g.__soulExchangePatched) return;
-  g.__soulExchangePatched = true;
-  const orig = g.tributeCandidates.bind(g) as (p: PlayerId, forCard?: CardInstance) => CardInstance[];
+/** Soul Exchange: the engine accepts the marked opponent's monster as Tribute Summon fodder (CardData.rules). */
+function soulExchangeRules(g: Game) {
+  const orig = g.tributeCandidates.bind(g);
   g.tributeCandidates = (p: PlayerId, forCard?: CardInstance) => {
     const base = orig(p, forCard);
-    const extra = ctx.game
-      .monsters(ctx.game.opp(p))
-      .filter((c) => c.flags.soulExchangeFor === p && c.flags.soulExchangeTurn === ctx.game.turn && !ctx.game.queryCard(c, 'cannotBeTributed'));
+    const extra = g
+      .monsters(g.opp(p))
+      .filter((c) => c.flags.soulExchangeFor === p && c.flags.soulExchangeTurn === g.turn && !g.queryCard(c, 'cannotBeTributed'));
     return [...base, ...extra];
   };
 }
@@ -1368,6 +1366,7 @@ function soulExchangePlan(ctx: Ctx): { target: CardInstance; score: number } | n
 
 spell('Soul Exchange', 'normal', {
   text: 'Target 1 monster your opponent controls; this turn, you can Tribute it for a Tribute Summon as if you controlled it. You cannot conduct your Battle Phase the turn you activate this card.',
+  rules: [soulExchangeRules],
   effects: [
     {
       kind: 'activate',
@@ -1394,7 +1393,6 @@ spell('Soul Exchange', 'normal', {
       resolve: async (ctx) => {
         const t = ctx.validTargets((c) => c.location === 'mzone' && c.controller === ctx.opp);
         if (!t.length) return;
-        ensureSoulExchangePatch(ctx);
         t[0].flags.soulExchangeFor = ctx.player;
         t[0].flags.soulExchangeTurn = ctx.turn;
         ctx.log(`${ctx.game.players[ctx.player].name} may Tribute ${t[0].faceUp ? t[0].name : 'that face-down monster'} this turn.`);

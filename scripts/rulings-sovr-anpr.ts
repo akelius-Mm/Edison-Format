@@ -7,17 +7,7 @@ import type { CardData, CardInstance } from '../src/engine/card';
 import type { Action, Activation, PlayerController, ResponseRequest, SelectRequest } from '../src/engine/controller';
 import { Game, GameOver } from '../src/engine/game';
 import type { BattlePos, Location, PlayerId } from '../src/engine/types';
-import { ensureAnprPatches } from '../src/cards/sets/anpr';
-import { ensureRgbtPatches } from '../src/cards/sets/rgbt';
-import { ensureCrmsPatches } from '../src/cards/sets/crms';
-import { ensurePtdnPatches } from '../src/cards/sets/ptdn';
-import { ensureLodtPatches } from '../src/cards/sets/lodt';
-import { ensureGlasPatches } from '../src/cards/sets/glas';
-import { ensureCsocPatches } from '../src/cards/sets/csoc';
 import { PREMADE_DECKS, aiSideDeck, buildDeckList, canSwap, moveToDeck, moveToSide, sideSummary, sidedDeckProblems, swapCards, validateDeck, type DeckIds } from '../src/decks';
-import { ensureTdgsPatches } from '../src/cards/sets/tdgs';
-import { ensureArchetypeExtrasPatches } from '../src/cards/sets/archetype-extras';
-import { ensureArchetypeExtras2Patches } from '../src/cards/sets/archetype-extras2';
 import { AIController } from '../src/ai/ai';
 import { Ctx } from '../src/engine/ctx';
 import { GY_BANISH_COST_PROBLEMS } from '../src/cards/gy-costs';
@@ -141,7 +131,6 @@ const linkOf = (g: Game, card: CardInstance) =>
   void filler;
   void T;
   void tuner;
-  void ensureAnprPatches;
 
   await test('Time Passage targets the Fortune Lady and cannot be activated in the Damage Step', async () => {
     const { g, c0, place } = setup();

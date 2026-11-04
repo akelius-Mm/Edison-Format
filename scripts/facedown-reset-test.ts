@@ -7,11 +7,6 @@ import type { CardData, CardInstance } from '../src/engine/card';
 import type { Action, Activation, PlayerController, ResponseRequest, SelectRequest } from '../src/engine/controller';
 import { Game, GameOver } from '../src/engine/game';
 import type { BattlePos, Location, PlayerId } from '../src/engine/types';
-import { ensureAnprPatches } from '../src/cards/sets/anpr';
-import { ensureLodtPatches } from '../src/cards/sets/lodt';
-import { ensureCsocPatches } from '../src/cards/sets/csoc';
-import { ensureGlasPatches } from '../src/cards/sets/glas';
-import { ensurePtdnPatches } from '../src/cards/sets/ptdn';
 
 const T = {
   wall: findCard('Rules Test Wall') ?? normal('Rules Test Wall', 'EARTH', 'Rock', 4, 500, 2000),
@@ -61,11 +56,6 @@ function setup() {
   g.turn = 2;
   g.turnPlayer = 0;
   g.phase = 'main1';
-  ensureAnprPatches(g);
-  ensureLodtPatches(g);
-  ensureCsocPatches(g);
-  ensureGlasPatches(g);
-  ensurePtdnPatches(g);
   const place = (p: PlayerId, data: CardData, loc: Location, opts: { faceUp?: boolean; pos?: BattlePos } = {}) => {
     const c = g.registerCard(new (g.allCards[0].constructor as any)(data, p)) as CardInstance;
     c.location = 'none';

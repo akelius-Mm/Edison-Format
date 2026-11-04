@@ -7,17 +7,7 @@ import type { CardData, CardInstance } from '../src/engine/card';
 import type { Action, Activation, PlayerController, ResponseRequest, SelectRequest } from '../src/engine/controller';
 import { Game, GameOver } from '../src/engine/game';
 import type { BattlePos, Location, PlayerId } from '../src/engine/types';
-import { ensureAnprPatches } from '../src/cards/sets/anpr';
-import { ensureRgbtPatches } from '../src/cards/sets/rgbt';
-import { ensureCrmsPatches } from '../src/cards/sets/crms';
-import { ensurePtdnPatches } from '../src/cards/sets/ptdn';
-import { ensureLodtPatches } from '../src/cards/sets/lodt';
-import { ensureGlasPatches } from '../src/cards/sets/glas';
-import { ensureCsocPatches } from '../src/cards/sets/csoc';
 import { PREMADE_DECKS, aiSideDeck, buildDeckList, canSwap, moveToDeck, moveToSide, sideSummary, sidedDeckProblems, swapCards, validateDeck, type DeckIds } from '../src/decks';
-import { ensureTdgsPatches } from '../src/cards/sets/tdgs';
-import { ensureArchetypeExtrasPatches } from '../src/cards/sets/archetype-extras';
-import { ensureArchetypeExtras2Patches } from '../src/cards/sets/archetype-extras2';
 import { AIController } from '../src/ai/ai';
 import { Ctx } from '../src/engine/ctx';
 import { GY_BANISH_COST_PROBLEMS } from '../src/cards/gy-costs';
@@ -535,7 +525,6 @@ function eq(a: unknown, b: unknown, msg: string) {
 
   await test('ANPR Barbaros Ur: no battle damage to the opponent; Sauropod Brachion doubles reflected damage', async () => {
     const { g, place } = setup();
-    ensureAnprPatches(g);
     const bar = place(0, cardByName('Beast Machine King Barbaros Ür'), 'mzone');
     const b = place(1, T.brute, 'mzone');
     await g.conductAttack(0, bar);
@@ -627,7 +616,6 @@ function eq(a: unknown, b: unknown, msg: string) {
 
   await test('ANPR Flamvell Commando: Tribute Summon only with a Flamvell monster', async () => {
     const { g, place } = setup();
-    ensureAnprPatches(g);
     const cmd = place(0, cardByName('Flamvell Commando'), 'hand');
     place(0, T.brute, 'mzone');
     eq(g.canNormalSummon(0, cmd), false, 'cannot Tribute a non-Flamvell');
@@ -1210,7 +1198,6 @@ async function rgbtTests() {
 
   await test("RGBT: Koa'ki Meiru Drago — no LIGHT/DARK Special Summons; G.B. Hunter — field cards stay out of the Deck", async () => {
     const { g, place } = setup();
-    ensureRgbtPatches(g);
     place(0, cardByName("Koa'ki Meiru Drago"), 'mzone');
     const dark = place(0, T.dark, 'grave');
     const earth = place(0, T.brute, 'grave');
@@ -1226,7 +1213,6 @@ async function rgbtTests() {
 
   await test('RGBT: Grave of the Super Ancient Organism — Special Summoned Level 6+ monsters cannot attack or activate effects', async () => {
     const { g, place } = setup();
-    ensureRgbtPatches(g);
     const st = place(1, cardByName('Grave of the Super Ancient Organism'), 'szone', { faceUp: true });
     st.activeOnField = true;
     const gig = place(0, cardByName('Master Gig'), 'mzone');
@@ -1257,7 +1243,6 @@ async function rgbtTests() {
 
   await test('RGBT: Crimson Fire doubles and reflects burn; Spell of Pain reflects it', async () => {
     const { g, c1, place } = setup();
-    ensureRgbtPatches(g);
     place(1, cardByName('Red Dragon Archfiend'), 'mzone');
     place(1, cardByName('Crimson Fire'), 'szone', { faceUp: false });
     c1.respond = respondWith('Crimson Fire');
@@ -1395,7 +1380,6 @@ async function rgbtTests() {
 
   await test('RGBT: Miracle Locus — +1000, a second attack only on monsters, no battle damage to the opponent', async () => {
     const { g, place } = setup();
-    ensureRgbtPatches(g);
     const a = place(0, T.brute, 'mzone');
     place(1, T.wall, 'mzone');
     const ml = place(0, cardByName('Miracle Locus'), 'szone', { faceUp: false });
@@ -1449,7 +1433,6 @@ async function crmsTests() {
 
   await test('CRMS: Assault Mode Activate needs Night Wing Sorceress to be used the turn it is Set; Tributes RDA for RDA/Assault Mode', async () => {
     const { g, place } = setup();
-    ensureCrmsPatches(g);
     const rda = place(0, cardByName('Red Dragon Archfiend'), 'mzone');
     rda.properlySummoned = true;
     const am = place(0, cardByName('Red Dragon Archfiend/Assault Mode'), 'deck');
@@ -1523,7 +1506,6 @@ async function crmsTests() {
 
   await test('CRMS: Summon Reactor・SK + the other Reactors summon Flying Fortress SKY FIRE, which destroys a Set Spell/Trap', async () => {
     const { g, c1, place } = setup();
-    ensureCrmsPatches(g);
     const sk = place(0, cardByName('Summon Reactor・SK'), 'mzone');
     place(0, cardByName('Trap Reactor・Y FI'), 'mzone');
     place(0, cardByName('Spell Reactor・RE'), 'mzone');
@@ -1545,7 +1527,6 @@ async function crmsTests() {
 
   await test('CRMS: Hydra Viper Tributes an Aqua-Type monster for each attack', async () => {
     const { g, place } = setup();
-    ensureCrmsPatches(g);
     const hv = place(0, cardByName('Hydra Viper'), 'mzone');
     const frog = place(0, cardByName('Submarine Frog'), 'mzone');
     await g.conductAttack(0, hv);
@@ -1556,7 +1537,6 @@ async function crmsTests() {
 
   await test('CRMS: Dimension Fortress Weapon stops cards going from the Deck to the GY', async () => {
     const { g, place } = setup();
-    ensureCrmsPatches(g);
     place(1, cardByName('Dimension Fortress Weapon'), 'mzone');
     const n = g.players[0].deck.length;
     await g.mill(0, 3);
@@ -1579,7 +1559,6 @@ async function crmsTests() {
 
   await test('CRMS: Ido stops your Summons and revives itself the next Standby Phase, destroying your other monsters', async () => {
     const { g, place } = setup();
-    ensureCrmsPatches(g);
     const ido = place(0, cardByName('Ido the Supreme Magical Force'), 'mzone');
     const b = place(0, T.brute, 'hand');
     eq(g.canNormalSummon(0, b), false, 'cannot Normal Summon');
@@ -1747,7 +1726,6 @@ async function crmsTests() {
 
   await test('CRMS: Spirit Force makes the battle damage 0 and returns a Warrior Tuner', async () => {
     const { g, c1, place } = setup();
-    ensureCrmsPatches(g);
     const a = place(0, T.brute, 'mzone');
     place(1, cardByName('Spirit Force'), 'szone', { faceUp: false });
     const t = place(1, tuner, 'grave');
@@ -1764,7 +1742,6 @@ async function crmsTests() {
     const volt = place(0, cardByName('Dark Voltanis'), 'hand');
     place(0, cardByName('Solemn Judgment'), 'szone', { faceUp: false });
     const victim = place(1, T.wall, 'mzone');
-    ensureCrmsPatches(g);
     c0.respond = respondWith('Solemn Judgment');
     const dh = place(1, cardByName('Dark Hole'), 'hand');
     await activateCard(g, 1, dh);
@@ -1852,11 +1829,11 @@ async function crmsTests() {
 
   await test('CRMS: Prevention Star locks a monster and banishes it when the equipped monster is destroyed', async () => {
     const { g, c0, place } = setup();
-    ensureCrmsPatches(g);
     const m = place(0, T.wall, 'mzone');
     const opp = place(1, T.brute, 'mzone');
-    await g.performAction(0, { type: 'position', card: m });
+    // in the game before the position change, as in a real duel (its rules track Attack -> Defense changes)
     const ps = place(0, cardByName('Prevention Star'), 'hand');
+    await g.performAction(0, { type: 'position', card: m });
     c0.pick = (_g, req) => req.candidates.slice(0, Math.max(1, req.min));
     await activateCard(g, 0, ps);
     eq(ps.equippedTo, m.uid, 'equipped');
@@ -2030,7 +2007,6 @@ async function ptdnTests() {
 
   await test('PTDN: Yubel — burns the attacker before damage calculation, survives, no battle damage', async () => {
     const { g, place } = setup();
-    ensurePtdnPatches(g);
     const y = place(0, cardByName('Yubel'), 'mzone');
     opp(g);
     const a = place(1, T.giant, 'mzone');
@@ -2042,7 +2018,6 @@ async function ptdnTests() {
 
   await test('PTDN: Yubel chain — own End Phase destruction summons nothing; destroyed otherwise -> Terror Incarnate -> Ultimate Nightmare', async () => {
     const { g, place } = setup();
-    ensurePtdnPatches(g);
     const y = place(0, cardByName('Yubel'), 'mzone');
     const terror = place(0, cardByName('Yubel - Terror Incarnate'), 'deck');
     const night = place(0, cardByName('Yubel - The Ultimate Nightmare'), 'deck');
@@ -2102,7 +2077,6 @@ async function ptdnTests() {
 
   await test('PTDN: Destiny HERO - Departed — banished when discarded, revives on the opponent\'s field, banished by battle', async () => {
     const { g, place } = setup();
-    ensurePtdnPatches(g);
     const dep = place(0, cardByName('Destiny HERO - Departed'), 'hand');
     place(0, T.wall, 'hand');
     const fine = place(0, cardByName('Fine'), 'szone', { faceUp: false });
@@ -2149,7 +2123,6 @@ async function ptdnTests() {
 
   await test('PTDN: Prime Material Dragon — negates Dark Hole; effect damage becomes an LP gain', async () => {
     const { g, c0, place } = setup();
-    ensurePtdnPatches(g);
     const pmd = place(0, cardByName('Prime Material Dragon'), 'mzone');
     place(0, T.wall, 'hand');
     g.turnPlayer = 1;
@@ -2179,7 +2152,6 @@ async function ptdnTests() {
 
   await test('PTDN: Transmigration Break — cards returned from the GY to the Deck are banished instead', async () => {
     const { g, place } = setup();
-    ensurePtdnPatches(g);
     const tb = place(0, cardByName('Transmigration Break'), 'szone', { faceUp: true });
     tb.activeOnField = true;
     const mons = [0, 1, 2, 3, 4].map(() => place(0, T.wall, 'grave'));
@@ -2233,7 +2205,6 @@ async function ptdnTests() {
 
   await test('PTDN: Earth Effigy counts as 2 Tributes for an EARTH Normal Monster (also face-down)', async () => {
     const { g, place } = setup();
-    ensurePtdnPatches(g);
     const eff = place(0, cardByName('Earth Effigy'), 'mzone', { faceUp: false, pos: 'def' });
     const giant = place(0, T.giant, 'hand');
     const tuner2 = place(0, T.dark, 'hand');
@@ -2282,7 +2253,6 @@ async function ptdnTests() {
 async function lodtTests() {
   const lodtSetup = () => {
     const s = setup();
-    ensureLodtPatches(s.g);
     return s;
   };
   const live = (c: CardInstance) => {
@@ -2735,7 +2705,6 @@ async function sidingTests() {
 async function tdgsTests() {
   const tdgsSetup = () => {
     const s = setup();
-    ensureTdgsPatches(s.g);
     return s;
   };
   const live = (c: CardInstance) => {
@@ -2943,7 +2912,6 @@ async function tdgsTests() {
 async function csocTests() {
   const csocSetup = () => {
     const s = setup();
-    ensureCsocPatches(s.g);
     return s;
   };
   const live = (c: CardInstance) => {
@@ -3151,7 +3119,6 @@ async function csocTests() {
 async function glasTests() {
   const glasSetup = () => {
     const s = setup();
-    ensureGlasPatches(s.g);
     return s;
   };
   const live = (c: CardInstance) => {
@@ -3420,7 +3387,6 @@ async function glasTests() {
 async function archetypeExtrasTests() {
   const xSetup = () => {
     const s = setup();
-    ensureArchetypeExtrasPatches(s.g);
     return s;
   };
   const procOf = (g: Game, c: CardInstance) => g.legalMainActions(0).find((a) => a.type === 'proc' && a.card === c);
@@ -3635,8 +3601,6 @@ async function archetypeExtrasTests() {
 async function archetypeExtras2Tests() {
   const ySetup = () => {
     const s = setup();
-    ensureTdgsPatches(s.g);
-    ensureArchetypeExtras2Patches(s.g);
     return s;
   };
   const procOf = (g: Game, c: CardInstance) => g.legalMainActions(0).find((a) => a.type === 'proc' && a.card === c);
@@ -3790,7 +3754,6 @@ async function fuzzRegressionTests() {
     g.turnPlayer = 1;
     await activateCard(g, 1, place(1, cardByName('Bad Reaction to Simochi'), 'szone', { faceUp: false }));
     eq(g.spellTraps(1).some((c) => c.name === 'Bad Reaction to Simochi' && c.faceUp), true, 'Simochi is active');
-    ensurePtdnPatches(g);
     place(1, cardByName('Prime Material Dragon'), 'mzone');
     await g.recover(0, 500);
     eq(g.players[0].lp, 8500, 'gain -> Simochi damage -> Prime Material gain');
@@ -4123,7 +4086,6 @@ async function fuzzRegressionTests() {
     const darkTuner = findCard('Rules Test Dark Tuner') ?? normal('Rules Test Dark Tuner', 'DARK', 'Fiend', 2, 800, 800);
     if (!darkTuner.mtypes!.includes('tuner')) darkTuner.mtypes!.push('tuner');
     const { g, place } = setup();
-    ensureCsocPatches(g);
     live(place(1, cardByName('Gozen Match'), 'szone', { faceUp: true }));
     const dark6 = findCard('Rules Test Dark Six') ?? normal('Rules Test Dark Six', 'DARK', 'Fiend', 6, 2000, 1000);
     const stardust = place(0, cardByName('Stardust Dragon'), 'extra');

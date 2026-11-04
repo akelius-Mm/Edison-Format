@@ -1,4 +1,4 @@
-import type { CardData, EffectDef, FusionReq, SynchroReq } from '../engine/card';
+import type { CardData, EffectDef, FusionReq, RuleModule, SynchroReq } from '../engine/card';
 import type { Attribute, MonsterType, Race, SpellType, TrapType } from '../engine/types';
 
 /** Global card database keyed by id. */
@@ -45,6 +45,8 @@ interface MonsterOpts {
   text?: string;
   sets?: string[];
   effects?: EffectDef[];
+  /** Rule modules the card adds to a game (CardData.rules). */
+  rules?: RuleModule[];
   cannotNormalSummon?: boolean;
   nomi?: boolean;
   synchro?: SynchroReq;
@@ -79,6 +81,7 @@ export function monster(name: string, o: MonsterOpts): CardData {
     text: o.text ?? '',
     sets: o.sets,
     effects: o.effects,
+    rules: o.rules,
     cannotNormalSummon: o.cannotNormalSummon || types.has('fusion') || types.has('synchro'),
     nomi: o.nomi,
     synchro: o.synchro,
@@ -121,15 +124,17 @@ interface STOpts {
   text: string;
   sets?: string[];
   effects?: EffectDef[];
+  /** Rule modules the card adds to a game (CardData.rules). */
+  rules?: RuleModule[];
   aiValue?: number;
   /** Its effects cannot be negated by Necrovalley (CardData.ignoresGyLock). */
   ignoresGyLock?: boolean;
 }
 
 export function spell(name: string, stype: SpellType, o: STOpts): CardData {
-  return register({ id: slug(name), name, kind: 'spell', stype, text: o.text, sets: o.sets, effects: o.effects, aiValue: o.aiValue, ignoresGyLock: o.ignoresGyLock });
+  return register({ id: slug(name), name, kind: 'spell', stype, text: o.text, sets: o.sets, effects: o.effects, rules: o.rules, aiValue: o.aiValue, ignoresGyLock: o.ignoresGyLock });
 }
 
 export function trap(name: string, ttype: TrapType, o: STOpts): CardData {
-  return register({ id: slug(name), name, kind: 'trap', ttype, text: o.text, sets: o.sets, effects: o.effects, aiValue: o.aiValue });
+  return register({ id: slug(name), name, kind: 'trap', ttype, text: o.text, sets: o.sets, effects: o.effects, rules: o.rules, aiValue: o.aiValue });
 }

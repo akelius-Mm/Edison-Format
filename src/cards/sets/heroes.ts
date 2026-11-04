@@ -346,10 +346,7 @@ const skyscraperOnField = (ctx: Ctx) => skyscraperUp(ctx.game);
  * (Game.ruleCleanup) and every action, like the engine's other state checks.
  * https://edisonrul.ing/cards/e/elemental-hero-captain-gold.html
  */
-const goldPatched = new WeakSet<Game>();
-function ensureCaptainGoldCheck(g: Game) {
-  if (goldPatched.has(g)) return;
-  goldPatched.add(g);
+function captainGoldRules(g: Game) {
   let checking = false;
   const check = async () => {
     if (checking || g.over || skyscraperUp(g)) return;
@@ -364,14 +361,13 @@ function ensureCaptainGoldCheck(g: Game) {
       checking = false;
     }
   };
-  const anyG = g as any;
   const origRC = g.ruleCleanup.bind(g);
-  anyG.ruleCleanup = async () => {
+  g.ruleCleanup = async () => {
     await origRC();
     await check();
   };
   const origPA = g.performAction.bind(g);
-  anyG.performAction = async (...a: Parameters<Game['performAction']>) => {
+  g.performAction = async (...a: Parameters<Game['performAction']>) => {
     await origPA(...a);
     await check();
   };
@@ -386,6 +382,7 @@ monster('Elemental Hero Captain Gold', {
   sets: HERO_SETS,
   aiValue: 0,
   text: 'You can discard this card to the Graveyard to add 1 "Skyscraper" from your Deck to your hand. If this card is on the field but "Skyscraper" is not on the field, destroy this card.',
+  rules: [captainGoldRules],
   effects: [
     {
       kind: 'ignition',
@@ -400,16 +397,6 @@ monster('Elemental Hero Captain Gold', {
         await ctx.search((c) => c.name === 'Skyscraper', 1, 'Add 1 "Skyscraper" to your hand.');
       },
       ai: { score: (ctx) => (ctx.hand('me', (c) => c.name === 'Skyscraper').length || skyscraperOnField(ctx) ? 0 : 40) },
-    },
-    {
-      // Installs the chainless self-destruction check (never activates). See ensureCaptainGoldCheck.
-      kind: 'trigger',
-      event: ['phaseStart', 'summoned', 'drawn', 'addedToHand'],
-      range: ['hand', 'deck', 'grave', 'banished', 'mzone', 'szone', 'extra'],
-      eventFilter: (ctx) => {
-        ensureCaptainGoldCheck(ctx.game);
-        return false;
-      },
     },
   ],
 });

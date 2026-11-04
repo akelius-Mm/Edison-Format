@@ -210,7 +210,6 @@ const trapMonsterScore = (ctx: Ctx) => {
 
 const DEPARTED = 'Destiny HERO - Departed';
 const YUBEL_BURNERS = new Set(['Yubel', 'Yubel - Terror Incarnate']);
-const PATCHED = new WeakSet<Game>();
 const transmigrationOn = (g: Game) => g.allFieldCards().some((c) => c.name === 'Transmigration Break' && c.faceUp && c.activeOnField && !g.isNegated(c));
 const primeMaterialOn = (g: Game) => g.allFieldCards().some((c) => c.name === 'Prime Material Dragon' && c.location === 'mzone' && c.faceUp && !g.isNegated(c));
 /** Effigy rule: can `tribute` count as 2 Tributes for `summoned`? */
@@ -219,14 +218,11 @@ function effigyFor(tribute: C, summoned: C) {
   return !!a && summoned.data.attribute === a && summoned.hasType('normal') && !summoned.isToken;
 }
 
-export function ensurePtdnPatches(g: Game) {
-  if (PATCHED.has(g)) return;
-  PATCHED.add(g);
-  const anyG = g as any;
+export function ptdnRules(g: Game) {
 
   // Rainbow Life / Prime Material Dragon: damage becomes an LP gain.
   const origDamage = g.damage.bind(g);
-  anyG.damage = async (p: PlayerId, amount: number, kind: 'battle' | 'effect', source?: C, sourcePlayer?: PlayerId) => {
+  g.damage = async (p: PlayerId, amount: number, kind: 'battle' | 'effect', source?: C, sourcePlayer?: PlayerId) => {
     if (Math.floor(amount) > 0) {
       if (g.turnData[`ptdn:rainbowLife:${p}`]) {
         g.log(`Rainbow Life: ${g.players[p].name} gains LP instead of taking damage.`, 'damage', p);
@@ -244,7 +240,7 @@ export function ensurePtdnPatches(g: Game) {
 
   // Destiny HERO - Departed / Transmigration Break.
   const origMove = g.moveCards.bind(g);
-  anyG.moveCards = async (cards: C[], to: Location, opts: Parameters<Game['moveCards']>[2]) => {
+  g.moveCards = async (cards: C[], to: Location, opts: Parameters<Game['moveCards']>[2]) => {
     const rs = reasonsOf(opts);
     if (to === 'grave' && !rs.includes('rule')) {
       const dep = cards.filter((c) => c.name === DEPARTED && (c.location === 'hand' || c.location === 'deck'));
@@ -272,7 +268,7 @@ export function ensurePtdnPatches(g: Game) {
   // Yubel / Yubel - Terror Incarnate: "Before damage calculation, if this face-up Attack Position card is targeted
   // for an attack" — a trigger point at the start of the Damage Step window (event 'targeted', data.ptdnBeforeCalc).
   const origResp = g.responseLoop.bind(g);
-  anyG.responseLoop = async (kind: Parameters<Game['responseLoop']>[0], first: PlayerId, prompt = '') => {
+  g.responseLoop = async (kind: Parameters<Game['responseLoop']>[0], first: PlayerId, prompt = '') => {
     const b = g.battle as (BattleState & { ptdnBdc?: boolean }) | null;
     if (kind === 'damage' && b && b.inDamageStep && !b.calc && !b.negated && !g.chain.length && !b.ptdnBdc) {
       b.ptdnBdc = true;
@@ -292,14 +288,14 @@ export function ensurePtdnPatches(g: Game) {
 
   // Cry Havoc!: the extra Normal Summon/Set it grants is for a Normal Monster only.
   const origCanNS = g.canNormalSummon.bind(g);
-  anyG.canNormalSummon = (p: PlayerId, card: C, set = false) => {
+  g.canNormalSummon = (p: PlayerId, card: C, set = false) => {
     if (!origCanNS(p, card, set)) return false;
     const pend = (g.turnData[`ptdn:cryHavoc:${p}`] as number | undefined) ?? 0;
     if (pend > 0 && g.players[p].normalSummonsLeft <= pend && !card.hasType('normal')) return false;
     return true;
   };
   const origNS = g.normalSummon.bind(g);
-  anyG.normalSummon = async (p: PlayerId, card: C, set: boolean, opts?: { byEffect?: boolean }) => {
+  g.normalSummon = async (p: PlayerId, card: C, set: boolean, opts?: { byEffect?: boolean }) => {
     const key = `ptdn:cryHavoc:${p}`;
     const pend = (g.turnData[key] as number | undefined) ?? 0;
     const before = g.players[p].normalSummonsLeft;
@@ -309,25 +305,13 @@ export function ensurePtdnPatches(g: Game) {
 
   // Earth / Wind Effigy: also usable as 2 Tributes while face-down.
   const origAlt = g.altTributeCandidates.bind(g);
-  anyG.altTributeCandidates = (p: PlayerId, card: C, set = false) => {
+  g.altTributeCandidates = (p: PlayerId, card: C, set = false) => {
     const r = origAlt(p, card, set);
     if (g.tributesNeeded(card) < 2) return r;
     const more = g.monsters(p).filter((c) => !c.faceUp && !r.includes(c) && effigyFor(c, card) && !g.queryCard(c, 'cannotBeTributed'));
     return more.length ? [...r, ...more] : r;
   };
 }
-
-/** Installs the per-game patches at the first phase (from any location, never activates). */
-const PATCH_LISTENER: EffectDef = {
-  kind: 'trigger',
-  event: 'phaseStart',
-  range: ALL_LOCS,
-  label: '(rules)',
-  eventFilter: (ctx) => {
-    ensurePtdnPatches(ctx.game);
-    return false;
-  },
-};
 
 // ---------------------------------------------------------------- Spell resolution watcher
 // "Each time a Spell Card is activated, ... when that Spell resolves" / "after resolving a Spell Card": the engine
@@ -560,8 +544,8 @@ monster('Yubel', {
   def: 0,
   aiValue: 1400,
   text: 'Cannot be destroyed by battle. You take no battle damage from battles involving this card. Before damage calculation, if this face-up Attack Position card is targeted for an attack: Inflict damage to your opponent equal to that attacking monster\'s ATK. Once per turn, during your End Phase: Tribute 1 other monster or destroy this card. When this card is destroyed, except by its own effect: Its owner can Special Summon 1 "Yubel - Terror Incarnate" from their hand, Deck, or GY.',
+  rules: [ptdnRules],
   effects: [
-    PATCH_LISTENER,
     yubelBody,
     yubelBurn,
     {
@@ -620,8 +604,8 @@ monster('Yubel - Terror Incarnate', {
   nomi: true,
   aiValue: 1600,
   text: 'Cannot be Normal Summoned or Set. Must be Special Summoned by "Yubel". Cannot be destroyed by battle. You take no battle damage from battles involving this card. Before damage calculation, if this face-up Attack Position card is targeted for an attack: Inflict damage to your opponent equal to that attacking monster\'s ATK. Once per turn, during your End Phase: Destroy all other monsters on the field. When this face-up card leaves the field: You can Special Summon 1 "Yubel - The Ultimate Nightmare" from your hand, Deck, or GY.',
+  rules: [ptdnRules],
   effects: [
-    PATCH_LISTENER,
     yubelBody,
     yubelBurn,
     {
@@ -937,8 +921,8 @@ monster(DEPARTED, {
   sets: ['hero', 'destiny-hero'],
   aiValue: 0,
   text: "During your Standby Phase, if this card is in your Graveyard: Special Summon it in face-up Attack Position to your opponent's side of the field. If this card is destroyed by battle, banish it instead of sending it to the Graveyard. If a card effect would send this card to the Graveyard from the hand or Deck, banish it instead.",
+  rules: [ptdnRules],
   effects: [
-    PATCH_LISTENER,
     {
       kind: 'trigger',
       event: 'phaseStart',
@@ -1670,7 +1654,8 @@ monster('Earth Effigy', {
   def: 2000,
   aiValue: 100,
   text: 'This card can be treated as 2 Tributes for the Tribute Summon of an EARTH Normal Monster.',
-  effects: [PATCH_LISTENER, effigyRule],
+  rules: [ptdnRules],
+  effects: [effigyRule],
 });
 monster('Wind Effigy', {
   attribute: 'WIND',
@@ -1680,7 +1665,8 @@ monster('Wind Effigy', {
   def: 200,
   aiValue: 0,
   text: 'This card can be treated as 2 Tributes for the Tribute Summon of a WIND Normal Monster.',
-  effects: [PATCH_LISTENER, effigyRule],
+  rules: [ptdnRules],
+  effects: [effigyRule],
 });
 
 /** "End the Battle Phase": no engine hook, so the attack is negated and no more attacks can be declared this turn. */
@@ -2053,8 +2039,8 @@ monster('Prime Material Dragon', {
   def: 2000,
   aiValue: 900,
   text: 'Any effect that would inflict damage to a player increases their LP by the same amount, instead. When a card or effect is activated that would destroy a monster(s) on the field (Quick Effect): You can send 1 card from your hand to the GY; negate the activation, and if you do, destroy it.',
+  rules: [ptdnRules],
   effects: [
-    PATCH_LISTENER,
     {
       kind: 'quick',
       label: 'Send 1 card from hand: negate a destruction effect',
@@ -2596,8 +2582,8 @@ const chronicleBanished = new WeakMap<C, { card: C; mid: number }[]>();
 const chronicleLive = (src: C) => (chronicleBanished.get(src) ?? []).filter((x) => x.card.location === 'banished' && x.card.moveId === x.mid).map((x) => x.card);
 spell('Spell Chronicle', 'continuous', {
   text: "Activate this card by sending your entire hand to the GY; banish 5 Spells/Traps from your Deck. Each time your opponent activates a Spell Card, place 1 Chronicle Counter on this card when that Spell Card resolves. You can remove 2 Chronicle Counters from this card; your opponent chooses 1 card banished by this card's effect for you to add to your hand. If this face-up card in the Spell & Trap Zone leaves the field: You take 500 damage for each card currently banished by this card's effect.",
+  rules: [ptdnRules],
   effects: [
-    PATCH_LISTENER,
     {
       kind: 'activate',
       categories: ['banish'],
@@ -3065,19 +3051,17 @@ function incomingBattleDamage(ctx: Ctx, p: PlayerId): number {
 
 trap('Rainbow Life', 'normal', {
   text: 'Discard 1 card; until the end of this turn, each time you would take damage, gain that amount of LP instead.',
+  rules: [ptdnRules],
   effects: [
-    PATCH_LISTENER,
     {
       kind: 'activate',
       categories: ['recover', 'protect'],
       canActivate: (ctx) => ctx.hand('me').length > 0,
       activate: async (ctx) => {
-        ensurePtdnPatches(ctx.game);
         const d = await ctx.discardFromHand(1, undefined, 'cost');
         if (!d.length) return false;
       },
       resolve: async (ctx) => {
-        ensurePtdnPatches(ctx.game);
         ctx.game.turnData[`ptdn:rainbowLife:${ctx.player}`] = true;
         ctx.log('Until the end of this turn, damage becomes an LP gain.');
       },
@@ -3567,8 +3551,8 @@ trap('Offering to the Snake Deity', 'normal', {
 
 trap('Cry Havoc!', 'continuous', {
   text: 'You can remove from play 1 monster from your Graveyard to Normal Summon or Set 1 Normal Monster from your hand. You can only activate this effect during your Main Phase.',
+  rules: [ptdnRules],
   effects: [
-    PATCH_LISTENER,
     { kind: 'activate', categories: [], ai: { score: (ctx) => (ctx.isMyTurn && mainPhase(ctx) && ctx.hand('me', (c) => c.hasType('normal')).length ? 25 : 0) } },
     {
       kind: 'ignition',
@@ -3578,7 +3562,6 @@ trap('Cry Havoc!', 'continuous', {
       condition: (ctx) => stActive(ctx) && mainPhase(ctx),
       canActivate: (ctx) => ctx.grave('me', (c) => c.isMonster).length > 0 && ctx.hand('me', (c) => c.hasType('normal') && !c.isToken).length > 0,
       activate: async (ctx) => {
-        ensurePtdnPatches(ctx.game);
         const s = await ctx.select(ctx.grave('me', (c) => c.isMonster), 1, 1, 'Banish 1 monster from your GY.', 'cost', { aiScore: (c) => -revScore(c) });
         if (!s.length) return false;
         await ctx.banish(s, 'cost');
@@ -3586,7 +3569,6 @@ trap('Cry Havoc!', 'continuous', {
       resolve: async (ctx) => {
         // APPROX: grants 1 additional Normal Summon/Set this turn that can only be used for a Normal Monster,
         // instead of summoning during the resolution.
-        ensurePtdnPatches(ctx.game);
         const key = `ptdn:cryHavoc:${ctx.player}`;
         ctx.game.turnData[key] = ((ctx.game.turnData[key] as number | undefined) ?? 0) + 1;
         ctx.gainNormalSummon(1);
@@ -3602,13 +3584,12 @@ trap('Cry Havoc!', 'continuous', {
 
 trap('Transmigration Break', 'continuous', {
   text: 'Any cards that would be returned to the Deck from the Graveyard are removed from play instead.',
+  rules: [ptdnRules],
   effects: [
-    PATCH_LISTENER,
     {
       kind: 'activate',
       categories: ['lockdown'],
       activate: async (ctx) => {
-        ensurePtdnPatches(ctx.game);
       },
       ai: { score: (ctx) => (!ctx.isMyTurn && ctx.phase === 'end' && ctx.grave('opp').length >= 6 && !ctx.game.chain.length ? 18 : 0) },
     },

@@ -7,8 +7,6 @@ import type { CardData, CardInstance } from '../src/engine/card';
 import type { Action, Activation, PlayerController, ResponseRequest, SelectRequest } from '../src/engine/controller';
 import { Game, GameOver } from '../src/engine/game';
 import type { BattlePos, Location, PlayerId } from '../src/engine/types';
-import { ensureRgbtPatches } from '../src/cards/sets/rgbt';
-import { ensureCrmsPatches } from '../src/cards/sets/crms';
 
 const T = {
   wall: findCard('Rules Test Wall') ?? normal('Rules Test Wall', 'EARTH', 'Rock', 4, 500, 2000),
@@ -105,7 +103,6 @@ async function tagOutBoard(withHunter: boolean, asked?: string[]) {
       return true;
     };
   }
-  ensureRgbtPatches(g);
   g.phase = 'battle';
   const laq = place(0, cardByName('Gladiator Beast Laquari'), 'mzone');
   laq.attackedThisTurnOrWasAttacked = true;
@@ -142,7 +139,6 @@ async function tagOutBoard(withHunter: boolean, asked?: string[]) {
 
   await test('G.B. Hunter: Contact Fusion (Gyzarus) cannot be performed', async () => {
     const { g, place } = setup();
-    ensureRgbtPatches(g);
     place(0, cardByName('Gladiator Beast Bestiari'), 'mzone');
     place(0, cardByName('Gladiator Beast Laquari'), 'mzone');
     const gyz = place(0, cardByName('Gladiator Beast Gyzarus'), 'extra');
@@ -154,7 +150,6 @@ async function tagOutBoard(withHunter: boolean, asked?: string[]) {
 
   await test('G.B. Hunter: Raptor Wing Strike (shuffle a Blackwing you control into the Deck) cannot be activated', async () => {
     const { g, place } = setup();
-    ensureRgbtPatches(g);
     place(0, cardByName('Blackwing - Bora the Spear'), 'mzone');
     place(0, cardByName('Blackwing - Kalut the Moon Shadow'), 'deck');
     const rws = place(0, cardByName('Raptor Wing Strike'), 'hand');
@@ -166,7 +161,6 @@ async function tagOutBoard(withHunter: boolean, asked?: string[]) {
 
   await test('Morphtronic Map: no Morph Counter when a face-down Defense monster is flipped face-up; Flip Summon and Attack->Defense count', async () => {
     const { g, place } = setup();
-    ensureCrmsPatches(g);
     const map = place(0, cardByName('Morphtronic Map'), 'fzone', { faceUp: true });
     map.activeOnField = true;
     const fd = place(1, T.wall, 'mzone', { faceUp: false, pos: 'def' });

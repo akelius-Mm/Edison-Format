@@ -103,7 +103,7 @@ function coreScore(g: Game, card: any, i = 0, window = 'chain', p: PlayerId = 0,
 }
 /** player 1's `attacker` attacks (target null = directly). */
 function attack(g: Game, attacker: any, target: any = null) {
-  g.battle = { attacker, target, attackerMoveId: attacker.moveId, targetMoveId: target?.moveId ?? 0, negated: false, inDamageStep: false, oppMonsterCount: 0 } as any;
+  g.battle = { attacker, target, attackerMoveId: attacker.moveId, targetMoveId: target?.moveId ?? 0, negated: false, inDamageStep: false, oppMonsterCount: 0, flags: {} } as any;
 }
 /** Push a chain link for `card` (player p) with these targets / event. */
 function link(g: Game, card: any, p: PlayerId, targets: any[] = [], event?: any, i = 0) {

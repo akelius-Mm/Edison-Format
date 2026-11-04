@@ -24,7 +24,7 @@ import { cardValue } from '../helpers';
 import type { CardInstance, EffectDef } from '../../engine/card';
 import { faceUpFlag } from '../../engine/card';
 import { Ctx } from '../../engine/ctx';
-import type { Game } from '../../engine/game';
+import type { ChainLink, Game } from '../../engine/game';
 import type { GameEvent, Location, PlayerId } from '../../engine/types';
 import { fusionSummonEffect } from './spells';
 import { QUESTION_ATK } from './sovr';
@@ -313,23 +313,19 @@ Ctx.prototype.canSummonCard = function (this: Ctx, c: C, side: 'me' | 'opp' = 'm
 /** Is `c` an active Gemini-Summoned copy of `name`? */
 const activeGemini = (g: Game, c: C | null | undefined, name: string) => !!c && c.name === name && geminiOn(c) && !g.isNegated(c);
 
-const PATCHED = new WeakSet<Game>();
-export function ensureGlasPatches(g: Game) {
-  if (PATCHED.has(g)) return;
-  PATCHED.add(g);
-  const anyG = g as any;
+export function glasRules(g: Game) {
   const s = gs(g);
 
   // ---- Special Summon legality
   const origSS = g.specialSummon.bind(g);
-  anyG.specialSummon = async (cards: C[], player: PlayerId, opts: Parameters<Game['specialSummon']>[2] = {}) => {
+  g.specialSummon = async (cards: C[], player: PlayerId, opts: Parameters<Game['specialSummon']>[2] = {}) => {
     const list = cards.filter((c) => !glasSummonForbidden(g, c, opts?.reasonCard));
     if (list.length < cards.length) g.log(`${cards.filter((c) => !list.includes(c)).map((c) => c.name).join(', ')} cannot be Special Summoned this way.`, 'info', player);
     if (!list.length) return [];
     return origSS(list, player, opts);
   };
   const origCanNS = g.canNormalSummon.bind(g);
-  anyG.canNormalSummon = (p: PlayerId, card: C, set = false) => {
+  g.canNormalSummon = (p: PlayerId, card: C, set = false) => {
     if (!origCanNS(p, card, set)) return false;
     if (!set && card.name === DRAGON_ICE && g.allFieldCards().some((m) => m.name === DRAGON_ICE && faceUpOn(m))) return false;
     return true;
@@ -337,7 +333,7 @@ export function ensureGlasPatches(g: Game) {
 
   // ---- damage
   const origDamage = g.damage.bind(g);
-  anyG.damage = async (p: PlayerId, amount: number, kind: 'battle' | 'effect', source?: C, sourcePlayer?: PlayerId) => {
+  g.damage = async (p: PlayerId, amount: number, kind: 'battle' | 'effect', source?: C, sourcePlayer?: PlayerId) => {
     if (kind === 'battle' && amount > 0 && g.battle) {
       const b = g.battle;
       const involved = [b.attacker, b.target].filter((c): c is C => !!c && c.location === 'mzone');
@@ -345,19 +341,19 @@ export function ensureGlasPatches(g: Game) {
         g.log(`No battle damage is taken from battles involving ${GHOST_FOG}.`, 'battle', p);
         return 0;
       }
-      if (!(b as any).glasSlime && involved.some((c) => c.controller === p && activeGemini(g, c, SLIME))) {
+      if (!b.flags.glasSlime && involved.some((c) => c.controller === p && activeGemini(g, c, SLIME))) {
         g.log(`${SLIME} reflects the battle damage.`, 'battle', p);
-        (b as any).glasSlime = true;
+        b.flags.glasSlime = true;
         try {
           return await origDamage(g.opp(p), amount, kind, source, p);
         } finally {
-          (b as any).glasSlime = false;
+          b.flags.glasSlime = false;
         }
       }
     }
     if (kind === 'effect' && amount > 0) {
-      const link = g.resolvingLink as any;
-      if (link?.glasMonolith instanceof Set && link.glasMonolith.has(p)) {
+      const link = g.resolvingLink;
+      if (link?.flags?.glasMonolith instanceof Set && link.flags.glasMonolith.has(p)) {
         g.log(`Energy-Absorbing Monolith: ${g.players[p].name} gains the LP instead.`, 'action', p);
         await g.recover(p, Math.floor(amount));
         return 0;
@@ -366,21 +362,21 @@ export function ensureGlasPatches(g: Game) {
     return origDamage(p, amount, kind, source, sourcePlayer);
   };
   const origCanDestroy = g.canDestroy.bind(g);
-  anyG.canDestroy = (card: C, reason: any) => {
+  g.canDestroy = (card: C, reason: any) => {
     if (reason === 'battle' && card.onField && s.defTac.has(`${g.turn}:${card.controller}`)) return false;
     return origCanDestroy(card, reason);
   };
 
   // ---- Tributes: Cloudian - Nimbusman
   const origNeed = g.tributesNeeded.bind(g);
-  anyG.tributesNeeded = (card: C) => (card.name === NIMBUSMAN && card.flags.glasNimbus !== undefined ? (card.flags.glasNimbus as number) : origNeed(card));
+  g.tributesNeeded = (card: C) => (card.name === NIMBUSMAN && card.flags.glasNimbus !== undefined ? (card.flags.glasNimbus as number) : origNeed(card));
   const origCands = g.tributeCandidates.bind(g) as (p: PlayerId, forCard?: C) => C[];
-  anyG.tributeCandidates = (p: PlayerId, forCard?: C) => {
+  g.tributeCandidates = (p: PlayerId, forCard?: C) => {
     const r = origCands(p, forCard);
     return forCard?.name === NIMBUSMAN && forCard.flags.glasNimbusWater ? r.filter((c) => c.data.attribute === 'WATER') : r;
   };
   const origNS = g.normalSummon.bind(g);
-  anyG.normalSummon = async (p: PlayerId, card: C, set: boolean, opts?: { byEffect?: boolean }) => {
+  g.normalSummon = async (p: PlayerId, card: C, set: boolean, opts?: { byEffect?: boolean }) => {
     try {
       if (card.name === NIMBUSMAN && !set) {
         const water = origCands(p, card).filter((c) => c.data.attribute === 'WATER');
@@ -413,14 +409,14 @@ export function ensureGlasPatches(g: Game) {
     return b.attacker.controller !== player && activeGemini(g, b.attacker, AG_KNIGHT) && b.attacker.moveId === b.attackerMoveId;
   };
   const origCAE = g.canActivateEffect.bind(g);
-  anyG.canActivateEffect = (player: PlayerId, card: C, ef: EffectDef, idx: number, mode: any) => {
+  g.canActivateEffect = (player: PlayerId, card: C, ef: EffectDef, idx: number, mode: any) => {
     if (agkBlocks(player, card, ef)) return null;
     return origCAE(player, card, ef, idx, mode);
   };
 
   // ---- state sync: Superalloy Beast Raptinus, "A" Cell Incubator
   const origUpdate = g.update.bind(g);
-  anyG.update = () => {
+  g.update = () => {
     if (!s.syncing) {
       s.syncing = true;
       try {
@@ -434,7 +430,7 @@ export function ensureGlasPatches(g: Game) {
 
   // ---- the normal draw: Soul Devouring Bamboo Sword
   const origDraw = g.draw.bind(g);
-  anyG.draw = async (p: PlayerId, n = 1, reason: any = 'draw') => {
+  g.draw = async (p: PlayerId, n = 1, reason: any = 'draw') => {
     if (reason === 'draw' && g.phase === 'draw' && p === g.turnPlayer && s.skipDraw.has(p) && !g.turnData['glas:skipped']) {
       s.skipDraw.delete(p);
       g.turnData['glas:skipped'] = true;
@@ -446,7 +442,7 @@ export function ensureGlasPatches(g: Game) {
 
   // ---- An Unfortunate Report: the next Battle Phase is conducted twice
   const origBP = g.battlePhase.bind(g);
-  anyG.battlePhase = async () => {
+  g.battlePhase = async () => {
     const tp = g.turnPlayer;
     const i = s.report.findIndex((r) => r.p === tp && r.from <= g.turn);
     await origBP();
@@ -497,23 +493,12 @@ function syncState(g: Game, s: GlasState) {
 }
 const INCUBATOR_COUNT = new WeakMap<C, { moveId: number; n: number }>();
 
-/** Installs the per-game patches at the first phase (from any location, never activates). */
-const PATCH_LISTENER: EffectDef = {
-  kind: 'trigger',
-  event: 'phaseStart',
-  range: ALL_LOCS,
-  eventFilter: (ctx) => {
-    ensureGlasPatches(ctx.game);
-    return false;
-  },
-};
-
 type MonsterOpts = Parameters<typeof monster>[1];
 type STOpts = Parameters<typeof spell>[2];
 /** Define a card of this set (adds the patch installer). */
-const M = (name: string, o: MonsterOpts) => monster(name, { ...o, effects: [...(o.effects ?? []), PATCH_LISTENER] });
-const S = (name: string, t: Parameters<typeof spell>[1], o: STOpts) => spell(name, t, { ...o, effects: [...(o.effects ?? []), PATCH_LISTENER] });
-const T = (name: string, t: Parameters<typeof trap>[1], o: STOpts) => trap(name, t, { ...o, effects: [...(o.effects ?? []), PATCH_LISTENER] });
+const M = (name: string, o: MonsterOpts) => monster(name, { ...o, rules: [...(o.rules ?? []), glasRules] });
+const S = (name: string, t: Parameters<typeof spell>[1], o: STOpts) => spell(name, t, { ...o, rules: [...(o.rules ?? []), glasRules] });
+const T = (name: string, t: Parameters<typeof trap>[1], o: STOpts) => trap(name, t, { ...o, rules: [...(o.rules ?? []), glasRules] });
 
 // ============================================================ Gladiator Beasts
 
@@ -1213,8 +1198,8 @@ M('Cloudian - Poison Cloud', {
       kind: 'trigger',
       event: 'attackDeclared',
       eventFilter: (ctx) => {
-        const b = ctx.battle as any;
-        if (b && b.target === ctx.self) b.glasPoisonFaceDown = !ctx.self.faceUp;
+        const b = ctx.battle;
+        if (b && b.target === ctx.self) b.flags.glasPoisonFaceDown = !ctx.self.faceUp;
         return false;
       },
     },
@@ -1224,7 +1209,7 @@ M('Cloudian - Poison Cloud', {
       mandatory: true,
       label: 'Destroy the monster that destroyed it',
       categories: ['destroy', 'damage'],
-      eventFilter: (ctx, ev) => ev.card === ctx.self && ctx.self.location === 'grave' && !(ctx.battle as any)?.glasPoisonFaceDown,
+      eventFilter: (ctx, ev) => ev.card === ctx.self && ctx.self.location === 'grave' && !ctx.battle?.flags.glasPoisonFaceDown,
       activate: async (ctx) => {
         const by = evo(ctx.event!);
         if (by) ctx.addTargets([by]);
@@ -3136,10 +3121,11 @@ T('Energy-Absorbing Monolith', 'normal', {
         ctx.data.link = ctx.prevLink();
       },
       resolve: async (ctx) => {
-        const l = ctx.data.link as any;
+        const l = ctx.data.link as ChainLink | undefined;
         if (!l) return;
-        if (!(l.glasMonolith instanceof Set)) l.glasMonolith = new Set<PlayerId>();
-        l.glasMonolith.add(ctx.player);
+        const flags = (l.flags ??= {});
+        if (!(flags.glasMonolith instanceof Set)) flags.glasMonolith = new Set<PlayerId>();
+        flags.glasMonolith.add(ctx.player);
       },
       ai: { score: () => 70 },
     },

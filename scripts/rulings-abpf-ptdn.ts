@@ -7,7 +7,6 @@ import type { CardData, CardInstance } from '../src/engine/card';
 import type { Action, Activation, PlayerController, ResponseRequest, SelectRequest } from '../src/engine/controller';
 import { Game, GameOver } from '../src/engine/game';
 import type { BattlePos, Location, PlayerId } from '../src/engine/types';
-import { ensurePtdnPatches } from '../src/cards/sets/ptdn';
 
 const T = {
   brute: findCard('Rules Test Brute') ?? normal('Rules Test Brute', 'EARTH', 'Warrior', 4, 1800, 1000),
@@ -110,7 +109,6 @@ async function activateCard(g: Game, p: PlayerId, card: CardInstance, label?: st
 
 (async () => {
   console.log('Rulings tests (ABPF / PTDN)');
-  void ensurePtdnPatches;
 
   const psychic = findCard('Rulings Test Psychic') ?? normal('Rulings Test Psychic', 'EARTH', 'Psychic', 4, 1000, 1000);
 

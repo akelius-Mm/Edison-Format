@@ -352,7 +352,11 @@ function eq(a: unknown, b: unknown, msg: string) {
     s.c0.option = (req) => (req.prompt.startsWith('Light Barrier') ? 1 : 0); // Tails
     const ex = s.place(0, cardByName('Arcana Force EX - The Dark Ruler'), 'hand');
     const other = s.place(1, T.brute, 'mzone');
-    await s.g.specialSummon([ex], 0, { ignoreConditions: true, proper: true });
+    // its own Special Summon (it can never be Special Summoned by a card effect): send 3 monsters
+    for (let i = 0; i < 3; i++) s.place(0, T.brute, 'mzone');
+    const effectIndex = ex.data.effects!.findIndex((e) => e.kind === 'proc');
+    const effect = ex.data.effects![effectIndex];
+    await s.g.performAction(0, { type: 'proc', card: ex, act: { card: ex, effect, effectIndex, label: effect.label ?? '' } });
     await s.g.processTriggers(true);
     const sd = skillDrain ? s.live(s.place(1, cardByName('Skill Drain'), 'szone')) : undefined;
     s.links.length = 0;

@@ -95,22 +95,18 @@ function nextTurnsOf(g: Game, p: PlayerId, n: number) {
   return Array.from({ length: n }, (_, i) => first + 2 * i);
 }
 
-// ---------------------------------------------------- engine workarounds
-// Dimension Wall (battle damage redirection) and Bad Reaction to Simochi (LP gain -> damage)
-// have no engine hook; we wrap the game instance's damage/recover once per game.
-// See docs/engine-requests/traps.md.
-const PATCHED = new WeakSet<Game>();
+// ---------------------------------------------------- rules (CardData.rules)
+// Dimension Wall (battle damage redirection) and Bad Reaction to Simochi (LP gain -> damage) replace damage / LP
+// gains: they wrap the game's damage and recover.
+/** Players whose battle damage this battle Dimension Wall redirects. */
+const REFLECT = new WeakMap<object, PlayerId[]>();
 function simochiAgainst(g: Game, p: PlayerId): CardInstance | undefined {
   return g.spellTraps(g.opp(p)).find((c) => c.name === 'Bad Reaction to Simochi' && c.faceUp && c.activeOnField && !g.isNegated(c));
 }
-function patchGame(g: Game) {
-  if (PATCHED.has(g)) return;
-  PATCHED.add(g);
-  const anyG = g as any;
+function trapRules(g: Game) {
   const origDamage = g.damage.bind(g);
-  anyG.damage = async (p: PlayerId, amount: number, kind: 'battle' | 'effect', source?: CardInstance, sourcePlayer?: PlayerId) => {
-    const b = g.battle as any;
-    if (kind === 'battle' && b && Array.isArray(b.__reflect) && b.__reflect.includes(p)) {
+  g.damage = async (p: PlayerId, amount: number, kind: 'battle' | 'effect', source?: CardInstance, sourcePlayer?: PlayerId) => {
+    if (kind === 'battle' && g.battle && REFLECT.get(g.battle)?.includes(p)) {
       const q = g.opp(p);
       g.log(`Dimension Wall: the battle damage is inflicted to ${g.players[q].name} instead.`, 'battle', p);
       return origDamage(q, amount, kind, source, p);
@@ -122,7 +118,7 @@ function patchGame(g: Game) {
   // Monolith, Rainbow Life, Prime Material Dragon), the player gains the LP. Without this the two replacements
   // called each other until the stack overflowed.
   let converting = 0;
-  anyG.recover = async (p: PlayerId, amount: number, source?: CardInstance) => {
+  g.recover = async (p: PlayerId, amount: number, source?: CardInstance) => {
     const sim = amount > 0 && !converting ? simochiAgainst(g, p) : undefined;
     if (sim) {
       g.log(`Bad Reaction to Simochi: ${g.players[p].name}'s LP gain becomes damage.`, 'action', sim.controller);
@@ -925,8 +921,7 @@ defTrap('Ceasefire', 'normal', {
         for (const c of down) await ctx.changePos(c, 'def', true);
         if (down.length) {
           const set = new Set(down);
-          const anyG = g as any;
-          anyG.pending = anyG.pending.filter((t: any) => !(t.event?.type === 'flipped' && set.has(t.card)));
+          g.pending = g.pending.filter((t) => !(t.event?.type === 'flipped' && set.has(t.card)));
         }
         const n = ctx.monsters('both', (c) => c.faceUp && c.hasType('effect')).length;
         if (n) await ctx.damage(ctx.opp, 500 * n);
@@ -1576,20 +1571,17 @@ defTrap('Draining Shield', 'normal', {
 
 defTrap('Dimension Wall', 'normal', {
   text: "When an opponent's monster declares an attack: Your opponent takes any battle damage you would have taken from this battle instead.",
+  rules: [trapRules],
   effects: [
     {
       kind: 'activate',
       event: 'attackDeclared',
       categories: ['damage', 'protect'],
       eventFilter: oppAttackEv,
-      activate: async (ctx) => {
-        patchGame(ctx.game);
-      },
       resolve: async (ctx) => {
-        const b = ctx.battle as any;
+        const b = ctx.battle;
         if (!b) return;
-        patchGame(ctx.game);
-        b.__reflect = [...(b.__reflect ?? []), ctx.player];
+        REFLECT.set(b, [...(REFLECT.get(b) ?? []), ctx.player]);
         ctx.log('Battle damage you would take from this battle is redirected to your opponent.');
       },
       ai: {
@@ -1607,16 +1599,12 @@ defTrap('Dimension Wall', 'normal', {
 
 defTrap('Bad Reaction to Simochi', 'continuous', {
   text: 'Any effect that would make your opponent gain LP inflicts that much damage to them instead.',
+  rules: [trapRules],
   effects: [
     {
       kind: 'activate',
       categories: ['damage', 'lockdown'],
-      activate: async (ctx) => {
-        patchGame(ctx.game);
-      },
-      resolve: async (ctx) => {
-        patchGame(ctx.game);
-      },
+      resolve: async () => {},
       ai: { score: (ctx) => (!haveActiveCopy(ctx) && myOpen(ctx, 'main1', 'main2') ? 15 : 0) },
     },
   ],

@@ -167,19 +167,15 @@ function specialSummonedThisTurn(g: Game, p: PlayerId, since = -1, except?: Card
 //  * Normal Summon legality: only 1 face-up "Earthbound Immortal", only 1 "Jester Confit", Brain Research Lab's
 //    extra Normal Summon is for a Psychic-Type monster only;
 //  * Tribute Summons: Flamvell Commando (Tribute a "Flamvell" monster), Sauropod Brachion (1 Dinosaur).
-const PATCHED = new WeakSet<Game>();
 const anyFaceUpEI = (g: Game) => g.allFieldCards().some((c) => c.location === 'mzone' && c.faceUp && isEI(c));
 function blocksDamageToOpp(g: Game, c: C) {
   if (g.isNegated(c)) return false;
   return c.name === 'Beast Machine King Barbaros Ür' || c.flags.anprRevivalNoDamage === true;
 }
-export function ensureAnprPatches(g: Game) {
-  if (PATCHED.has(g)) return;
-  PATCHED.add(g);
-  const anyG = g as any;
+export function anprRules(g: Game) {
 
   const origDamage = g.damage.bind(g);
-  anyG.damage = async (p: PlayerId, amount: number, kind: 'battle' | 'effect', source?: C, sourcePlayer?: PlayerId) => {
+  g.damage = async (p: PlayerId, amount: number, kind: 'battle' | 'effect', source?: C, sourcePlayer?: PlayerId) => {
     if (kind === 'effect' && g.turnData[`anpr:halve:${p}`] && amount > 0) {
       amount = Math.floor(amount / 2);
       g.log(`Damage Translation halves the damage to ${amount}.`, 'damage', p);
@@ -203,11 +199,11 @@ export function ensureAnprPatches(g: Game) {
 
   const origCanNS = g.canNormalSummon.bind(g);
   const origNormalSummon = g.normalSummon.bind(g);
-  anyG.normalSummon = async (p: PlayerId, card: C, set: boolean, opts?: { byEffect?: boolean }) => {
+  g.normalSummon = async (p: PlayerId, card: C, set: boolean, opts?: { byEffect?: boolean }) => {
     labGrant(g, p);
     return origNormalSummon(p, card, set, opts);
   };
-  anyG.canNormalSummon = (p: PlayerId, card: C, set = false) => {
+  g.canNormalSummon = (p: PlayerId, card: C, set = false) => {
     // Brain Research Lab: its extra Psychic Normal Summon is granted as soon as the turn player's Normal Summons are looked at.
     labGrant(g, p);
     if (!origCanNS(p, card, set)) return false;
@@ -221,12 +217,12 @@ export function ensureAnprPatches(g: Game) {
   const origCands = g.tributeCandidates.bind(g);
   const dinos = (p: PlayerId) => origCands(p).filter((c) => c.data.race === 'Dinosaur');
   const origNeed = g.tributesNeeded.bind(g);
-  anyG.tributesNeeded = (card: C) => {
+  g.tributesNeeded = (card: C) => {
     // APPROX: the 1-Dinosaur Tribute Summon is also allowed when the card is Set.
     if (card.name === 'Sauropod Brachion' && card.location === 'hand' && dinos(card.owner).length) return 1;
     return origNeed(card);
   };
-  anyG.tributeCandidates = (p: PlayerId, forCard?: C) => {
+  g.tributeCandidates = (p: PlayerId, forCard?: C) => {
     const list = origCands(p, forCard);
     if (forCard?.name === 'Flamvell Commando') return list.filter(isFlamvell);
     if (forCard?.name === 'Sauropod Brachion' && forCard.location === 'hand' && list.some((c) => c.data.race === 'Dinosaur')) {
@@ -235,17 +231,6 @@ export function ensureAnprPatches(g: Game) {
     return list;
   };
 }
-/** Installs the per-game patches at the first Draw Phase (from any location, never activates). */
-const PATCH_LISTENER: EffectDef = {
-  kind: 'trigger',
-  event: 'phaseStart',
-  range: ALL_LOCS,
-  eventFilter: (ctx) => {
-    ensureAnprPatches(ctx.game);
-    return false;
-  },
-};
-
 // ------------------------------------------------------------ Koa'ki Meiru maintenance
 
 /** "During each of your End Phases, destroy this card unless you send 1 Iron Core from your hand to the GY or reveal 1 <race> monster in your hand." */
@@ -568,8 +553,8 @@ monster('Jester Confit', {
   aiValue: 300,
   // 2010 card text: https://edisonrul.ing/cards/j/jester-confit.html
   text: 'You can Special Summon this card from your hand in face-up Attack Position. If you do, return this card and 1 face-up monster your opponent controls to the hand during the End Phase of your opponent\'s next turn. You can only control 1 face-up "Jester Confit".',
+  rules: [anprRules],
   effects: [
-    PATCH_LISTENER,
     {
       kind: 'proc',
       label: 'Special Summon',
@@ -577,7 +562,6 @@ monster('Jester Confit', {
       categories: ['specialSummon'],
       condition: (ctx) => ctx.freeMZones() > 0 && !ctx.faceUpMonsters('me', (c) => c.name === 'Jester Confit').length,
       perform: async (ctx) => {
-        ensureAnprPatches(ctx.game);
         ctx.game.turnData[`anpr:confit:${ctx.self.uid}`] = true;
         return true;
       },
@@ -807,7 +791,6 @@ monster('Turbo Rocket', {
 
 function earthboundEffects(): EffectDef[] {
   return [
-    PATCH_LISTENER,
     {
       kind: 'continuous',
       mods: [
@@ -857,6 +840,7 @@ monster('Earthbound Immortal Cusillu', {
   sets: ['earthbound-immortal'],
   aiValue: 600,
   text: 'There can only be 1 "Earthbound Immortal" monster on the field. If there is no face-up Field Spell on the field, destroy this card. Your opponent\'s monsters cannot target this card for attacks. This card can attack your opponent directly. If this card would be destroyed by battle, you can Tribute 1 other monster instead, and if you do, halve your opponent\'s LP.',
+  rules: [anprRules],
   effects: [
     ...earthboundEffects(),
     {
@@ -891,6 +875,7 @@ monster('Earthbound Immortal Chacu Challhua', {
   sets: ['earthbound-immortal'],
   aiValue: 600,
   text: 'There can only be 1 "Earthbound Immortal" monster on the field. If there is no face-up Field Spell on the field, destroy this card. Your opponent\'s monsters cannot target this card for attacks. This card can attack your opponent directly. Once per turn: You can inflict damage to your opponent equal to half this card\'s DEF on the field. This card cannot attack the turn this effect is activated. While this card is in Defense Position, your opponent cannot conduct their Battle Phase.',
+  rules: [anprRules],
   effects: [
     ...earthboundEffects(),
     {
@@ -1865,8 +1850,8 @@ monster('Flamvell Commando', {
   nomi: true,
   aiValue: 400,
   text: 'This card cannot be Special Summoned. This card can only be Normal Summoned by Tributing 1 "Flamvell" monster you control. Once per turn, you can remove from play 1 monster in your Graveyard with 200 DEF to inflict damage to your opponent equal to that monster\'s ATK.',
+  rules: [anprRules],
   effects: [
-    PATCH_LISTENER,
     {
       kind: 'ignition',
       opt: true,
@@ -2108,8 +2093,8 @@ monster('Sauropod Brachion', {
   def: 3000,
   aiValue: 200,
   text: 'Cannot be Special Summoned from the Deck. You can Tribute Summon this card face-up by Tributing 1 Dinosaur monster. Once per turn: You can change this card to face-down Defense Position. If this card is Flip Summoned: Change all other monsters on the field to face-down Defense Position. If this card is attacked, any battle damage your opponent takes from that battle is doubled.',
+  rules: [anprRules],
   effects: [
-    PATCH_LISTENER,
     {
       kind: 'ignition',
       opt: true,
@@ -2199,15 +2184,14 @@ monster('Beast Machine King Barbaros Ür', {
   def: 1200,
   aiValue: 300,
   text: 'You can Special Summon this card (from your hand) by banishing 1 Machine-Type monster and 1 Beast-Warrior-Type monster from your hand, field, and/or Graveyard. If this card attacks or is attacked, your opponent takes no battle damage.',
+  rules: [anprRules],
   effects: [
-    PATCH_LISTENER,
     {
       kind: 'proc',
       label: 'Special Summon',
       categories: ['specialSummon'],
       condition: (ctx) => ctx.freeMZones() > 0 && barbarosPairs(ctx).machines.length > 0 && barbarosPairs(ctx).bw.some((b) => barbarosPairs(ctx).machines.some((m) => m !== b)),
       perform: async (ctx) => {
-        ensureAnprPatches(ctx.game);
         const { machines } = barbarosPairs(ctx);
         const [m] = await ctx.select(machines, 1, 1, 'Banish 1 Machine-Type monster from your hand, field or GY.', 'cost', { aiScore: (c) => -barbarosCost(ctx, c) });
         if (!m) return false;
@@ -2862,8 +2846,8 @@ function labGrant(g: Game, p: PlayerId) {
 }
 spell('Brain Research Lab', 'field', {
   text: 'Once per turn, you can Normal Summon 1 Psychic-Type monster in addition to your Normal Summon or Set. If successful, place 1 Psychic Counter on this card. You can also place 1 Psychic Counter on this card instead of paying Life Points to activate any Psychic-Type monster\'s effect that you control. When this card is removed from the field, the controller of this card takes 1000 damage for each Psychic Counter on it.',
+  rules: [anprRules],
   effects: [
-    PATCH_LISTENER,
     { kind: 'activate', categories: ['lockdown'], ai: { score: (ctx) => (ctx.hand('me', isRace('Psychic')).length >= 2 ? 25 : 0) } },
     {
       // 2010 rulings: the extra Normal Summon is a Continuous-like effect (no Chain, nothing to activate). It can be used
@@ -3377,15 +3361,14 @@ trap('Depth Amulet', 'continuous', {
 const ghostToken = token('Ghost Token', 'DARK', 'Fiend', 1, 0, 0, 'Ghost Token (Fiend-Type/DARK/Level 1/ATK 0/DEF 0). Special Summoned by "Damage Translation".');
 trap('Damage Translation', 'normal', {
   text: 'Halve all effect damage you take this turn. During the End Phase this turn, Special Summon 1 "Ghost Token" (Fiend-Type/DARK/Level 1/ATK 0/DEF 0) in Defense Position for each time you took effect damage this turn.',
+  rules: [anprRules],
   effects: [
-    PATCH_LISTENER,
     {
       kind: 'activate',
       categories: ['protect', 'specialSummon'],
       resolve: async (ctx) => {
         const g = ctx.game;
         const p = ctx.player;
-        ensureAnprPatches(g);
         g.turnData[`anpr:halve:${p}`] = true;
         const turn = g.turn;
         g.addDelayed('end', async () => {
@@ -3761,8 +3744,8 @@ const upsetVictim = (ctx: Ctx) => (c: C) => faceUpOn(c) && ctx.level(c) >= 7 && 
 
 trap('Revival of the Immortals', 'normal', {
   text: 'Target 1 "Earthbound Immortal" monster in your GY; Special Summon it, but it cannot declare an attack this turn, also your opponent takes no battle damage from attacks involving it.',
+  rules: [anprRules],
   effects: [
-    PATCH_LISTENER,
     {
       kind: 'activate',
       categories: ['specialSummon'],
@@ -3771,7 +3754,6 @@ trap('Revival of the Immortals', 'normal', {
         await ctx.selectTargets(ctx.grave('me', (c) => isEI(c) && ctx.canSummonCard(c)), 1, 1, 'Target 1 "Earthbound Immortal" monster in your GY.', 'specialSummon');
       },
       resolve: async (ctx) => {
-        ensureAnprPatches(ctx.game);
         const [t] = ctx.validTargets((c) => c.location === 'grave');
         if (!t || anyFaceUpEI(ctx.game)) return;
         const r = await ctx.specialSummon(t);

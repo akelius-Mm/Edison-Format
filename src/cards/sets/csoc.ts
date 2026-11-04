@@ -317,15 +317,11 @@ function maniaFilter(g: Game, p: PlayerId, acts: Action[]): Action[] {
 }
 const WRAPPED_CTRL = new WeakSet<PlayerController>();
 
-const PATCHED = new WeakSet<Game>();
-export function ensureCsocPatches(g: Game) {
-  if (PATCHED.has(g)) return;
-  PATCHED.add(g);
-  const anyG = g as any;
+export function csocRules(g: Game) {
 
   // ---- events
   const origEmit = g.emit.bind(g);
-  anyG.emit = (ev: Omit<GameEvent, 'seq' | 'batch'>) => {
+  g.emit = (ev: Omit<GameEvent, 'seq' | 'batch'>) => {
     const full = origEmit(ev);
     onEvent(g, full);
     return full;
@@ -333,7 +329,7 @@ export function ensureCsocPatches(g: Game) {
 
   // ---- battle damage: Machine Lord Ür
   const origDamage = g.damage.bind(g);
-  anyG.damage = async (p: PlayerId, amount: number, kind: 'battle' | 'effect', source?: C, sourcePlayer?: PlayerId) => {
+  g.damage = async (p: PlayerId, amount: number, kind: 'battle' | 'effect', source?: C, sourcePlayer?: PlayerId) => {
     if (kind === 'battle' && amount > 0 && g.battle) {
       const b = g.battle;
       for (const u of [b.attacker, b.target]) {
@@ -348,7 +344,7 @@ export function ensureCsocPatches(g: Game) {
 
   // ---- attacks: Morphtronic Magnen, Machine Lord Ür
   const origAT = g.attackTargets.bind(g);
-  anyG.attackTargets = (attacker: C) => {
+  g.attackTargets = (attacker: C) => {
     const r = origAT(attacker);
     if (attacker.name === MAGNEN && faceUpOn(attacker) && attacker.pos === 'atk' && !g.isNegated(attacker)) {
       const ups = g.faceUpMonsters(g.opp(attacker.controller));
@@ -366,7 +362,7 @@ export function ensureCsocPatches(g: Game) {
     return r;
   };
   const origCanAttack = g.canAttack.bind(g);
-  anyG.canAttack = (c: C) => {
+  g.canAttack = (c: C) => {
     if (origCanAttack(c)) return true;
     if (!urActive(g, c) || c.pos !== 'atk' || c.controller !== g.turnPlayer || c.attacksThisTurn < 1) return false;
     if (g.queryCard(c, 'cannotAttack') || c.flags.cannotAttackTurn === g.turn) return false;
@@ -382,14 +378,14 @@ export function ensureCsocPatches(g: Game) {
     return false;
   };
   const origCAE = g.canActivateEffect.bind(g);
-  anyG.canActivateEffect = (player: PlayerId, card: C, ef: EffectDef, idx: number, mode: any) => {
+  g.canActivateEffect = (player: PlayerId, card: C, ef: EffectDef, idx: number, mode: any) => {
     if (blocked(card, ef)) return null;
     return origCAE(player, card, ef, idx, mode);
   };
 
   // ---- Summon legality
   const origCanNS = g.canNormalSummon.bind(g);
-  anyG.canNormalSummon = (p: PlayerId, card: C, set = false) => {
+  g.canNormalSummon = (p: PlayerId, card: C, set = false) => {
     if (!origCanNS(p, card, set)) return false;
     if (set || card.name === OVERDRIVE || !summonBlocked(g, card, p, true)) return true;
     if (summonBlocked(g, card, p, true, true)) return false;
@@ -402,7 +398,7 @@ export function ensureCsocPatches(g: Game) {
     return trib.length >= need && others.length <= need && others.every((m) => trib.includes(m));
   };
   const origSS = g.specialSummon.bind(g);
-  anyG.specialSummon = async (cards: C[], player: PlayerId, opts: Parameters<Game['specialSummon']>[2] = {}) => {
+  g.specialSummon = async (cards: C[], player: PlayerId, opts: Parameters<Game['specialSummon']>[2] = {}) => {
     const ctrl = opts?.controller ?? player;
     const list: C[] = [];
     for (const c of cards) {
@@ -415,23 +411,24 @@ export function ensureCsocPatches(g: Game) {
     return origSS(list, player, opts);
   };
   const origISS = g.inherentSpecialSummon.bind(g);
-  anyG.inherentSpecialSummon = async (p: PlayerId, card: C, ...rest: any[]) => {
+  g.inherentSpecialSummon = async (...args: Parameters<Game['inherentSpecialSummon']>) => {
+    const [p, card] = args;
     if (summonBlocked(g, card, p, true)) return false;
-    return (origISS as any)(p, card, ...rest);
+    return origISS(...args);
   };
   // Gozen Match: only material combinations that leave face-up monsters of the Synchro Monster's Attribute (or none),
   // so the Synchro Summon never ends with 2 Attributes (it was summoned, then sent to the GY by the state check).
   const origCombos = g.synchroCombos.bind(g);
-  anyG.synchroCombos = (p: PlayerId, syn: C, mustInclude?: C) => {
+  g.synchroCombos = (p: PlayerId, syn: C, mustInclude?: C) => {
     const combos = origCombos(p, syn, mustInclude);
     if (!liveCards(g, GOZEN).length) return combos;
     return combos.filter((combo) => g.faceUpMonsters(p).every((m) => combo.includes(m) || m.data.attribute === syn.data.attribute));
   };
   const origCanSyn = g.canSynchro.bind(g);
   // (Gozen Match is checked per material combination by synchroCombos above.)
-  anyG.canSynchro = (p: PlayerId, syn: C) => origCanSyn(p, syn) && !summonBlocked(g, syn, p, true, true);
+  g.canSynchro = (p: PlayerId, syn: C) => origCanSyn(p, syn) && !summonBlocked(g, syn, p, true, true);
   const origLMA = g.legalMainActions.bind(g);
-  anyG.legalMainActions = (p: PlayerId) =>
+  g.legalMainActions = (p: PlayerId) =>
     origLMA(p).filter((a: Action) => {
       if (a.type === 'flip' || a.type === 'proc') return !summonBlocked(g, a.card, p, true);
       return true;
@@ -439,19 +436,19 @@ export function ensureCsocPatches(g: Game) {
 
   // ---- state checks
   const origRC = g.ruleCleanup.bind(g);
-  anyG.ruleCleanup = async () => {
+  g.ruleCleanup = async () => {
     await origRC();
     await stateChecks(g);
   };
   const origPA = g.performAction.bind(g);
-  anyG.performAction = async (p: PlayerId, a: Action) => {
+  g.performAction = async (p: PlayerId, a: Action) => {
     await origPA(p, a);
     await stateChecks(g);
   };
 
   // ---- control: Botanical Lion
   const origTC = g.takeControl.bind(g);
-  anyG.takeControl = async (card: C, player: PlayerId, untilEndPhase = false) => {
+  g.takeControl = async (card: C, player: PlayerId, untilEndPhase = false) => {
     if (card.name === LION && faceUpOn(card) && !g.isNegated(card)) {
       g.log(`Control of ${card.name} cannot switch.`, 'action', card.controller);
       return false;
@@ -461,7 +458,7 @@ export function ensureCsocPatches(g: Game) {
 
   // ---- chains: Urgent Tuning
   const origRes = g.resolveChain.bind(g);
-  anyG.resolveChain = async () => {
+  g.resolveChain = async () => {
     await origRes();
     const s = gs(g);
     while (s.urgent.length && !g.over) {
@@ -483,7 +480,7 @@ export function ensureCsocPatches(g: Game) {
   // 2010 ruling: the Synchro Summon is part of Urgent Tuning's resolution, so "Solemn Judgment" cannot negate it.
   // https://edisonrul.ing/cards/u/urgent-tuning.html
   const origSNW = g.summonNegationWindow.bind(g);
-  anyG.summonNegationWindow = async (cards: C[], p: PlayerId, method: string) => (gs(g).urgentSummoning ? false : origSNW(cards, p, method));
+  g.summonNegationWindow = async (cards: C[], p: PlayerId, method: string) => (gs(g).urgentSummoning ? false : origSNW(cards, p, method));
 
   // ---- Battle Mania: forced attacks
   for (const ctrl of g.controllers) {
@@ -531,23 +528,12 @@ function onEvent(g: Game, ev: GameEvent) {
   }
 }
 
-/** Installs the per-game patches at the first phase (from any location, never activates). */
-const PATCH_LISTENER: EffectDef = {
-  kind: 'trigger',
-  event: 'phaseStart',
-  range: ALL_LOCS,
-  eventFilter: (ctx) => {
-    ensureCsocPatches(ctx.game);
-    return false;
-  },
-};
-
 type MonsterOpts = Parameters<typeof monster>[1];
 type STOpts = Parameters<typeof spell>[2];
 /** Define a card of this set (adds the patch installer). */
-const M = (name: string, o: MonsterOpts) => monster(name, { ...o, effects: [...(o.effects ?? []), PATCH_LISTENER] });
-const S = (name: string, t: Parameters<typeof spell>[1], o: STOpts) => spell(name, t, { ...o, effects: [...(o.effects ?? []), PATCH_LISTENER] });
-const T = (name: string, t: Parameters<typeof trap>[1], o: STOpts) => trap(name, t, { ...o, effects: [...(o.effects ?? []), PATCH_LISTENER] });
+const M = (name: string, o: MonsterOpts) => monster(name, { ...o, rules: [...(o.rules ?? []), csocRules] });
+const S = (name: string, t: Parameters<typeof spell>[1], o: STOpts) => spell(name, t, { ...o, rules: [...(o.rules ?? []), csocRules] });
+const T = (name: string, t: Parameters<typeof trap>[1], o: STOpts) => trap(name, t, { ...o, rules: [...(o.rules ?? []), csocRules] });
 
 // ============================================================ MONSTERS
 

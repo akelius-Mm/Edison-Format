@@ -194,7 +194,6 @@ const alienBattleRule: EffectDef = {
 
 // ---------------------------------------------------------------- per-game rule patches
 
-const PATCHED = new WeakSet<Game>();
 /** Monsters changed from face-up Attack to face-up Defense Position: card → turn. */
 const atkToDef = new WeakMap<C, { turn: number; moveId: number }>();
 /** Battle position of a monster right before its latest changePosition call. */
@@ -215,21 +214,18 @@ function starBlastCut(g: Game, c: C): number {
   return 0;
 }
 
-export function ensureCrmsPatches(g: Game) {
-  if (PATCHED.has(g)) return;
-  PATCHED.add(g);
-  const anyG = g as any;
+export function crmsRules(g: Game) {
 
   // Flying Fortress SKY FIRE: response window after the opponent Sets a Spell/Trap Card.
   const origPerform = g.performAction.bind(g);
-  anyG.performAction = async (p: PlayerId, a: Action) => {
+  g.performAction = async (p: PlayerId, a: Action) => {
     await origPerform(p, a);
     if (a.type === 'setST' && !g.over && a.card.onField) await skyFireOnSet(g, p, a.card);
   };
 
   // Night Wing Sorceress: "Assault Mode Activate" can be activated the turn it was Set.
   const origCAE = g.canActivateEffect.bind(g);
-  anyG.canActivateEffect = (player: PlayerId, card: C, ef: EffectDef, idx: number, mode: { open: boolean; window?: any }) => {
+  g.canActivateEffect = (player: PlayerId, card: C, ef: EffectDef, idx: number, mode: { open: boolean; window?: any }) => {
     if (card.name === AMA && card.location === 'szone' && !card.faceUp && card.setTurn === g.turn && controlsFaceUp(g, player, NIGHT_WING)) {
       const st = card.setTurn;
       card.setTurn = -1;
@@ -244,7 +240,7 @@ export function ensureCrmsPatches(g: Game) {
 
   // Hydra Viper: Tribute 1 Aqua-Type monster each time it declares an attack (cost of the attack).
   const origAttack = g.conductAttack.bind(g);
-  anyG.conductAttack = async (p: PlayerId, attacker: C) => {
+  g.conductAttack = async (p: PlayerId, attacker: C) => {
     if (attacker.name === HYDRA && faceUpActive(g, attacker)) {
       const aquas = g.monsters(p).filter((c) => c.data.race === 'Aqua' && !g.queryCard(c, 'cannotBeTributed'));
       if (!aquas.length) return;
@@ -259,7 +255,7 @@ export function ensureCrmsPatches(g: Game) {
 
   // Dimension Fortress Weapon: cards cannot be sent from the Deck to the GY.
   const origMove = g.moveCards.bind(g);
-  anyG.moveCards = async (cards: C[], to: Location, opts: any) => {
+  g.moveCards = async (cards: C[], to: Location, opts: any) => {
     if (to === 'grave' && cards.some((c) => c.location === 'deck') && dfwActive(g)) {
       const rest = cards.filter((c) => c.location !== 'deck');
       if (rest.length < cards.length) g.log('Dimension Fortress Weapon: cards cannot be sent from the Deck to the GY.', 'info');
@@ -271,13 +267,13 @@ export function ensureCrmsPatches(g: Game) {
 
   // Star Blast: reduced Level in the hand (and after it is Summoned from there, until the End Phase).
   const origLevel = g.getLevel.bind(g);
-  anyG.getLevel = (card: C) => {
+  g.getLevel = (card: C) => {
     const n = starBlastCut(g, card);
     const base = origLevel(card);
     return n ? Math.max(1, base - n) : base;
   };
   const origNeed = g.tributesNeeded.bind(g);
-  anyG.tributesNeeded = (card: C) => {
+  g.tributesNeeded = (card: C) => {
     const n = starBlastCut(g, card);
     if (!n || card.location !== 'hand' || card.flags.noTribute) return origNeed(card);
     const lv = Math.max(1, lvl(card) - n);
@@ -286,33 +282,23 @@ export function ensureCrmsPatches(g: Game) {
 
   // Ido the Supreme Magical Force (no Summons/Sets) and the "only 1 face-up" monsters.
   const origCanNS = g.canNormalSummon.bind(g);
-  anyG.canNormalSummon = (p: PlayerId, card: C, set = false) => {
+  g.canNormalSummon = (p: PlayerId, card: C, set = false) => {
     if (!origCanNS(p, card, set)) return false;
     if (controlsFaceUp(g, p, IDO)) return false;
     if (!set && (card.name === IDO || card.name === OVERLORD) && g.faceUpMonsters(p).some((c) => c.name === card.name)) return false;
     return true;
   };
   const origLegal = g.legalMainActions.bind(g);
-  anyG.legalMainActions = (p: PlayerId) => {
+  g.legalMainActions = (p: PlayerId) => {
     const acts: Action[] = origLegal(p);
     if (!controlsFaceUp(g, p, IDO)) return acts;
     return acts.filter((a) => !['summon', 'set', 'flip', 'proc', 'synchro'].includes(a.type));
   };
 
-  // Spirit Force: the battle damage of that battle becomes 0.
-  const origDamage = g.damage.bind(g);
-  anyG.damage = async (p: PlayerId, amount: number, kind: 'battle' | 'effect', source?: C, sourcePlayer?: PlayerId) => {
-    const b = g.battle as any;
-    if (kind === 'battle' && b && Array.isArray(b.crmsNoDamage) && b.crmsNoDamage.includes(p)) {
-      g.log(`${g.players[p].name} takes no battle damage (Spirit Force).`, 'battle', p);
-      return 0;
-    }
-    return origDamage(p, amount, kind, source, sourcePlayer);
-  };
 
   // Prevention Star: remember "changed from face-up Attack Position to face-up Defense Position this turn".
   const origPos = g.changePosition.bind(g);
-  anyG.changePosition = async (card: C, pos: BattlePos, faceUp = true, reasonPlayer?: PlayerId) => {
+  g.changePosition = async (card: C, pos: BattlePos, faceUp = true, reasonPlayer?: PlayerId) => {
     const wasUpAtk = card.location === 'mzone' && card.faceUp && card.pos === 'atk';
     // Morphtronic Map: the position before this change (read while the 'positionChanged' event is emitted).
     if (card.location === 'mzone') prevPos.set(card, { pos: card.pos, faceUp: card.faceUp, moveId: card.moveId });
@@ -321,23 +307,12 @@ export function ensureCrmsPatches(g: Game) {
   };
 
   // Dark Voltanis: "after a Counter Trap Card you control has been activated and has resolved".
-  const origResolveLink = anyG.resolveLink.bind(g);
-  anyG.resolveLink = async (link: ChainLink) => {
+  const origResolveLink = g.resolveLink.bind(g);
+  g.resolveLink = async (link: ChainLink) => {
     await origResolveLink(link);
     if (link.isCardActivation && !link.negated && link.card.isTrap && link.card.data.ttype === 'counter') resolvedCounter.set(link.card, link.card.moveId);
   };
 }
-
-/** Installs the per-game patches at the first phase change (from any location, never activates). */
-const PATCH_LISTENER: EffectDef = {
-  kind: 'trigger',
-  event: 'phaseStart',
-  range: ALL_LOCS,
-  eventFilter: (ctx) => {
-    ensureCrmsPatches(ctx.game);
-    return false;
-  },
-};
 
 // =================================================================== /Assault Mode monsters
 
@@ -707,7 +682,8 @@ monster(NIGHT_WING, {
   def: 1200,
   aiValue: 200,
   text: 'You can activate "Assault Mode Activate" the turn it is Set.',
-  effects: [PATCH_LISTENER],
+  rules: [crmsRules],
+  types: ['effect'],
 });
 
 spell('Assault Overload', 'quickplay', {
@@ -1136,8 +1112,8 @@ monster(SKY_FIRE, {
   nomi: true,
   aiValue: 2000,
   text: 'This card cannot be Normal Summoned or Set. This card cannot be Special Summoned except with the effect of "Summon Reactor・SK". Once per turn, you can send 1 card from your hand to the Graveyard to destroy 1 card your opponent controls. Once during each of your opponent\'s turns, you can activate 1 of the following effects:\n● When your opponent Normal Summons or Special Summons a monster, destroy it and inflict 800 damage to your opponent.\n● When your opponent Sets a card, destroy it and inflict 800 damage to your opponent.',
+  rules: [crmsRules],
   effects: [
-    PATCH_LISTENER,
     {
       kind: 'ignition',
       opt: true,
@@ -1675,7 +1651,8 @@ monster(DFW, {
   aiValue: 400,
   text: 'Cards cannot be sent from the Deck to the GY.',
   // APPROX: cards whose cost would send cards from the Deck to the GY can still be activated (the cards just stay).
-  effects: [PATCH_LISTENER],
+  rules: [crmsRules],
+  types: ['effect'],
 });
 
 monster('Desert Protector', {
@@ -1761,8 +1738,8 @@ monster(HYDRA, {
   def: 400,
   aiValue: 200,
   text: 'Each time this card declares an attack, you must Tribute 1 Aqua-Type monster. This card can attack 3 times during each Battle Phase.',
+  rules: [crmsRules],
   effects: [
-    PATCH_LISTENER,
     {
       kind: 'continuous',
       mods: [
@@ -1782,8 +1759,8 @@ monster(OVERLORD, {
   sets: ALIEN,
   aiValue: 500,
   text: 'You can remove 2 A-Counters from anywhere on the field to Special Summon this card from your hand. Once per turn, you can place 1 A-Counter on each face-up monster your opponent controls. (If a monster with an A-Counter battles an "Alien" monster, it loses 300 ATK and DEF for each A-Counter during damage calculation only.) You can only control 1 "Alien Overlord".',
+  rules: [crmsRules],
   effects: [
-    PATCH_LISTENER,
     alienBattleRule,
     {
       kind: 'proc',
@@ -1870,8 +1847,8 @@ monster('Dark Voltanis', {
   def: 1400,
   aiValue: 800,
   text: 'After 1 Counter Trap Card you control has been activated and has resolved, you can Tribute 1 DARK monster to Special Summon this card from your hand. If this card is Special Summoned in this way, destroy 1 card on the field.',
+  rules: [crmsRules],
   effects: [
-    PATCH_LISTENER,
     {
       kind: 'trigger',
       event: 'sentToGrave',
@@ -2128,8 +2105,8 @@ monster(IDO, {
   def: 800,
   aiValue: 300,
   text: 'You cannot Summon or Normal Set monsters. You can only control 1 "Ido the Supreme Magical Force". During your next Standby Phase after this card was destroyed by a card effect and sent to the GY: Special Summon this card from the GY, and if you do, destroy all other monsters you control.',
+  rules: [crmsRules],
   effects: [
-    PATCH_LISTENER,
     { kind: 'continuous', mods: [{ q: 'cannotSpecialSummon', to: 'players', filter: (ctx, p) => p === ctx.player }] },
     {
       // Remember the turn it was destroyed by a card effect (no chain).
@@ -2251,13 +2228,12 @@ monster('Armoroid', {
 const preventionMemo = new WeakMap<C, { sel?: { c: C; mid: number } }>();
 spell('Prevention Star', 'equip', {
   text: 'Equip only to a monster you control, if it was changed from face-up Attack Position to face-up Defense Position this turn. Select 1 monster your opponent controls. That monster cannot attack or change its battle position. When the equipped monster is destroyed and this card is sent to the Graveyard, remove from play the selected monster.',
+  rules: [crmsRules],
   effects: [
-    PATCH_LISTENER,
     {
       kind: 'activate',
       categories: ['lockdown'],
       canActivate: (ctx) => {
-        ensureCrmsPatches(ctx.game);
         return ctx.faceUpMonsters('me', (c) => changedToDef(ctx, c) && ctx.canTarget(c)).length > 0 && ctx.monsters('opp', (c) => ctx.canTarget(c)).length > 0;
       },
       activate: async (ctx) => {
@@ -2359,8 +2335,8 @@ spell('Vengeful Servant', 'equip', {
 
 spell('Star Blast', 'normal', {
   text: 'Pay any number of Life Points in multiples of 500; reduce the Level of 1 monster you control or that is in your hand by 1 for each 500 Life Points you paid, until the End Phase.',
+  rules: [crmsRules],
   effects: [
-    PATCH_LISTENER,
     {
       kind: 'activate',
       categories: [],
@@ -2371,7 +2347,6 @@ spell('Star Blast', 'normal', {
       // Level of 1 or more (paid 1000: no Level 2). No legal choice on resolution: no effect.
       // https://edisonrul.ing/cards/s/star-blast.html
       activate: async (ctx) => {
-        ensureCrmsPatches(ctx.game);
         const cands = starBlastChoices(ctx, 1);
         if (!cands.length) return false;
         const maxLv = Math.max(...cands.map((c) => ctx.level(c)));
@@ -2488,8 +2463,8 @@ spell('Morphtronic Rusty Engine', 'equip', {
 
 spell('Morphtronic Map', 'field', {
   text: 'Each time a monster\'s battle position is changed, place 1 Morph Counter on this card. All "Morphtronic" monsters gain 300 ATK for each Morph Counter on this card. When this card is destroyed and sent from the field to the Graveyard, you can Special Summon 1 "Morphtronic" monster from your Graveyard.',
+  rules: [crmsRules],
   effects: [
-    PATCH_LISTENER,
     { kind: 'activate', categories: [], ai: { score: (ctx) => (ctx.cards('me', ['hand', 'mzone'], isMorphMon).length ? 25 : 5) } },
     {
       kind: 'trigger',
@@ -3012,17 +2987,15 @@ spell('Assault Armor', 'equip', {
 
 trap('Spirit Force', 'normal', {
   text: "During your opponent's turn, at damage calculation: Make the battle damage you take from this battle 0, then you can add 1 Warrior-Type Tuner monster with 1500 or less DEF from your Graveyard to your hand.",
+  rules: [crmsRules],
   effects: [
-    PATCH_LISTENER,
     {
       kind: 'activate',
       damageStep: true,
       categories: ['protect', 'toHand'],
       condition: (ctx) => !ctx.isMyTurn && !!ctx.battle && ctx.battle.inDamageStep && !ctx.battle.calc && !ctx.battle.negated,
       resolve: async (ctx) => {
-        ensureCrmsPatches(ctx.game);
-        const b = ctx.battle as any;
-        if (b) (b.crmsNoDamage ??= []).push(ctx.player);
+        ctx.game.preventBattleDamage(ctx.player, ctx.self);
         const cands = ctx.grave('me', (c) => raceIs(c, 'Warrior') && c.isTuner && (c.data.def ?? 0) <= 1500);
         if (!cands.length || !(await ctx.confirm('Add 1 Warrior-Type Tuner monster from your GY to your hand?'))) return;
         const sel = await ctx.select(cands, 1, 1, 'Add 1 Warrior-Type Tuner monster with 1500 or less DEF from your GY to your hand.', 'toHand');
@@ -3314,10 +3287,10 @@ trap('Fake Explosion', 'normal', {
       categories: ['protect', 'specialSummon'],
       eventFilter: (ctx, ev) => evc(ev)?.controller === ctx.opp,
       resolve: async (ctx) => {
-        const b = ctx.battle as any;
+        const b = ctx.battle;
         if (!b) return;
         for (const c of [b.attacker, b.target]) if (c && c.location === 'mzone') ctx.addTempMod(c, 'indestructibleBattle', true, 'battle');
-        (b.crmsFake ??= []).push(ctx.self.uid);
+        (b.flags.crmsFake ??= []).push(ctx.self.uid);
       },
       ai: {
         score: (ctx) => {
@@ -3338,8 +3311,8 @@ trap('Fake Explosion', 'normal', {
       label: 'Special Summon "Summon Reactor・SK"',
       categories: ['specialSummon'],
       eventFilter: (ctx) => {
-        const b = ctx.battle as any;
-        return !!b && Array.isArray(b.crmsFake) && b.crmsFake.includes(ctx.self.uid) && !!b.calc;
+        const b = ctx.battle;
+        return !!b && Array.isArray(b.flags.crmsFake) && b.flags.crmsFake.includes(ctx.self.uid) && !!b.calc;
       },
       resolve: async (ctx) => {
         const cands = ctx.cards('me', ['hand', 'grave'], (c) => c.name === SK && ctx.canSummonCard(c));

@@ -245,26 +245,12 @@ async function boundCheck(g: Game) {
   }
 }
 
-const PATCHED = new WeakSet<Game>();
-export function ensureTdgsPatches(g: Game) {
-  if (PATCHED.has(g)) return;
-  PATCHED.add(g);
-  const anyG = g as any;
+export function tdgsRules(g: Game) {
   const s = gs(g);
-
-  // ---- battle damage: Defense Draw
-  const origDamage = g.damage.bind(g);
-  anyG.damage = async (p: PlayerId, amount: number, kind: 'battle' | 'effect', source?: C, sourcePlayer?: PlayerId) => {
-    if (kind === 'battle' && amount > 0 && ((g.battle as any)?.tdgsNoDamage as PlayerId[] | undefined)?.includes(p)) {
-      g.log(`${g.players[p].name} takes no battle damage from this battle.`, 'battle', p);
-      return 0;
-    }
-    return origDamage(p, amount, kind, source, sourcePlayer);
-  };
 
   // ---- Tributes: Big Piece Golem, Cyber Shark, Geartown (Normal Summons only, not Sets)
   const origNeed = g.tributesNeeded.bind(g);
-  anyG.tributesNeeded = (card: C) => {
+  g.tributesNeeded = (card: C) => {
     let n = origNeed(card);
     if (n > 0 && !s.setting && card.location === 'hand') {
       if (noTributeOk(g, card)) return 0;
@@ -273,7 +259,7 @@ export function ensureTdgsPatches(g: Game) {
     return n;
   };
   const origCanNS = g.canNormalSummon.bind(g);
-  anyG.canNormalSummon = (p: PlayerId, card: C, set = false) => {
+  g.canNormalSummon = (p: PlayerId, card: C, set = false) => {
     if (set) s.setting++;
     try {
       return origCanNS(p, card, set);
@@ -282,7 +268,7 @@ export function ensureTdgsPatches(g: Game) {
     }
   };
   const origNS = g.normalSummon.bind(g);
-  anyG.normalSummon = async (p: PlayerId, card: C, set: boolean, opts?: { byEffect?: boolean }) => {
+  g.normalSummon = async (p: PlayerId, card: C, set: boolean, opts?: { byEffect?: boolean }) => {
     if (set) s.setting++;
     try {
       return await origNS(p, card, set, opts);
@@ -293,7 +279,7 @@ export function ensureTdgsPatches(g: Game) {
 
   // ---- Special Summons: Power Filter
   const origSS = g.specialSummon.bind(g);
-  anyG.specialSummon = async (cards: C[], player: PlayerId, opts: Parameters<Game['specialSummon']>[2] = {}) => {
+  g.specialSummon = async (cards: C[], player: PlayerId, opts: Parameters<Game['specialSummon']>[2] = {}) => {
     if (powerFilterOn(g)) {
       const ok = cards.filter((c) => !lowAtk(c));
       if (ok.length < cards.length) g.log('Power Filter: monsters with 1000 or less ATK cannot be Special Summoned.', 'info');
@@ -303,16 +289,17 @@ export function ensureTdgsPatches(g: Game) {
     return origSS(cards, player, opts);
   };
   const origISS = g.inherentSpecialSummon.bind(g);
-  anyG.inherentSpecialSummon = async (p: PlayerId, card: C, ...rest: any[]) => {
+  g.inherentSpecialSummon = async (...args: Parameters<Game['inherentSpecialSummon']>) => {
+    const [p, card] = args;
     if (powerFilterOn(g) && lowAtk(card)) return false;
-    return (origISS as any)(p, card, ...rest);
+    return origISS(...args);
   };
   const origCanSyn = g.canSynchro.bind(g);
-  anyG.canSynchro = (p: PlayerId, syn: C) => origCanSyn(p, syn) && !(powerFilterOn(g) && lowAtk(syn));
+  g.canSynchro = (p: PlayerId, syn: C) => origCanSyn(p, syn) && !(powerFilterOn(g) && lowAtk(syn));
 
   // ---- main actions: Power Filter (procedures), Toy Magician (Set as a Spell)
   const origLMA = g.legalMainActions.bind(g);
-  anyG.legalMainActions = (p: PlayerId) => {
+  g.legalMainActions = (p: PlayerId) => {
     let out: Action[] = origLMA(p);
     if (powerFilterOn(g)) out = out.filter((a) => !(a.type === 'proc' && lowAtk(a.card)));
     if (g.freeSZones(p) > 0 && !g.queryPlayer(p, 'cannotSet')) {
@@ -323,7 +310,7 @@ export function ensureTdgsPatches(g: Game) {
 
   // ---- LP costs: Telekinetic Charging Cell ("you do not have to pay Life Points to activate its effects")
   const origPay = g.payLp.bind(g);
-  anyG.payLp = async (p: PlayerId, amount: number) => {
+  g.payLp = async (p: PlayerId, amount: number) => {
     const top = g.chain[g.chain.length - 1];
     if (top && !g.resolvingLink && top.player === p && top.card.isMonster && top.card.location === 'mzone' && chargingCellOn(g, top.card)) {
       g.log(`${top.card.name} activates its effect without paying ${amount} LP (Telekinetic Charging Cell).`, 'action', p);
@@ -334,7 +321,7 @@ export function ensureTdgsPatches(g: Game) {
 
   // ---- negation: Splendid Venus
   const origNL = g.negateLink.bind(g);
-  anyG.negateLink = (link: ChainLink, destroy = false, by?: C) => {
+  g.negateLink = (link: ChainLink, destroy = false, by?: C) => {
     if (venusProtects(g, link)) {
       g.log(`${link.card.name} cannot be negated (Splendid Venus).`, 'chain', link.player);
       venusShield.set(link.card, { moveId: link.card.moveId, by: g.resolvingLink });
@@ -343,7 +330,7 @@ export function ensureTdgsPatches(g: Game) {
     return origNL(link, destroy, by);
   };
   const origDestroy = g.destroy.bind(g);
-  anyG.destroy = async (cards: C[], reason: Reason, reasonPlayer?: PlayerId, reasonCard?: C, battleWith?: C) => {
+  g.destroy = async (cards: C[], reason: Reason, reasonPlayer?: PlayerId, reasonCard?: C, battleWith?: C) => {
     // "Negate, and if you do, destroy it": a card that could not be negated is not destroyed by that effect.
     cards = cards.filter((c) => {
       const sh = venusShield.get(c);
@@ -354,7 +341,7 @@ export function ensureTdgsPatches(g: Game) {
 
   // ---- Spirit returns: Izanagi, Mirror of Yata
   const origTH = g.toHand.bind(g);
-  anyG.toHand = async (cards: C[], reason: Reason, reasonPlayer?: PlayerId, reasonCard?: C) => {
+  g.toHand = async (cards: C[], reason: Reason, reasonPlayer?: PlayerId, reasonCard?: C) => {
     const c = cards[0];
     if (cards.length === 1 && c === reasonCard && isSpirit(c) && c.location === 'mzone' && c.faceUp && g.phase === 'end' && spiritExempt(g, c)) {
       const keep = await g.confirm(c.controller, `${c.name}: keep it on the field instead of returning it to the hand?`, c, true);
@@ -368,29 +355,18 @@ export function ensureTdgsPatches(g: Game) {
 
   // ---- lingering links: Dharc the Dark Charmer, Kinka-byo
   const origRC = g.ruleCleanup.bind(g);
-  anyG.ruleCleanup = async () => {
+  g.ruleCleanup = async () => {
     await origRC();
     await boundCheck(g);
   };
 }
 
-/** Installs the per-game patches at the first phase (from any location, never activates). */
-const PATCH_LISTENER: EffectDef = {
-  kind: 'trigger',
-  event: 'phaseStart',
-  range: ALL_LOCS,
-  eventFilter: (ctx) => {
-    ensureTdgsPatches(ctx.game);
-    return false;
-  },
-};
-
 type MonsterOpts = Parameters<typeof monster>[1];
 type STOpts = Parameters<typeof spell>[2];
 /** Define a card of this set (adds the patch installer). */
-const M = (name: string, o: MonsterOpts) => monster(name, { ...o, effects: [...(o.effects ?? []), PATCH_LISTENER] });
-const S = (name: string, t: Parameters<typeof spell>[1], o: STOpts) => spell(name, t, { ...o, effects: [...(o.effects ?? []), PATCH_LISTENER] });
-const T = (name: string, t: Parameters<typeof trap>[1], o: STOpts) => trap(name, t, { ...o, effects: [...(o.effects ?? []), PATCH_LISTENER] });
+const M = (name: string, o: MonsterOpts) => monster(name, { ...o, rules: [...(o.rules ?? []), tdgsRules] });
+const S = (name: string, t: Parameters<typeof spell>[1], o: STOpts) => spell(name, t, { ...o, rules: [...(o.rules ?? []), tdgsRules] });
+const T = (name: string, t: Parameters<typeof trap>[1], o: STOpts) => trap(name, t, { ...o, rules: [...(o.rules ?? []), tdgsRules] });
 
 // ============================================================ Spirit helpers (Kinka-byo, Izanami, Yamato-no-Kami)
 
@@ -2446,7 +2422,6 @@ S(POWER_FILTER, 'continuous', {
       kind: 'activate',
       categories: ['lockdown'],
       canActivate: (ctx) => {
-        ensureTdgsPatches(ctx.game);
         return true;
       },
       ai: { score: (ctx) => (myOpenMain(ctx) && ctx.cards('me', ['hand', 'deck', 'extra'], (c) => c.isMonster && lowAtk(c)).length <= 4 ? 18 : 0) },
@@ -2559,7 +2534,6 @@ S(CHARGING_CELL, 'equip', {
       kind: 'activate',
       categories: [],
       canActivate: (ctx) => {
-        ensureTdgsPatches(ctx.game);
         return ctx.faceUpMonsters('both', (c) => isPsychic(c) && ctx.canTarget(c)).length > 0;
       },
       activate: async (ctx) => {
@@ -2733,10 +2707,7 @@ T('Defense Draw', 'normal', {
       condition: (ctx) =>
         !ctx.isMyTurn && !!ctx.battle && ctx.battle.inDamageStep && !ctx.battle.calc && !ctx.battle.negated && expectedBattleDamage(ctx.game, ctx.player) > 0 && ctx.deck('me').length > 0,
       resolve: async (ctx) => {
-        ensureTdgsPatches(ctx.game);
-        const b = ctx.battle as any;
-        if (!b) return;
-        (b.tdgsNoDamage ??= []).push(ctx.player);
+        ctx.game.preventBattleDamage(ctx.player, ctx.self);
         await ctx.draw(1);
       },
       ai: {

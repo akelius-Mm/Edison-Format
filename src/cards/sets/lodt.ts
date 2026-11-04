@@ -316,21 +316,12 @@ async function swampCheck(g: Game) {
   }
 }
 
-const PATCHED = new WeakSet<Game>();
-export function ensureLodtPatches(g: Game) {
-  if (PATCHED.has(g)) return;
-  PATCHED.add(g);
-  const anyG = g as any;
+export function lodtRules(g: Game) {
 
   // ---- battle damage
   const origDamage = g.damage.bind(g);
-  anyG.damage = async (p: PlayerId, amount: number, kind: 'battle' | 'effect', source?: C, sourcePlayer?: PlayerId) => {
+  g.damage = async (p: PlayerId, amount: number, kind: 'battle' | 'effect', source?: C, sourcePlayer?: PlayerId) => {
     if (kind === 'battle' && amount > 0) {
-      const b = g.battle as any;
-      if (b?.lodtNoDamage?.has(p)) {
-        g.log(`${g.players[p].name} takes no battle damage (Arcana Force XIV - Temperance).`, 'battle', p);
-        return 0;
-      }
       if (source && source.controller !== p && source.flags.lodtUnion?.turn === g.turn) {
         g.log(`${source.name} cannot inflict battle damage (Union Attack).`, 'battle', p);
         return 0;
@@ -347,18 +338,18 @@ export function ensureLodtPatches(g: Game) {
 
   // ---- Tribute requirements
   const origNeed = g.tributesNeeded.bind(g);
-  anyG.tributesNeeded = (card: C) => {
+  g.tributesNeeded = (card: C) => {
     if (card.name === FOG_KING && card.flags.lodtFogNeed !== undefined) return card.flags.lodtFogNeed as number;
     let n = origNeed(card);
     if (n > 0 && card.data.attribute === 'WIND' && simorghActive(g)) n -= 1; // APPROX: also applies to Tribute Sets
     return n;
   };
   const origCands = g.tributeCandidates.bind(g) as (p: PlayerId, forCard?: C) => C[];
-  anyG.tributeCandidates = (p: PlayerId, forCard?: C) => origCands(p, forCard).filter((c) => !(c.name === MUSASABI && c.faceUp && !g.isNegated(c)));
+  g.tributeCandidates = (p: PlayerId, forCard?: C) => origCands(p, forCard).filter((c) => !(c.name === MUSASABI && c.faceUp && !g.isNegated(c)));
 
   // ---- Normal Summon legality
   const origCanNS = g.canNormalSummon.bind(g);
-  anyG.canNormalSummon = (p: PlayerId, card: C, set = false) => {
+  g.canNormalSummon = (p: PlayerId, card: C, set = false) => {
     let ok = origCanNS(p, card, set);
     if (!ok && !set && card.name === FOG_KING && card.location === 'hand' && g.players[p].normalSummonsLeft > 0 && !g.queryPlayer(p, 'cannotNormalSummon')) {
       ok = g.freeMZones(p) > 0; // Fog King: Normal Summon without Tributing
@@ -373,7 +364,7 @@ export function ensureLodtPatches(g: Game) {
     return true;
   };
   const origNS = g.normalSummon.bind(g);
-  anyG.normalSummon = async (p: PlayerId, card: C, set: boolean, opts?: { byEffect?: boolean }) => {
+  g.normalSummon = async (p: PlayerId, card: C, set: boolean, opts?: { byEffect?: boolean }) => {
     if (set) card.flags.lodtSetting = true;
     try {
       if (card.name === FOG_KING && !set) {
@@ -396,7 +387,7 @@ export function ensureLodtPatches(g: Game) {
 
   // ---- Special Summon legality
   const origSS = g.specialSummon.bind(g);
-  anyG.specialSummon = async (cards: C[], player: PlayerId, opts: Parameters<Game['specialSummon']>[2] = {}) => {
+  g.specialSummon = async (cards: C[], player: PlayerId, opts: Parameters<Game['specialSummon']>[2] = {}) => {
     const ctrl = opts?.controller ?? player;
     let list = cards.filter((c) => !effectSummonForbidden(g, c, player, ctrl));
     if (summonsLeft(g, player) < 1) list = [];
@@ -408,19 +399,20 @@ export function ensureLodtPatches(g: Game) {
   // Normal / Tribute / Flip Summons and inherent Special Summons (Synchro, procedures) all pass the summon-negation
   // window once per Summon: count the attempt there (it counts even if it is negated).
   const origSNW = g.summonNegationWindow.bind(g);
-  anyG.summonNegationWindow = async (cards: C[], p: PlayerId, method: string) => {
+  g.summonNegationWindow = async (cards: C[], p: PlayerId, method: string) => {
     countSummon(g, p);
     return origSNW(cards, p, method);
   };
   const origISS = g.inherentSpecialSummon.bind(g);
-  anyG.inherentSpecialSummon = async (p: PlayerId, card: C, ...rest: any[]) => {
+  g.inherentSpecialSummon = async (...args: Parameters<Game['inherentSpecialSummon']>) => {
+    const [p, card] = args;
     if (summonsLeft(g, p) < 1 || tualatinBlocks(g, p, card) || uniqueBlocks(g, p, card)) return false;
-    return (origISS as any)(p, card, ...rest);
+    return origISS(...args);
   };
   const origCanSyn = g.canSynchro.bind(g);
-  anyG.canSynchro = (p: PlayerId, syn: C) => origCanSyn(p, syn) && summonsLeft(g, p) >= 1 && !tualatinBlocks(g, p, syn);
+  g.canSynchro = (p: PlayerId, syn: C) => origCanSyn(p, syn) && summonsLeft(g, p) >= 1 && !tualatinBlocks(g, p, syn);
   const origLMA = g.legalMainActions.bind(g);
-  anyG.legalMainActions = (p: PlayerId) =>
+  g.legalMainActions = (p: PlayerId) =>
     origLMA(p).filter((a: Action) => {
       if (a.type === 'flip') return !tourBlocks(g, p) && summonsLeft(g, p) >= 1;
       if (a.type === 'proc') return summonsLeft(g, p) >= 1 && !tualatinBlocks(g, p, a.card) && !uniqueBlocks(g, p, a.card);
@@ -429,7 +421,7 @@ export function ensureLodtPatches(g: Game) {
 
   // ---- attack targets: Miracle Flipper
   const origAT = g.attackTargets.bind(g);
-  anyG.attackTargets = (attacker: C) => {
+  g.attackTargets = (attacker: C) => {
     const r = origAT(attacker);
     const def = g.opp(attacker.controller);
     if (g.faceUpMonsters(def).some((c) => c.name === FLIPPER && !g.isNegated(c))) {
@@ -440,12 +432,12 @@ export function ensureLodtPatches(g: Game) {
 
   // ---- activations: Angel O7, Sanguine Swamp
   const origCAE = g.canActivateEffect.bind(g);
-  anyG.canActivateEffect = (player: PlayerId, card: C, ef: EffectDef, idx: number, mode: any) => {
+  g.canActivateEffect = (player: PlayerId, card: C, ef: EffectDef, idx: number, mode: any) => {
     if (activationBlocked(g, card, ef)) return null;
     return origCAE(player, card, ef, idx, mode);
   };
   const origAct = g.activate.bind(g);
-  anyG.activate = async (player: PlayerId, act: any) => {
+  g.activate = async (player: PlayerId, act: any) => {
     if (activationBlocked(g, act.card, act.effect)) {
       g.log(`${act.card.name}'s effect cannot be activated.`, 'info', player);
       return null;
@@ -453,19 +445,19 @@ export function ensureLodtPatches(g: Game) {
     return origAct(player, act);
   };
   const origRC = g.ruleCleanup.bind(g);
-  anyG.ruleCleanup = async () => {
+  g.ruleCleanup = async () => {
     await origRC();
     await swampCheck(g);
   };
   const origPA = g.performAction.bind(g);
-  anyG.performAction = async (p: PlayerId, a: Action) => {
+  g.performAction = async (p: PlayerId, a: Action) => {
     await origPA(p, a);
     await swampCheck(g);
   };
 
   // ---- the normal draw: Dark General Freed, Mystical Cards of Light
   const origDraw = g.draw.bind(g);
-  anyG.draw = async (p: PlayerId, n = 1, reason: any = 'draw') => {
+  g.draw = async (p: PlayerId, n = 1, reason: any = 'draw') => {
     if (reason === 'draw' && n === 1 && g.phase === 'draw' && p === g.turnPlayer && !g.turnData['lodt:normalDraw']) {
       g.turnData['lodt:normalDraw'] = true;
       const freed = liveCards(g, FREED, p)[0];
@@ -492,11 +484,11 @@ export function ensureLodtPatches(g: Game) {
 
   // ---- Spell & Trap Zones: Mystical Cards of Light (APPROX: the count of free zones is reduced; zones are not tied to a slot)
   const origFreeS = g.freeSZones.bind(g);
-  anyG.freeSZones = (p: PlayerId) => Math.max(0, origFreeS(p) - g.zone(p, 'szone').filter((c) => c.name === MCOL && c.faceUp).length);
+  g.freeSZones = (p: PlayerId) => Math.max(0, origFreeS(p) - g.zone(p, 'szone').filter((c) => c.name === MCOL && c.faceUp).length);
 
   // ---- turns: Arcana Force XXI - The World
   const origPT = g.playTurn.bind(g);
-  anyG.playTurn = async () => {
+  g.playTurn = async () => {
     const next = g.opp(g.turnPlayer);
     const s = gs(g);
     if (s.skip.has(next) && !g.over) {
@@ -515,23 +507,12 @@ export function ensureLodtPatches(g: Game) {
   };
 }
 
-/** Installs the per-game patches at the first phase (from any location, never activates). */
-const PATCH_LISTENER: EffectDef = {
-  kind: 'trigger',
-  event: 'phaseStart',
-  range: ALL_LOCS,
-  eventFilter: (ctx) => {
-    ensureLodtPatches(ctx.game);
-    return false;
-  },
-};
-
 type MonsterOpts = Parameters<typeof monster>[1];
 type STOpts = Parameters<typeof spell>[2];
 /** Define a card of this set (adds the patch installer). */
-const M = (name: string, o: MonsterOpts) => monster(name, { ...o, effects: [...(o.effects ?? []), PATCH_LISTENER] });
-const S = (name: string, t: Parameters<typeof spell>[1], o: STOpts) => spell(name, t, { ...o, effects: [...(o.effects ?? []), PATCH_LISTENER] });
-const T = (name: string, t: Parameters<typeof trap>[1], o: STOpts) => trap(name, t, { ...o, effects: [...(o.effects ?? []), PATCH_LISTENER] });
+const M = (name: string, o: MonsterOpts) => monster(name, { ...o, rules: [...(o.rules ?? []), lodtRules] });
+const S = (name: string, t: Parameters<typeof spell>[1], o: STOpts) => spell(name, t, { ...o, rules: [...(o.rules ?? []), lodtRules] });
+const T = (name: string, t: Parameters<typeof trap>[1], o: STOpts) => trap(name, t, { ...o, rules: [...(o.rules ?? []), lodtRules] });
 
 // ============================================================ Arcana Force coin tosses
 // An Arcana Force monster's coin result lives in ARC (keyed by card, valid while it stays face-up on the field).
@@ -972,18 +953,17 @@ arcana(
       label: 'Discard: take no battle damage',
       categories: ['protect'],
       condition: (ctx) => {
-        const b = ctx.battle as any;
+        const b = ctx.battle;
         if (!b || !b.inDamageStep) return false;
         const involved = b.attacker.controller === ctx.player || (b.target ? b.target.controller === ctx.player : true);
-        return involved && !b.lodtNoDamage?.has(ctx.player);
+        return involved && !b.noDamageFor?.some((s) => s.player === ctx.player);
       },
       activate: async (ctx) => {
         await ctx.discard(ctx.self, 'cost');
       },
       resolve: async (ctx) => {
-        const b = ctx.battle as any;
-        if (!b) return;
-        (b.lodtNoDamage ??= new Set<PlayerId>()).add(ctx.player);
+        if (!ctx.battle) return;
+        ctx.game.preventBattleDamage(ctx.player, ctx.self);
         ctx.log(`${ctx.game.players[ctx.player].name} will take no battle damage from this battle.`);
       },
       ai: { score: (ctx) => (expectedBattleDamage(ctx.game, ctx.player) >= 1000 ? 70 : 0) },
@@ -2662,7 +2642,7 @@ S('Space Gift', 'normal', {
 /** Activate a Field Spell from the Deck (Demise of the Land). APPROX: the Field Spell's activation resolves at once (no new Chain Link). */
 async function activateFieldFromDeck(ctx: Ctx, card: C) {
   const g = ctx.game;
-  await (g as any).replaceFieldSpell(ctx.player);
+  await g.replaceFieldSpell(ctx.player);
   g.rawMove(card, 'fzone', { controller: ctx.player, faceUp: true });
   g.shuffleDeck(ctx.player);
   ctx.log(`${g.players[ctx.player].name} activates ${card.name} from the Deck.`);

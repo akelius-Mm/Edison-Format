@@ -9,16 +9,6 @@ import type { Action, Activation, PlayerController, ResponseRequest, SelectReque
 import { Ctx } from '../src/engine/ctx';
 import { Game, GameOver } from '../src/engine/game';
 import type { BattlePos, Location, PlayerId } from '../src/engine/types';
-import { ensureAnprPatches } from '../src/cards/sets/anpr';
-import { ensureRgbtPatches } from '../src/cards/sets/rgbt';
-import { ensureCrmsPatches } from '../src/cards/sets/crms';
-import { ensurePtdnPatches } from '../src/cards/sets/ptdn';
-import { ensureLodtPatches } from '../src/cards/sets/lodt';
-import { ensureGlasPatches } from '../src/cards/sets/glas';
-import { ensureCsocPatches } from '../src/cards/sets/csoc';
-import { ensureTdgsPatches } from '../src/cards/sets/tdgs';
-import { ensureArchetypeExtrasPatches } from '../src/cards/sets/archetype-extras';
-import { ensureArchetypeExtras2Patches } from '../src/cards/sets/archetype-extras2';
 
 const T = {
   brute: findCard('Rules Test Brute') ?? normal('Rules Test Brute', 'EARTH', 'Warrior', 4, 1800, 1000),
@@ -80,19 +70,6 @@ function setup() {
   const c0 = new TestController();
   const c1 = new TestController();
   const g = new Game([{ main: filler(20), extra: [] }, { main: filler(20), extra: [] }], [c0, c1], { seed: 1 });
-  for (const ensure of [
-    ensureAnprPatches,
-    ensureRgbtPatches,
-    ensureCrmsPatches,
-    ensurePtdnPatches,
-    ensureLodtPatches,
-    ensureGlasPatches,
-    ensureCsocPatches,
-    ensureTdgsPatches,
-    ensureArchetypeExtrasPatches,
-    ensureArchetypeExtras2Patches,
-  ])
-    ensure(g);
   g.turn = 2;
   g.turnPlayer = 0;
   g.phase = 'main1';
@@ -213,7 +190,7 @@ const topLink = (g: Game) => g.chain[g.chain.length - 1];
       const att = place(1, T.brute, 'mzone');
       if (mine === 0) await g.conductAttack(1, att);
       else {
-        (g as any).battle = { attacker: att, target: null, attackerMoveId: att.moveId, targetMoveId: -1, negated: false, inDamageStep: false, oppMonsterCount: mine };
+        (g as any).battle = { attacker: att, target: null, attackerMoveId: att.moveId, targetMoveId: -1, negated: false, inDamageStep: false, oppMonsterCount: mine, flags: {} };
         g.emit({ type: 'attackDeclared', card: att, player: 1 });
         await g.processTriggers(true);
         await (g as any).responseLoop('attack', 0);
@@ -386,7 +363,7 @@ const topLink = (g: Game) => g.chain[g.chain.length - 1];
     const war = place(0, T.brute, 'mzone');
     const t = place(1, T.wall, 'mzone', { pos: 'def' });
     const sm = place(0, N('Sword Master'), 'hand');
-    (g as any).battle = { attacker: war, target: t, attackerMoveId: war.moveId, targetMoveId: t.moveId, negated: false, inDamageStep: true, oppMonsterCount: 1 };
+    (g as any).battle = { attacker: war, target: t, attackerMoveId: war.moveId, targetMoveId: t.moveId, negated: false, inDamageStep: true, oppMonsterCount: 1, flags: {} };
     await g.destroy([t], 'effect', 0);
     g.emit({ type: 'damageStepEnd', card: war, other: t, player: 0 });
     await g.processTriggers(true);
@@ -489,7 +466,7 @@ const topLink = (g: Game) => g.chain[g.chain.length - 1];
     place(0, N('Tethys, Goddess of Light'), 'mzone');
     const f = place(0, T.lightWall, 'hand');
     const before = g.players[0].hand.length;
-    (g as any).battle = { attacker: f, target: null, attackerMoveId: -1, targetMoveId: -1, negated: false, inDamageStep: true, oppMonsterCount: 0 };
+    (g as any).battle = { attacker: f, target: null, attackerMoveId: -1, targetMoveId: -1, negated: false, inDamageStep: true, oppMonsterCount: 0, flags: {} };
     g.emit({ type: 'drawn', card: f, player: 0 });
     await g.processTriggers(true);
     (g as any).battle = null;

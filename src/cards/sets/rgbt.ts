@@ -16,7 +16,7 @@
 import { monster, spell, token, trap } from '../define';
 import { bestTarget, cardValue, flip, selfDestroysByBattle, specialSummonBlockers } from '../helpers';
 import { synchroOptions } from './plants';
-import { ensureAnprPatches } from './anpr';
+import { anprRules } from './anpr';
 import type { CardInstance, EffectDef } from '../../engine/card';
 import type { Activation } from '../../engine/controller';
 import { Ctx } from '../../engine/ctx';
@@ -233,18 +233,8 @@ const needsCore = (ctx: Ctx) => ctx.faceUpMonsters('me', isKoakiMonster).length 
 
 // ---- Earthbound Immortals (same rules as anpr.ts / sovr.ts) ----
 const faceUpFieldSpell = (g: Game) => [g.players[0].fzone, g.players[1].fzone].some((c) => !!c && c.faceUp);
-const ANPR_PATCH_LISTENER: EffectDef = {
-  kind: 'trigger',
-  event: 'phaseStart',
-  range: ALL_LOCS,
-  eventFilter: (ctx) => {
-    ensureAnprPatches(ctx.game); // "only 1 face-up Earthbound Immortal" Normal Summon rule
-    return false;
-  },
-};
 function earthboundRules(): EffectDef[] {
   return [
-    ANPR_PATCH_LISTENER,
     {
       kind: 'continuous',
       mods: [
@@ -299,7 +289,6 @@ function earthboundRules(): EffectDef[] {
 //    Special Summoned Level 6+ monsters on the field) and G.B. Hunter (no tag-outs: blocked triggers are not offered);
 //  * attackTargets: Miracle Locus (its second attack must be on a monster).
 
-const PATCHED = new WeakSet<Game>();
 const fieldCardActive = (g: Game, name: string, kind: 'monster' | 'st') =>
   g.allFieldCards().some((c) => c.name === name && c.faceUp && (kind === 'monster' ? c.location === 'mzone' : c.activeOnField) && !g.isNegated(c));
 const gbHunterActive = (g: Game) => fieldCardActive(g, 'G.B. Hunter', 'monster');
@@ -338,13 +327,10 @@ function redirectDamage(link: ChainLink, victim: PlayerId, mult: number, by: str
   link.ctx.data.rgbtRedirect = { victim, mult, by } as DamageRedirect;
 }
 
-export function ensureRgbtPatches(g: Game) {
-  if (PATCHED.has(g)) return;
-  PATCHED.add(g);
-  const anyG = g as any;
+export function rgbtRules(g: Game) {
 
   const origDamage = g.damage.bind(g);
-  anyG.damage = async (p: PlayerId, amount: number, kind: 'battle' | 'effect', source?: C, sourcePlayer?: PlayerId) => {
+  g.damage = async (p: PlayerId, amount: number, kind: 'battle' | 'effect', source?: C, sourcePlayer?: PlayerId) => {
     if (kind === 'effect' && amount > 0) {
       const r = g.resolvingLink?.ctx.data.rgbtRedirect as DamageRedirect | undefined;
       if (r && r.victim === p) {
@@ -365,7 +351,7 @@ export function ensureRgbtPatches(g: Game) {
   };
 
   const origMove = g.moveCards.bind(g);
-  anyG.moveCards = async (cards: C[], to: Location, opts: any) => {
+  g.moveCards = async (cards: C[], to: Location, opts: any) => {
     if ((to === 'deck' || to === 'extra') && cards.some((c) => c.onField) && gbHunterActive(g)) {
       const kept = cards.filter((c) => c.onField);
       g.log(`G.B. Hunter: ${kept.map((c) => (c.faceUp ? c.name : 'a face-down card')).join(', ')} cannot be returned to the Deck.`, 'action');
@@ -376,41 +362,41 @@ export function ensureRgbtPatches(g: Game) {
   };
 
   const origSS = g.specialSummon.bind(g);
-  anyG.specialSummon = async (cards: C[], player: PlayerId, opts: any = {}) => {
+  g.specialSummon = async (cards: C[], player: PlayerId, opts: any = {}) => {
     const ok = cards.filter((c) => !dragoBlocks(g, c));
     if (ok.length < cards.length) g.log(`Koa'ki Meiru Drago: LIGHT and DARK monsters cannot be Special Summoned.`, 'action');
     return origSS(ok, player, opts);
   };
   const origInherent = g.inherentSpecialSummon.bind(g);
-  anyG.inherentSpecialSummon = async (p: PlayerId, card: C, method?: any, pos?: any, extra?: any) => {
-    if (dragoBlocks(g, card)) return false;
-    return origInherent(p, card, method, pos, extra);
+  g.inherentSpecialSummon = async (...args: Parameters<Game['inherentSpecialSummon']>) => {
+    if (dragoBlocks(g, args[1])) return false;
+    return origInherent(...args);
   };
   const origCanSynchro = g.canSynchro.bind(g);
-  anyG.canSynchro = (p: PlayerId, s: C) => !dragoBlocks(g, s) && origCanSynchro(p, s);
+  g.canSynchro = (p: PlayerId, s: C) => !dragoBlocks(g, s) && origCanSynchro(p, s);
   const origCanProc = g.canProc.bind(g);
-  anyG.canProc = (p: PlayerId, c: C, ef: EffectDef, idx: number) => !dragoBlocks(g, c) && !gbHunterBlocks(g, c, ef) && origCanProc(p, c, ef, idx);
+  g.canProc = (p: PlayerId, c: C, ef: EffectDef, idx: number) => !dragoBlocks(g, c) && !gbHunterBlocks(g, c, ef) && origCanProc(p, c, ef, idx);
 
   const origCanNS = g.canNormalSummon.bind(g);
-  anyG.canNormalSummon = (p: PlayerId, card: C, set = false) => {
+  g.canNormalSummon = (p: PlayerId, card: C, set = false) => {
     if (!origCanNS(p, card, set)) return false;
     if (!set && card.name === 'King of the Beasts' && faceUpKing(g)) return false;
     return true;
   };
 
   const origLegal = g.legalMainActions.bind(g);
-  anyG.legalMainActions = (p: PlayerId) => {
+  g.legalMainActions = (p: PlayerId) => {
     const acts = origLegal(p);
     if (g.turnData['rgbt:calming']) return acts.filter((a) => a.type !== 'flip');
     return acts;
   };
 
   const origCAE = g.canActivateEffect.bind(g);
-  anyG.canActivateEffect = (player: PlayerId, card: C, ef: EffectDef, idx: number, mode: any) =>
+  g.canActivateEffect = (player: PlayerId, card: C, ef: EffectDef, idx: number, mode: any) =>
     organismBlocks(g, card, ef) || gbHunterBlocks(g, card, ef) ? null : origCAE(player, card, ef, idx, mode);
   // Triggers (tag-outs) do not go through canActivateEffect: drop them before the player is asked.
   const origCAT = g.canActivateTrigger.bind(g);
-  anyG.canActivateTrigger = (player: PlayerId, card: C, ef: EffectDef, idx: number) => {
+  g.canActivateTrigger = (player: PlayerId, card: C, ef: EffectDef, idx: number) => {
     if (organismBlocks(g, card, ef)) {
       g.log(`Grave of the Super Ancient Organism: ${card.name}'s effect cannot be activated.`, 'chain', player);
       return false;
@@ -422,7 +408,7 @@ export function ensureRgbtPatches(g: Game) {
     return origCAT(player, card, ef, idx);
   };
   const origActivate = g.activate.bind(g);
-  anyG.activate = async (player: PlayerId, act: Activation) => {
+  g.activate = async (player: PlayerId, act: Activation) => {
     if (organismBlocks(g, act.card, act.effect)) {
       g.log(`Grave of the Super Ancient Organism: ${act.card.name}'s effect cannot be activated.`, 'chain', player);
       return null;
@@ -436,23 +422,12 @@ export function ensureRgbtPatches(g: Game) {
   };
 
   const origTargets = g.attackTargets.bind(g);
-  anyG.attackTargets = (attacker: C) => {
+  g.attackTargets = (attacker: C) => {
     const r = origTargets(attacker);
     if (attacker.flags.rgbtLocusTurn === g.turn && attacker.attacksThisTurn >= 1) return { targets: r.targets, direct: false };
     return r;
   };
 }
-/** Installs the per-game patches at the first phase start (from any location, never activates). */
-const PATCH_LISTENER: EffectDef = {
-  kind: 'trigger',
-  event: 'phaseStart',
-  range: ALL_LOCS,
-  eventFilter: (ctx) => {
-    ensureRgbtPatches(ctx.game);
-    return false;
-  },
-};
-
 // =================================================================== MONSTERS
 
 const wingedCount = (ctx: Ctx) => ctx.faceUpMonsters('me', (c) => isRace(c, 'Winged Beast')).length;
@@ -1048,6 +1023,7 @@ monster('Earthbound Immortal Aslla piscu', {
   sets: ['earthbound-immortal'],
   aiValue: 800,
   text: 'There can only be 1 "Earthbound Immortal" monster on the field. If there is no face-up Field Spell on the field, destroy this card. Your opponent\'s monsters cannot target this card for attacks. This card can attack directly. If this face-up card leaves the field, except by its own effect: Destroy as many face-up monsters your opponent controls as possible, and if you do, inflict 800 damage to your opponent for each monster destroyed.',
+  rules: [anprRules],
   effects: [
     ...earthboundRules(),
     {
@@ -1088,6 +1064,7 @@ monster('Earthbound Immortal Ccapac Apu', {
   sets: ['earthbound-immortal'],
   aiValue: 700,
   text: 'There can only be 1 "Earthbound Immortal" monster on the field. If there is no face-up Field Spell on the field, destroy this card. Your opponent\'s monsters cannot target this card for attacks. This card can attack directly. If this card destroys an opponent\'s monster by battle: Inflict damage to your opponent equal to the destroyed monster\'s original ATK.',
+  rules: [anprRules],
   effects: [
     ...earthboundRules(),
     {
@@ -1225,8 +1202,8 @@ monster("Koa'ki Meiru Drago", {
   sets: ['koaki-meiru'],
   aiValue: 400,
   text: 'During each of your End Phases, destroy this card unless you send 1 "Iron Core of Koa\'ki Meiru" from your hand to the GY or reveal 1 Dragon monster in your hand. Neither player can Special Summon LIGHT or DARK monsters.',
+  rules: [rgbtRules],
   effects: [
-    PATCH_LISTENER,
     koakiUpkeep('Dragon-Type monster', (c) => isRace(c, 'Dragon')),
     // "Neither player can Special Summon LIGHT or DARK monsters": see ensureRgbtPatches (specialSummon wrappers).
     { kind: 'continuous', label: 'No LIGHT/DARK Special Summons' },
@@ -1750,7 +1727,8 @@ monster('G.B. Hunter', {
   aiValue: 200,
   text: 'Cards on the field cannot be returned to the Deck.',
   // The rule itself lives in ensureRgbtPatches (moveCards wrapper).
-  effects: [PATCH_LISTENER, { kind: 'continuous', label: 'Cards on the field cannot be returned to the Deck' }],
+  rules: [rgbtRules],
+  effects: [{ kind: 'continuous', label: 'Cards on the field cannot be returned to the Deck' }],
 });
 
 monster('Trident Dragion', {
@@ -2313,8 +2291,8 @@ monster('King of the Beasts', {
   def: 800,
   aiValue: 300,
   text: 'You can Tribute 1 face-up "Moja" you control to Special Summon this card from your hand or Graveyard. There can only be 1 face-up "King of the Beasts" on the field.',
+  rules: [rgbtRules],
   effects: [
-    PATCH_LISTENER,
     {
       kind: 'proc',
       range: ['hand', 'grave'],
@@ -2923,8 +2901,8 @@ function startOfMain1(g: Game) {
 }
 spell('Calming Magic', 'normal', {
   text: 'This card can only be activated at the start of Main Phase 1. During the Main Phases and Battle Phase of this turn, neither player can Summon monsters.',
+  rules: [rgbtRules],
   effects: [
-    PATCH_LISTENER,
     {
       // APPROX: "at the start of Main Phase 1" = before anything else happened in Main Phase 1 (Sets do not count).
       kind: 'activate',
@@ -3029,8 +3007,8 @@ spell('Ojama Country', 'field', {
 
 spell('Spell of Pain', 'quickplay', {
   text: 'When your opponent activates a card or effect that would inflict effect damage to you: Your opponent takes the effect damage from that card or effect, instead.',
+  rules: [rgbtRules],
   effects: [
-    PATCH_LISTENER,
     {
       kind: 'activate',
       categories: ['damage'],
@@ -3054,8 +3032,8 @@ spell('Spell of Pain', 'quickplay', {
 
 trap('Miracle Locus', 'normal', {
   text: 'Target 1 face-up Attack Position monster you control; your opponent draws 1 card, also that monster gains 1000 ATK until the end of this turn, and if it does, it can make up to 2 attacks on monsters during each Battle Phase this turn. If it attacks or is attacked this turn, your opponent takes no battle damage from that attack.',
+  rules: [rgbtRules],
   effects: [
-    PATCH_LISTENER,
     {
       kind: 'activate',
       categories: ['atkChange'],
@@ -3088,8 +3066,8 @@ trap('Miracle Locus', 'normal', {
 
 trap('Crimson Fire', 'counter', {
   text: 'When your opponent activates a Spell/Trap Card that would inflict damage to you, while you control a "Red Dragon Archfiend": Your opponent takes twice the effect damage you would have taken, instead.',
+  rules: [rgbtRules],
   effects: [
-    PATCH_LISTENER,
     {
       kind: 'activate',
       categories: ['damage'],
@@ -3615,8 +3593,8 @@ trap('Bone Temple Block', 'normal', {
 
 trap('Grave of the Super Ancient Organism', 'continuous', {
   text: 'Level 6 or higher Special Summoned monsters on the field cannot declare attacks, nor can players activate their effects.',
+  rules: [rgbtRules],
   effects: [
-    PATCH_LISTENER,
     {
       kind: 'activate',
       categories: ['lockdown'],

@@ -8,16 +8,6 @@ import type { CardData, CardInstance } from '../src/engine/card';
 import type { Action, Activation, OptionRequest, PlayerController, ResponseRequest, SelectRequest } from '../src/engine/controller';
 import { Game, GameOver } from '../src/engine/game';
 import type { BattlePos, Location, PlayerId } from '../src/engine/types';
-import { ensureAnprPatches } from '../src/cards/sets/anpr';
-import { ensureRgbtPatches } from '../src/cards/sets/rgbt';
-import { ensureCrmsPatches } from '../src/cards/sets/crms';
-import { ensurePtdnPatches } from '../src/cards/sets/ptdn';
-import { ensureLodtPatches } from '../src/cards/sets/lodt';
-import { ensureGlasPatches } from '../src/cards/sets/glas';
-import { ensureCsocPatches } from '../src/cards/sets/csoc';
-import { ensureTdgsPatches } from '../src/cards/sets/tdgs';
-import { ensureArchetypeExtrasPatches } from '../src/cards/sets/archetype-extras';
-import { ensureArchetypeExtras2Patches } from '../src/cards/sets/archetype-extras2';
 
 const T = {
   brute: findCard('Rules Test Brute') ?? normal('Rules Test Brute', 'EARTH', 'Warrior', 4, 1800, 1000),
@@ -75,19 +65,6 @@ function setup() {
   const c0 = new TestController();
   const c1 = new TestController();
   const g = new Game([{ main: filler(20), extra: [] }, { main: filler(20), extra: [] }], [c0, c1], { seed: 1 });
-  for (const ensure of [
-    ensureAnprPatches,
-    ensureRgbtPatches,
-    ensureCrmsPatches,
-    ensurePtdnPatches,
-    ensureLodtPatches,
-    ensureGlasPatches,
-    ensureCsocPatches,
-    ensureTdgsPatches,
-    ensureArchetypeExtrasPatches,
-    ensureArchetypeExtras2Patches,
-  ])
-    ensure(g);
   g.turn = 2;
   g.turnPlayer = 0;
   g.phase = 'main1';

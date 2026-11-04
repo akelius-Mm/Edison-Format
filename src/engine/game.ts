@@ -1,4 +1,4 @@
-import { CardInstance, type CardData, type EffectDef, type QueryKey, type TempMod } from './card';
+import { CardInstance, type CardData, type EffectDef, type QueryKey, type RuleModule, type TempMod } from './card';
 import type {
   Action,
   Activation,
@@ -71,6 +71,8 @@ export interface ChainLink {
   moveIdAfterCost?: number;
   /** With `negated`: only the effect was negated (Starlight Road), not the activation. */
   effectOnly?: boolean;
+  /** Card scripts' notes about this link (Energy-Absorbing Monolith: whose damage becomes an LP gain). */
+  flags?: Record<string, any>;
 }
 
 interface PendingTrigger {
@@ -101,6 +103,10 @@ export interface BattleState {
   markedDestroyed?: CardInstance[];
   /** The attack target was face-down at the start of the Damage Step, before it was flipped (Ally of Justice Catastor). */
   targetFaceDownAtStart?: boolean;
+  /** Players who take no battle damage from this battle, and the card that says so (Defense Draw, Spirit Force...). */
+  noDamageFor?: { player: PlayerId; by: string }[];
+  /** Card scripts' notes about this battle (they last until the battle ends). */
+  flags: Record<string, any>;
 }
 
 export interface LogEntry {
@@ -265,8 +271,19 @@ export class Game {
     }
   }
 
+  /** Rule modules already installed on this game (CardData.rules). */
+  private installedRules = new Set<RuleModule>();
+
+  /** Install a card set's rule module on this game, once (CardData.rules; tests may install one directly). */
+  installRules(install: RuleModule) {
+    if (this.installedRules.has(install)) return;
+    this.installedRules.add(install);
+    install(this);
+  }
+
   registerCard(c: CardInstance) {
     this.allCards.push(c);
+    for (const install of c.data.rules ?? []) this.installRules(install);
     if (c.data.effects?.some((e) => e.kind === 'continuous')) this.continuousSources.push(c);
     if (c.data.effects?.some((e) => e.kind === 'continuous' && e.dataMod)) this.dataModSources.push(c);
     c.view = this.cardView;
@@ -1059,10 +1076,25 @@ export class Game {
     return this.moveCards(cards, 'grave', { reason, reasonPlayer: p, reasonCard });
   }
 
+  /** `p` takes no battle damage from the current battle (Defense Draw, Spirit Force, Arcana Force XIV - Temperance...). */
+  preventBattleDamage(p: PlayerId, by: CardInstance) {
+    if (this.battle) (this.battle.noDamageFor ??= []).push({ player: p, by: by.name });
+  }
+
+  /** The card that keeps `p` from taking battle damage from the current battle, if any (preventBattleDamage). */
+  private battleDamageShield(p: PlayerId) {
+    return this.battle?.noDamageFor?.find((s) => s.player === p)?.by;
+  }
+
   async damage(p: PlayerId, amount: number, kind: 'battle' | 'effect', source?: CardInstance, sourcePlayer?: PlayerId) {
     amount = Math.floor(amount);
     if (amount <= 0) return 0;
     if (kind === 'effect' && this.queryPlayer(p, 'noEffectDamage')) return 0;
+    const shield = kind === 'battle' ? this.battleDamageShield(p) : undefined;
+    if (shield) {
+      this.log(`${this.players[p].name} takes no battle damage from this battle (${shield}).`, 'battle', p);
+      return 0;
+    }
     this.players[p].lp = Math.max(0, this.players[p].lp - amount);
     this.log(`${this.players[p].name} takes ${amount} ${kind === 'battle' ? 'battle ' : ''}damage. (LP ${this.players[p].lp})`, 'damage', p);
     await this.anim({ type: 'damage', player: p, amount, kind });
@@ -1593,7 +1625,7 @@ export class Game {
    * in the chain first, it stays. Edison Format Rule #2, https://www.edisonformat.com/edison-rule-differences.html
    * ("Mountain" / "Umi" / "Dust Tornado" examples); Rulebook v7.0 p.21.
    */
-  private async replaceFieldSpell(player: PlayerId, except?: CardInstance) {
+  async replaceFieldSpell(player: PlayerId, except?: CardInstance) {
     const old = this.players[player].fzone;
     // reasonPlayer: whose new Field Spell destroyed it (Geartown cannot activate when its controller replaced it).
     if (old && old !== except) await this.moveCards([old], 'grave', { reason: 'rule', reasons: ['rule', 'destroy'], destroyed: true, reasonPlayer: player });
@@ -1708,7 +1740,7 @@ export class Game {
     this.update();
   }
 
-  private async resolveLink(link: ChainLink) {
+  async resolveLink(link: ChainLink) {
     const { card, effect: ef, ctx } = link;
     // Continuous / equip / field cards must still be on the field to resolve
     if (link.isCardActivation) {
@@ -2706,6 +2738,7 @@ export class Game {
       negated: false,
       inDamageStep: false,
       oppMonsterCount: this.monsters(opp).length,
+      flags: {},
     };
     this.recentEvents = [];
     this.log(
@@ -2885,7 +2918,10 @@ export class Game {
     await this.anim({ type: 'battle', attacker: attacker.uid, target: target?.uid ?? null });
     if (dmg) {
       const involved = dmg.player === p ? attacker : target;
+      const shield = this.battleDamageShield(dmg.player);
+      if (shield) this.log(`${this.players[dmg.player].name} takes no battle damage from this battle (${shield}).`, 'battle', dmg.player);
       const blocked =
+        !!shield ||
         this.queryPlayer(dmg.player, 'noBattleDamage') ||
         (involved && this.queryCard(involved, 'noBattleDamageFrom')) ||
         (target && dmg.player === opp && this.queryCard(target, 'noBattleDamageFrom'));

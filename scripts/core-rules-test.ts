@@ -458,7 +458,7 @@ async function gameOver(fn: () => Promise<unknown> | unknown): Promise<GameOver>
     const dt = place(1, cardByName('Dust Tornado'), 'szone');
     const ct = place(1, counterTrap, 'szone');
     const atk = place(0, T.brute, 'mzone');
-    g.battle = { attacker: atk, target: null, attackerMoveId: atk.moveId, targetMoveId: -1, negated: false, inDamageStep: true, oppMonsterCount: 0 };
+    g.battle = { attacker: atk, target: null, attackerMoveId: atk.moveId, targetMoveId: -1, negated: false, inDamageStep: true, oppMonsterCount: 0, flags: {} };
     const offered = () => g.getActivations(1, { open: false, window: 'damage' }).map((a) => a.card);
     eq(offered().includes(dt), false, 'Dust Tornado in the Damage Step');
     eq(offered().includes(ct), true, 'Counter Trap in the Damage Step');

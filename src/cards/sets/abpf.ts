@@ -3061,13 +3061,10 @@ trap('Fiendish Chain', 'continuous', {
   ],
 });
 
-const reflectPatched = new WeakSet<Game>();
-function ensureReflectPatch(g: Game) {
-  if (reflectPatched.has(g)) return;
-  reflectPatched.add(g);
-  const anyG = g as any;
+/** Nature's Reflection replaces effect damage (CardData.rules). */
+function naturesReflectionRules(g: Game) {
   const orig = g.damage.bind(g);
-  anyG.damage = async (p: PlayerId, amount: number, kind: 'battle' | 'effect', source?: C, sourcePlayer?: PlayerId) => {
+  g.damage = async (p: PlayerId, amount: number, kind: 'battle' | 'effect', source?: C, sourcePlayer?: PlayerId) => {
     if (kind === 'effect' && sourcePlayer !== undefined && sourcePlayer !== p && g.turnData[`abpfNatRefl:${p}`]) {
       g.log(`Nature's Reflection: the damage is inflicted to ${g.players[sourcePlayer].name} instead.`, 'action', p);
       return orig(sourcePlayer, amount, kind, source, sourcePlayer);
@@ -3077,12 +3074,12 @@ function ensureReflectPatch(g: Game) {
 }
 trap("Nature's Reflection", 'normal', {
   text: 'During this turn, any effect activated by your opponent that would inflict damage becomes an effect that inflicts damage to their Life Points.',
+  rules: [naturesReflectionRules],
   effects: [
     {
       kind: 'activate',
       categories: ['damage'],
       resolve: async (ctx) => {
-        ensureReflectPatch(ctx.game);
         ctx.game.turnData[`abpfNatRefl:${ctx.player}`] = true;
       },
       ai: {

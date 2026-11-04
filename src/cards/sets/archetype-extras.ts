@@ -70,20 +70,16 @@ const otherSamurai = (ctx: Ctx) => ctx.faceUpMonsters('me', (c) => c !== ctx.sel
 
 // ============================================================ per-game patches
 
-const PATCHED = new WeakSet<Game>();
 
 /** Face-up copies of `name` controlled by `p`. */
 const faceUpNamed = (g: Game, p: PlayerId, name: string) => g.faceUpMonsters(p).filter((c) => c.name === name);
 const neverSpecial = (c: C) => c.name === DARK_DUST || c.name === VANITY;
 
-export function ensureArchetypeExtrasPatches(g: Game) {
-  if (PATCHED.has(g)) return;
-  PATCHED.add(g);
-  const anyG = g as any;
+export function archetypeExtrasRules(g: Game) {
 
   // ---- battle damage: Phantom of Chaos
   const origDamage = g.damage.bind(g);
-  anyG.damage = async (p: PlayerId, amount: number, kind: 'battle' | 'effect', source?: C, sourcePlayer?: PlayerId) => {
+  g.damage = async (p: PlayerId, amount: number, kind: 'battle' | 'effect', source?: C, sourcePlayer?: PlayerId) => {
     if (kind === 'battle' && amount > 0 && g.battle) {
       const b = g.battle;
       const involved = [b.attacker, b.target].filter((c): c is C => !!c);
@@ -98,13 +94,13 @@ export function ensureArchetypeExtrasPatches(g: Game) {
 
   // ---- Summon legality
   const origCanNS = g.canNormalSummon.bind(g);
-  anyG.canNormalSummon = (p: PlayerId, card: C, set = false) => {
+  g.canNormalSummon = (p: PlayerId, card: C, set = false) => {
     if (!origCanNS(p, card, set)) return false;
     if (!set && card.name === GRANDMASTER && faceUpNamed(g, p, GRANDMASTER).length) return false;
     return true;
   };
   const origSS = g.specialSummon.bind(g);
-  anyG.specialSummon = async (cards: C[], player: PlayerId, opts: Parameters<Game['specialSummon']>[2] = {}) => {
+  g.specialSummon = async (cards: C[], player: PlayerId, opts: Parameters<Game['specialSummon']>[2] = {}) => {
     const ctrl = opts?.controller ?? player;
     const list: C[] = [];
     for (const c of cards) {
@@ -116,28 +112,18 @@ export function ensureArchetypeExtrasPatches(g: Game) {
     return origSS(list, player, opts);
   };
   const origISS = g.inherentSpecialSummon.bind(g);
-  anyG.inherentSpecialSummon = async (p: PlayerId, card: C, ...rest: any[]) => {
+  g.inherentSpecialSummon = async (...args: Parameters<Game['inherentSpecialSummon']>) => {
+    const [p, card] = args;
     if (neverSpecial(card)) return false;
-    return (origISS as any)(p, card, ...rest);
+    return origISS(...args);
   };
 }
-
-/** Installs the per-game patches at the first phase (from any location, never activates). */
-const PATCH_LISTENER: EffectDef = {
-  kind: 'trigger',
-  event: 'phaseStart',
-  range: ALL_LOCS,
-  eventFilter: (ctx) => {
-    ensureArchetypeExtrasPatches(ctx.game);
-    return false;
-  },
-};
 
 type MonsterOpts = Parameters<typeof monster>[1];
 type STOpts = Parameters<typeof trap>[2];
 /** Define a card of this file (adds the patch installer). */
-const M = (name: string, o: MonsterOpts) => monster(name, { ...o, effects: [...(o.effects ?? []), PATCH_LISTENER] });
-const T = (name: string, t: Parameters<typeof trap>[1], o: STOpts) => trap(name, t, { ...o, effects: [...(o.effects ?? []), PATCH_LISTENER] });
+const M = (name: string, o: MonsterOpts) => monster(name, { ...o, rules: [...(o.rules ?? []), archetypeExtrasRules] });
+const T = (name: string, t: Parameters<typeof trap>[1], o: STOpts) => trap(name, t, { ...o, rules: [...(o.rules ?? []), archetypeExtrasRules] });
 
 // ============================================================ Six Samurai
 
@@ -584,9 +570,8 @@ const PHANTOM_PATCHED = new WeakSet<C>();
 /** Phantom of Chaos's own lasting effects, kept while it copies another monster. */
 const PHANTOM_KEEP: EffectDef[] = [
   // Registers Phantom of Chaos as a continuous source so copied continuous effects apply (no mods of its own:
-  // the battle damage rule lives in ensureArchetypeExtrasPatches).
+  // the battle damage rule lives in archetypeExtrasRules).
   { kind: 'continuous', mods: [] },
-  PATCH_LISTENER,
 ];
 function copyInto(g: Game, ph: C, src: C) {
   if (!PHANTOM_PATCHED.has(ph)) {
@@ -601,7 +586,7 @@ function copyInto(g: Game, ph: C, src: C) {
   // APPROX: only the effects that work on the field are copied (Special Summon procedures and hand / GY effects are
   // dropped), and the copy keeps Phantom of Chaos's Level, Attribute and Type.
   const copied = (src.data.effects ?? []).filter((e) => {
-    if (e.kind === 'proc' || e === PATCH_LISTENER) return false;
+    if (e.kind === 'proc') return false;
     if (e.range && !e.range.includes('mzone')) return false;
     return true;
   });

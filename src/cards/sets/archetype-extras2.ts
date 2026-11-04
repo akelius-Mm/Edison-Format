@@ -72,16 +72,12 @@ function castleFor(g: Game, p: PlayerId, card: C): C | undefined {
 
 // ============================================================ per-game patches
 
-const PATCHED = new WeakSet<Game>();
 
-export function ensureArchetypeExtras2Patches(g: Game) {
-  if (PATCHED.has(g)) return;
-  PATCHED.add(g);
-  const anyG = g as any;
+export function archetypeExtras2Rules(g: Game) {
 
   // ---- Summon legality: Ancient Gear Golem "cannot be Special Summoned"
   const origSS = g.specialSummon.bind(g);
-  anyG.specialSummon = async (cards: C[], player: PlayerId, opts: Parameters<Game['specialSummon']>[2] = {}) => {
+  g.specialSummon = async (cards: C[], player: PlayerId, opts: Parameters<Game['specialSummon']>[2] = {}) => {
     if (!opts?.ignoreConditions && cards.some((c) => c.name === AGG && c.location !== 'mzone')) {
       cards = cards.filter((c) => c.name !== AGG);
       if (!cards.length) return [];
@@ -91,7 +87,7 @@ export function ensureArchetypeExtras2Patches(g: Game) {
 
   // ---- Tributes: Ancient Gear Castle
   const origCanNS = g.canNormalSummon.bind(g);
-  anyG.canNormalSummon = (p: PlayerId, card: C, set = false) => {
+  g.canNormalSummon = (p: PlayerId, card: C, set = false) => {
     if (origCanNS(p, card, set)) return true;
     if (set || !castleFor(g, p, card)) return false;
     card.flags.noTribute = true;
@@ -102,7 +98,7 @@ export function ensureArchetypeExtras2Patches(g: Game) {
     }
   };
   const origNS = g.normalSummon.bind(g);
-  anyG.normalSummon = async (p: PlayerId, card: C, set: boolean, opts?: { byEffect?: boolean }) => {
+  g.normalSummon = async (p: PlayerId, card: C, set: boolean, opts?: { byEffect?: boolean }) => {
     const castle = set ? undefined : castleFor(g, p, card);
     if (castle) {
       const need = g.tributesNeeded(card);
@@ -134,21 +130,10 @@ export function ensureArchetypeExtras2Patches(g: Game) {
   };
 }
 
-/** Installs the per-game patches at the first phase (from any location, never activates). */
-const PATCH_LISTENER: EffectDef = {
-  kind: 'trigger',
-  event: 'phaseStart',
-  range: ALL_LOCS,
-  eventFilter: (ctx) => {
-    ensureArchetypeExtras2Patches(ctx.game);
-    return false;
-  },
-};
-
 type MonsterOpts = Parameters<typeof monster>[1];
 type STOpts = Parameters<typeof spell>[2];
-const M = (name: string, o: MonsterOpts) => monster(name, { ...o, effects: [...(o.effects ?? []), PATCH_LISTENER] });
-const S = (name: string, t: Parameters<typeof spell>[1], o: STOpts) => spell(name, t, { ...o, effects: [...(o.effects ?? []), PATCH_LISTENER] });
+const M = (name: string, o: MonsterOpts) => monster(name, { ...o, rules: [...(o.rules ?? []), archetypeExtras2Rules] });
+const S = (name: string, t: Parameters<typeof spell>[1], o: STOpts) => spell(name, t, { ...o, rules: [...(o.rules ?? []), archetypeExtras2Rules] });
 
 /** "If this card destroys an opponent's monster by battle: inflict `n` damage" (Yellow Gadget bonus). */
 function yellowBurn(n: number): EffectDef {
