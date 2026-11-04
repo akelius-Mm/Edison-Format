@@ -17,7 +17,7 @@
 //  * activations: Cursed Fig (locked Set cards), Revived King Ha Des (negated monsters in the GY);
 //  * Summon legality: Overdrive Teleporter (cannot be Special Summoned), Rai-Jin (only 1 face-up), Gozen Match;
 //  * state checks after every move / action: Zombie Mammoth, Gozen Match, Mark of the Rose (control returns);
-//  * control: Botanical Lion; chains: Urgent Tuning (the Synchro Summon right after the Chain resolves);
+//  * control: Botanical Lion; Urgent Tuning (its Synchro Summon is not negatable);
 //  * Battle Mania: the forced monsters must attack (the controllers' "leave the Battle Phase" choice is withheld).
 import { monster, spell, token, trap } from '../define';
 import { bestTarget, cardValue } from '../helpers';
@@ -45,6 +45,8 @@ const MAMMOTH = 'Zombie Mammoth';
 const GOZEN = 'Gozen Match';
 const LION = 'Botanical Lion';
 const GARDEN = 'Black Garden';
+const FERTILIZER = 'Miracle Fertilizer';
+const CEPHALOTUS = 'Gigantic Cephalotus';
 
 // ============================================================ shared helpers
 
@@ -208,20 +210,18 @@ const HORSEY_TOKEN_EFFECT: EffectDef = {
 interface CsocGameState {
   /** Black Garden is Summoning its Rose Tokens (those Summons do not trigger it). */
   gardenBusy: number;
-  /** Urgent Tuning: Synchro Summon right after the Chain resolves. */
-  urgent: PlayerId[];
   /** Urgent Tuning's Synchro Summon is being performed (no summon-negation window). */
   urgentSummoning?: boolean;
   /** Battle Mania: player p's listed monsters must attack during turn `turn`. */
   mania: { p: PlayerId; turn: number; uids: Set<number> }[];
   /** Mark of the Rose: control taken while equipped. */
-  marks: { mark: C; markMoveId: number; host: C; hostMoveId: number }[];
+  marks: { mark: C; markMoveId: number; host: C; hostMoveId: number; hostFaceUpId: number }[];
   checking: boolean;
 }
 const GSTATE = new WeakMap<Game, CsocGameState>();
 function gs(g: Game): CsocGameState {
   let s = GSTATE.get(g);
-  if (!s) GSTATE.set(g, (s = { gardenBusy: 0, urgent: [], mania: [], marks: [], checking: false }));
+  if (!s) GSTATE.set(g, (s = { gardenBusy: 0, mania: [], marks: [], checking: false }));
   return s;
 }
 
@@ -288,11 +288,30 @@ async function stateChecks(g: Game) {
         await g.sendToGrave(out, 'effect', p, liveCards(g, GOZEN)[0]);
       }
     }
+    // Gigantic Cephalotus, 2010 ruling: "If 'Skill Drain' is active, 'Gigantic Cephalotus' loses any ATK gained by its
+    // effect. The ATK is not regained when 'Skill Drain' is negated or removed from the field."
+    // https://edisonrul.ing/cards/g/gigantic-cephalotus.html
+    for (const m of [...g.monsters(0), ...g.monsters(1)]) {
+      if (m.name === CEPHALOTUS && faceUpOn(m) && m.flags.cephalotus && g.isNegated(m)) m.flags.cephalotus = 0;
+    }
+    // Miracle Fertilizer, 2010 ruling: "If you Special Summon 2 or more monsters with 'Miracle Fertilizer', when any of
+    // the Special Summoned monsters is removed from the field, 'Miracle Fertilizer' is destroyed."
+    // https://edisonrul.ing/cards/m/miracle-fertilizer.html
+    const fertKill = g.allFieldCards().filter((f) => {
+      const list = f.name === FERTILIZER ? (f.flags.fertSummoned as { uid: number; moveId: number }[] | undefined) : undefined;
+      return !!list?.some((r) => {
+        const m = g.card(r.uid);
+        return !m || m.moveId !== r.moveId || !m.onField;
+      });
+    });
+    if (fertKill.length) await g.moveCards(fertKill, 'grave', { reason: 'rule', reasons: ['rule', 'destroy'], destroyed: true });
     // Mark of the Rose: when it leaves the field, control of the monster returns.
     for (const r of [...s.marks]) {
       const markGone = !r.mark.onField || r.mark.moveId !== r.markMoveId;
       const hostGone = r.host.location !== 'mzone' || r.host.moveId !== r.hostMoveId;
-      if (hostGone) {
+      // 2010 ruling: "If the equipped monster is flipped face-down, it remains on its current controller's side of the
+      // field." https://edisonrul.ing/cards/m/mark-of-the-rose.html
+      if (hostGone || r.host.faceUpId !== r.hostFaceUpId) {
         s.marks.splice(s.marks.indexOf(r), 1);
         continue;
       }
@@ -428,11 +447,20 @@ export function csocRules(g: Game) {
   // (Gozen Match is checked per material combination by synchroCombos above.)
   g.canSynchro = (p: PlayerId, syn: C) => origCanSyn(p, syn) && !summonBlocked(g, syn, p, true, true);
   const origLMA = g.legalMainActions.bind(g);
-  g.legalMainActions = (p: PlayerId) =>
-    origLMA(p).filter((a: Action) => {
+  g.legalMainActions = (p: PlayerId) => {
+    const acts = origLMA(p).filter((a: Action) => {
       if (a.type === 'flip' || a.type === 'proc') return !summonBlocked(g, a.card, p, true);
       return true;
     });
+    // Battle Mania, 2010 ruling: "If your opponent controls a face-up Attack Position monster at the end of their Main
+    // Phase 1, they must conduct their Battle Phase during the turn 'Battle Mania' is activated." Monsters unaffected
+    // by Trap Cards do not have to attack. https://edisonrul.ing/cards/b/battle-mania.html
+    if (g.phase === 'main1' && gs(g).mania.some((m) => m.p === p && m.turn === g.turn) && acts.some((a) => a.type === 'phase' && a.to === 'battle')) {
+      const mustBattle = g.faceUpMonsters(p).some((m) => m.pos === 'atk' && !g.queryCard(m, 'unaffectedByTraps'));
+      if (mustBattle) return acts.filter((a) => !(a.type === 'phase' && a.to === 'end'));
+    }
+    return acts;
+  };
 
   // ---- state checks
   const origRC = g.ruleCleanup.bind(g);
@@ -456,27 +484,6 @@ export function csocRules(g: Game) {
     return origTC(card, player, untilEndPhase);
   };
 
-  // ---- chains: Urgent Tuning
-  const origRes = g.resolveChain.bind(g);
-  g.resolveChain = async () => {
-    await origRes();
-    const s = gs(g);
-    while (s.urgent.length && !g.over) {
-      const p = s.urgent.shift()!;
-      const cands = g.players[p].extra.filter((c) => g.canSynchro(p, c));
-      if (!cands.length) continue;
-      const [syn] = await g.select(p, cands, 1, 1, 'Urgent Tuning: Synchro Summon 1 Synchro Monster.', 'specialSummon', {
-        aiScore: (c) => (c.data.atk ?? 0) + (c.data.aiValue ?? 0),
-      });
-      if (!syn) continue;
-      s.urgentSummoning = true;
-      try {
-        await g.synchroSummon(p, syn);
-      } finally {
-        s.urgentSummoning = false;
-      }
-    }
-  };
   // 2010 ruling: the Synchro Summon is part of Urgent Tuning's resolution, so "Solemn Judgment" cannot negate it.
   // https://edisonrul.ing/cards/u/urgent-tuning.html
   const origSNW = g.summonNegationWindow.bind(g);
@@ -520,6 +527,17 @@ function onEvent(g: Game, ev: GameEvent) {
       const h = c.flags.csocUrHit as { turn: number; uids: Set<number> } | undefined;
       if (!h || h.turn !== g.turn) c.flags.csocUrHit = { turn: g.turn, uids: new Set([t.uid]) };
       else h.uids.add(t.uid);
+    }
+  }
+  // Confusion Chaff, 2010 ruling: "If a monster declares a direct attack, but that attack is negated, it will not be
+  // considered the first monster that attacked directly that turn." https://edisonrul.ing/cards/c/confusion-chaff.html
+  if (ev.type === 'attackNegated' && c && g.battle && !g.battle.target) {
+    const list = (g.turnData['csoc:direct'] ?? []) as { card: C; moveId: number }[];
+    for (let i = list.length - 1; i >= 0; i--) {
+      if (list[i].card === c) {
+        list.splice(i, 1);
+        break;
+      }
     }
   }
   // Defense Position monsters destroyed this turn (Lineage of Destruction).
@@ -590,6 +608,14 @@ M('Healing Wave Generator', {
   ],
 });
 
+/** Turbo Synchron lost the current battle (it is destroyed by battle at the end of the Damage Step). */
+function turboDestroyedByBattle(ctx: Ctx) {
+  const b = ctx.battle;
+  if (!b?.inDamageStep) return false;
+  if (b.markedDestroyed) return b.markedDestroyed.includes(ctx.self);
+  return !!b.calc?.losers.includes(ctx.self) && ctx.game.canDestroy(ctx.self, 'battle');
+}
+
 M('Turbo Synchron', {
   attribute: 'WIND',
   race: 'Machine',
@@ -619,8 +645,14 @@ M('Turbo Synchron', {
       when: true,
       label: 'Special Summon a monster from your hand',
       categories: ['specialSummon'],
-      eventFilter: (ctx, ev) => ev.player === ctx.player && ctx.battle?.attacker === ctx.self && ctx.self.controller === ctx.player,
-      canActivate: (ctx) => ctx.canSpecialSummon() && ctx.hand('me', (c) => c.isMonster && (c.data.atk ?? 0) <= (ctx.event?.amount ?? 0) && ctx.canSummonCard(c)).length > 0,
+      // 2010 ruling: "'Turbo Synchron' must be face-up on the field (not destroyed by battle) to activate this effect."
+      // https://edisonrul.ing/cards/t/turbo-synchron.html
+      eventFilter: (ctx, ev) =>
+        ev.player === ctx.player && ctx.battle?.attacker === ctx.self && ctx.self.controller === ctx.player && faceUpOn(ctx.self) && !turboDestroyedByBattle(ctx),
+      canActivate: (ctx) =>
+        !turboDestroyedByBattle(ctx) &&
+        ctx.canSpecialSummon() &&
+        ctx.hand('me', (c) => c.isMonster && (c.data.atk ?? 0) <= (ctx.event?.amount ?? 0) && ctx.canSummonCard(c)).length > 0,
       resolve: async (ctx) => {
         const cands = ctx.hand('me', (c) => c.isMonster && (c.data.atk ?? 0) <= (ctx.event?.amount ?? 0) && ctx.canSummonCard(c));
         const [c] = await ctx.select(cands, 1, 1, 'Special Summon 1 monster from your hand.', 'specialSummon', { aiScore: (x) => (x.data.atk ?? 0) + (x.data.aiValue ?? 0) });
@@ -1372,15 +1404,18 @@ M('Gigantic Cephalotus', {
   atk: 1850,
   def: 700,
   aiValue: 100,
-  text: 'This card gains 200 ATK each time a Plant-Type monster is sent from the field to the Graveyard.',
+  text: 'Each time a Plant-Type monster is destroyed and sent to the Graveyard, this card gains 200 ATK.',
   effects: [
     {
-      // Bookkeeping only (never activates): counts Plant-Type monsters sent from the field to the GY while this card is face-up.
+      // Bookkeeping only (never activates): counts Plant-Type monsters destroyed and sent from the field to the GY while
+      // this card is face-up. 2010 ruling: "The destroyed Plant-Type monster must be a Plant-Type monster both on the
+      // field and in the Graveyard." https://edisonrul.ing/cards/g/gigantic-cephalotus.html
       kind: 'trigger',
       event: 'sentToGrave',
       eventFilter: (ctx, ev) => {
         const c = evc(ev);
-        if (c && c !== ctx.self && ev.from === 'mzone' && isPlant(c) && faceUpOn(ctx.self) && !ctx.game.isNegated(ctx.self)) {
+        // (The Type is read in the GY; the events do not record a Type the monster had only on the field.)
+        if (c && c !== ctx.self && ev.from === 'mzone' && reasonsOf(ev).includes('destroy') && isPlant(c) && faceUpOn(ctx.self) && !ctx.game.isNegated(ctx.self)) {
           ctx.self.flags.cephalotus = (ctx.self.flags.cephalotus ?? 0) + 1;
         }
         return false;
@@ -2315,7 +2350,7 @@ S('Mark of the Rose', 'equip', {
         if (!t || !ctx.self.onField || !ctx.self.faceUp) return;
         ctx.equip(t);
         if (await ctx.game.takeControl(t, ctx.player, false)) {
-          gs(ctx.game).marks.push({ mark: ctx.self, markMoveId: ctx.self.moveId, host: t, hostMoveId: t.moveId });
+          gs(ctx.game).marks.push({ mark: ctx.self, markMoveId: ctx.self.moveId, host: t, hostMoveId: t.moveId, hostFaceUpId: t.faceUpId });
         }
       },
       ai: {
@@ -2476,8 +2511,9 @@ S('Morphtronic Accelerator', 'normal', {
     {
       kind: 'activate',
       categories: ['destroy', 'draw'],
-      // Rulings (Yugipedia, Card Rulings:Morphtronic Accelerator): it targets 1 card on the field; returning the
-      // "Morphtronic" monster is part of the effect, not a cost; if the target is not destroyed, you do not draw.
+      // 2010 rulings: it targets 1 card on the field; returning the "Morphtronic" monster is part of the effect, not a
+      // cost; if the target cannot be destroyed, you still return the "Morphtronic" monster but do not draw.
+      // https://edisonrul.ing/cards/m/morphtronic-accelerator.html
       canActivate: (ctx) => ctx.hand('me', isMorphMon).length > 0 && ctx.field('both', (c) => c !== ctx.self && ctx.canTarget(c)).length > 0 && ctx.deck().length > 0,
       activate: async (ctx) => {
         await ctx.selectTargets(ctx.field('both', (c) => c !== ctx.self), 1, 1, 'Target 1 card on the field to destroy.', 'destroy', {
@@ -2541,8 +2577,9 @@ S('Morphtronic Engine', 'equip', {
     ),
     {
       // https://edisonrul.ing/cards/m/morphtronic-engine.html — "The effect to destroy the equipped 'Morphtronic' monster
-      // during your second Standby Phase after activating 'Morphtronic Engine' starts a Chain." A skipped Standby Phase
-      // does not count; if this card cannot be destroyed it stays equipped.
+      // during your second Standby Phase after activating 'Morphtronic Engine' starts a Chain." If that Standby Phase is
+      // skipped, or this card cannot be destroyed, it is not destroyed and stays equipped.
+      // APPROX: no card in the pool skips a Standby Phase, so only Standby Phases that happen are counted here.
       kind: 'trigger',
       event: 'phaseStart',
       range: ['szone'],
@@ -2703,7 +2740,11 @@ S('Miracle Fertilizer', 'continuous', {
           ctx.addPlayerMod(ctx.player, 'cannotNormalSummon');
           ctx.addPlayerMod(ctx.player, 'cannotSet');
         }
-        if (r.length && ctx.self.onField) ctx.game.link(ctx.self, r[0], false);
+        if (r.length && ctx.self.onField) {
+          ctx.game.link(ctx.self, r[0], false);
+          // Every monster it Summoned stays tracked (the engine link above holds only the latest): see stateChecks.
+          ((ctx.self.flags.fertSummoned ??= []) as { uid: number; moveId: number }[]).push({ uid: r[0].uid, moveId: r[0].moveId });
+        }
       },
       ai: { score: (ctx) => (ctx.game.players[ctx.player].normalSummonsLeft <= 0 || ctx.grave('me', (c) => isPlant(c) && (c.data.atk ?? 0) >= 1500).length ? 55 : 20) },
     },
@@ -2977,9 +3018,32 @@ T('Urgent Tuning', 'normal', {
       categories: ['specialSummon'],
       condition: (ctx) => ctx.phase === 'battle' && !ctx.battle?.inDamageStep,
       canActivate: (ctx) => ctx.extra('me', (c) => ctx.game.canSynchro(ctx.player, c)).length > 0,
+      // 2010 ruling: "The Synchro Summon occurs when this effect resolves, it does not occur 'immediately after this
+      // effect resolves'", and "Solemn Judgment" cannot negate it. https://edisonrul.ing/cards/u/urgent-tuning.html
       resolve: async (ctx) => {
-        // The Synchro Summon is performed right after this Chain resolves (Game.resolveChain patch).
-        gs(ctx.game).urgent.push(ctx.player);
+        const g = ctx.game;
+        const p = ctx.player;
+        if (g.queryPlayer(p, 'cannotSpecialSummon') || g.queryPlayer(p, 'cannotSynchroSummon')) return;
+        const cands = ctx.extra('me', (c) => g.canSynchro(p, c) && !g.queryCard(c, 'cannotBeSummoned'));
+        if (!cands.length) return;
+        const [syn] = await ctx.select(cands, 1, 1, 'Urgent Tuning: Synchro Summon 1 Synchro Monster.', 'specialSummon', {
+          aiScore: (c) => (c.data.atk ?? 0) + (c.data.aiValue ?? 0),
+        });
+        if (!syn) return;
+        const mats = await g.pickCombo(p, g.synchroCombos(p, syn), `Select Synchro Materials for ${syn.name}`);
+        if (!mats) return;
+        // Game.synchroSummon minus its trigger processing: the Summon happens inside this Chain Link, and its triggers
+        // (e.g. "when Synchro Summoned") are handled after the Chain like any other Summon by an effect.
+        g.log(`${g.players[p].name} Synchro Summons ${syn.name} using ${mats.map((m) => m.name).join(', ')}.`, 'action', p);
+        await g.moveCards(mats, 'grave', { reason: 'synchro', reasons: ['synchro', 'material'], reasonPlayer: p, reasonCard: syn });
+        const materials = mats.map((m) => ({ uid: m.uid, name: m.name, attribute: m.data.attribute, race: m.data.race, level: m.data.level, card: m }));
+        const s = gs(g);
+        s.urgentSummoning = true;
+        try {
+          await g.inherentSpecialSummon(p, syn, 'synchro', 'choose', { materials }, true);
+        } finally {
+          s.urgentSummoning = false;
+        }
       },
       ai: { score: (ctx) => (ctx.isMyTurn ? 55 : 40) },
     },
@@ -3350,9 +3414,12 @@ T('Plant Food Chain', 'normal', {
       mods: [{ q: 'atk', to: 'cards', filter: equippedTo, value: 500 }],
     },
     {
+      // Does not miss timing. 2010 rulings: "If 'Plant Food Chain' is equipped to a monster, and is destroyed by an effect
+      // that is Chain Link 2 or higher, you can activate 'Plant Food Chain's' effect after that Chain resolves"; it can
+      // also activate if it and the equipped monster are destroyed at the same time.
+      // https://edisonrul.ing/cards/p/plant-food-chain.html
       kind: 'trigger',
       event: 'destroyed',
-      when: true,
       label: 'Special Summon a Plant-Type monster from the GY',
       categories: ['specialSummon'],
       eventFilter: (ctx, ev) => ev.card === ctx.self && ev.from === 'szone' && reasonsOf(ev).includes('effect') && PFC_EQUIPPED.get(ctx.self) === ctx.self.moveId - 1,

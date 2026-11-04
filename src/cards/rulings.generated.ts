@@ -39,6 +39,10 @@ export const RULINGS: Record<string, RulingNote[]> = {
   ],
   "Alien Hypno": [
     {
+      "text": "Alien Hypno: control returns when it, or the monster it took, is turned face-down. 2010 rulings: \"If you take control of your opponent's monster with 'Alien Hypno' and afterwards 'Alien Hypno' is flipped face-down, every monster that you are controlling with 'Alien Hypno's' effect is returned to your opponent\", and \"...afterwards the selected monster is flipped face-down, the selected monster is returned to your opponent.\"",
+      "url": "https://edisonrul.ing/cards/a/alien-hypno.html"
+    },
+    {
       "text": "2010 ruling: removing the A-Counters, and destroying a monster that has none left, do not start a Chain (run in the End Phase, outside the Chain).",
       "url": "https://edisonrul.ing/cards/a/alien-hypno.html"
     }
@@ -191,6 +195,12 @@ export const RULINGS: Record<string, RulingNote[]> = {
     {
       "text": "2010 ruling: \"Lightsworn\" monsters on either field, in either GY and banished cannot be targeted.",
       "url": "https://edisonrul.ing/cards/a/aurkus-lightsworn-druid.html"
+    }
+  ],
+  "Battle Mania": [
+    {
+      "text": "Battle Mania, 2010 ruling: \"If your opponent controls a face-up Attack Position monster at the end of their Main Phase 1, they must conduct their Battle Phase during the turn 'Battle Mania' is activated.\" Monsters unaffected by Trap Cards do not have to attack.",
+      "url": "https://edisonrul.ing/cards/b/battle-mania.html"
     }
   ],
   "Battle of the Elements": [
@@ -374,6 +384,10 @@ export const RULINGS: Record<string, RulingNote[]> = {
     }
   ],
   "Confusion Chaff": [
+    {
+      "text": "Confusion Chaff, 2010 ruling: \"If a monster declares a direct attack, but that attack is negated, it will not be considered the first monster that attacked directly that turn.\"",
+      "url": "https://edisonrul.ing/cards/c/confusion-chaff.html"
+    },
     {
       "text": "A face-down first attacker is flipped face-up and the battle is conducted normally",
       "url": "https://edisonrul.ing/cards/c/confusion-chaff.html"
@@ -891,6 +905,16 @@ export const RULINGS: Record<string, RulingNote[]> = {
     {
       "text": "2010 ruling: this effect targets 1 of your opponent's monsters.",
       "url": "https://edisonrul.ing/cards/g/ghost-gardna.html"
+    }
+  ],
+  "Gigantic Cephalotus": [
+    {
+      "text": "Gigantic Cephalotus, 2010 ruling: \"If 'Skill Drain' is active, 'Gigantic Cephalotus' loses any ATK gained by its effect. The ATK is not regained when 'Skill Drain' is negated or removed from the field.\"",
+      "url": "https://edisonrul.ing/cards/g/gigantic-cephalotus.html"
+    },
+    {
+      "text": "Bookkeeping only (never activates): counts Plant-Type monsters destroyed and sent from the field to the GY while this card is face-up. 2010 ruling: \"The destroyed Plant-Type monster must be a Plant-Type monster both on the field and in the Graveyard.\"",
+      "url": "https://edisonrul.ing/cards/g/gigantic-cephalotus.html"
     }
   ],
   "Gladiator Beast Dimacari": [
@@ -1427,6 +1451,10 @@ export const RULINGS: Record<string, RulingNote[]> = {
   ],
   "Mark of the Rose": [
     {
+      "text": "2010 ruling: \"If the equipped monster is flipped face-down, it remains on its current controller's side of the field.\"",
+      "url": "https://edisonrul.ing/cards/m/mark-of-the-rose.html"
+    },
+    {
       "text": "2010 rulings: it also activates for a monster Special Summoned face-down (its ATK is not halved, but the Rose Token is still Summoned), and once for monsters Summoned at the same time: a single Rose Token (one for each player whose monsters were Summoned, e.g. \"The Shallow Grave\"). No token if the monster left the field.",
       "url": "https://edisonrul.ing/cards/b/black-garden.html"
     },
@@ -1485,6 +1513,10 @@ export const RULINGS: Record<string, RulingNote[]> = {
   ],
   "Miracle Fertilizer": [
     {
+      "text": "Miracle Fertilizer, 2010 ruling: \"If you Special Summon 2 or more monsters with 'Miracle Fertilizer', when any of the Special Summoned monsters is removed from the field, 'Miracle Fertilizer' is destroyed.\"",
+      "url": "https://edisonrul.ing/cards/m/miracle-fertilizer.html"
+    },
+    {
       "text": "2010 ruling: if the targeted Plant is removed in response, you can still Normal Summon or Set that turn; once a monster is Special Summoned, the restriction stays even if this card leaves the field.",
       "url": "https://edisonrul.ing/cards/m/miracle-fertilizer.html"
     }
@@ -1535,6 +1567,12 @@ export const RULINGS: Record<string, RulingNote[]> = {
       "url": "https://edisonrul.ing/cards/m/morphtransition.html"
     }
   ],
+  "Morphtronic Accelerator": [
+    {
+      "text": "2010 rulings: it targets 1 card on the field; returning the \"Morphtronic\" monster is part of the effect, not a cost; if the target cannot be destroyed, you still return the \"Morphtronic\" monster but do not draw.",
+      "url": "https://edisonrul.ing/cards/m/morphtronic-accelerator.html"
+    }
+  ],
   "Morphtronic Celfon": [
     {
       "text": "it cannot be activated if you cannot Special Summon, or if there are no \"Morphtronic\" monsters left in your Deck.",
@@ -1555,7 +1593,7 @@ export const RULINGS: Record<string, RulingNote[]> = {
   ],
   "Morphtronic Engine": [
     {
-      "text": "\"The effect to destroy the equipped 'Morphtronic' monster during your second Standby Phase after activating 'Morphtronic Engine' starts a Chain.\" A skipped Standby Phase does not count; if this card cannot be destroyed it stays equipped.",
+      "text": "\"The effect to destroy the equipped 'Morphtronic' monster during your second Standby Phase after activating 'Morphtronic Engine' starts a Chain.\" If that Standby Phase is skipped, or this card cannot be destroyed, it is not destroyed and stays equipped.",
       "url": "https://edisonrul.ing/cards/m/morphtronic-engine.html"
     },
     {
@@ -1707,6 +1745,12 @@ export const RULINGS: Record<string, RulingNote[]> = {
     {
       "text": "an Ignition Effect that activates & resolves in the GY (your Main Phase, not only the Standby Phase); placing the hand card on top of the Deck is the cost.",
       "url": "https://edisonrul.ing/cards/p/plaguespreader-zombie.html"
+    }
+  ],
+  "Plant Food Chain": [
+    {
+      "text": "Does not miss timing. 2010 rulings: \"If 'Plant Food Chain' is equipped to a monster, and is destroyed by an effect that is Chain Link 2 or higher, you can activate 'Plant Food Chain's' effect after that Chain resolves\"; it can also activate if it and the equipped monster are destroyed at the same time.",
+      "url": "https://edisonrul.ing/cards/p/plant-food-chain.html"
     }
   ],
   "Poison Chain": [
@@ -2335,6 +2379,12 @@ export const RULINGS: Record<string, RulingNote[]> = {
       "url": "https://edisonrul.ing/cards/t/turbo-cannon.html"
     }
   ],
+  "Turbo Synchron": [
+    {
+      "text": "2010 ruling: \"'Turbo Synchron' must be face-up on the field (not destroyed by battle) to activate this effect.\"",
+      "url": "https://edisonrul.ing/cards/t/turbo-synchron.html"
+    }
+  ],
   "Twin-Shield Defender": [
     {
       "text": "2010 ruling: it targets 1 face-up monster your opponent controls.",
@@ -2362,6 +2412,10 @@ export const RULINGS: Record<string, RulingNote[]> = {
   "Urgent Tuning": [
     {
       "text": "2010 ruling: the Synchro Summon is part of Urgent Tuning's resolution, so \"Solemn Judgment\" cannot negate it.",
+      "url": "https://edisonrul.ing/cards/u/urgent-tuning.html"
+    },
+    {
+      "text": "2010 ruling: \"The Synchro Summon occurs when this effect resolves, it does not occur 'immediately after this effect resolves'\", and \"Solemn Judgment\" cannot negate it.",
       "url": "https://edisonrul.ing/cards/u/urgent-tuning.html"
     }
   ],
