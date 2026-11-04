@@ -51,6 +51,10 @@ export const RULINGS: Record<string, RulingNote[]> = {
     {
       "text": "No A-Counter battle rule of its own: the 2010 text has none. Its counters weaken monsters through the cards that print the rule (Alien Kid, Alien Overlord...), field-wide.",
       "url": "https://edisonrul.ing/cards/a/alien-dog.html"
+    },
+    {
+      "text": "\"Even if you have more than 1 Alien Dog in your hand, you can only activate the effect of 1\" (per Normal Summon). (historical)",
+      "url": "https://edisonrul.ing/cards/a/alien-dog.html"
     }
   ],
   "Alien Hypno": [
@@ -111,6 +115,10 @@ export const RULINGS: Record<string, RulingNote[]> = {
     {
       "text": "Kinka-byo flipped face-down: its effect disappears, the monster stays (2010 ruling, ).",
       "url": "https://edisonrul.ing/cards/k/kinka-byo.html"
+    },
+    {
+      "text": "Montage Dragon: once its effect is negated while it is face-up (Skill Drain), its ATK stays 0 even after the negation ends. (historical). Every ATK read of a negated Montage Dragon goes through isNegated, which records the loss.",
+      "url": "https://edisonrul.ing/cards/m/montage-dragon.html"
     }
   ],
   "Ancient Gear Castle": [
@@ -197,7 +205,7 @@ export const RULINGS: Record<string, RulingNote[]> = {
   ],
   "Attack of the Cornered Rat": [
     {
-      "text": "2010 ruling: it can only be activated once during the same Damage Step.",
+      "text": "2010 ruling: it can only be activated once during the same Damage Step. It targets the opponent's monster (same page).",
       "url": "https://edisonrul.ing/cards/a/attack-of-the-cornered-rat.html"
     }
   ],
@@ -705,6 +713,10 @@ export const RULINGS: Record<string, RulingNote[]> = {
   ],
   "Earthbound Immortal Aslla piscu": [
     {
+      "text": "This is not \"its own effect\" (no reasonCard), so Aslla piscu's effect activates: \"If a face-down Aslla piscu is flipped face-up while another Earthbound Immortal is on the field, the flipped Aslla piscu is destroyed. However, this is not considered as 'destroyed by its own effect'\". (historical)",
+      "url": "https://edisonrul.ing/cards/e/earthbound-immortal-aslla-piscu.html"
+    },
+    {
       "text": "Not when it is returned to the Deck or banished face-down",
       "url": "https://edisonrul.ing/cards/e/earthbound-immortal-aslla-piscu.html"
     }
@@ -889,6 +901,16 @@ export const RULINGS: Record<string, RulingNote[]> = {
     {
       "text": "2010 rulings: this card must remain face-up on the field to activate and resolve both effects.",
       "url": "https://edisonrul.ing/cards/f/future-visions.html"
+    }
+  ],
+  "G.B. Hunter": [
+    {
+      "text": "A destroyed card that would be returned to the Deck instead (Grave Protector...) goes to the Graveyard: \"monsters destroyed by battle cannot return to the Deck, so they go to the Graveyard instead\". (historical)",
+      "url": "https://edisonrul.ing/cards/g/gb-hunter.html"
+    },
+    {
+      "text": "'toDeck': G.B. Hunter stops it being activated, like a Gladiator Beast tag-out.",
+      "url": "https://edisonrul.ing/cards/g/gb-hunter.html"
     }
   ],
   "Gaap the Divine Soldier": [
@@ -1078,6 +1100,10 @@ export const RULINGS: Record<string, RulingNote[]> = {
     }
   ],
   "Herald of Orange Light": [
+    {
+      "text": "It negates an activation, so it can be activated in the Damage Step. (historical)",
+      "url": "https://edisonrul.ing/cards/h/herald-of-orange-light.html"
+    },
     {
       "text": "sending the cards to the GY is the cost, so \"this effect cannot activate while \"Macro Cosmos\" is active\".",
       "url": "https://edisonrul.ing/cards/h/herald-of-orange-light.html"
@@ -1269,6 +1295,10 @@ export const RULINGS: Record<string, RulingNote[]> = {
     {
       "text": "\"The Maintenance Cost is not an effect. It cannot be negated. Revealing... does not start a chain.\" (also Koa'ki Meiru Doom / Guardian / Ice / Powerhand / Valafar pages)",
       "url": "https://edisonrul.ing/cards/k/koaki-meiru-drago.html"
+    },
+    {
+      "text": "\"Neither player can Special Summon LIGHT or DARK monsters\": see rgbtRules (specialSummon wrappers, and Game.specialSummonAllowed so cards/effects that WOULD Special Summon a LIGHT/DARK monster cannot be activated, e.g. Monster Reborn can't target one). (historical)",
+      "url": "https://edisonrul.ing/cards/k/koaki-meiru-drago.html"
     }
   ],
   "Koa'ki Meiru Hydro Barrier": [
@@ -1281,6 +1311,12 @@ export const RULINGS: Record<string, RulingNote[]> = {
     {
       "text": "2010 ruling: this effect targets 1 Special Summoned monster.",
       "url": "https://edisonrul.ing/cards/k/koaki-meiru-ice.html"
+    }
+  ],
+  "Koa'ki Meiru Powerhand": [
+    {
+      "text": "\"The effect negation ability... begins when an attack target is declared\" (not only in the Damage Step). (historical)",
+      "url": "https://edisonrul.ing/cards/k/koaki-meiru-powerhand.html"
     }
   ],
   "Koa'ki Meiru Rooklord": [
@@ -1374,6 +1410,10 @@ export const RULINGS: Record<string, RulingNote[]> = {
   "Light End Dragon": [
     {
       "text": "2010 rulings: cannot be activated if this card's ATK and DEF are less than 500, or if the other monster has 0 ATK and 0 DEF.",
+      "url": "https://edisonrul.ing/cards/l/light-end-dragon.html"
+    },
+    {
+      "text": "\"VS. Enemy Controller: if either effect of E-Con is chained to this effect, this card is no longer treated as 'battling'. Therefore, this card will lose 500 ATK and DEF, but the opponent's monster will not lose any.\" (A negated attack, e.g. Magic Cylinder, still applies both.) Either monster switched position / control (or left) since the activation: they are no longer battling.",
       "url": "https://edisonrul.ing/cards/l/light-end-dragon.html"
     }
   ],
@@ -1541,6 +1581,12 @@ export const RULINGS: Record<string, RulingNote[]> = {
       "url": "https://edisonrul.ing/cards/m/megamorph.html"
     }
   ],
+  "Mermaid Archer": [
+    {
+      "text": "replaceDestroy sees every card destroyed at the same time: \"If Mermaid Archer and the monster equipped to it would be destroyed at the same time (by Judgment Dragon, for example), you cannot destroy the equipped monster to save Mermaid Archer.\" (historical)",
+      "url": "https://edisonrul.ing/cards/m/mermaid-archer.html"
+    }
+  ],
   "Messenger of Peace": [
     {
       "text": "\"The maintenance cost is optional, you may chose not to pay 100 Life Points and 'Messenger of Peace' will be destroyed\": a maintenance cost, applied without a Chain.",
@@ -1616,6 +1662,10 @@ export const RULINGS: Record<string, RulingNote[]> = {
     }
   ],
   "Montage Dragon": [
+    {
+      "text": "Montage Dragon: once its effect is negated while it is face-up (Skill Drain), its ATK stays 0 even after the negation ends. (historical). Every ATK read of a negated Montage Dragon goes through isNegated, which records the loss.",
+      "url": "https://edisonrul.ing/cards/m/montage-dragon.html"
+    },
     {
       "text": "2010 ruling: flipped face-down and back face-up, its ATK is 0.",
       "url": "https://edisonrul.ing/cards/m/montage-dragon.html"
@@ -1707,6 +1757,12 @@ export const RULINGS: Record<string, RulingNote[]> = {
       "url": "https://edisonrul.ing/cards/m/mosaic-manticore.html"
     }
   ],
+  "Multiple Piece Golem": [
+    {
+      "text": "'toDeck': G.B. Hunter stops it being activated, like a Gladiator Beast tag-out.",
+      "url": "https://edisonrul.ing/cards/g/gb-hunter.html"
+    }
+  ],
   "Mysterious Triangle": [
     {
       "text": "2010 ruling: targets the monster it destroys; if the target loses its A-Counter in response (e.g. flipped face-down) or is not destroyed, nothing is destroyed and no \"Alien\" is Special Summoned.",
@@ -1789,8 +1845,18 @@ export const RULINGS: Record<string, RulingNote[]> = {
   ],
   "Overdoom Line": [
     {
+      "text": "\"If a monster receives the ATK boost from Overdoom Line but is flipped face-down, it loses the boost, even if flipped face-up again while Overdoom Line is still on the field.\"",
+      "url": "https://edisonrul.ing/cards/o/overdoom-line.html"
+    },
+    {
       "text": "the self-destruction is not an effect (Royal Decree does not stop it).",
       "url": "https://edisonrul.ing/cards/o/overdoom-line.html"
+    }
+  ],
+  "Overworked": [
+    {
+      "text": "Compared with the ORIGINAL ATK (Game.baseAtk), which Unstable Evolution changes: \"The monster equipped with Unstable Evolution is not destroyed by Overworked\".",
+      "url": "https://edisonrul.ing/cards/u/unstable-evolution.html"
     }
   ],
   "Phoenix Wing Wind Blast": [
@@ -1879,6 +1945,12 @@ export const RULINGS: Record<string, RulingNote[]> = {
     {
       "text": "cannot be activated if the opponent has fewer than 3 cards in the Deck or no cards in the hand; if their hand is empty when it resolves, the effect disappears.",
       "url": "https://edisonrul.ing/cards/p/psi-impulse.html"
+    }
+  ],
+  "Psi-Station": [
+    {
+      "text": "It targets the Normal Summoned Psychic-Type monster. (historical)",
+      "url": "https://edisonrul.ing/cards/p/psi-station.html"
     }
   ],
   "Psychic Commander": [
@@ -2009,6 +2081,12 @@ export const RULINGS: Record<string, RulingNote[]> = {
       "url": "https://edisonrul.ing/cards/r/release-restraint-wave.html"
     }
   ],
+  "Remote Revenge": [
+    {
+      "text": "Only the monster targets count: \"cannot be chained to an effect that targets 2 or more monsters\", but \"if the effect targets only 1 monster while also targeting 1 or more Non-Monster Cards, like Icarus Attack, Remote Revenge can be chained\". (historical)",
+      "url": "https://edisonrul.ing/cards/r/remote-revenge.html"
+    }
+  ],
   "Rescue Cat": [
     {
       "text": "it Special Summons 2 monsters at once: it cannot be activated to Summon only 1 (2 eligible Beasts and 2 free zones, counting the one Rescue Cat frees), and a Summoned monster that is flipped face-down is not destroyed in the End Phase.",
@@ -2037,6 +2115,12 @@ export const RULINGS: Record<string, RulingNote[]> = {
     {
       "text": "it activates automatically (a chain, targeting the attacker) the first time an opponent's monster with less ATK than your \"Earthbound Immortal\" monster attacks.",
       "url": "https://edisonrul.ing/cards/r/roar-of-the-earthbound-immortal.html"
+    }
+  ],
+  "Rose Tentacles": [
+    {
+      "text": "With Wonder Clover it does not stack: 0 or 1 Plant = 2 attacks, 2 Plants = 3 attacks, so only the part of n above Clover's 1 extra attack is added. (historical)",
+      "url": "https://edisonrul.ing/cards/r/rose-tentacles.html"
     }
   ],
   "Royal Oppression": [
@@ -2101,6 +2185,12 @@ export const RULINGS: Record<string, RulingNote[]> = {
     {
       "text": "monsters Special Summoned before Scary Moth was Summoned (and Scary Moth's own Special Summon) do not count.",
       "url": "https://edisonrul.ing/cards/s/scary-moth.html"
+    }
+  ],
+  "Sea Dragon Lord Gishilnodon": [
+    {
+      "text": "Level 3 or lower on the field AND in the Graveyard (a Level 4 made Level 3 by A Legendary Ocean does not count). (historical)",
+      "url": "https://edisonrul.ing/cards/s/sea-dragon-lord-gishilnodon.html"
     }
   ],
   "Seal of Wickedness": [
@@ -2457,6 +2547,10 @@ export const RULINGS: Record<string, RulingNote[]> = {
     {
       "text": "2010 ruling: it targets the Tuner in the opponent's GY.",
       "url": "https://edisonrul.ing/cards/t/tuner-capture.html"
+    },
+    {
+      "text": "\"If a monster receives the ATK boost from Overdoom Line but is flipped face-down, it loses the boost, even if flipped face-up again while Overdoom Line is still on the field.\"",
+      "url": "https://edisonrul.ing/cards/o/overdoom-line.html"
     }
   ],
   "Turbo Cannon": [
@@ -2499,6 +2593,12 @@ export const RULINGS: Record<string, RulingNote[]> = {
     {
       "text": "2010 ruling: Gemini monsters already treated as Effect Monsters are unaffected (not Set in the End Phase).",
       "url": "https://edisonrul.ing/cards/u/unleash-your-power.html"
+    }
+  ],
+  "Unstable Evolution": [
+    {
+      "text": "Compared with the ORIGINAL ATK (Game.baseAtk), which Unstable Evolution changes: \"The monster equipped with Unstable Evolution is not destroyed by Overworked\".",
+      "url": "https://edisonrul.ing/cards/u/unstable-evolution.html"
     }
   ],
   "Urgent Tuning": [
@@ -2615,6 +2715,12 @@ export const RULINGS: Record<string, RulingNote[]> = {
     {
       "text": "it targets 1 \"X-Saber\" monster in your Graveyard.",
       "url": "https://edisonrul.ing/cards/x/xx-saber-ragigura.html"
+    }
+  ],
+  "Yamato-no-Kami": [
+    {
+      "text": "It still triggers if Yamato-no-Kami was destroyed in the same battle (or by an effect after damage calculation). The historical section is silent on this; this follows the Revised section.",
+      "url": "https://edisonrul.ing/cards/y/yamato-no-kami.html"
     }
   ],
   "Yubel": [
