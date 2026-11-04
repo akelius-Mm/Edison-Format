@@ -248,6 +248,23 @@ async function boundCheck(g: Game) {
 export function tdgsRules(g: Game) {
   const s = gs(g);
 
+  // ---- Unstable Evolution: the equipped monster's original ATK
+  const origBaseAtk = g.baseAtk.bind(g);
+  g.baseAtk = (card: C) => unstableBaseAtk(g, card) ?? origBaseAtk(card);
+
+  // ---- Montage Dragon: once its effect is negated while it is face-up (Skill Drain), its ATK stays 0 even after
+  // the negation ends. https://edisonrul.ing/cards/m/montage-dragon.html (historical). Every ATK read of a negated
+  // Montage Dragon goes through isNegated, which records the loss.
+  const origIsNegated = g.isNegated.bind(g);
+  g.isNegated = (card: C) => {
+    const r = origIsNegated(card);
+    if (r && card.name === 'Montage Dragon' && card.location === 'mzone' && card.faceUp) {
+      const m = montageAtk.get(card);
+      if (m && m.moveId === card.moveId && m.fid === card.faceUpId) m.lost = true;
+    }
+    return r;
+  };
+
   // ---- Tributes: Big Piece Golem, Cyber Shark, Geartown (Normal Summons only, not Sets)
   const origNeed = g.tributesNeeded.bind(g);
   g.tributesNeeded = (card: C) => {
@@ -817,7 +834,7 @@ M('Handcuffs Dragon', {
   ],
 });
 
-const montageAtk = new WeakMap<C, { moveId: number; fid: number; atk: number }>();
+const montageAtk = new WeakMap<C, { moveId: number; fid: number; atk: number; lost?: boolean }>();
 M('Montage Dragon', {
   attribute: 'EARTH',
   race: 'Dragon',
@@ -863,7 +880,8 @@ M('Montage Dragon', {
           value: (ctx) => {
             // 2010 ruling: flipped face-down and back face-up, its ATK is 0. https://edisonrul.ing/cards/m/montage-dragon.html
             const m = montageAtk.get(ctx.self);
-            return m && m.moveId === ctx.self.moveId && m.fid === ctx.self.faceUpId ? m.atk : 0;
+            // Negated once (Skill Drain) while face-up: stays 0 (see tdgsRules).
+            return m && !m.lost && m.moveId === ctx.self.moveId && m.fid === ctx.self.faceUpId ? m.atk : 0;
           },
         },
       ],
@@ -1453,7 +1471,10 @@ M('Yamato-no-Kami', {
       when: true,
       label: 'Destroy 1 Spell/Trap your opponent controls',
       categories: ['destroy'],
-      eventFilter: (ctx, ev) => ev.other === ctx.self && faceUpOn(ctx.self) && ev.fromController === ctx.opp,
+      // It still triggers if Yamato-no-Kami was destroyed in the same battle (or by an effect after damage
+      // calculation). The historical section is silent on this; this follows the Revised section.
+      // https://edisonrul.ing/cards/y/yamato-no-kami.html
+      eventFilter: (ctx, ev) => ev.other === ctx.self && ev.fromController === ctx.opp,
       canActivate: (ctx) => ctx.spellTraps('opp', (c) => ctx.canTarget(c)).length > 0,
       activate: async (ctx) => {
         await ctx.selectTargets(ctx.spellTraps('opp'), 1, 1, 'Target 1 Spell or Trap Card your opponent controls.', 'destroy');
@@ -1530,7 +1551,9 @@ M('Multiple Piece Golem', {
       event: 'battleEnd',
       when: true,
       label: 'Return to the Extra Deck',
-      categories: ['specialSummon'],
+      // 'toDeck': G.B. Hunter stops it being activated, like a Gladiator Beast tag-out.
+      // https://edisonrul.ing/cards/g/gb-hunter.html
+      categories: ['toDeck', 'specialSummon'],
       eventFilter: (ctx) => faceUpOn(ctx.self) && ctx.self.attackedThisTurnOrWasAttacked,
       resolve: async (ctx) => {
         if (!faceUpOn(ctx.self)) return;
@@ -1601,6 +1624,9 @@ M('Herald of Orange Light', {
       range: ['hand'],
       label: "Negate a monster's effect",
       categories: ['negate', 'destroy'],
+      // It negates an activation, so it can be activated in the Damage Step.
+      // https://edisonrul.ing/cards/h/herald-of-orange-light.html (historical)
+      damageStep: true,
       condition: (ctx) => {
         const l = ctx.prevLink();
         return !!l && !l.negated && l.player === ctx.opp && l.card.isMonster && !l.isCardActivation;
@@ -2258,15 +2284,15 @@ S('Psi-Station', 'continuous', {
       label: 'Pay 500: Level +1, ATK +300',
       categories: ['atkChange'],
       eventFilter: (ctx, ev) => !!evc(ev) && isPsychic(evc(ev)!) && faceUpOn(evc(ev)!) && stActive(ctx),
-      canActivate: (ctx) => ctx.lp > 500,
+      // It targets the Normal Summoned Psychic-Type monster. https://edisonrul.ing/cards/p/psi-station.html (historical)
+      canActivate: (ctx) => ctx.lp > 500 && !!ctx.event && ctx.canTarget(evc(ctx.event)!),
       activate: async (ctx) => {
-        ctx.data.m = evc(ctx.event!);
-        ctx.data.mid = (ctx.data.m as C).moveId;
+        ctx.addTargets([evc(ctx.event!)!]);
         await ctx.payLp(500);
       },
       resolve: async (ctx) => {
-        const m = ctx.data.m as C;
-        if (!faceUpOn(m) || m.moveId !== ctx.data.mid) return;
+        const m = ctx.validTargets(faceUpOn)[0];
+        if (!m) return;
         ctx.addTempMod(m, 'level', 1, 'field');
         ctx.addTempMod(m, 'atk', 300, 'field');
       },
@@ -2455,26 +2481,23 @@ S('Unstable Evolution', 'equip', {
         },
       },
     },
-    {
-      // APPROX: "original ATK becomes X" as the difference to the printed ATK.
-      kind: 'continuous',
-      mods: [
-        {
-          q: 'atk',
-          to: 'cards',
-          filter: (ctx, c: C) => c === ctx.equipTarget,
-          value: (ctx, c: C) => {
-            const mine = ctx.lp;
-            const theirs = ctx.oppLp;
-            if (mine < theirs) return 2400 - ctx.game.baseAtk(c);
-            if (mine > theirs) return 1000 - ctx.game.baseAtk(c);
-            return 0;
-          },
-        },
-      ],
-    },
+    // "Original ATK becomes X": applied by tdgsRules through Game.baseAtk (unstableBaseAtk).
+    { kind: 'continuous', label: 'Original ATK becomes 2400 / 1000' },
   ],
 });
+/**
+ * Unstable Evolution changes the equipped monster's ORIGINAL ATK (Shrink halves it, Megamorph doubles/halves it, other
+ * gains and losses apply on top, Overworked does not see a gain). https://edisonrul.ing/cards/u/unstable-evolution.html
+ * (historical). Undefined when no active Unstable Evolution applies.
+ */
+function unstableBaseAtk(g: Game, card: C): number | undefined {
+  if (card.location !== 'mzone' || !card.faceUp) return undefined;
+  const ue = g.equipsOf(card).find((e) => e.name === 'Unstable Evolution' && e.faceUp && e.activeOnField && !g.isNegated(e));
+  if (!ue) return undefined;
+  const mine = g.players[ue.controller].lp;
+  const theirs = g.players[g.opp(ue.controller)].lp;
+  return mine < theirs ? 2400 : mine > theirs ? 1000 : undefined;
+}
 
 S('Recycling Batteries', 'normal', {
   text: 'Select 2 Thunder-Type monsters with 1500 or less ATK in your Graveyard, and add them to your hand.',
@@ -2733,8 +2756,11 @@ T('Remote Revenge', 'normal', {
         const l = ctx.prevLink();
         if (!l || l.negated) return false;
         const cats = l.effect.categories ?? [];
-        const ts = l.ctx.targets;
-        return cats.includes('destroy') && !cats.includes('destroyMulti') && ts.length === 1 && ts[0].location === 'mzone' && ts[0].controller === ctx.player;
+        // Only the monster targets count: "cannot be chained to an effect that targets 2 or more monsters", but "if the
+        // effect targets only 1 monster while also targeting 1 or more Non-Monster Cards, like Icarus Attack, Remote
+        // Revenge can be chained". https://edisonrul.ing/cards/r/remote-revenge.html (historical)
+        const ts = remoteMonsterTargets(l);
+        return cats.includes('destroy') && !cats.includes('destroyMulti') && ts.length === 1 && ts[0].controller === ctx.player;
       },
       canActivate: (ctx) => ctx.monsters('opp', (c) => remoteOk(ctx, c)).length > 0,
       activate: async (ctx) => {
@@ -2746,7 +2772,10 @@ T('Remote Revenge', 'normal', {
         const cands = ctx.monsters('opp', (c) => remoteOk(ctx, c));
         const [t] = await ctx.select(cands, 1, 1, 'Select the new target (a monster your opponent controls).', 'target', { aiScore: (c) => cardValue(ctx.game, c) });
         if (!t) return;
-        l.ctx.targets.length = 0;
+        // switch the monster target only (Icarus Attack keeps its Spell/Trap target)
+        const old = remoteMonsterTargets(l)[0];
+        const i = old ? l.ctx.targets.indexOf(old) : -1;
+        if (i >= 0) l.ctx.targets.splice(i, 1);
         l.ctx.addTargets([t]);
         ctx.log(`The target of ${l.card.name} changes to ${t.faceUp ? t.name : 'a face-down monster'}.`);
       },
@@ -2754,9 +2783,11 @@ T('Remote Revenge', 'normal', {
     },
   ],
 });
+/** The targets of `l` that are monsters on the field. */
+const remoteMonsterTargets = (l: ChainLink) => l.ctx.targets.filter((c) => c.location === 'mzone');
 function remoteOk(ctx: Ctx, c: C) {
   const l = ctx.data.link ?? ctx.prevLink();
-  const old = (l as ChainLink | undefined)?.ctx.targets[0];
+  const old = l ? remoteMonsterTargets(l as ChainLink)[0] : undefined;
   if (!l || !old) return false;
   if (old.faceUp && !c.faceUp) return false;
   return (l as ChainLink).ctx.canTarget(c);
@@ -3145,7 +3176,9 @@ T('Overworked', 'normal', {
     },
   ],
 });
-const overworkedList = (ctx: Ctx) => ctx.faceUpMonsters('both', (c) => ctx.atk(c) > (c.data.atk ?? 0));
+// Compared with the ORIGINAL ATK (Game.baseAtk), which Unstable Evolution changes: "The monster equipped with Unstable
+// Evolution is not destroyed by Overworked". https://edisonrul.ing/cards/u/unstable-evolution.html
+const overworkedList = (ctx: Ctx) => ctx.faceUpMonsters('both', (c) => ctx.atk(c) > ctx.game.baseAtk(c));
 
 T('Kunai with Chain', 'normal', {
   text: "Activate 1 or both of these effects:\n● Change the attacking monster to Defense Position when your opponent's monster declares an attack.\n● Equip this card to a face-up monster you control. It gains 500 ATK.",

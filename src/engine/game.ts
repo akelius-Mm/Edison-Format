@@ -819,18 +819,19 @@ export class Game {
   ): Promise<CardInstance[]> {
     if (!cards.length) return [];
     this.beginBatch();
-    const moved: { card: CardInstance; from: Location; to: Location; fromFaceUp: boolean; fromCtrl: PlayerId; wasMonster: boolean; fromNegated: boolean }[] = [];
+    const moved: { card: CardInstance; from: Location; to: Location; fromFaceUp: boolean; fromCtrl: PlayerId; wasMonster: boolean; fromNegated: boolean; fromLevel?: number }[] = [];
     // Snapshot before anything moves: whose effects were negated while on the field (EffectDef.noChain leave-field effects).
     const negatedBefore = new Set(cards.filter((c) => c.onField && c.faceUp && this.isNegated(c)));
     for (const card of cards) {
       const from = card.location;
       const fromFaceUp = card.faceUp;
       const fromCtrl = card.controller;
+      const fromLevel = from === 'mzone' && fromFaceUp ? this.getLevel(card) : undefined;
       const prevMoveId = card.moveId;
       const dest = this.rawMove(card, to, { faceUp: opts.faceUp, bottom: opts.bottom });
       // Remember that this move was a destruction (read by ruleCleanup for links that break only on destruction).
       if (opts.destroyed) card.flags.destroyedFromMoveId = prevMoveId;
-      moved.push({ card, from, to: dest, fromFaceUp, fromCtrl, wasMonster: from === 'mzone', fromNegated: negatedBefore.has(card) });
+      moved.push({ card, from, to: dest, fromFaceUp, fromCtrl, wasMonster: from === 'mzone', fromNegated: negatedBefore.has(card), fromLevel });
     }
     if (!opts.noAnim) {
       await this.anim({
@@ -853,7 +854,7 @@ export class Game {
       minor: opts.minor,
     };
     for (const m of moved) {
-      const common = { ...base, card: m.card, from: m.from, to: m.to, fromFaceUp: m.fromFaceUp, fromController: m.fromCtrl, fromNegated: m.fromNegated || undefined };
+      const common = { ...base, card: m.card, from: m.from, to: m.to, fromFaceUp: m.fromFaceUp, fromController: m.fromCtrl, fromNegated: m.fromNegated || undefined, fromLevel: m.fromLevel };
       const wasField = m.from === 'mzone' || m.from === 'szone' || m.from === 'fzone';
       if (wasField && !(m.to === 'mzone' || m.to === 'szone' || m.to === 'fzone')) this.emit({ type: 'leftField', ...common });
       if (opts.destroyed) this.emit({ type: 'destroyed', ...common });
@@ -1421,6 +1422,23 @@ export class Game {
    * blocked trigger is neither offered nor asked about.
    */
   canActivateTrigger(_player: PlayerId, _card: CardInstance, _ef: EffectDef, _idx: number): boolean {
+    return true;
+  }
+
+  /**
+   * Whether a rule lets the effect running in `ctx` target `card` (on top of Ctx.canTarget's own checks). Rule
+   * modules wrap this (rgbt.ts: G.B. Hunter forbids targeting a card on the field to return it to the Deck).
+   */
+  targetAllowed(_card: CardInstance, _ctx: Ctx): boolean {
+    return true;
+  }
+
+  /**
+   * Whether a rule outside the query system lets `card` be Special Summoned at all (read by Ctx.canSummonCard /
+   * canSummonSelf, so an effect that would Special Summon only such cards cannot be activated). Rule modules wrap this
+   * (rgbt.ts: Koa'ki Meiru Drago).
+   */
+  specialSummonAllowed(_card: CardInstance): boolean {
     return true;
   }
 
@@ -2956,15 +2974,16 @@ export class Game {
     }
     if (destroyGroup.length) {
       this.beginBatch();
-      const moved: { card: CardInstance; by: CardInstance; from: Location; ctrl: PlayerId; negated: boolean }[] = [];
+      const moved: { card: CardInstance; by: CardInstance; from: Location; ctrl: PlayerId; negated: boolean; level?: number }[] = [];
       for (const l of destroyGroup) {
-        moved.push({ card: l.card, by: l.by, from: l.card.location, ctrl: l.card.controller, negated: l.card.faceUp && this.isNegated(l.card) });
+        const level = l.card.faceUp ? this.getLevel(l.card) : undefined;
+        moved.push({ card: l.card, by: l.by, from: l.card.location, ctrl: l.card.controller, negated: l.card.faceUp && this.isNegated(l.card), level });
         this.log(`${l.card.name} is destroyed by battle.`, 'battle', l.card.controller);
       }
       for (const m of moved) this.rawMove(m.card, 'grave');
       await this.anim({ type: 'destroy', cards: moved.map((m) => ({ uid: m.card.uid, from: m.from, to: m.card.location, ctrl: m.ctrl })), reason: 'battle' });
       for (const m of moved) {
-        const common = { card: m.card, from: m.from as Location, to: m.card.location, fromController: m.ctrl, fromFaceUp: true, reason: 'battle' as Reason, reasons: ['battle', 'destroy'] as Reason[], reasonCard: m.by, reasonPlayer: m.by.controller, other: m.by, fromNegated: m.negated || undefined };
+        const common = { card: m.card, from: m.from as Location, to: m.card.location, fromController: m.ctrl, fromFaceUp: true, reason: 'battle' as Reason, reasons: ['battle', 'destroy'] as Reason[], reasonCard: m.by, reasonPlayer: m.by.controller, other: m.by, fromNegated: m.negated || undefined, fromLevel: m.level };
         this.emit({ type: 'leftField', ...common });
         this.emit({ type: 'destroyed', ...common });
         this.emit({ type: 'battleDestroyed', ...common });
