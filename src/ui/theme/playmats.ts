@@ -1,5 +1,5 @@
 // Playmats, modelled on what people actually duelled on in 2010: plain neoprene, the paper starter-deck mat,
-// felt and a kitchen table, and card-art mats (the official card artwork printed on neoprene, the way prize mats
+// felt and a kitchen table, deck mats (several of a top deck's cards side by side), and card-art mats (the official card artwork printed on neoprene, the way prize mats
 // and most players' own mats looked). Nothing here is drawn: surfaces are material textures, and every picture is
 // the card's official artwork (YGOPRODeck, the same source as the card images; see ../cards/officialArt.ts).
 // When the artwork can't load (offline before it was ever cached, or official images turned off) an art mat
@@ -21,8 +21,10 @@ export interface Playmat {
   zoneFill: string;
   /** Print official-style zone names ("Monster Card Zone"...) inside the zones. */
   printedZones?: boolean;
-  /** Card whose official artwork is printed on the mat. */
+  /** Card whose official artwork is printed on the mat (a deck mat's centre card). */
   art?: string;
+  /** A deck mat's three cards, left to right: the official artwork of each, collaged across the mat. */
+  collage?: readonly string[];
   /** Colour of the stitched edge. */
   edge?: string;
   /** CSS background value (reads the artwork cache, so it can change once the artwork is known). */
@@ -48,6 +50,12 @@ const LIGHT = 'radial-gradient(ellipse at 50% 38%, rgba(255,255,255,.07), rgba(2
 export const ART_FOCUS = 'center 15%';
 /** Keeps zone lines readable over busy artwork. */
 const ART_SCRIM = 'linear-gradient(rgba(0,0,0,.30), rgba(0,0,0,.30))';
+/** Pushes a deck mat's side cards back behind its centre card. */
+const SIDE_SCRIM = 'linear-gradient(rgba(0,0,0,.28), rgba(0,0,0,.28))';
+/** A deck mat's centre panel is square (sized like the artwork) and this shades its two edges, so the cards
+ *  behind meet it in a soft dark band with a thin printed line, not a hard seam. */
+const collageSeam = (line: string) =>
+  `${svgUri(`<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100"><defs><linearGradient id="s"><stop offset="0" stop-color="#000" stop-opacity=".85"/><stop offset=".07" stop-color="#000" stop-opacity=".35"/><stop offset=".13" stop-color="#000" stop-opacity="0"/><stop offset=".87" stop-color="#000" stop-opacity="0"/><stop offset=".93" stop-color="#000" stop-opacity=".35"/><stop offset="1" stop-color="#000" stop-opacity=".85"/></linearGradient></defs><rect width="100" height="100" fill="url(#s)"/><g stroke="${line}" stroke-opacity=".55" stroke-width=".6"><line x1="1.2" y1="0" x2="1.2" y2="100"/><line x1="98.8" y1="0" x2="98.8" y2="100"/></g></svg>`)} center / auto 100% no-repeat`;
 
 const WOOD = svgUri(
   `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1000" preserveAspectRatio="none"><filter id="w" x="0" y="0" width="100%" height="100%"><feTurbulence type="fractalNoise" baseFrequency=".0035 .09" numOctaves="4" seed="7" stitchTiles="stitch"/><feColorMatrix values="0 0 0 .55 .2  0 0 0 .32 .11  0 0 0 .16 .05  0 0 0 0 .55"/></filter><rect width="1600" height="1000" filter="url(#w)"/><g stroke="#000" stroke-opacity=".28" stroke-width="3">${[0, 1, 2, 3, 4, 5].map((i) => `<line x1="0" y1="${i * 200 + 40}" x2="1600" y2="${i * 200 + 40}"/>`).join('')}</g></svg>`,
@@ -55,7 +63,7 @@ const WOOD = svgUri(
 
 /** Printed text in a mat's corner (an event mat's name and date). */
 const printLayer = (text: string, color: string) =>
-  `${svgUri(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${Math.max(200, text.length * 13)} 30"><text x="100%" y="21" text-anchor="end" font-family="Arial Narrow, Arial, Helvetica, sans-serif" font-weight="700" font-size="18" letter-spacing="3" fill="${color}" fill-opacity=".85">${text}</text></svg>`)} right 3.5% bottom 4% / auto 5.5% no-repeat`;
+  `${svgUri(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${Math.max(200, text.length * 17)} 30"><text x="100%" y="21" text-anchor="end" font-family="Arial Narrow, Arial, Helvetica, sans-serif" font-weight="700" font-size="18" letter-spacing="3" fill="${color}" fill-opacity=".85">${text}</text></svg>`)} right 3.5% bottom 4% / auto 5.5% no-repeat`;
 
 // ---------------------------------------------------------------- definitions
 
@@ -73,6 +81,8 @@ interface Def {
   /** Material texture over the surface. */
   texture?: string;
   art?: string;
+  /** Deck mat: three cards, left / centre / right (centre = art). */
+  collage?: readonly string[];
   print?: string;
   edge?: string;
 }
@@ -269,6 +279,44 @@ const PRESTIGE: Def[] = [
   }),
 ];
 
+// ---------------------------------------------------------------- deck mats
+// Archetype mats, like the official ones that put a deck's monsters side by side on one mat: three official
+// artworks of a top Edison deck's key cards, the centre card in front and its two partners behind, with the deck's
+// name printed in the corner. Each deck is one of the real 2010 tournament decks in src/decks/tournament*.ts.
+
+/** A deck mat: [left, centre, right] cards on coloured neoprene. */
+function deckDef(id: string, name: string, cards: readonly [string, string, string], c: { base: string; mid: string; dark: string; edge: string; line: string }, description: string): Def {
+  return artDef(cards[1], {
+    id,
+    name,
+    description,
+    base: c.base,
+    accent: c.edge,
+    surface: neoprene(c.base, c.mid, c.dark),
+    print: name.toUpperCase(),
+    edge: c.edge,
+    printedZones: true,
+    zoneLine: c.line,
+    collage: cards,
+  });
+}
+
+const DECK: Def[] = [
+  deckDef('deck-gladiator', 'Gladiator Beasts', ['Gladiator Beast Bestiari', 'Gladiator Beast Gyzarus', 'Gladiator Beast Heraklinos'], { base: '#2b1206', mid: '#4a2410', dark: '#0e0502', edge: '#e0a35a', line: 'rgba(240,196,140,.72)' }, 'Bestiari, Gyzarus and Heraklinos tagging in across bronze neoprene.'),
+  deckDef('deck-blackwings', 'Blackwings', ['Blackwing - Shura the Blue Flame', 'Blackwing Armor Master', 'Blackwing - Kalut the Moon Shadow'], { base: '#0b0b14', mid: '#1c1a30', dark: '#030306', edge: '#9d8cff', line: 'rgba(196,186,255,.68)' }, 'Shura, Armor Master and Kalut on a midnight mat.'),
+  deckDef('deck-lightsworn', 'Lightsworn', ['Ryko, Lightsworn Hunter', 'Judgment Dragon', 'Lyla, Lightsworn Sorceress'], { base: '#1d1a10', mid: '#3a3320', dark: '#0a0904', edge: '#f4e2a0', line: 'rgba(250,236,186,.75)' }, 'Ryko and Lyla flank Judgment Dragon on white-gold stitching.'),
+  deckDef('deck-twilight', 'Twilight', ['Chaos Sorcerer', 'Dark Armed Dragon', 'Judgment Dragon'], { base: '#140d1c', mid: '#2a1c3a', dark: '#05030a', edge: '#d8c7ff', line: 'rgba(226,214,255,.7)' }, 'Light and dark together: Chaos Sorcerer, Dark Armed Dragon and Judgment Dragon.'),
+  deckDef('deck-plant-synchro', 'Quickdraw Dandywarrior', ['Dandylion', 'Quickdraw Synchron', 'Lonefire Blossom'], { base: '#0c2212', mid: '#1a4224', dark: '#030c05', edge: '#9fe08a', line: 'rgba(196,240,180,.72)' }, 'The deck that won Edison: Dandylion, Quickdraw Synchron and Lonefire Blossom.'),
+  deckDef('deck-machina-gadgets', 'Machina Gadgets', ['Green Gadget', 'Machina Fortress', 'Red Gadget'], { base: '#14181c', mid: '#2a3238', dark: '#05070a', edge: '#c9d4dc', line: 'rgba(214,224,232,.7)' }, 'Green and Red Gadget either side of Machina Fortress, on gunmetal neoprene.'),
+  deckDef('deck-monarchs', 'Frog Monarchs', ['Raiza the Storm Monarch', 'Caius the Shadow Monarch', 'Treeborn Frog'], { base: '#170b22', mid: '#2e1844', dark: '#06030c', edge: '#c69bff', line: 'rgba(218,196,255,.7)' }, 'Raiza and Caius, with the Treeborn Frog that brings them back every turn.'),
+  deckDef('deck-x-sabers', 'X-Sabers', ['XX-Saber Emmersblade', 'XX-Saber Faultroll', 'XX-Saber Hyunlei'], { base: '#20160a', mid: '#3f2b12', dark: '#0b0703', edge: '#f0b54a', line: 'rgba(246,206,140,.72)' }, 'Emmersblade, Faultroll and Hyunlei under amber stitching.'),
+  deckDef('deck-gravekeepers', 'Gravekeepers', ["Gravekeeper's Spy", "Gravekeeper's Descendant", "Gravekeeper's Commandant"], { base: '#1e170c', mid: '#3a2d18', dark: '#0a0704', edge: '#d9b779', line: 'rgba(232,208,160,.7)' }, 'Spy, Descendant and Commandant guarding the valley.'),
+  deckDef('deck-zombies', 'Zombies', ['Goblin Zombie', 'Zombie Master', 'Mezuki'], { base: '#0f1a12', mid: '#1f3424', dark: '#040805', edge: '#a8d6a0', line: 'rgba(196,232,190,.68)' }, 'Goblin Zombie, Zombie Master and Mezuki crawling out of the grave.'),
+];
+
+/** The deck mats, in the order they're offered. */
+export const DECK_MAT_IDS = DECK.map((d) => d.id);
+
 /** Mats you earn at Regionals, the Championship Series and Nationals; locked until then. */
 export const PRESTIGE_MAT_IDS = ['regional-silver', 'regional-top16', 'championship-edison', 'feature-table', 'nationals-indy', 'national-champion'] as const;
 export type PrestigeMatId = (typeof PRESTIGE_MAT_IDS)[number];
@@ -304,6 +352,18 @@ function cssOf(d: Def): string {
   if (d.texture) layers.push(d.texture);
   layers.push(LIGHT);
   if (d.print) layers.push(printLayer(d.print, d.edge ?? d.accent));
+  if (d.collage) {
+    // Deck mat: three square artworks at full height, left / centre / right. On a mat half (about 2–2.5 times as
+    // wide as tall) they overlap a little, and the centre card sits in front with shaded edges.
+    const [left, centre, right] = d.collage.map(artUrl);
+    if (left || centre || right) layers.push(ART_SCRIM);
+    if (centre) layers.push(collageSeam(d.edge ?? d.accent), `url("${centre}") center / auto 100% no-repeat`);
+    if (left || right) layers.push(SIDE_SCRIM);
+    if (left) layers.push(`url("${left}") left center / auto 100% no-repeat`);
+    if (right) layers.push(`url("${right}") right center / auto 100% no-repeat`);
+    layers.push(d.surface);
+    return layers.join(', ');
+  }
   const url = artUrl(d.art);
   // A mat half is about twice as wide as the (square) artwork, so cover crops its top and bottom. Anchor near the
   // top, where card art keeps the head and face, instead of the middle (which cut Judgment Dragon's head off).
@@ -323,6 +383,7 @@ function build(d: Def): Playmat {
     zoneFill: d.zoneFill,
     printedZones: d.printedZones,
     art: d.art,
+    collage: d.collage,
     edge: d.edge,
     get css() {
       return cssOf(d);
@@ -332,8 +393,8 @@ function build(d: Def): Playmat {
 
 export const CUSTOM_MAT_ID = 'custom';
 
-/** Every offered mat: plain surfaces, the art mats, then the six event mats. */
-export const PLAYMATS: Playmat[] = [...PLAIN, ...ART_MAT_CARDS.map((c) => artDef(c)), ...PRESTIGE].map(build);
+/** Every offered mat: plain surfaces, the art mats, the deck mats, then the six event mats. */
+export const PLAYMATS: Playmat[] = [...PLAIN, ...ART_MAT_CARDS.map((c) => artDef(c)), ...DECK, ...PRESTIGE].map(build);
 
 const artCache = new Map<string, Playmat>();
 
@@ -356,9 +417,12 @@ export function playmatById(id: string): Playmat {
 
 /** Once an art mat's artwork is looked up, paint it again (if the element still shows that mat). */
 function whenArtKnown(el: HTMLElement, id: string, m: Playmat, paint: () => void) {
-  if (!m.art || !officialArtEnabled() || cachedOfficialImage(m.art) !== undefined) return;
-  void getOfficialImage(m.art).then((img) => {
-    if (img && el.dataset.playmat === m.id && el.dataset.playmatReq === id) paint();
+  if (!officialArtEnabled()) return;
+  const unknown = (m.collage ?? (m.art ? [m.art] : [])).filter((c) => cachedOfficialImage(c) === undefined);
+  if (!unknown.length) return;
+  // a deck mat repaints once all three are known (one repaint, not three)
+  void Promise.all(unknown.map(getOfficialImage)).then((imgs) => {
+    if (imgs.some(Boolean) && el.dataset.playmat === m.id && el.dataset.playmatReq === id) paint();
   });
 }
 
