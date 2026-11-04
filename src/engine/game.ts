@@ -475,15 +475,24 @@ export class Game {
     return true;
   }
 
-  private collectMods(q: QueryKey, subject: CardInstance | PlayerId): (number | boolean)[] {
+  /**
+   * `lock` (a Game.lockStat TempMod): leave out the continuous modifiers it locked and the TempMods added before it.
+   * `keys`: collect the source key of every continuous modifier that applies.
+   */
+  private collectMods(q: QueryKey, subject: CardInstance | PlayerId, lock?: TempMod, keys?: string[]): (number | boolean)[] {
     const out: (number | boolean)[] = [];
     this.queryDepth++;
     try {
       for (const src of this.continuousSources) {
-        for (const ef of src.data.effects ?? []) {
+        const effs = src.data.effects ?? [];
+        for (let ei = 0; ei < effs.length; ei++) {
+          const ef = effs[ei];
           if (ef.kind !== 'continuous' || !ef.mods) continue;
-          for (const m of ef.mods) {
+          for (let mi = 0; mi < ef.mods.length; mi++) {
+            const m = ef.mods[mi];
             if (m.q !== q) continue;
+            const key = `${src.uid}:${src.moveId}:${ei}:${mi}`;
+            if (lock?.locked?.includes(key)) continue;
             const to = m.to ?? 'self';
             if (to === 'self' && subject !== src) continue;
             if (to === 'cards' && typeof subject === 'number') continue;
@@ -493,11 +502,15 @@ export class Game {
             if (m.filter && !m.filter(ctx, subject)) continue;
             const v = typeof m.value === 'function' ? m.value(ctx, subject) : m.value ?? true;
             out.push(v);
+            keys?.push(key);
           }
         }
       }
       if (typeof subject !== 'number') {
-        for (const t of subject.tempMods) if (t.q === q) out.push(t.value);
+        const from = lock ? subject.tempMods.indexOf(lock) + 1 : 0;
+        subject.tempMods.forEach((t, i) => {
+          if (t.q === q && i >= from) out.push(t.value);
+        });
       } else {
         for (const m of this.playerMods) if (m.player === subject && m.q === q) out.push(m.value);
       }
@@ -510,8 +523,22 @@ export class Game {
   queryCard(card: CardInstance, q: QueryKey): boolean {
     return this.collectMods(q, card).some((v) => v === true || (typeof v === 'number' && v !== 0));
   }
-  queryCardNum(card: CardInstance, q: QueryKey): number {
-    return this.collectMods(q, card).reduce<number>((a, v) => a + (typeof v === 'number' ? v : 0), 0);
+  queryCardNum(card: CardInstance, q: QueryKey, lock?: TempMod): number {
+    return this.collectMods(q, card, lock).reduce<number>((a, v) => a + (typeof v === 'number' ? v : 0), 0);
+  }
+
+  /**
+   * A non-continuous "its ATK/DEF becomes X" that lasts while the monster is face-up on the field: X is locked. The
+   * modifiers applying now (Equip Spells, its own "gains ATK for each..." effects, earlier "until the End Phase" boosts)
+   * stop changing it, even if they later change or leave; modifiers applied afterwards still do.
+   * https://edisonrul.ing/cards/b/blackwing-gale-the-whirlwind.html, https://edisonrul.ing/cards/i/inverse-universe.html
+   */
+  lockStat(card: CardInstance, stat: 'atk' | 'def', value: number) {
+    const locked: string[] = [];
+    this.collectMods(stat, card, undefined, locked);
+    if (stat === 'atk') delete card.flags.setAtk;
+    card.tempMods.push({ q: stat === 'atk' ? 'atkBecomes' : 'defBecomes', value: Math.max(0, value), until: 'field', turn: this.turn, locked });
+    this.update();
   }
   queryPlayer(p: PlayerId, q: QueryKey): boolean {
     return this.collectMods(q, p).some((v) => !!v);
@@ -558,6 +585,15 @@ export class Game {
     return amount <= 0 || this.players[p].lp > amount;
   }
 
+  /**
+   * A monster whose effects stay negated in the GY until it leaves (card.flags.negatedInGrave, reset when it moves):
+   * "the effects of monsters this card destroys by battle are negated" (Ancient Gear Beast,
+   * https://edisonrul.ing/cards/a/ancient-gear-beast.html). Its GY effects cannot activate and do not resolve.
+   */
+  negatedInGrave(card: CardInstance): boolean {
+    return card.location === 'grave' && !!card.flags.negatedInGrave;
+  }
+
   isNegated(card: CardInstance): boolean {
     if (!card.onField) return false;
     if (card.flags.negatedTurn === this.turn) return true;
@@ -579,12 +615,20 @@ export class Game {
     }
     // SOVR: lasting "ATK becomes X" ('atkBecomes' TempMod); later ATK modifiers still apply on top.
     const becomes = card.tempMods.filter((t) => t.q === 'atkBecomes');
-    if (becomes.length) return Math.max(0, Number(becomes[becomes.length - 1].value) + this.queryCardNum(card, 'atk'));
+    if (becomes.length) {
+      const b = becomes[becomes.length - 1];
+      return Math.max(0, Number(b.value) + this.queryCardNum(card, 'atk', b.locked ? b : undefined));
+    }
     return Math.max(0, this.baseAtk(card) + this.queryCardNum(card, 'atk'));
   }
   getDef(card: CardInstance): number {
     if (!card.isMonster) return 0;
     if (!(card.location === 'mzone' && card.faceUp)) return card.data.def ?? 0;
+    const becomes = card.tempMods.filter((t) => t.q === 'defBecomes');
+    if (becomes.length) {
+      const b = becomes[becomes.length - 1];
+      return Math.max(0, Number(b.value) + this.queryCardNum(card, 'def', b.locked ? b : undefined));
+    }
     return Math.max(0, this.baseDef(card) + this.queryCardNum(card, 'def'));
   }
   getLevel(card: CardInstance): number {
@@ -995,12 +1039,23 @@ export class Game {
 
   // ABPF: destruction replacement hooks (EffectDef.replaceDestroyOne). With no hook on any card this returns `cards` unchanged.
   private replacingDestroyOne = new Set<number>();
+  /** The cards being destroyed together while replaceDestroyOne hooks run (they cannot be destroyed instead). */
+  destroyingGroup: CardInstance[] = [];
   async applyDestroyReplacementsOne(cards: CardInstance[], reason: Reason, reasonCard?: CardInstance): Promise<CardInstance[]> {
     const hooks: { src: CardInstance; ef: EffectDef }[] = [];
     for (const src of this.continuousSources) {
       for (const ef of src.data.effects ?? []) if (ef.kind === 'continuous' && ef.replaceDestroyOne) hooks.push({ src, ef });
     }
     if (!hooks.length) return cards;
+    const outerGroup = this.destroyingGroup;
+    this.destroyingGroup = cards;
+    try {
+      return await this.applyDestroyReplacementsOneIn(cards, hooks, reason, reasonCard);
+    } finally {
+      this.destroyingGroup = outerGroup;
+    }
+  }
+  private async applyDestroyReplacementsOneIn(cards: CardInstance[], hooks: { src: CardInstance; ef: EffectDef }[], reason: Reason, reasonCard?: CardInstance) {
     const out: CardInstance[] = [];
     for (const c of cards) {
       let replaced = false;
@@ -1495,6 +1550,7 @@ export class Game {
         if (this.isNegated(card)) return null;
         if (card.isTrap && this.queryPlayer(player, 'cannotActivateTraps')) return null;
       }
+      if (this.negatedInGrave(card)) return null;
       if (ef.kind === 'ignition' && (!isOwnTurn || this.chain.length)) return null;
     }
 
@@ -1756,7 +1812,7 @@ export class Game {
         this.log(`${card.name}'s effect is negated.`, 'chain');
         return;
       }
-    } else if (link.fromLocation === 'mzone' && card.location === 'mzone' && card.faceUp && this.isNegated(card)) {
+    } else if ((link.fromLocation === 'mzone' && card.location === 'mzone' && card.faceUp && this.isNegated(card)) || (link.fromLocation === 'grave' && this.negatedInGrave(card))) {
       this.log(`${card.name}'s effect is negated.`, 'chain');
       return;
     }
@@ -1838,6 +1894,7 @@ export class Game {
       // monster on field must still be face-up and not negated (a maintenance cost is not an effect: Skill Drain does not stop it)
       if (card.location === 'mzone' && !card.faceUp && t.event.type !== 'flipped') continue;
       if (card.location === 'mzone' && !ef.maintenance && this.isNegated(card)) continue;
+      if (this.negatedInGrave(card)) continue;
       // A chainless "when this card leaves the field" effect does not apply if the card was negated when it left
       // (Il Blud under Skill Drain: https://edisonrul.ing/cards/i/il-blud.html).
       if (ef.noChain && !ef.maintenance && t.event.card === card && t.event.fromNegated) continue;
@@ -2160,7 +2217,12 @@ export class Game {
       if (ps.negated) {
         this.log(`The summon of ${cards.map((c) => c.name).join(', ')} is negated.`, 'chain');
         const still = cards.filter((c) => c.location === 'mzone');
-        if (still.length) await this.destroy(still, 'rule');
+        // A monster whose Summon is negated was never on the field: its events carry the reason 'negated', so "sent
+        // from the field to the GY" effects (Sangan: https://edisonrul.ing/cards/s/sangan.html) do not activate.
+        if (still.length) {
+          for (const c of still) this.log(`${c.name} is destroyed.`, 'action', c.controller);
+          await this.moveCards(still, 'grave', { reason: 'rule', reasons: ['rule', 'destroy', 'negated'], destroyed: true });
+        }
         return true;
       }
       return false;
@@ -2821,6 +2883,14 @@ export class Game {
         }
       }
     }
+    // Start of the Damage Step, before a face-down target is flipped: Trigger Effects that activate "at the start of the
+    // Damage Step" (Gundari: https://edisonrul.ing/cards/g/gundari.html).
+    this.beginBatch();
+    this.emit({ type: 'damageStepStart', card: attacker, other: target ?? undefined, player: p, minor: true });
+    if (this.pending.length) {
+      await this.processTriggers(false);
+      target = b.target;
+    }
     b.targetFaceDownAtStart = !!target && !target.faceUp && target.location === 'mzone';
     if (target && !target.faceUp && target.location === 'mzone') {
       // flip face-up (flip effects resolve after damage calculation)
@@ -2920,11 +2990,19 @@ export class Game {
       const involved = dmg.player === p ? attacker : target;
       const shield = this.battleDamageShield(dmg.player);
       if (shield) this.log(`${this.players[dmg.player].name} takes no battle damage from this battle (${shield}).`, 'battle', dmg.player);
-      const blocked =
+      let blocked =
         !!shield ||
         this.queryPlayer(dmg.player, 'noBattleDamage') ||
         (involved && this.queryCard(involved, 'noBattleDamageFrom')) ||
         (target && dmg.player === opp && this.queryCard(target, 'noBattleDamageFrom'));
+      // "The next battle damage you take this turn becomes 0" (turnData.zeroNextBattleDamage[p] = card name: Blackwing -
+      // Mistral the Silver Shield): used up by the first battle damage that player would take.
+      const zeroNext = this.turnData.zeroNextBattleDamage?.[dmg.player] as string | undefined;
+      if (!blocked && zeroNext) {
+        delete this.turnData.zeroNextBattleDamage[dmg.player];
+        this.log(`${this.players[dmg.player].name}'s battle damage becomes 0 (${zeroNext}).`, 'battle', dmg.player);
+        blocked = true;
+      }
       if (!blocked) {
         const src = dmg.player === p ? target ?? undefined : attacker;
         await this.damage(dmg.player, dmg.amount, 'battle', src, this.opp(dmg.player));

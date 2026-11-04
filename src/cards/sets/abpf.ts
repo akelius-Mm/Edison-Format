@@ -782,7 +782,8 @@ monster('Rose Fairy', {
       label: 'Special Summon',
       categories: ['specialSummon'],
       eventFilter: (ctx, ev) => ev.card === ctx.self && ev.from === 'deck' && ev.reason !== 'draw',
-      condition: (ctx) => ctx.canSummonSelf() && ctx.canSummonCard(ctx.self),
+      // 2010 ruling: this effect cannot be activated during the Damage Step. https://edisonrul.ing/cards/r/rose-fairy.html
+      condition: (ctx) => !ctx.battle?.inDamageStep && ctx.canSummonSelf() && ctx.canSummonCard(ctx.self),
       resolve: async (ctx) => {
         if (ctx.self.location === 'hand') await ctx.specialSummon(ctx.self, { pos: 'choose' });
       },
@@ -945,8 +946,10 @@ monster('Reptilianne Naga', {
       kind: 'trigger',
       event: 'damageStepEnd',
       label: '(battled)',
+      // 2010 ruling: this applies even if "Reptilianne Naga" is destroyed during the Damage Step; the ATK stays 0 while
+      // that monster is face-up on the field. https://edisonrul.ing/cards/r/reptilianne-naga.html
       eventFilter: (ctx, ev) => {
-        if (!monActive(ctx)) return false;
+        if (ctx.self.onField && !monActive(ctx)) return false;
         const a = evc(ev);
         const t = evo(ev);
         const o = a === ctx.self ? t : t === ctx.self ? a : undefined;
@@ -962,8 +965,8 @@ monster('Reptilianne Naga', {
             g.turnData.abpfNagaDone = true;
             for (const v of (g.turnData.abpfNaga ?? []) as { c: C; moveId: number }[]) {
               if (v.c.location === 'mzone' && v.c.faceUp && v.c.moveId === v.moveId) {
-                const now = g.getAtk(v.c);
-                if (now > 0) g.addTempMod(v.c, 'atk', -now, 'field');
+                // Revised section (the historical one is silent): the 0 is locked, as for Blackwing - Gale.
+                g.lockStat(v.c, 'atk', 0);
                 g.log(`${v.c.name}'s ATK becomes 0 (Reptilianne Naga).`, 'action');
               }
             }
@@ -999,6 +1002,9 @@ monster('Reptilianne Vaskii', {
   sets: REP,
   cannotNormalSummon: true,
   nomi: true,
+  // 2010 ruling: it cannot be Special Summoned except from your hand by its own method.
+  // https://edisonrul.ing/cards/r/reptilianne-vaskii.html
+  noSpecialFrom: ['grave', 'banished', 'deck'],
   aiValue: 1200,
   text: 'This card cannot be Normal Summoned or Set. This card cannot be Special Summoned except by Tributing 2 face-up monsters with 0 ATK from anywhere on the field. Once per turn, you can select and destroy 1 face-up monster your opponent controls. There can only be 1 face-up "Reptilianne Vaskii" on the field.',
   effects: [
@@ -1044,7 +1050,12 @@ monster('Reptilianne Vaskii', {
       activate: async (ctx) => {
         await ctx.selectTargets(ctx.faceUpMonsters('opp'), 1, 1, 'Target 1 face-up monster your opponent controls.', 'destroy');
       },
-      resolve: destroyTargets,
+      // 2010 ruling: a target that is face-down when this resolves is not destroyed.
+      // https://edisonrul.ing/cards/r/reptilianne-vaskii.html
+      resolve: async (ctx) => {
+        const t = ctx.validTargets((c) => c.location === 'mzone' && c.faceUp);
+        if (t.length) await ctx.destroy(t);
+      },
       ai: { score: () => 65 },
     },
   ],
@@ -1451,21 +1462,23 @@ monster('Gundari', {
   effects: [
     ...spiritEffects,
     {
-      // APPROX: no "start of the Damage Step" event; used in the Damage Step window before damage calculation.
-      kind: 'quick',
-      damageStep: true,
+      // 2010 ruling: a mandatory effect that activates at the start of the Damage Step.
+      // https://edisonrul.ing/cards/g/gundari.html
+      kind: 'trigger',
+      event: 'damageStepStart',
+      mandatory: true,
       label: 'Return both monsters to the hand',
       categories: ['toHand'],
-      condition: (ctx) => {
+      eventFilter: (ctx, ev) => {
+        if (ev.card !== ctx.self && ev.other !== ctx.self) return false;
         const o = battleOpponent(ctx);
-        return !!ctx.battle?.inDamageStep && !!o && o.location === 'mzone' && o.faceUp && o.hasType('synchro') && monActive(ctx);
+        return !!o && o.location === 'mzone' && o.faceUp && o.hasType('synchro') && monActive(ctx);
       },
       resolve: async (ctx) => {
         const o = battleOpponent(ctx);
         const list = [ctx.self, o].filter((c): c is C => !!c && c.location === 'mzone');
         if (list.length) await ctx.toHand(list);
       },
-      ai: { score: () => 100 },
     },
   ],
 });
@@ -1701,6 +1714,9 @@ monster('Majestic Red Dragon', {
   atk: 4000,
   def: 3000,
   types: ['synchro'],
+  // A "Majestic" monster: "Majestic Dragon" can only be Synchro Material for one.
+  // https://edisonrul.ing/cards/m/majestic-dragon.html
+  sets: ['majestic'],
   aiValue: 1500,
   text: '"Majestic Dragon" + "Red Dragon Archfiend" + 1 non-Tuner monster\nCannot be destroyed by card effects. After damage calculation, if this card attacks: Destroy all Defense Position monsters on the field. Once per turn: You can target 1 face-up monster your opponent controls; negate its effects, and if you do, this card gains ATK equal to that monster\'s ATK. These changes last until the end of this turn. During the End Phase: Target 1 "Red Dragon Archfiend" in your Graveyard; return this card from the field to the Extra Deck, then Special Summon that target.',
   synchro: {
@@ -1733,9 +1749,10 @@ monster('Majestic Red Dragon', {
       categories: ['negate', 'atkChange'],
       // 2010 rulings: cannot target a non-Effect Monster; the ATK gained is the target's ATK once its effects are
       // negated (other cards' bonuses still count). https://edisonrul.ing/cards/m/majestic-red-dragon.html
-      canActivate: (ctx) => ctx.faceUpMonsters('opp', (c) => c.hasType('effect') && ctx.canTarget(c)).length > 0,
+      // Revised section (the historical one is silent): cannot target a monster whose effects are already negated.
+      canActivate: (ctx) => ctx.faceUpMonsters('opp', (c) => c.hasType('effect') && !ctx.isNegated(c) && ctx.canTarget(c)).length > 0,
       activate: async (ctx) => {
-        await ctx.selectTargets(ctx.faceUpMonsters('opp', (c) => c.hasType('effect')), 1, 1, 'Target 1 face-up Effect Monster your opponent controls.', 'negate', {
+        await ctx.selectTargets(ctx.faceUpMonsters('opp', (c) => c.hasType('effect') && !ctx.isNegated(c)), 1, 1, 'Target 1 face-up Effect Monster your opponent controls.', 'negate', {
           aiScore: (c) => ctx.atk(c) + cardValue(ctx.game, c),
         });
       },
@@ -1756,15 +1773,17 @@ monster('Majestic Red Dragon', {
       label: 'Return; summon Red Dragon Archfiend',
       categories: ['specialSummon', 'toDeck'],
       eventFilter: (ctx, ev) => ev.phase === 'end' && ctx.self.location === 'mzone' && ctx.self.faceUp,
-      canActivate: (ctx) => ctx.grave('me', (c) => c.name === 'Red Dragon Archfiend' && ctx.canSummonCard(c)).length > 0,
+      // Revised section (the historical one only says it targets): even with no "Red Dragon Archfiend" in the GY this
+      // card still returns to the Extra Deck. https://edisonrul.ing/cards/m/majestic-red-dragon.html
       activate: async (ctx) => {
-        await ctx.selectTargets(ctx.grave('me', (c) => c.name === 'Red Dragon Archfiend'), 1, 1, 'Target "Red Dragon Archfiend" in your GY.', 'specialSummon');
+        const rda = ctx.grave('me', (c) => c.name === 'Red Dragon Archfiend' && ctx.canTarget(c));
+        if (rda.length) await ctx.selectTargets(rda, 1, 1, 'Target "Red Dragon Archfiend" in your GY.', 'specialSummon');
       },
       resolve: async (ctx) => {
+        if (ctx.self.location !== 'mzone') return;
         const t = ctx.validTargets((c) => c.location === 'grave')[0];
-        if (!t || ctx.self.location !== 'mzone') return;
         await ctx.toDeck(ctx.self, 'shuffle');
-        if ((ctx.self.location as Location) === 'extra' && ctx.canSummonCard(t)) await ctx.specialSummon(t, { pos: 'choose', ignoreConditions: true });
+        if (t && (ctx.self.location as Location) === 'extra' && ctx.canSummonCard(t)) await ctx.specialSummon(t, { pos: 'choose', ignoreConditions: true });
       },
     },
   ],
@@ -2152,14 +2171,19 @@ monster('Chimera the Flying Mythical Beast', {
   atk: 2100,
   def: 1800,
   types: ['fusion'],
-  sets: ['phantom-beast'],
+  // Not a "Phantom Beast" card (Revised section; the historical one is silent and the 2010 text has no such line).
+  // https://edisonrul.ing/cards/c/chimera-the-flying-mythical-beast.html
   aiValue: 400,
-  text: '"Gazelle the King of Mythical Beasts" + "Berfomet"\n(This card is always treated as a "Phantom Beast" card.)\nWhen this card is destroyed: You can target 1 "Berfomet" or 1 "Gazelle the King of Mythical Beasts" in your GY; Special Summon that target.',
+  text: '"Gazelle the King of Mythical Beasts" + "Berfomet"\nWhen this card is destroyed: You can target 1 "Berfomet" or 1 "Gazelle the King of Mythical Beasts" in your GY; Special Summon that target.',
   fusion: { materials: [named('Gazelle the King of Mythical Beasts'), named('Berfomet')], desc: '"Gazelle the King of Mythical Beasts" + "Berfomet"' },
   effects: [
+    // 2010 rulings: an optional "When" effect that misses the timing if destroyed by "Cyber Jar"; it activates when
+    // destroyed by battle or by an effect, and also when destroyed while equipped to "Relinquished" (a Spell & Trap
+    // Zone card). https://edisonrul.ing/cards/c/chimera-the-flying-mythical-beast.html
     reviveFromGrave('Revive Berfomet / Gazelle', (c) => c.name === 'Berfomet' || c.name === 'Gazelle the King of Mythical Beasts', {
       event: 'destroyed',
-      eventFilter: (ctx, ev) => ev.card === ctx.self && ev.from === 'mzone',
+      when: true,
+      eventFilter: (ctx, ev) => ev.card === ctx.self && (ev.from === 'mzone' || ev.from === 'szone'),
     }),
   ],
 });
@@ -2187,7 +2211,7 @@ monster('Viser Des', {
         const t = ctx.validTargets((c) => c.location === 'mzone')[0];
         if (!t) return;
         const mid = t.moveId;
-        if (ctx.self.location === 'mzone') ctx.self.flags.viser = { c: t, moveId: mid };
+        if (ctx.self.location === 'mzone') ctx.self.flags.viser = { c: t, moveId: mid, p: ctx.player };
         const g = ctx.game;
         const p = ctx.player;
         const self = ctx.self;
@@ -2207,9 +2231,11 @@ monster('Viser Des', {
     },
     {
       kind: 'continuous',
+      // 2010 ruling: if your opponent takes control of "Viser Des" its effect no longer applies.
+      // https://edisonrul.ing/cards/v/viser-des.html
       active: (ctx) => {
-        const v = ctx.self.flags.viser as { c: C; moveId: number } | undefined;
-        return !!v && v.c.location === 'mzone' && v.c.moveId === v.moveId;
+        const v = ctx.self.flags.viser as { c: C; moveId: number; p: PlayerId } | undefined;
+        return !!v && ctx.self.controller === v.p && v.c.location === 'mzone' && v.c.moveId === v.moveId;
       },
       mods: [{ q: 'indestructibleBattle' }],
     },
@@ -2491,7 +2517,9 @@ spell('Rocket Pilder', 'equip', {
       mandatory: true,
       label: 'Attack target loses ATK',
       categories: ['atkChange'],
-      eventFilter: (ctx, ev) => stActive(ctx) && !!ctx.equipTarget && ev.card === ctx.equipTarget && !!evo(ev) && evo(ev)!.location === 'mzone',
+      // 2010 ruling: it starts a Chain even if the equipped monster destroyed its attack target.
+      // https://edisonrul.ing/cards/r/rocket-pilder.html
+      eventFilter: (ctx, ev) => stActive(ctx) && !!ctx.equipTarget && ev.card === ctx.equipTarget && !!evo(ev),
       resolve: async (ctx) => {
         const a = ctx.equipTarget;
         const t = evo(ctx.event!);
@@ -2527,13 +2555,16 @@ spell('Break! Draw!', 'equip', {
       mandatory: true,
       label: 'Destroy this card (3rd End Phase)',
       categories: ['destroy'],
+      // 2010 ruling: destroying it during your 3rd End Phase is not an effect (no Chain) and cannot be negated.
+      // https://edisonrul.ing/cards/b/break-draw.html
+      noChain: true,
       eventFilter: (ctx, ev) => {
         if (ev.phase !== 'end' || !ctx.isMyTurn || !ctx.self.faceUp || !ctx.self.activeOnField) return false;
         ctx.self.flags.breakDrawEnds = (ctx.self.flags.breakDrawEnds ?? 0) + 1;
         return ctx.self.flags.breakDrawEnds >= 3;
       },
       resolve: async (ctx) => {
-        if (ctx.self.onField) await ctx.destroy(ctx.self);
+        if (ctx.self.onField) await ctx.game.destroy([ctx.self], 'rule', ctx.player, ctx.self);
       },
     },
   ],
@@ -2639,12 +2670,30 @@ spell("Spiders' Lair", 'continuous', {
         if (!stActive(ctx)) return;
         for (const v of pending) {
           if (v.c.location !== 'mzone' || v.c.moveId !== v.moveId || !ctx.self.onField) continue;
-          if (v.c.pos !== 'def' || !v.c.faceUp) await ctx.changePos(v.c, 'def', true);
-          (ctx.self.flags.lairLocked ??= []).push({ uid: v.c.uid, moveId: v.c.moveId });
+          // 2010 ruling: a monster this card did not change to Defense Position (already in Defense Position) is not
+          // kept in Defense Position. https://edisonrul.ing/cards/s/spiders-lair.html
+          if (v.c.pos !== 'atk') continue;
+          await ctx.changePos(v.c, 'def', true);
+          if (v.c.location === 'mzone' && (v.c.pos as string) === 'def') (ctx.self.flags.lairLocked ??= []).push({ uid: v.c.uid, moveId: v.c.moveId });
         }
       },
     },
-    // 2010 ruling: a monster flipped face-down (Book of Moon) is no longer affected. https://edisonrul.ing/cards/s/spiders-lair.html
+    // 2010 rulings: a monster kept in Defense Position that is flipped face-down (Book of Moon) is no longer affected,
+    // and a targeted Insect flipped face-down is no longer targeted (even once face-up again).
+    // https://edisonrul.ing/cards/s/spiders-lair.html
+    {
+      kind: 'trigger',
+      event: 'positionChanged',
+      label: '(flipped face-down)',
+      eventFilter: (ctx, ev) => {
+        const c = evc(ev);
+        if (!c || c.faceUp) return false;
+        const drop = (list: Mark[] | undefined) => list?.filter((m) => !(m.uid === c.uid && m.moveId === c.moveId));
+        ctx.self.flags.lair = drop(ctx.self.flags.lair);
+        ctx.self.flags.lairLocked = drop(ctx.self.flags.lairLocked);
+        return false;
+      },
+    },
     { kind: 'continuous', mods: [{ q: 'cannotChangePos', to: 'cards', filter: (ctx, c: C) => c.faceUp && marked(ctx.self.flags.lairLocked, c) }] },
   ],
 });
@@ -3182,6 +3231,9 @@ trap('Offering to the Immortals', 'normal', {
       categories: ['negateAttack', 'specialSummon', 'search'],
       eventFilter: (ctx, ev) => oppAttack(ctx, ev) && !ev.other,
       condition: (ctx) => attackWindow(ctx) && !ctx.battle!.target && ctx.lp <= 3000,
+      // 2010 ruling: you cannot activate it without 2 open Monster Zones and an "Earthbound Immortal" card in your Deck.
+      // https://edisonrul.ing/cards/o/offering-to-the-immortals.html
+      canActivate: (ctx) => ctx.freeMZones() >= 2 && ctx.deck('me', (c) => c.name.includes('Earthbound Immortal')).length > 0,
       resolve: async (ctx) => {
         if (!ctx.battle || ctx.battle.negated) return;
         ctx.negateAttack();
@@ -3602,14 +3654,15 @@ trap('Inverse Universe', 'normal', {
       canActivate: (ctx) => ctx.faceUpMonsters('both', (c) => c.hasType('effect')).length > 0,
       resolve: async (ctx) => {
         const g = ctx.game;
+        // 2010 rulings: the switched values are "frozen" while face-up: the monster's own ATK-calculating effects and
+        // Equip Spells already applying no longer change them (even if the Equip leaves); new Equip Spells still do.
+        // https://edisonrul.ing/cards/i/inverse-universe.html
         for (const c of ctx.faceUpMonsters('both', (m) => m.hasType('effect'))) {
           const a = g.getAtk(c);
           const d = g.getDef(c);
-          c.flags.baseAtk = d - g.queryCardNum(c, 'atk');
-          c.flags.baseDef = a - g.queryCardNum(c, 'def');
-          delete c.flags.setAtk;
+          g.lockStat(c, 'atk', d);
+          g.lockStat(c, 'def', a);
         }
-        g.update();
       },
       ai: {
         score: (ctx) => {

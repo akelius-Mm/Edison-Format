@@ -114,6 +114,7 @@ export type EventType =
   | 'phaseStart'
   | 'phaseEnd'
   | 'battleEnd'
+  | 'damageStepStart'
   | 'damageStepEnd'
   /** Before damage calculation, after a Set attack target was flipped face-up (Ehren, Lightsworn Monk). */
   | 'beforeDamageCalc'

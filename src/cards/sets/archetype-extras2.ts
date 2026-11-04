@@ -23,7 +23,7 @@ import { monster, spell } from '../define';
 import { cardValue } from '../helpers';
 import type { CardInstance, EffectDef } from '../../engine/card';
 import type { Ctx } from '../../engine/ctx';
-import type { Game } from '../../engine/game';
+import type { ChainLink, Game } from '../../engine/game';
 import type { GameEvent, Location, PlayerId } from '../../engine/types';
 
 type C = CardInstance;
@@ -36,6 +36,8 @@ const CASTLE = 'Ancient Gear Castle';
 const GREEN = 'Green Gadget';
 const RED = 'Red Gadget';
 const YELLOW = 'Yellow Gadget';
+/** "This card cannot be Special Summoned." https://edisonrul.ing/cards/a/ancient-gear-beast.html */
+const NO_SPECIAL = [AGG, 'Ancient Gear Beast'];
 
 // ============================================================ helpers
 
@@ -78,8 +80,8 @@ export function archetypeExtras2Rules(g: Game) {
   // ---- Summon legality: Ancient Gear Golem "cannot be Special Summoned"
   const origSS = g.specialSummon.bind(g);
   g.specialSummon = async (cards: C[], player: PlayerId, opts: Parameters<Game['specialSummon']>[2] = {}) => {
-    if (!opts?.ignoreConditions && cards.some((c) => c.name === AGG && c.location !== 'mzone')) {
-      cards = cards.filter((c) => c.name !== AGG);
+    if (!opts?.ignoreConditions && cards.some((c) => NO_SPECIAL.includes(c.name) && c.location !== 'mzone')) {
+      cards = cards.filter((c) => !NO_SPECIAL.includes(c.name));
       if (!cards.length) return [];
     }
     return origSS(cards, player, opts);
@@ -135,20 +137,45 @@ type STOpts = Parameters<typeof spell>[2];
 const M = (name: string, o: MonsterOpts) => monster(name, { ...o, rules: [...(o.rules ?? []), archetypeExtras2Rules] });
 const S = (name: string, t: Parameters<typeof spell>[1], o: STOpts) => spell(name, t, { ...o, rules: [...(o.rules ?? []), archetypeExtras2Rules] });
 
-/** "If this card destroys an opponent's monster by battle: inflict `n` damage" (Yellow Gadget bonus). */
-function yellowBurn(n: number): EffectDef {
-  return {
-    kind: 'trigger',
-    event: 'battleDestroyed',
-    mandatory: true,
-    label: `Inflict ${n} damage`,
-    categories: ['damage'],
-    eventFilter: (ctx, ev) =>
-      tributedWith(ctx.self, YELLOW) && ev.other === ctx.self && faceUpOn(ctx.self) && (ev.fromController ?? (ev.card as C).owner) !== ctx.player,
-    resolve: async (ctx) => {
-      await ctx.damage(ctx.opp, n);
+/** moveId of each Gadjiltron while it is on the field with the "Yellow Gadget" effect (kept after it leaves). */
+const yellowOnField = new WeakMap<C, { moveId: number; controller: PlayerId }>();
+
+/**
+ * "If this card destroys an opponent's monster by battle: inflict `n` damage" (Yellow Gadget bonus), plus a hidden
+ * trigger that remembers the Tribute Summon with "Yellow Gadget".
+ * 2010 ruling: this Trigger Effect activates even if this card leaves the field (destroyed in the same battle).
+ * https://edisonrul.ing/cards/a/ancient-gear-gadjiltron-dragon.html, https://edisonrul.ing/cards/a/ancient-gear-gadjiltron-chimera.html
+ */
+function yellowBurn(n: number): EffectDef[] {
+  return [
+    {
+      kind: 'trigger',
+      event: 'summoned',
+      label: '(remember the Yellow Gadget Tribute)',
+      eventFilter: (ctx, ev) => {
+        if (ev.card === ctx.self && tributedWith(ctx.self, YELLOW)) yellowOnField.set(ctx.self, { moveId: ctx.self.moveId, controller: ctx.self.controller });
+        return false;
+      },
     },
-  };
+    {
+      kind: 'trigger',
+      event: 'battleDestroyed',
+      mandatory: true,
+      label: `Inflict ${n} damage`,
+      categories: ['damage'],
+      eventFilter: (ctx, ev) => {
+        if (ev.other !== ctx.self) return false;
+        const victimCtrl = ev.fromController ?? (ev.card as C).owner;
+        if (tributedWith(ctx.self, YELLOW) && faceUpOn(ctx.self)) return victimCtrl !== ctx.player;
+        // Left the field in this same battle (both destroyed): the previous instance had the effect.
+        const y = yellowOnField.get(ctx.self);
+        return !!y && !ctx.self.onField && y.moveId === ctx.self.moveId - 1 && y.controller === ctx.player && victimCtrl !== ctx.player;
+      },
+      resolve: async (ctx) => {
+        await ctx.damage(ctx.opp, n);
+      },
+    },
+  ];
 }
 
 /** "If this card inflicts battle damage to your opponent [by a direct attack]: inflict `n` damage" (Red Gadget bonus). */
@@ -201,7 +228,7 @@ M('Ancient Gear Gadjiltron Dragon', {
     gearLock,
     { kind: 'continuous', active: (ctx) => tributedWith(ctx.self, GREEN), mods: [{ q: 'piercing' }] },
     redBurn(400, false),
-    yellowBurn(600),
+    ...yellowBurn(600),
   ],
 });
 
@@ -217,7 +244,7 @@ M('Ancient Gear Gadjiltron Chimera', {
   effects: [
     { kind: 'continuous', active: (ctx) => tributedWith(ctx.self, GREEN), mods: [{ q: 'atk', value: 300 }] },
     redBurn(500, true),
-    yellowBurn(700),
+    ...yellowBurn(700),
   ],
 });
 
@@ -228,23 +255,37 @@ M('Ancient Gear Beast', {
   atk: 2000,
   def: 2000,
   sets: ['ancient-gear'],
+  // 2010 ruling: "This card cannot be Special Summoned" (a Condition that cannot be negated; not even face-down by
+  // "The Shallow Grave"). https://edisonrul.ing/cards/a/ancient-gear-beast.html
+  nomi: true,
   aiValue: 400,
-  text: `Negate the effects of monsters destroyed by battle with this card. ${LOCK_TEXT}`,
+  text: `This card cannot be Special Summoned. The effects of your opponent's monsters that this card destroys by battle are negated. ${LOCK_TEXT}`,
   effects: [
     gearLock,
+    // 2010 rulings: monsters are marked "destroyed by battle" at the end of damage calculation; their effects that
+    // activate in substeps 6 and 7 (Ryko, Mystic Tomato) are negated, and their effects in the GY (Treeborn Frog) stay
+    // negated until the card leaves the GY. Not monsters destroyed as substitutes (they are not marked).
+    // https://edisonrul.ing/cards/a/ancient-gear-beast.html
     {
-      // Same technique as Dark Balter the Terrible (extra.ts): drop the destroyed monster's pending triggers.
+      kind: 'continuous',
+      mods: [
+        {
+          q: 'negated',
+          to: 'cards',
+          filter: (ctx, c: C) => {
+            const b = ctx.battle;
+            return !!b && b.inDamageStep && (b.attacker === ctx.self || b.target === ctx.self) && c !== ctx.self && !!b.markedDestroyed?.includes(c);
+          },
+        },
+      ],
+    },
+    {
       kind: 'trigger',
-      event: ['battleDestroyed', 'damageStepEnd'],
+      event: 'battleDestroyed',
       label: 'Negate destroyed monster',
       eventFilter: (ctx, ev: GameEvent) => {
-        if (ev.type === 'battleDestroyed' && ev.other === ctx.self && !ctx.isNegated(ctx.self)) {
-          const c = ev.card as C;
-          if (c.hasType('effect')) c.flags.agBeastNegated = true;
-        } else if (ev.type === 'damageStepEnd' && (ev.card === ctx.self || ev.other === ctx.self)) {
-          ctx.game.pending = ctx.game.pending.filter((t) => !t.card.flags.agBeastNegated);
-          for (const p of [0, 1] as const) for (const c of ctx.game.players[p].grave) delete c.flags.agBeastNegated;
-        }
+        const c = ev.card as C;
+        if (ev.other === ctx.self && ctx.self.location === 'mzone' && ctx.self.faceUp && !ctx.isNegated(ctx.self) && c.location === 'grave') c.flags.negatedInGrave = true;
         return false;
       },
     },
@@ -271,8 +312,38 @@ M('Ancient Gear Engineer', {
   def: 1500,
   sets: ['ancient-gear'],
   aiValue: 400,
-  text: `${LOCK_TEXT} When this card attacks, select 1 Spell or Trap Card your opponent controls and destroy it at the end of the Damage Step.`,
+  text: `Negate the effect of any Trap Card that targets this card, and destroy that Trap Card. ${LOCK_TEXT} When this card attacks, destroy 1 Spell or Trap Card on your opponent's side of the field at the end of the Damage Step.`,
   effects: [
+    {
+      // 2010 rulings: a Continuous Effect (no chain); Traps can still target this card but resolve without effect, and
+      // it does not apply if a chained effect (Book of Moon) flips this card face-down before the Trap resolves.
+      // https://edisonrul.ing/cards/a/ancient-gear-engineer.html
+      // Same technique as Obsidian Dragon (ptdn.ts): wrap the resolution of the Trap's chain link.
+      kind: 'trigger',
+      event: 'chainActivated',
+      label: '(negate Trap effects that target this card)',
+      eventFilter: (ctx, ev) => {
+        const link = ev.data?.link as (ChainLink & { agEngineer?: boolean }) | undefined;
+        const me = ctx.self;
+        if (!link || link.agEngineer || !link.card.isTrap || !link.ctx.targets.includes(me) || !faceUpOn(me)) return false;
+        link.agEngineer = true;
+        const mid = me.moveId;
+        const g = ctx.game;
+        const orig = link.effect;
+        link.effect = {
+          ...orig,
+          resolve: async (c) => {
+            if (me.location === 'mzone' && me.moveId === mid && me.faceUp && !g.isNegated(me)) {
+              g.log(`${me.name} negates the effect of ${link.card.name}.`, 'chain', me.controller);
+              if (link.card.onField) await g.destroy([link.card], 'effect', me.controller, me);
+              return;
+            }
+            if (orig.resolve) await orig.resolve(c);
+          },
+        };
+        return false;
+      },
+    },
     gearLock,
     {
       // APPROX: the target is chosen and destroyed at the end of the Damage Step (one chain link instead of a target
@@ -380,7 +451,9 @@ S('Machine Duplication', 'normal', {
         ctx.canSpecialSummon() &&
         ctx.faceUpMonsters('me', (c) => c.data.race === 'Machine' && ctx.atk(c) <= 500 && ctx.deck('me', (d) => d.name === c.name && ctx.canSummonCard(d)).length > 0).length > 0,
       activate: async (ctx) => {
-        const cands = ctx.faceUpMonsters('me', (c) => c.data.race === 'Machine' && ctx.atk(c) <= 500);
+        // 2010 ruling: you cannot target a Machine-Type monster if no card in your Deck shares its name (ex: Tokens).
+        // https://edisonrul.ing/cards/m/machine-duplication.html
+        const cands = ctx.faceUpMonsters('me', (c) => c.data.race === 'Machine' && ctx.atk(c) <= 500 && ctx.deck('me', (d) => d.name === c.name).length > 0);
         const [t] = await ctx.selectTargets(cands, 1, 1, 'Select 1 face-up Machine-Type monster with 500 or less ATK you control.', 'target', {
           aiScore: (c) => ctx.deck('me', (d) => d.name === c.name).length * 100 + cardValue(ctx.game, c),
         });

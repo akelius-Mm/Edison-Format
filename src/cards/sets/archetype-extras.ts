@@ -138,7 +138,9 @@ const samuraiSubstitute: EffectDef = {
   kind: 'continuous',
   replaceDestroyOne: async (ctx, card) => {
     if (card !== ctx.self || !faceUpOn(ctx.self) || SUBSTITUTING.has(ctx.game)) return false;
-    const subs = ctx.faceUpMonsters('me', (c) => c !== ctx.self && isSixSamurai(c));
+    // 2010 ruling: one substitute per protected "Six Samurai", and never one that is being destroyed at the same time
+    // (Mirror Force destroying all of them: no substitute). https://edisonrul.ing/cards/t/the-six-samurai-yaichi.html
+    const subs = ctx.faceUpMonsters('me', (c) => c !== ctx.self && isSixSamurai(c) && !ctx.game.destroyingGroup.includes(c));
     if (!subs.length) return false;
     const val = (c: C) => cardValue(ctx.game, c);
     const cheapest = [...subs].sort((a, b) => val(a) - val(b))[0];
@@ -354,7 +356,7 @@ M('The Six Samurai - Nisashi', {
 
 // First English printing: Force of the Breaker (FOTB-EN052), 2007-05-16.
 T('Backs to the Wall', 'normal', {
-  text: 'Pay Life Points so that you only have 100 Life Points left. Special Summon as many "Six Samurai" monsters with different names from your Graveyard as possible. (You cannot Special Summon a monster with the same name as a monster you control.)',
+  text: 'Pay Life Points so that you only have 100 left. Special Summon as many "Six Samurai" monsters from your Graveyard as possible. You cannot Special Summon more than 1 monster with the same name, or a monster that has the same name as a monster on the field.',
   effects: [
     {
       kind: 'activate',
@@ -364,7 +366,9 @@ T('Backs to the Wall', 'normal', {
         await ctx.payLp(ctx.lp - 100);
       },
       resolve: async (ctx) => {
-        const taken = new Set(ctx.faceUpMonsters('me').map((c) => c.name));
+        // 2010 card text: not a monster with the same name as a monster on the field (either side).
+        // https://edisonrul.ing/cards/b/backs-to-the-wall.html
+        const taken = new Set(ctx.faceUpMonsters('both').map((c) => c.name));
         const pick: C[] = [];
         const byName = new Map<string, C[]>();
         for (const c of ctx.grave('me', (x) => isSixSamurai(x) && ctx.canSummonCard(x))) {
@@ -384,7 +388,7 @@ T('Backs to the Wall', 'normal', {
       ai: {
         score: (ctx) => {
           const names = new Set(ctx.grave('me', isSixSamurai).map((c) => c.name));
-          for (const c of ctx.faceUpMonsters('me')) names.delete(c.name);
+          for (const c of ctx.faceUpMonsters('both')) names.delete(c.name);
           const n = Math.min(names.size, ctx.freeMZones());
           if (n < 2) return 0;
           const atk = ctx
@@ -404,6 +408,16 @@ T('Backs to the Wall', 'normal', {
 });
 
 // ============================================================ Diva Hero
+
+/** Infernal Prodigy Tributed for a "HERO" Tribute Summon: where it went (moveId/location) and whether the Summon succeeded. */
+const prodigyTributes = new WeakMap<C, { turn: number; moveId: number; loc: string; by: C; done: boolean }>();
+/** Is Prodigy still where the Tribute sent it (or removed from play from the GY after that)? */
+function prodigyDraws(c: C, turn: number) {
+  const r = prodigyTributes.get(c);
+  if (!r || !r.done || r.turn !== turn) return false;
+  if (c.moveId === r.moveId) return c.location === r.loc;
+  return r.loc === 'grave' && c.location === 'banished' && c.moveId === r.moveId + 1;
+}
 
 // First English printing: Duelist Pack: Jaden Yuki 3 (DP06-EN008), 2008-01-26.
 M('Evil HERO Infernal Prodigy', {
@@ -433,6 +447,10 @@ M('Evil HERO Infernal Prodigy', {
         },
       },
     },
+    // 2010 rulings: no draw if Prodigy was Tributed to Set a HERO or the Tribute Summon was negated (Solemn Judgment),
+    // or if it was Special Summoned / shuffled into the Deck / added to the hand before the End Phase; it still draws
+    // if Prodigy was removed from play when Tributed (Macro Cosmos) or after (Soul Release); only once per turn.
+    // https://edisonrul.ing/cards/e/evil-hero-infernal-prodigy.html
     {
       // Bookkeeping: remember that it was Tributed for a "HERO" Tribute Summon this turn.
       kind: 'trigger',
@@ -442,7 +460,20 @@ M('Evil HERO Infernal Prodigy', {
       eventFilter: (ctx, ev) => {
         const by = ev.reasonCard as C | undefined;
         // A Tribute Summon moves the Tributes before the monster, so the summoned HERO is still in the hand here.
-        if (ev.card === ctx.self && ev.from === 'mzone' && by && isHero(by)) ctx.self.flags.prodigyTurn = ctx.turn;
+        if (ev.card === ctx.self && ev.from === 'mzone' && by && isHero(by))
+          prodigyTributes.set(ctx.self, { turn: ctx.turn, moveId: ctx.self.moveId, loc: ctx.self.location, by, done: false });
+        return false;
+      },
+    },
+    {
+      // Bookkeeping: the HERO's Tribute Summon succeeded face-up (not a Tribute Set, not negated).
+      kind: 'trigger',
+      event: 'tributeSummoned',
+      range: ['grave', 'banished'],
+      label: '(HERO Tribute Summoned)',
+      eventFilter: (ctx, ev) => {
+        const r = prodigyTributes.get(ctx.self);
+        if (r && r.turn === ctx.turn && r.by === ev.card && (ev.card as C).faceUp) r.done = true;
         return false;
       },
     },
@@ -453,10 +484,10 @@ M('Evil HERO Infernal Prodigy', {
       mandatory: true,
       label: 'Draw 1 card',
       categories: ['draw'],
-      eventFilter: (ctx, ev) => ev.phase === 'end' && ctx.self.flags.prodigyTurn === ctx.turn,
+      eventFilter: (ctx, ev) => ev.phase === 'end' && prodigyDraws(ctx.self, ctx.turn),
       resolve: async (ctx) => {
-        if (ctx.self.flags.prodigyTurn !== ctx.turn) return;
-        ctx.self.flags.prodigyTurn = undefined;
+        if (!prodigyDraws(ctx.self, ctx.turn)) return;
+        prodigyTributes.delete(ctx.self);
         await ctx.draw(1);
       },
     },
