@@ -1,15 +1,15 @@
 // Sourced rulings regression tests (group 2: Garoth .. Prime Material Dragon). Each test pins a behaviour fixed from
 // the edisonrul.ing card page (historical edisonformat.com section: 2010 US card text + 2010 Konami/UDE rulings).
-// Usage: npx tsx scripts/sourced-2.ts
-import '../src/cards';
-import { cardByName, findCard } from '../src/cards';
-import { normal } from '../src/cards/define';
-import type { CardData, CardInstance } from '../src/engine/card';
-import type { Action, Activation, PlayerController, ResponseRequest, SelectRequest } from '../src/engine/controller';
-import { Ctx } from '../src/engine/ctx';
-import { Game, GameOver } from '../src/engine/game';
-import type { BattlePos, Location, PlayerId } from '../src/engine/types';
-import { TestController, eq, report, test } from './lib/harness';
+// Usage: npx tsx scripts/rulings/deck-cards-g-p.ts
+import '../../src/cards';
+import { cardByName, findCard } from '../../src/cards';
+import { normal } from '../../src/cards/define';
+import type { CardData, CardInstance } from '../../src/engine/card';
+import type { Action, Activation, PlayerController, ResponseRequest, SelectRequest } from '../../src/engine/controller';
+import { Ctx } from '../../src/engine/ctx';
+import { Game, GameOver } from '../../src/engine/game';
+import type { BattlePos, Location, PlayerId } from '../../src/engine/types';
+import { TestController, eq, report, test } from '../lib/harness';
 
 const T = {
   brute: findCard('Rules Test Brute') ?? normal('Rules Test Brute', 'EARTH', 'Warrior', 4, 1800, 1000),

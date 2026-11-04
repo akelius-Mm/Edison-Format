@@ -1,15 +1,15 @@
 // Sourced rulings sweep, group 3 (Prohibition .. Zombie World): one regression test per fix.
 // Source for every test: the edisonrul.ing card page named in the test (historical 2010 TCG section).
-// Usage: npx tsx scripts/sourced-3.ts
-import '../src/cards';
-import { cardByName, findCard } from '../src/cards';
-import { normal } from '../src/cards/define';
-import type { CardData, CardInstance } from '../src/engine/card';
-import type { Action, Activation, OptionRequest, PlayerController, ResponseRequest, SelectRequest } from '../src/engine/controller';
-import { Ctx } from '../src/engine/ctx';
-import { Game, GameOver, type ChainLink } from '../src/engine/game';
-import type { BattlePos, GameEvent, Location, PlayerId } from '../src/engine/types';
-import { TestController, eq, report, test } from './lib/harness';
+// Usage: npx tsx scripts/rulings/deck-cards-p-z.ts
+import '../../src/cards';
+import { cardByName, findCard } from '../../src/cards';
+import { normal } from '../../src/cards/define';
+import type { CardData, CardInstance } from '../../src/engine/card';
+import type { Action, Activation, OptionRequest, PlayerController, ResponseRequest, SelectRequest } from '../../src/engine/controller';
+import { Ctx } from '../../src/engine/ctx';
+import { Game, GameOver, type ChainLink } from '../../src/engine/game';
+import type { BattlePos, GameEvent, Location, PlayerId } from '../../src/engine/types';
+import { TestController, eq, report, test } from '../lib/harness';
 
 const T = {
   brute: findCard('Rules Test Brute') ?? normal('Rules Test Brute', 'EARTH', 'Warrior', 4, 1800, 1000),

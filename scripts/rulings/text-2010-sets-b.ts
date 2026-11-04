@@ -1,14 +1,14 @@
 // Edison-text (errata) sweep regression tests, group "sets-b": cards whose code followed modern (post-2010)
 // wording or rulings instead of the text legal at SJC Edison (2010-04-24).
-// Usage: npx tsx scripts/edison-text-sets-b.ts
-import '../src/cards';
-import { cardByName, findCard } from '../src/cards';
-import { normal } from '../src/cards/define';
-import type { CardData, CardInstance } from '../src/engine/card';
-import type { Action, Activation, PlayerController, ResponseRequest, SelectRequest } from '../src/engine/controller';
-import { Game, GameOver } from '../src/engine/game';
-import type { BattlePos, Location, PlayerId } from '../src/engine/types';
-import { TestController, eq, report, test } from './lib/harness';
+// Usage: npx tsx scripts/rulings/text-2010-sets-b.ts
+import '../../src/cards';
+import { cardByName, findCard } from '../../src/cards';
+import { normal } from '../../src/cards/define';
+import type { CardData, CardInstance } from '../../src/engine/card';
+import type { Action, Activation, PlayerController, ResponseRequest, SelectRequest } from '../../src/engine/controller';
+import { Game, GameOver } from '../../src/engine/game';
+import type { BattlePos, Location, PlayerId } from '../../src/engine/types';
+import { TestController, eq, report, test } from '../lib/harness';
 
 const T = {
   brute: findCard('Rules Test Brute') ?? normal('Rules Test Brute', 'EARTH', 'Warrior', 4, 1800, 1000),

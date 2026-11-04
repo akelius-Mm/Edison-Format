@@ -1,15 +1,15 @@
 // Sourced rulings regression tests, group p2-0 (A Hero Emerges .. Cloudian - Storm Dragon): each test pins a
 // behaviour to the 2010 TCG text / rulings on edisonrul.ing (Edisonformat.com historical section).
-// Usage: npx tsx scripts/sourced-p2-0.ts
-import '../src/cards';
-import { cardByName, findCard } from '../src/cards';
-import { normal } from '../src/cards/define';
-import type { CardData, CardInstance } from '../src/engine/card';
-import type { Action, Activation, PlayerController, ResponseRequest, SelectRequest } from '../src/engine/controller';
-import { Ctx } from '../src/engine/ctx';
-import { Game, GameOver } from '../src/engine/game';
-import type { BattlePos, Location, PlayerId } from '../src/engine/types';
-import { TestController, eq, report, test } from './lib/harness';
+// Usage: npx tsx scripts/rulings/pool-a-c.ts
+import '../../src/cards';
+import { cardByName, findCard } from '../../src/cards';
+import { normal } from '../../src/cards/define';
+import type { CardData, CardInstance } from '../../src/engine/card';
+import type { Action, Activation, PlayerController, ResponseRequest, SelectRequest } from '../../src/engine/controller';
+import { Ctx } from '../../src/engine/ctx';
+import { Game, GameOver } from '../../src/engine/game';
+import type { BattlePos, Location, PlayerId } from '../../src/engine/types';
+import { TestController, eq, report, test } from '../lib/harness';
 
 const T = {
   brute: findCard('Rules Test Brute') ?? normal('Rules Test Brute', 'EARTH', 'Warrior', 4, 1800, 1000),

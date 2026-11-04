@@ -1,13 +1,13 @@
 // Sourced rulings sweep, phase 2 group 3 (Infernity Beast .. Natural Tune): one regression test per fix.
 // Source for every test: the edisonrul.ing card page named above it (historical 2010 TCG section).
-// Usage: npx tsx scripts/sourced-p2-3.ts
-import '../src/cards';
-import { cardByName, findCard } from '../src/cards';
-import { normal, token } from '../src/cards/define';
-import type { CardData, CardInstance } from '../src/engine/card';
-import type { Action, Activation, OptionRequest, PlayerController, ResponseRequest, SelectRequest } from '../src/engine/controller';
-import { Game, GameOver } from '../src/engine/game';
-import type { BattlePos, Location, PlayerId } from '../src/engine/types';
+// Usage: npx tsx scripts/rulings/pool-i-n.ts
+import '../../src/cards';
+import { cardByName, findCard } from '../../src/cards';
+import { normal, token } from '../../src/cards/define';
+import type { CardData, CardInstance } from '../../src/engine/card';
+import type { Action, Activation, OptionRequest, PlayerController, ResponseRequest, SelectRequest } from '../../src/engine/controller';
+import { Game, GameOver } from '../../src/engine/game';
+import type { BattlePos, Location, PlayerId } from '../../src/engine/types';
 
 const T = {
   brute: findCard('Rules Test Brute') ?? normal('Rules Test Brute', 'EARTH', 'Warrior', 4, 1800, 1000),

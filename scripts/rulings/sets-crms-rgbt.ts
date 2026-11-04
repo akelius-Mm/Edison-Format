@@ -1,13 +1,13 @@
 // Rulings regression tests for Crimson Crisis (crms.ts) and Raging Battle (rgbt.ts) cards.
-// Usage: npx tsx scripts/rulings-crms-rgbt.ts
-import '../src/cards';
-import { cardByName, findCard } from '../src/cards';
-import { normal } from '../src/cards/define';
-import type { CardData, CardInstance } from '../src/engine/card';
-import type { Action, Activation, PlayerController, ResponseRequest, SelectRequest } from '../src/engine/controller';
-import { Game, GameOver } from '../src/engine/game';
-import type { BattlePos, Location, PlayerId } from '../src/engine/types';
-import { TestController, eq, report, test } from './lib/harness';
+// Usage: npx tsx scripts/rulings/sets-crms-rgbt.ts
+import '../../src/cards';
+import { cardByName, findCard } from '../../src/cards';
+import { normal } from '../../src/cards/define';
+import type { CardData, CardInstance } from '../../src/engine/card';
+import type { Action, Activation, PlayerController, ResponseRequest, SelectRequest } from '../../src/engine/controller';
+import { Game, GameOver } from '../../src/engine/game';
+import type { BattlePos, Location, PlayerId } from '../../src/engine/types';
+import { TestController, eq, report, test } from '../lib/harness';
 
 const T = {
   wall: findCard('Rules Test Wall') ?? normal('Rules Test Wall', 'EARTH', 'Rock', 4, 500, 2000),

@@ -121,6 +121,7 @@ sleeve and playmat; `?mode=spectate&seed=N` runs AI-vs-AI duels).
 npm run typecheck
 npm test             # everything below except the browser tests
 npm run test:rules   # deterministic rules tests (battle, chains, negation, synchro...)
+npm run test:rulings # one regression test per card ruling fix (scripts/rulings/), each citing edisonrul.ing
 npm run test:sim     # AI-vs-AI duels across all premade decks (catches script errors)
 npm run test:replay  # record and replay duels deterministically
 npm run test:packs   # booster pack pull rates
