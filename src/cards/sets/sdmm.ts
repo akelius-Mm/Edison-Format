@@ -579,12 +579,24 @@ spell('Inferno Reckless Summon', 'quickplay', {
       },
       condition: (ctx) => ctx.faceUpMonsters('opp').length > 0,
       activate: async (ctx) => {
-        ctx.data.name = evc(ctx.event!)?.name;
+        const c = evc(ctx.event!);
+        ctx.data.name = c?.name;
+        ctx.data.anchor = c;
+        ctx.data.anchorMove = c?.moveId;
       },
       resolve: async (ctx) => {
         const name = ctx.data.name as string | undefined;
         if (!name) return;
         const g = ctx.game;
+        // If both your Special Summoned monster and every face-up monster your opponent controls were flipped
+        // face-down or removed from the field by chained effects, the effect disappears (only one of them gone: it
+        // still resolves). https://edisonrul.ing/cards/i/inferno-reckless-summon.html
+        const a = ctx.data.anchor as C | undefined;
+        const anchorGone = !a || a.location !== 'mzone' || a.moveId !== ctx.data.anchorMove || !a.faceUp;
+        if (anchorGone && !ctx.faceUpMonsters('opp').length) {
+          ctx.log('Inferno Reckless Summon: the effect disappears.');
+          return;
+        }
         // Your side: every copy (face-up Attack Position).
         if (ctx.canSpecialSummon()) {
           const mine = ctx.cards('me', ['hand', 'deck', 'grave'], (c) => c.isMonster && c.name === name && ctx.canSummonCard(c));

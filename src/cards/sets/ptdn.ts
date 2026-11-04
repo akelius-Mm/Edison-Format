@@ -959,7 +959,9 @@ monster('Dark Horus', {
   atk: 3000,
   def: 1800,
   aiValue: 400,
-  text: "Once per turn, after resolving a Spell Card that was activated during your opponent's Main Phase: You can target 1 Level 4 DARK monster in your Graveyard; Special Summon that target. This card must be face-up on the field to activate and to resolve this effect.",
+  // April 2010 printing: https://edisonrul.ing/cards/d/dark-horus.html — it does not "select" (target): the monster is
+  // chosen when the effect resolves.
+  text: "Once per turn, when a Spell Card is activated during your opponent's Main Phase, you can Special Summon 1 Level 4 DARK monster from your Graveyard.",
   effects: [
     SPELL_WATCH,
     {
@@ -975,13 +977,12 @@ monster('Dark Horus', {
         return !!info && !!info.cl1 && info.player === ctx.opp && info.turnPlayer === ctx.opp && (info.phase === 'main1' || info.phase === 'main2') && monActive(ctx);
       },
       canActivate: (ctx) => monActive(ctx) && ctx.canSpecialSummon() && ctx.grave('me', (c) => isDark(c) && lvl(c) === 4 && ctx.canSummonCard(c)).length > 0,
-      activate: async (ctx) => {
-        await ctx.selectTargets(ctx.grave('me', (c) => isDark(c) && lvl(c) === 4 && ctx.canSummonCard(c)), 1, 1, 'Target 1 Level 4 DARK monster in your GY.', 'specialSummon', { aiScore: revScore });
-      },
       resolve: async (ctx) => {
         if (!monActive(ctx)) return;
-        const t = ctx.validTargets((c) => c.location === 'grave')[0];
-        if (t && ctx.canSummonCard(t)) await ctx.specialSummon(t, { pos: autoPos(ctx, t) });
+        const cands = ctx.grave('me', (c) => isDark(c) && lvl(c) === 4 && ctx.canSummonCard(c));
+        if (!cands.length || !ctx.canSpecialSummon()) return;
+        const [t] = await ctx.select(cands, 1, 1, 'Special Summon 1 Level 4 DARK monster from your GY.', 'specialSummon', { aiScore: revScore });
+        if (t) await ctx.specialSummon(t, { pos: autoPos(ctx, t) });
       },
     },
   ],
@@ -1191,6 +1192,54 @@ const obsidianWatch: EffectDef = {
     return false;
   },
 };
+/**
+ * Obsidian Dragon is a Continuous Effect: an Equip Spell/Trap or a Union monster equipped to a DARK monster its
+ * controller controls is negated and destroyed — also one equipped before Obsidian Dragon arrived, and "Snatch Steal"
+ * once it has taken the opponent's DARK monster (the monster then goes back). "Brain Control" is not an equip, so it
+ * is untouched. Checked after every move (Game.ruleCleanup), action and chain, like the engine's other state checks.
+ * https://edisonrul.ing/cards/o/obsidian-dragon.html
+ */
+function obsidianRules(g: Game) {
+  let checking = false;
+  const check = async () => {
+    if (checking || g.over) return;
+    checking = true;
+    try {
+      const doomed: C[] = [];
+      for (const p of [0, 1] as PlayerId[]) {
+        const on = g.monsters(p).some((m) => m.name === 'Obsidian Dragon' && m.faceUp && !g.isNegated(m));
+        if (!on) continue;
+        for (const e of g.allFieldCards()) {
+          if (e.equippedTo == null || !e.faceUp || e.location !== 'szone' || doomed.includes(e)) continue;
+          if (!(e.isSpell || e.isTrap || e.printedData.kind === 'monster')) continue;
+          const host = g.card(e.equippedTo);
+          if (host && host.location === 'mzone' && host.faceUp && host.controller === p && isDark(host)) doomed.push(e);
+        }
+      }
+      if (doomed.length) {
+        g.log(`Obsidian Dragon negates and destroys ${doomed.map((c) => c.name).join(', ')}.`, 'action');
+        await g.destroy(doomed, 'effect', doomed[0].controller);
+      }
+    } finally {
+      checking = false;
+    }
+  };
+  const origRC = g.ruleCleanup.bind(g);
+  g.ruleCleanup = async () => {
+    await origRC();
+    await check();
+  };
+  const origPA = g.performAction.bind(g);
+  g.performAction = async (...a: Parameters<Game['performAction']>) => {
+    await origPA(...a);
+    await check();
+  };
+  const origRun = g.runChain.bind(g);
+  g.runChain = async (...a: Parameters<Game['runChain']>) => {
+    await origRun(...a);
+    await check();
+  };
+}
 monster('Obsidian Dragon', {
   attribute: 'DARK',
   race: 'Rock',
@@ -1199,6 +1248,7 @@ monster('Obsidian Dragon', {
   def: 2100,
   aiValue: 300,
   text: 'Negate any Spell/Trap effects that target exactly 1 DARK monster you control (and no other cards), and if you do, destroy them.',
+  rules: [obsidianRules],
   effects: [obsidianWatch],
 });
 
@@ -1975,7 +2025,15 @@ monster('Metabo Globster', {
       categories: ['specialSummon'],
       eventFilter: (ctx, ev) => {
         const s = ev.reasonCard as C | undefined;
-        return ev.card === ctx.self && ev.from === 'mzone' && !!s && s.location === 'hand' && isDark(s) && !reasonsOf(ev).includes('effect');
+        // Only when Tributed face-up (the face-down ruling was reversed only in May 2011) and not for a Tribute Set;
+        // the historical section has no rulings, these are from the Revised section.
+        // https://edisonrul.ing/cards/m/metabo-globster.html
+        return ev.card === ctx.self && ev.from === 'mzone' && !!ev.fromFaceUp && !!s && s.location === 'hand' && isDark(s) && !reasonsOf(ev).includes('effect');
+      },
+      // The Tribute Set case: the monster it was Tributed for is now Set (summonMethod 'set') — checked once the Set is done.
+      condition: (ctx) => {
+        const s = ctx.event?.reasonCard as C | undefined;
+        return !(s && s.location === 'mzone' && s.summonMethod === 'set');
       },
       canActivate: (ctx) => ctx.canSpecialSummon(),
       resolve: async (ctx) => {
@@ -2029,6 +2087,10 @@ const destroysMonster = (ctx: Ctx, l: ChainLink) => {
   const cats = l.effect.categories ?? [];
   if (!cats.includes('destroy') && !cats.includes('destroyMulti')) return false;
   if (l.ctx.targets.length) return l.ctx.targets.some((t) => t.location === 'mzone');
+  // A non-targeting effect whose card never mentions monsters (Heavy Storm, Harpie's Feather Duster) cannot destroy
+  // one: the Quick Effect only answers an effect that would destroy a monster(s) on the field.
+  // https://edisonrul.ing/cards/p/prime-material-dragon.html
+  if (!/monster/i.test(l.card.data.text ?? '')) return false;
   return ctx.monsters('both').length > 0;
 };
 monster('Prime Material Dragon', {
@@ -3535,7 +3597,12 @@ trap('Offering to the Snake Deity', 'normal', {
         await ctx.selectTargets(ctx.field('opp'), 2, 2, 'Target 2 cards your opponent controls.', 'destroy');
       },
       resolve: async (ctx) => {
+        // If a chained effect removed 1 of the targets from the field, the whole effect disappears; a target that is
+        // only unaffected by Traps still lets the others be destroyed.
+        // https://edisonrul.ing/cards/o/offering-to-the-snake-deity.html
         const t = ctx.validTargets((c) => c.onField);
+        const stillThere = ctx.targets.filter((c) => t.includes(c) || (c.onField && ctx.game.isUnaffected(c, ctx.self, ctx.player)));
+        if (stillThere.length < ctx.targets.length) return;
         if (t.length) await ctx.destroy(t);
       },
       ai: {

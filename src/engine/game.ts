@@ -1494,6 +1494,7 @@ export class Game {
         if (!card.isMonster && !card.activeOnField) return null;
         if (this.isNegated(card)) return null;
         if (card.isTrap && this.queryPlayer(player, 'cannotActivateTraps')) return null;
+        if (card.isSpell && this.queryPlayer(player, 'cannotActivateSpellEffects')) return null;
       }
       if (ef.kind === 'ignition' && (!isOwnTurn || this.chain.length)) return null;
     }

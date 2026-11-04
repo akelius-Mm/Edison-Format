@@ -370,6 +370,8 @@ monster('Destiny Hero - Diamond Dude', {
             'main1',
             async () => {
               if (top.location !== 'grave' || top.moveId !== id || game.turnPlayer !== player) return;
+              // Cold Wave stops this effect too: https://edisonrul.ing/cards/c/cold-wave.html
+              if (game.queryPlayer(player, 'cannotActivateSpellEffects')) return;
               const idx = (top.data.effects ?? []).findIndex((e) => e.kind === 'activate');
               const ef = top.data.effects?.[idx];
               if (!ef) return;
