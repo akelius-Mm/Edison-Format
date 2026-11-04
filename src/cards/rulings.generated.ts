@@ -9,6 +9,12 @@ export interface RulingNote {
 
 /** 2010 rulings by card name. */
 export const RULINGS: Record<string, RulingNote[]> = {
+  "\"A\" Cell Incubator": [
+    {
+      "text": "Not when the card was flipped face-down: \"these A-Counters are not removed by an effect\".",
+      "url": "https://edisonrul.ing/cards/a/a-cell-incubator.html"
+    }
+  ],
   "A Hero Emerges": [
     {
       "text": "2010 text/rulings: a card that is not Summoned (not a monster, a Special Summon-only or Spirit monster) is sent to the Graveyard.",
@@ -167,6 +173,12 @@ export const RULINGS: Record<string, RulingNote[]> = {
       "url": "https://edisonrul.ing/cards/a/arcana-force-i-the-magician.html"
     }
   ],
+  "Arcana Force XXI - The World": [
+    {
+      "text": "Its once-per-turn use is not spent by a negated activation: Arcana Force XXI - The World (Tails) \"will activate again until it resolves\".",
+      "url": "https://edisonrul.ing/cards/a/arcana-force-xxi-the-world.html"
+    }
+  ],
   "Arcana Knight Joker": [
     {
       "text": "2010 ruling: it can be activated during the Damage Step.",
@@ -174,6 +186,10 @@ export const RULINGS: Record<string, RulingNote[]> = {
     }
   ],
   "Arcanite Magician": [
+    {
+      "text": "\"You can Tribute a face-down Synchro Monster.\"",
+      "url": "https://edisonrul.ing/cards/a/assault-mode-activate.html"
+    },
     {
       "text": "2010 text: it destroys 1 card your opponent controls (targeted); removing the counter is the cost.",
       "url": "https://edisonrul.ing/cards/a/arcanite-magician.html"
@@ -205,6 +221,12 @@ export const RULINGS: Record<string, RulingNote[]> = {
     {
       "text": "2010 rulings: returning \"Assault Mode Activate\" is the cost, and the Spell/Trap is targeted.",
       "url": "https://edisonrul.ing/cards/a/assault-mercenary.html"
+    }
+  ],
+  "Assault Mode Activate": [
+    {
+      "text": "\"You can Tribute a face-down Synchro Monster.\"",
+      "url": "https://edisonrul.ing/cards/a/assault-mode-activate.html"
     }
   ],
   "Assault Revival": [
@@ -282,6 +304,10 @@ export const RULINGS: Record<string, RulingNote[]> = {
   "Black Garden": [
     {
       "text": "2010 rulings: it also activates for a monster Special Summoned face-down (its ATK is not halved, but the Rose Token is still Summoned), and once for monsters Summoned at the same time: a single Rose Token (one for each player whose monsters were Summoned, e.g. \"The Shallow Grave\"). No token if the monster left the field.",
+      "url": "https://edisonrul.ing/cards/b/black-garden.html"
+    },
+    {
+      "text": "The Rose Token is Special Summoned by Black Garden's controller's card effect: \"If Player A activates Scapegoat while Player B controls Black Garden, Black Garden... Special Summons a Rose Token\" (and with Summon Limit it counts for Player B).",
       "url": "https://edisonrul.ing/cards/b/black-garden.html"
     },
     {
@@ -449,6 +475,18 @@ export const RULINGS: Record<string, RulingNote[]> = {
       "url": "https://edisonrul.ing/cards/c/clear-world.html"
     }
   ],
+  "Cloudian - Poison Cloud": [
+    {
+      "text": "2010 ruling: it needs a Smoke Ball \"in your Deck or in either player's Graveyard\", so the opponent's GY is a source too.",
+      "url": "https://edisonrul.ing/cards/c/cloudian-turbulence.html"
+    }
+  ],
+  "Cloudian - Turbulence": [
+    {
+      "text": "2010 ruling: it needs a Smoke Ball \"in your Deck or in either player's Graveyard\", so the opponent's GY is a source too.",
+      "url": "https://edisonrul.ing/cards/c/cloudian-turbulence.html"
+    }
+  ],
   "Cloudian Squall": [
     {
       "text": "Activates (starts a Chain) each Standby Phase even with no face-up monster",
@@ -507,6 +545,14 @@ export const RULINGS: Record<string, RulingNote[]> = {
     {
       "text": "Targets 1 card your opponent controls (removing the A-Counters is the cost)",
       "url": "https://edisonrul.ing/cards/c/cosmic-fortress-golgar.html"
+    },
+    {
+      "text": "\"The effect that negates attacks activates when the attack is declared, and targets the attacking monster.\"",
+      "url": "https://edisonrul.ing/cards/s/summon-reactor-sk.html"
+    },
+    {
+      "text": "\"This effect can be activated during the Damage Step.\",",
+      "url": "https://edisonrul.ing/cards/s/spell-reactor-re.html"
     },
     {
       "text": "2010 ruling: sending 1 card from the hand is the cost, and the card to destroy is targeted on activation.",
@@ -593,6 +639,12 @@ export const RULINGS: Record<string, RulingNote[]> = {
       "url": "https://edisonrul.ing/cards/d/dark-bribe.html"
     }
   ],
+  "Dark Fusion": [
+    {
+      "text": "2 Heads: negated for as long as they stay face-up (no duration in the text), even once Chaos Neos is gone.",
+      "url": "https://edisonrul.ing/cards/e/elemental-hero-chaos-neos.html"
+    }
+  ],
   "Dark Horus": [
     {
       "text": "April 2010 printing: — it does not \"select\" (target): the monster is chosen when the effect resolves.",
@@ -645,6 +697,12 @@ export const RULINGS: Record<string, RulingNote[]> = {
       "url": "https://edisonrul.ing/cards/d/destiny-end-dragoon.html"
     }
   ],
+  "Destiny HERO - Departed": [
+    {
+      "text": "\"When Destiny Hero - Departed is sent to the Graveyard to pay a cost, it is not removed from play.\"",
+      "url": "https://edisonrul.ing/cards/d/destiny-hero-departed.html"
+    }
+  ],
   "Destiny Hero - Disk Commander": [
     {
       "text": "Cold Wave stops this effect too",
@@ -679,6 +737,12 @@ export const RULINGS: Record<string, RulingNote[]> = {
     {
       "text": "Returning the Fusion Monster is the cost; it targets banished monsters of both players, and needs at least 1 banished monster and 1 open Monster Card Zone for each player",
       "url": "https://edisonrul.ing/cards/d/dimension-explosion.html"
+    }
+  ],
+  "Dimension Fortress Weapon": [
+    {
+      "text": "Dimension Fortress Weapon: costs that send cards from the Deck to the GY cannot be paid (Card Trooper, Celestia), and Solar Recharge, Reasoning, Monster Gate, Null and Void, Diamond Dude and Future Fusion \"cannot be activated\".",
+      "url": "https://edisonrul.ing/cards/d/dimension-fortress-weapon.html"
     }
   ],
   "Dimensional Alchemist": [
@@ -721,6 +785,12 @@ export const RULINGS: Record<string, RulingNote[]> = {
       "url": "https://edisonrul.ing/cards/a/angel-o7.html"
     }
   ],
+  "Divine Wrath": [
+    {
+      "text": "Either player's monster effect: the 2010 text has no \"your opponent\" (\"Negate the activation of an Effect Monster's effect\").",
+      "url": "https://edisonrul.ing/cards/d/divine-wrath.html"
+    }
+  ],
   "Djinn Presider of Rituals": [
     {
       "text": "\"The effect to draw a card does not start a Chain. It occurs when the monster destroyed by battle is sent to the Graveyard.\" Several copies used for one Ritual Summon still draw only 1 card (only the first copy still in place applies).",
@@ -743,6 +813,10 @@ export const RULINGS: Record<string, RulingNote[]> = {
     {
       "text": "Not while either player has fewer than 2 cards in the Deck",
       "url": "https://edisonrul.ing/cards/d/dna-checkup.html"
+    },
+    {
+      "text": "The Attribute rule is a state check and a Summon restriction (ensureCsocPatches). Flip Summons of another Attribute are not offered while you control a face-up monster (legalMainActions filter): \"YOU CANNOT: Flip / Normal / Special Summoning a monster of a different Attribute\".",
+      "url": "https://edisonrul.ing/cards/g/gozen-match.html"
     }
   ],
   "Domino Effect": [
@@ -827,6 +901,12 @@ export const RULINGS: Record<string, RulingNote[]> = {
       "url": "https://edisonrul.ing/cards/d/dupe-frog.html"
     }
   ],
+  "Dust Tornado": [
+    {
+      "text": "\"You must destroy 1 Spell or Trap Card... to be able to Set 1 Spell or Trap Card.\"",
+      "url": "https://edisonrul.ing/cards/d/dust-tornado.html"
+    }
+  ],
   "Earthbound Immortal Aslla piscu": [
     {
       "text": "This is not \"its own effect\" (no reasonCard), so Aslla piscu's effect activates: \"If a face-down Aslla piscu is flipped face-up while another Earthbound Immortal is on the field, the flipped Aslla piscu is destroyed. However, this is not considered as 'destroyed by its own effect'\". (historical)",
@@ -875,6 +955,12 @@ export const RULINGS: Record<string, RulingNote[]> = {
     {
       "text": "2010 ruling: activates before damage calculation (after a Set monster is flipped face-up), and damage calculation does not happen. It does not target.",
       "url": "https://edisonrul.ing/cards/e/ehren-lightsworn-monk.html"
+    }
+  ],
+  "Elemental HERO Chaos Neos": [
+    {
+      "text": "2 Heads: negated for as long as they stay face-up (no duration in the text), even once Chaos Neos is gone.",
+      "url": "https://edisonrul.ing/cards/e/elemental-hero-chaos-neos.html"
     }
   ],
   "Elemental Hero Gaia": [
@@ -937,6 +1023,14 @@ export const RULINGS: Record<string, RulingNote[]> = {
     {
       "text": "its effect does not target a card in the GY and is not negated by \"Necrovalley\".",
       "url": "https://edisonrul.ing/cards/r/red-eyes-darkness-metal-dragon.html"
+    },
+    {
+      "text": "Rulings audit: the Effect Monster is targeted on activation and banished on resolution (not a cost), so D.D. Crow / Necrovalley in response stop the copy; the copy happens only if it was banished. \"You cannot target a non-effect monster, nor can you target a Gemini monster.\"",
+      "url": "https://edisonrul.ing/cards/p/phantom-of-chaos.html"
+    },
+    {
+      "text": "\"This card can never be Special Summoned from the Graveyard / removed from play\" (only by its own procedure from the hand).",
+      "url": "https://edisonrul.ing/cards/s/sky-scourge-norleras.html"
     }
   ],
   "Evil HERO Inferno Wing": [
@@ -997,6 +1091,12 @@ export const RULINGS: Record<string, RulingNote[]> = {
     {
       "text": "2010 ruling: monsters Summoned at the same time are all destroyed.",
       "url": "https://edisonrul.ing/cards/f/flying-fortress-sky-fire.html"
+    }
+  ],
+  "Fog King": [
+    {
+      "text": "\"If this card is flipped face-down / leaves the field, or if this effect is negated, its ATK becomes 0.\"",
+      "url": "https://edisonrul.ing/cards/f/fog-king.html"
     }
   ],
   "Fortune Lady Light": [
@@ -1129,6 +1229,10 @@ export const RULINGS: Record<string, RulingNote[]> = {
   ],
   "Gladiator Beast Dimacari": [
     {
+      "text": "Gladiator Beast Dimacari: its double attack \"no longer applies if... has its effects negated by Skill Drain (even if Skill Drain is later negated / destroyed)\".",
+      "url": "https://edisonrul.ing/cards/g/gladiator-beast-dimacari.html"
+    },
+    {
       "text": "A face-down \"Gladiator Beast\" is a new card once flipped face-up (Dimacari's double attack no longer applies).",
       "url": "https://edisonrul.ing/cards/g/gladiator-beast-dimacari.html"
     }
@@ -1222,6 +1326,10 @@ export const RULINGS: Record<string, RulingNote[]> = {
   "Gozen Match": [
     {
       "text": "Gozen Match, 2010 ruling: you can Tribute Summon a monster of any Attribute by Tributing your face-up monster(s) of the other Attribute.",
+      "url": "https://edisonrul.ing/cards/g/gozen-match.html"
+    },
+    {
+      "text": "The Attribute rule is a state check and a Summon restriction (ensureCsocPatches). Flip Summons of another Attribute are not offered while you control a face-up monster (legalMainActions filter): \"YOU CANNOT: Flip / Normal / Special Summoning a monster of a different Attribute\".",
       "url": "https://edisonrul.ing/cards/g/gozen-match.html"
     }
   ],
@@ -1599,8 +1707,20 @@ export const RULINGS: Record<string, RulingNote[]> = {
   ],
   "Light and Darkness Dragon": [
     {
+      "text": "it chains to the activation of a Spell/Trap Card (played face-up) or of a monster effect from any location, \"not... to the activated effect of a Spell / Trap card that is already face-up / in the Graveyard\".",
+      "url": "https://edisonrul.ing/cards/l/light-and-darkness-dragon.html:"
+    },
+    {
+      "text": "2 Light and Darkness Dragons: the one not directly chained to the activation \"resolves without effect... and it won't lose ATK or DEF\".",
+      "url": "https://edisonrul.ing/cards/l/light-and-darkness-dragon.html"
+    },
+    {
       "text": "Edison functional errata (Lumina / Susa Soldier entries): a Phase-Dependent Mandatory Trigger whose activation is negated by this card \"activates again... until it is able to resolve\" (Judgment Dragon, every Lightsworn and every Spirit monster).",
       "url": "https://www.edisonformat.com/functional-errata.html"
+    },
+    {
+      "text": "Its once-per-turn use is not spent by a negated activation: Arcana Force XXI - The World (Tails) \"will activate again until it resolves\".",
+      "url": "https://edisonrul.ing/cards/a/arcana-force-xxi-the-world.html"
     },
     {
       "text": "it activates whenever it is destroyed and sent to the GY: from the hand, the Deck, the field, or while equipped to \"Relinquished\" (a Spell & Trap Zone).",
@@ -1777,6 +1897,10 @@ export const RULINGS: Record<string, RulingNote[]> = {
       "url": "https://edisonrul.ing/cards/b/black-garden.html"
     },
     {
+      "text": "The Rose Token is Special Summoned by Black Garden's controller's card effect: \"If Player A activates Scapegoat while Player B controls Black Garden, Black Garden... Special Summons a Rose Token\" (and with Summon Limit it counts for Player B).",
+      "url": "https://edisonrul.ing/cards/b/black-garden.html"
+    },
+    {
       "text": "2010 rulings: it cannot be activated without a Plant-Type monster on the field. At resolution, Black Garden and the Plants must be destroyed, and the target is Summoned only if its ATK still equals the Plants' total ATK; if Black Garden already left the field, nothing is destroyed.",
       "url": "https://edisonrul.ing/cards/b/black-garden.html"
     }
@@ -1797,6 +1921,12 @@ export const RULINGS: Record<string, RulingNote[]> = {
     {
       "text": "\"If you use the effect of Assault Armor to let Max Warrior attack twice and destroy two monsters, its Level will be 2 and its original ATK/DEF will be 1/4 of their printed value\": it halves the current original ATK/DEF.",
       "url": "https://edisonrul.ing/cards/m/max-warrior.html"
+    }
+  ],
+  "Maximum Six": [
+    {
+      "text": "\"If this card is flipped face-down / leaves the field, or if this effect is negated, its ATK becomes 0.\"",
+      "url": "https://edisonrul.ing/cards/f/fog-king.html"
     }
   ],
   "Megamorph": [
@@ -1961,6 +2091,12 @@ export const RULINGS: Record<string, RulingNote[]> = {
       "url": "https://edisonrul.ing/cards/m/morphtronic-forcefield.html"
     }
   ],
+  "Morphtronic Magnen": [
+    {
+      "text": "\"If you control 2 or more Morphtronic Magnens in Defense Position, your opponent cannot attack, unless they control a monster that can attack directly due to an effect.\"",
+      "url": "https://edisonrul.ing/cards/m/morphtronic-magnen.html"
+    }
+  ],
   "Morphtronic Magnen Bar": [
     {
       "text": "2010 ruling: the Attack Position effect cannot be activated in Main Phase 2.",
@@ -1999,6 +2135,12 @@ export const RULINGS: Record<string, RulingNote[]> = {
     {
       "text": "'toDeck': G.B. Hunter stops it being activated, like a Gladiator Beast tag-out.",
       "url": "https://edisonrul.ing/cards/g/gb-hunter.html"
+    }
+  ],
+  "My Body as a Shield": [
+    {
+      "text": "\"Activate only... when your OPPONENT activates a card with an effect that would destroy\" (TU2 / GLD3 text).",
+      "url": "https://edisonrul.ing/cards/m/my-body-as-a-shield.html"
     }
   ],
   "Mysterious Triangle": [
@@ -2147,6 +2289,12 @@ export const RULINGS: Record<string, RulingNote[]> = {
     {
       "text": "Compared with the ORIGINAL ATK (Game.baseAtk), which Unstable Evolution changes: \"The monster equipped with Unstable Evolution is not destroyed by Overworked\".",
       "url": "https://edisonrul.ing/cards/u/unstable-evolution.html"
+    }
+  ],
+  "Phantom of Chaos": [
+    {
+      "text": "Rulings audit: the Effect Monster is targeted on activation and banished on resolution (not a cost), so D.D. Crow / Necrovalley in response stop the copy; the copy happens only if it was banished. \"You cannot target a non-effect monster, nor can you target a Gemini monster.\"",
+      "url": "https://edisonrul.ing/cards/p/phantom-of-chaos.html"
     }
   ],
   "Phoenix Wing Wind Blast": [
@@ -2429,6 +2577,12 @@ export const RULINGS: Record<string, RulingNote[]> = {
       "url": "https://edisonrul.ing/cards/r/revival-gift.html"
     }
   ],
+  "Revived King Ha Des": [
+    {
+      "text": "The negation lasts while the monster stays in the GY (\"Treeborn Frog, Plaguespreader Zombie, Sinister Serpent... The negation is reset if these cards are removed from the Graveyard\"), not just this turn.",
+      "url": "https://edisonrul.ing/cards/r/revived-king-ha-des.html"
+    }
+  ],
   "Ribbon of Rebirth": [
     {
       "text": "no effect if Ribbon of Rebirth is not in the GY or the removed zone during the End Phase.",
@@ -2597,6 +2751,12 @@ export const RULINGS: Record<string, RulingNote[]> = {
       "url": "https://edisonrul.ing/cards/s/sinister-seeds.html"
     }
   ],
+  "Sky Scourge Norleras": [
+    {
+      "text": "\"This card can never be Special Summoned from the Graveyard / removed from play\" (only by its own procedure from the hand).",
+      "url": "https://edisonrul.ing/cards/s/sky-scourge-norleras.html"
+    }
+  ],
   "Slip of Fortune": [
     {
       "text": "2010 rulings : \"Slip of Fortune targets 2 monsters: the attacking monster and the attack target monster\"; the attack is still negated if the attack target left the field in response; a face-down Defense Position target is removed from play face-down and returns in face-down Defense Position; returning it is not a Special Summon.",
@@ -2653,6 +2813,12 @@ export const RULINGS: Record<string, RulingNote[]> = {
     {
       "text": "2010 ruling: cannot be activated without an \"Ancient Gear Golem\" left in your Deck.",
       "url": "https://edisonrul.ing/cards/s/spell-gear.html"
+    }
+  ],
+  "Spell Reactor・RE": [
+    {
+      "text": "\"This effect can be activated during the Damage Step.\",",
+      "url": "https://edisonrul.ing/cards/s/spell-reactor-re.html"
     }
   ],
   "Spellbinding Circle": [
@@ -2727,6 +2893,12 @@ export const RULINGS: Record<string, RulingNote[]> = {
     {
       "text": "the 2010 TCG text excludes \"Frog the Jam\" (not a \"Frog\" here, see isFrog), not \"Substitoad\": it can Summon another Substitoad and protects itself. No once-per-turn.",
       "url": "https://edisonrul.ing/cards/s/substitoad.html"
+    }
+  ],
+  "Summon Reactor・SK": [
+    {
+      "text": "\"The effect that negates attacks activates when the attack is declared, and targets the attacking monster.\"",
+      "url": "https://edisonrul.ing/cards/s/summon-reactor-sk.html"
     }
   ],
   "Sun Dragon Inti": [
@@ -2943,6 +3115,12 @@ export const RULINGS: Record<string, RulingNote[]> = {
       "url": "https://edisonrul.ing/cards/o/overdoom-line.html"
     }
   ],
+  "Tuner's Scheme": [
+    {
+      "text": "\"If Tuner's Scheme is removed from the field, its effect no longer applies and your opponent regains control of the Synchro Monster\" — unless it was flipped face-down meanwhile (then it is no longer targeted and you keep it).",
+      "url": "https://edisonrul.ing/cards/t/tuners-scheme.html"
+    }
+  ],
   "Tuningware": [
     {
       "text": "2010 ruling: \"This effect cannot activate if the Synchro Summon is negated (by \"Black Horn of Heaven\")\": the Synchro Monster left the Monster Zone without being Synchro Summoned.",
@@ -2993,6 +3171,12 @@ export const RULINGS: Record<string, RulingNote[]> = {
     {
       "text": "a card / effect that targets a card(s) on the field (any card, not only a Plant); not one that does not target.",
       "url": "https://edisonrul.ing/cards/t/tytannial-princess-of-camellias.html"
+    }
+  ],
+  "Ultimate Offering": [
+    {
+      "text": "\"If this card is face-up, you can activate this effect multiple times in the same Chain.\"",
+      "url": "https://edisonrul.ing/cards/u/ultimate-offering.html"
     }
   ],
   "Unifrog": [
@@ -3063,6 +3247,12 @@ export const RULINGS: Record<string, RulingNote[]> = {
     {
       "text": "if this card left the GY before resolution, nothing is added.",
       "url": "https://edisonrul.ing/cards/v/volcanic-shell.html"
+    }
+  ],
+  "Waboku": [
+    {
+      "text": "\"Waboku applies to ALL of the monsters on that player's side of the field for the entire turn\" — also monsters Summoned after it resolved (wabokuRules).",
+      "url": "https://edisonrul.ing/cards/w/waboku.html"
     }
   ],
   "Wall of Ivy": [
