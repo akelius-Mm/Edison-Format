@@ -85,6 +85,12 @@ export const RULINGS: Record<string, RulingNote[]> = {
       "url": "https://edisonrul.ing/cards/a/ally-of-justice-catastor.html"
     }
   ],
+  "Ancient Fairy Dragon": [
+    {
+      "text": "2010 ruling: \"If the activation of this effect is negated (by \"Divine Wrath\"), the Ⓒ Condition is not applied. If this effect resolves negated (by \"Skill Drain\"), the Ⓒ Condition still applies.\"",
+      "url": "https://edisonrul.ing/cards/a/ancient-fairy-dragon.html"
+    }
+  ],
   "Ancient Forest": [
     {
       "text": "Bookkeeping: mark each monster that attacks while this card is face-up (never activates). 2010 rulings: a monster that attacks while this card is negated is still destroyed if the negation is gone by the end of the Battle Phase; one whose attack was negated (\"Magic Cylinder\") is not.",
@@ -186,6 +192,10 @@ export const RULINGS: Record<string, RulingNote[]> = {
     }
   ],
   "Armory Arm": [
+    {
+      "text": "2010 ruling: \"If the target leaves the field before this effect resolves, \"Armory Arm\" is destroyed.\"",
+      "url": "https://edisonrul.ing/cards/a/armory-arm.html"
+    },
     {
       "text": "2010 ruling (changed in January 2011 to the original ATK): the damage equals the destroyed monster's ATK on the field at damage calculation.",
       "url": "https://edisonrul.ing/cards/a/armory-arm.html"
@@ -521,6 +531,12 @@ export const RULINGS: Record<string, RulingNote[]> = {
       "url": "https://edisonrul.ing/cards/d/dark-horus.html"
     }
   ],
+  "Darksea Rescue": [
+    {
+      "text": "2010 ruling: \"If the Synchro Summon is negated, you do not draw 1 card.\"",
+      "url": "https://edisonrul.ing/cards/d/darksea-rescue.html"
+    }
+  ],
   "Deck Lockdown": [
     {
       "text": "Destroying it during the Standby Phase does not start a Chain",
@@ -727,6 +743,12 @@ export const RULINGS: Record<string, RulingNote[]> = {
       "url": "https://edisonrul.ing/cards/e/earthbound-immortal-ccarayhua.html"
     }
   ],
+  "Earthbound Immortal Chacu Challhua": [
+    {
+      "text": "It stops the opponent from entering the Battle Phase only: \"If this card is changed to Defense Position during your opponent's Battle Phase, the Battle Phase will continue.\"",
+      "url": "https://edisonrul.ing/cards/e/earthbound-immortal-chacu-challhua.html"
+    }
+  ],
   "Earthbound Immortal Cusillu": [
     {
       "text": "Tributing is part of the effect, not a cost",
@@ -841,6 +863,12 @@ export const RULINGS: Record<string, RulingNote[]> = {
     {
       "text": "\"Necrovalley\" negates its effect (card ruling, although it does not target).",
       "url": "https://edisonrul.ing/cards/e/exchange-of-the-spirit.html"
+    }
+  ],
+  "Fairy Wind": [
+    {
+      "text": "2010 ruling: \"If \"Heavy Storm\" or \"Giant Trunade\" is activated, you cannot activate \"Fairy Wind\" unless there is another face-up Spell or Trap Card other than \"Heavy Storm\" or \"Giant Trunade.\"\"",
+      "url": "https://edisonrul.ing/cards/f/fairy-wind.html"
     }
   ],
   "Faustian Bargain": [
@@ -985,6 +1013,12 @@ export const RULINGS: Record<string, RulingNote[]> = {
     {
       "text": "Bookkeeping only (never activates): counts Plant-Type monsters destroyed and sent from the field to the GY while this card is face-up. 2010 ruling: \"The destroyed Plant-Type monster must be a Plant-Type monster both on the field and in the Graveyard.\"",
       "url": "https://edisonrul.ing/cards/g/gigantic-cephalotus.html"
+    }
+  ],
+  "Gladiator Beast Darius": [
+    {
+      "text": "2010 rulings : \"The target's effects are not negated: if the target is flipped face-down / leaves the field (by \"Book of Moon\" or \"Bottomless Trap Hole\"); if Darius is flipped face-down / leaves the field\".",
+      "url": "https://edisonrul.ing/cards/g/gladiator-beast-darius.html"
     }
   ],
   "Gladiator Beast Dimacari": [
@@ -1331,6 +1365,12 @@ export const RULINGS: Record<string, RulingNote[]> = {
       "url": "https://edisonrul.ing/cards/k/koaki-meiru-sea-panther.html"
     }
   ],
+  "Koa'ki Meiru Speeder": [
+    {
+      "text": "2010 ruling: \"Revealing \"Iron Core of Koa'ki Meiru\" is a cost to activate this effect.\"",
+      "url": "https://edisonrul.ing/cards/k/koaki-meiru-speeder.html"
+    }
+  ],
   "Koa'ki Meiru Tornado": [
     {
       "text": "2010 ruling: Special Summoned monsters are destroyed even if face-down (Special Summoned face-down, or flipped face-down by \"Book of Moon\" in response).",
@@ -1347,6 +1387,12 @@ export const RULINGS: Record<string, RulingNote[]> = {
     {
       "text": "2010 rulings: if it leaves the field in response its new controller still discards; if control went straight back (Remove Brainwashing), its current controller discards.",
       "url": "https://edisonrul.ing/cards/k/kunoichi.html"
+    }
+  ],
+  "Kuribon": [
+    {
+      "text": "2010 ruling: \"If you cannot take Battle Damage because of the effect of \"Waboku\" or \"Tornado Wall\" you cannot activate the effect of \"Kuribon.\"\"",
+      "url": "https://edisonrul.ing/cards/k/kuribon.html"
     }
   ],
   "Kycoo the Ghost Destroyer": [
@@ -1815,6 +1861,34 @@ export const RULINGS: Record<string, RulingNote[]> = {
       "url": "https://edisonrul.ing/cards/n/nightmare-archfiends.html"
     }
   ],
+  "Nitro Synchron": [
+    {
+      "text": "2010 text and rulings : \"this card gains 1000 ATK during its next attack, for damage calculation only\" — only when it attacks (being attacked neither uses nor gets the boost).",
+      "url": "https://edisonrul.ing/cards/n/nitro-warrior.html"
+    },
+    {
+      "text": "2010 text: \"if this ATTACKING card destroys an opponent's monster by battle\" (not when it is attacked).",
+      "url": "https://edisonrul.ing/cards/n/nitro-warrior.html"
+    },
+    {
+      "text": "\"attack it with this card\": the extra attack can only be declared on that monster, and is lost if it was flipped face-down or left the field (\"If the target is flipped face-down / leaves the field, you do not make a second attack\", ). See nitroRules.",
+      "url": "https://edisonrul.ing/cards/n/nitro-warrior.html"
+    }
+  ],
+  "Nitro Warrior": [
+    {
+      "text": "2010 text and rulings : \"this card gains 1000 ATK during its next attack, for damage calculation only\" — only when it attacks (being attacked neither uses nor gets the boost).",
+      "url": "https://edisonrul.ing/cards/n/nitro-warrior.html"
+    },
+    {
+      "text": "2010 text: \"if this ATTACKING card destroys an opponent's monster by battle\" (not when it is attacked).",
+      "url": "https://edisonrul.ing/cards/n/nitro-warrior.html"
+    },
+    {
+      "text": "\"attack it with this card\": the extra attack can only be declared on that monster, and is lost if it was flipped face-down or left the field (\"If the target is flipped face-down / leaves the field, you do not make a second attack\", ). See nitroRules.",
+      "url": "https://edisonrul.ing/cards/n/nitro-warrior.html"
+    }
+  ],
   "Ojama Country": [
     {
       "text": "sending the \"Ojama\" card is a cost; the effect targets 1 \"Ojama\" monster in your GY and cannot be activated without one there (the card just sent can then be the target).",
@@ -2213,6 +2287,12 @@ export const RULINGS: Record<string, RulingNote[]> = {
       "url": "https://edisonrul.ing/cards/s/small-piece-golem.html"
     }
   ],
+  "Shiny Black \"C\"": [
+    {
+      "text": "2010 ruling: \"If the target is flipped face-down before this effect resolves, it is not destroyed.\"",
+      "url": "https://edisonrul.ing/cards/s/shiny-black-c.html"
+    }
+  ],
   "Shire, Lightsworn Spirit": [
     {
       "text": "it must remain face-up on the field to resolve.",
@@ -2241,6 +2321,12 @@ export const RULINGS: Record<string, RulingNote[]> = {
     {
       "text": "cannot be activated without enough empty Monster Zones for every Token (so never for 3000 or more battle damage).",
       "url": "https://edisonrul.ing/cards/s/sinister-seeds.html"
+    }
+  ],
+  "Slip of Fortune": [
+    {
+      "text": "2010 rulings : \"Slip of Fortune targets 2 monsters: the attacking monster and the attack target monster\"; the attack is still negated if the attack target left the field in response; a face-down Defense Position target is removed from play face-down and returns in face-down Defense Position; returning it is not a Special Summon.",
+      "url": "https://edisonrul.ing/cards/s/slip-of-fortune.html"
     }
   ],
   "Slip Summon": [
@@ -2327,6 +2413,12 @@ export const RULINGS: Record<string, RulingNote[]> = {
     {
       "text": "2010 rulings: Star Blast does not target; the monster is chosen when it resolves. The LP you can pay is capped by the highest Level among the legal choices at activation (no over-paying), and the chosen monster must keep a Level of 1 or more (paid 1000: no Level 2). No legal choice on resolution: no effect.",
       "url": "https://edisonrul.ing/cards/s/star-blast.html"
+    }
+  ],
+  "Stardust Dragon": [
+    {
+      "text": "2010 ruling: the End Phase revival \"only activates if Stardust Dragon successfully resolved its ① effect this turn\" — not when this effect's activation (or effect) was negated (Divine Wrath, Royal Oppression...).",
+      "url": "https://edisonrul.ing/cards/s/stardust-dragon.html"
     }
   ],
   "Starlight Road": [
@@ -2553,6 +2645,12 @@ export const RULINGS: Record<string, RulingNote[]> = {
       "url": "https://edisonrul.ing/cards/o/overdoom-line.html"
     }
   ],
+  "Tuningware": [
+    {
+      "text": "2010 ruling: \"This effect cannot activate if the Synchro Summon is negated (by \"Black Horn of Heaven\")\": the Synchro Monster left the Monster Zone without being Synchro Summoned.",
+      "url": "https://edisonrul.ing/cards/t/tuningware.html"
+    }
+  ],
   "Turbo Cannon": [
     {
       "text": "2010 rulings: it targets 1 face-up monster; not applied if the target is flipped face-down; the damage goes to its controller on resolution (half its current ATK).",
@@ -2563,6 +2661,16 @@ export const RULINGS: Record<string, RulingNote[]> = {
     {
       "text": "2010 ruling: \"'Turbo Synchron' must be face-up on the field (not destroyed by battle) to activate this effect.\"",
       "url": "https://edisonrul.ing/cards/t/turbo-synchron.html"
+    },
+    {
+      "text": "2010 ruling: \"If it attacks a face-down Synchro Monster, \"Turbo Warrior's\" effect does not activate.\"",
+      "url": "https://edisonrul.ing/cards/t/turbo-warrior.html"
+    }
+  ],
+  "Turbo Warrior": [
+    {
+      "text": "2010 ruling: \"If it attacks a face-down Synchro Monster, \"Turbo Warrior's\" effect does not activate.\"",
+      "url": "https://edisonrul.ing/cards/t/turbo-warrior.html"
     }
   ],
   "Turret Warrior": [
