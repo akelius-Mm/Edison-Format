@@ -36,6 +36,11 @@ async function tributeSelf(ctx: Ctx) {
   });
 }
 
+/** Can this card be sent to the GY as a cost (not while "Macro Cosmos" / "Banisher of the Radiance" would banish it)? */
+function canSendSelfToGrave(ctx: Ctx) {
+  return !ctx.game.queryPlayer(ctx.self.owner, 'banishInsteadOfGrave') && !ctx.game.queryCard(ctx.self, 'banishInsteadOfGrave');
+}
+
 /**
  * "End the Battle Phase": the engine has no direct hook, so the current attack is negated and
  * the turn player cannot declare further attacks this turn.
@@ -331,6 +336,9 @@ monster('Gorz the Emissary of Darkness', {
       kind: 'trigger',
       event: 'damage',
       range: ['hand'],
+      // "When... you can": it can miss the timing (e.g. effect damage as Chain Link 2+).
+      // https://edisonrul.ing/cards/g/gorz-the-emissary-of-darkness.html
+      when: true,
       label: 'Special Summon Gorz',
       categories: ['specialSummon', 'damage'],
       eventFilter: (ctx, ev) =>
@@ -463,8 +471,19 @@ monster('Battle Fader', {
       label: 'Special Summon & end Battle Phase',
       categories: ['specialSummon', 'negateAttack'],
       eventFilter: (ctx, ev) => evC(ev)?.controller === ctx.opp && !ev.other,
+      // "You cannot activate multiple copies of 'Battle Fader' in response to a single attack declaration."
+      // https://edisonrul.ing/cards/b/battle-fader.html
       condition: (ctx) =>
-        !!ctx.battle && !ctx.battle.target && !ctx.battle.inDamageStep && !attackFinished(ctx.game) && ctx.canSummonSelf() && ctx.canSummonCard(ctx.self),
+        !!ctx.battle &&
+        !ctx.battle.target &&
+        !ctx.battle.inDamageStep &&
+        !ctx.battle.flags.battleFader &&
+        !attackFinished(ctx.game) &&
+        ctx.canSummonSelf() &&
+        ctx.canSummonCard(ctx.self),
+      activate: async (ctx) => {
+        if (ctx.battle) ctx.battle.flags.battleFader = true;
+      },
       resolve: async (ctx) => {
         if (ctx.self.location !== 'hand') return;
         const r = await ctx.specialSummon(ctx.self, { pos: 'def' });
@@ -494,8 +513,10 @@ monster('Marshmallon', {
   effects: [
     { kind: 'continuous', mods: [{ q: 'indestructibleBattle' }] },
     {
+      // Substep 5 (after damage calculation), so it chains with other "after damage calculation" effects:
+      // https://edisonrul.ing/cards/m/marshmallon.html
       kind: 'trigger',
-      event: ['flipped', 'damageStepEnd'],
+      event: ['flipped', 'damageCalculated'],
       mandatory: true,
       label: '1000 damage',
       categories: ['damage'],
@@ -742,8 +763,10 @@ monster('Rescue Cat', {
       // https://edisonrul.ing/cards/r/rescue-cat.html — it Special Summons 2 monsters at once: it cannot be activated to
       // Summon only 1 (2 eligible Beasts and 2 free zones, counting the one Rescue Cat frees), and a Summoned monster
       // that is flipped face-down is not destroyed in the End Phase.
+      // Sending it to the GY is the cost: it cannot be activated while "Macro Cosmos" is active.
       canActivate: (ctx) =>
         !ctx.game.queryPlayer(ctx.player, 'cannotSpecialSummon') &&
+        canSendSelfToGrave(ctx) &&
         ctx.freeMZones() + 1 >= 2 &&
         ctx.deck('me', (c) => c.isMonster && c.data.race === 'Beast' && (c.data.level ?? 0) <= 3 && !c.data.nomi && ctx.canSummonCard(c)).length >= 2,
       activate: async (ctx) => {
@@ -820,9 +843,11 @@ monster('Night Assailant', {
   effects: [
     flip({
       categories: ['destroy'],
-      canActivate: (ctx) => ctx.monsters('opp', (c) => ctx.canTarget(c)).length > 0,
+      // Mandatory: "This effect activates even if your opponent doesn't control a monster."
+      // https://edisonrul.ing/cards/n/night-assailant.html
       activate: async (ctx) => {
-        await ctx.selectTargets(ctx.monsters('opp'), 1, 1, 'Target 1 monster your opponent controls to destroy.', 'destroy');
+        if (ctx.monsters('opp', (c) => ctx.canTarget(c)).length)
+          await ctx.selectTargets(ctx.monsters('opp'), 1, 1, 'Target 1 monster your opponent controls to destroy.', 'destroy');
       },
       resolve: destroyTargets,
     }),
@@ -871,6 +896,32 @@ monster('Magician of Faith', {
   ],
 });
 
+/**
+ * Neo-Spacian Grand Mole: its trigger activates at the start of the Damage Step (Substep 1), before a face-down attack
+ * target is flipped face-up. The engine has no event there, so this wraps the Damage Step and offers the trigger first.
+ * https://edisonrul.ing/cards/n/neo-spacian-grand-mole.html
+ */
+function grandMoleRules(g: Game) {
+  const anyG = g as unknown as { damageStep: () => Promise<void> };
+  const orig = anyG.damageStep.bind(g);
+  anyG.damageStep = async () => {
+    const b = g.battle;
+    if (b && b.target && !b.negated) {
+      for (const me of [b.attacker, b.target]) {
+        if (me.name !== 'Neo-Spacian Grand Mole' || me.location !== 'mzone' || !me.faceUp || g.isNegated(me)) continue;
+        const idx = (me.data.effects ?? []).findIndex((e) => e.label === 'Bounce both');
+        if (idx < 0) continue;
+        b.inDamageStep = true;
+        const event = { type: 'beforeDamageCalc', seq: 0, batch: 0, card: b.attacker, other: b.target } as GameEvent;
+        g.pending.push({ card: me, effect: me.data.effects![idx], effectIndex: idx, event, player: me.controller });
+        await g.processTriggers(false);
+        if (g.over) return;
+      }
+    }
+    return orig();
+  };
+}
+
 monster('Neo-Spacian Grand Mole', {
   attribute: 'EARTH',
   race: 'Rock',
@@ -879,10 +930,13 @@ monster('Neo-Spacian Grand Mole', {
   def: 300,
   text: "At the start of the Damage Step, if this card battles an opponent's monster: You can return that monster to the hand, and also return this card to the hand.",
   aiValue: 900,
+  rules: [grandMoleRules],
   effects: [
     {
-      // Approximated as a Damage Step quick effect before damage calculation (no "start of Damage Step" event).
-      kind: 'quick',
+      // An optional Trigger Effect in Substep 1 (start of the Damage Step), before a face-down monster is flipped: a Set
+      // Flip monster it battles is returned without its Flip Effect activating. Put on the Chain by grandMoleRules (no
+      // event: never offered otherwise). https://edisonrul.ing/cards/n/neo-spacian-grand-mole.html
+      kind: 'trigger',
       damageStep: true,
       label: 'Bounce both',
       categories: ['toHand'],
@@ -930,11 +984,15 @@ monster('Twin-Headed Behemoth', {
       categories: ['specialSummon'],
       eventFilter: (ctx, ev) => ev.card === ctx.self && reasonsOf(ev).includes('destroy') && !duelUsed(ctx.game, `behemoth:${ctx.self.uid}`),
       resolve: async (ctx) => {
-        markDuel(ctx.game, `behemoth:${ctx.self.uid}`);
         const me = ctx.self;
         const id = me.moveId;
+        // The once-per-Duel use is spent in the End Phase, when it would be Special Summoned (even if it cannot be, e.g.
+        // zones full or Scapegoat), not when it is destroyed: Special Summoned by "Monster Reborn" before then, it has
+        // not been used. https://edisonrul.ing/cards/t/twin-headed-behemoth.html
         const revive = async () => {
-          if (me.location !== 'grave' || me.moveId !== id || !ctx.canSpecialSummon()) return;
+          if (me.location !== 'grave' || me.moveId !== id || duelUsed(ctx.game, `behemoth:${me.uid}`)) return;
+          markDuel(ctx.game, `behemoth:${me.uid}`);
+          if (!ctx.canSpecialSummon()) return;
           const r = await ctx.specialSummon(me, { pos: 'choose' });
           if (r.length) {
             me.flags.baseAtk = 1000;
@@ -960,7 +1018,58 @@ monster('Banisher of the Radiance', {
   effects: [{ kind: 'continuous', mods: [{ q: 'banishInsteadOfGrave', to: 'players' }] }],
 });
 
-monster('Doomcaliber Knight', {
+/**
+ * Doomcaliber Knight: a mandatory Quick Effect ("you must Tribute this card"). After a monster effect is activated, each
+ * face-up Doomcaliber Knight that can be Tributed adds its negation as the next Chain Link (in any Phase or Step, Damage
+ * Step included). When monster effects are put on a Chain together (SEGOC), it is chained after the last of them.
+ * Only the Knight chained directly to a monster effect negates it; one chained to anything else resolves without effect.
+ * https://edisonrul.ing/cards/d/doomcaliber-knight.html (historical: "MUST activate whenever its activation requirement
+ * is met", "only the Doomcal chained directly onto that monster effect will successfully negate that effect").
+ */
+const DOOMCAL = 'Doomcaliber Knight';
+const DOOMCAL_LABEL = 'Tribute: negate monster effect';
+const isDoomcalLink = (l: ChainLink) => l.card.name === DOOMCAL && l.effect.label === DOOMCAL_LABEL;
+function doomcaliberRules(g: Game) {
+  const isMonsterEffect = (l: ChainLink) => l.card.isMonster && !l.isCardActivation && l.speed < 3;
+  const fire = async () => {
+    for (const me of g.allFieldCards()) {
+      if (me.name !== DOOMCAL || me.location !== 'mzone' || !me.faceUp || g.isNegated(me) || g.queryCard(me, 'cannotBeTributed')) continue;
+      const idx = (me.data.effects ?? []).findIndex((e) => e.label === DOOMCAL_LABEL);
+      if (idx < 0) continue;
+      const ef = me.data.effects![idx];
+      await g.activate(me.controller, { card: me, effect: ef, effectIndex: idx, label: DOOMCAL_LABEL });
+      if (g.over) return;
+    }
+  };
+  let building = 0;
+  let activatedWhileBuilding = false;
+  const anyG = g as unknown as { buildTriggerChain: () => Promise<boolean> };
+  const origBuild = anyG.buildTriggerChain.bind(g);
+  anyG.buildTriggerChain = async () => {
+    building++;
+    let built: boolean;
+    try {
+      built = await origBuild();
+    } finally {
+      building--;
+    }
+    if (building === 0 && activatedWhileBuilding) {
+      activatedWhileBuilding = false;
+      if (!g.over) await fire();
+    }
+    return built;
+  };
+  const origActivate = g.activate.bind(g);
+  g.activate = async (player: PlayerId, act) => {
+    const link = await origActivate(player, act);
+    if (!link || g.over || !isMonsterEffect(link) || isDoomcalLink(link)) return link;
+    if (building > 0) activatedWhileBuilding = true;
+    else await fire();
+    return link;
+  };
+}
+
+monster(DOOMCAL, {
   attribute: 'DARK',
   race: 'Fiend', // printed Type (YGOJSON), was Warrior
   level: 4,
@@ -968,33 +1077,30 @@ monster('Doomcaliber Knight', {
   def: 1800,
   // "Cannot be Special Summoned": blocked from every location (it has no Summon procedure).
   noSpecialFrom: ['hand', 'deck', 'grave', 'banished'],
-  text: 'Cannot be Special Summoned. During either player\'s turn, when a monster effect is activated: You can Tribute this face-up card; negate the activation, and if you do, destroy that monster.',
+  // April 2010 printing: https://edisonrul.ing/cards/d/doomcaliber-knight.html
+  text: 'This card cannot be Special Summoned. When an Effect Monster\'s effect is activated, you must Tribute this card. Negate that effect\'s activation, and destroy the monster.',
   aiValue: 700,
+  rules: [doomcaliberRules],
   effects: [
     {
-      kind: 'quick',
-      label: 'Tribute: negate monster effect',
+      // The mandatory negation, added as its own Chain Link by doomcaliberRules (no event: never offered otherwise).
+      // Tributing this card is the cost.
+      kind: 'trigger',
+      speed: 2,
+      damageStep: true,
+      mandatory: true,
+      label: DOOMCAL_LABEL,
       categories: ['negate', 'destroy'],
-      condition: (ctx) => {
-        const l = ctx.prevLink();
-        return !!l && !l.negated && l.card.isMonster && !l.isCardActivation && l.card !== ctx.self;
-      },
-      canActivate: (ctx) => !ctx.query(ctx.self, 'cannotBeTributed'),
       activate: async (ctx) => {
-        ctx.data.link = ctx.prevLink();
+        // the Chain Link it is chained directly to (its own link is already on the Chain)
+        const chain = ctx.game.chain;
+        ctx.data.link = chain[chain.length - 2];
         await tributeSelf(ctx);
       },
       resolve: async (ctx) => {
-        await ctx.negateAndDestroy(ctx.data.link as ChainLink);
-      },
-      ai: {
-        score: (ctx) => {
-          const l = ctx.prevLink();
-          if (!l || l.player !== ctx.opp) return 0;
-          const cats = l.effect.categories ?? [];
-          if (cats.some((c) => ['destroy', 'destroyMulti', 'banish', 'control', 'specialSummon', 'search', 'draw', 'negate'].includes(c))) return 60;
-          return cardValue(ctx.game, l.card) >= 2000 ? 45 : 0;
-        },
+        const l = ctx.data.link as ChainLink | undefined;
+        if (!l || l.negated || !l.card.isMonster || l.isCardActivation || isDoomcalLink(l)) return;
+        await ctx.negateAndDestroy(l);
       },
     },
   ],
@@ -1049,6 +1155,9 @@ monster('Thunder King Rai-Oh', {
         const ps = ctx.game.pendingSummon;
         return !!ps && ps.player === ctx.opp && ps.cards.length === 1 && !['normal', 'tribute', 'flip'].includes(ps.method);
       },
+      // Sending it to the GY is a cost: "You cannot activate this effect while 'Macro Cosmos' is active."
+      // https://edisonrul.ing/cards/t/thunder-king-rai-oh.html
+      canActivate: canSendSelfToGrave,
       activate: async (ctx) => {
         await ctx.sendToGrave(ctx.self, 'cost');
       },
@@ -1191,6 +1300,37 @@ monster('Kycoo the Ghost Destroyer', {
   ],
 });
 
+/**
+ * Big Shield Gardna: a Spell that targets only this card, while it is face-down, is negated and this card is changed to
+ * face-up Defense Position. Checked when the Spell resolves, so a "Book of Moon" chained to flip it face-down lets it
+ * negate. Not a Spell that targets 2 cards (Riryoku) or none (Creature Swap, Dark Hole). A face-down monster's effects are
+ * not negated by "Skill Drain". https://edisonrul.ing/cards/b/big-shield-gardna.html
+ */
+function bigShieldGardnaRules(g: Game) {
+  const orig = g.activate.bind(g);
+  g.activate = async (player: PlayerId, act) => {
+    const link = await orig(player, act);
+    if (!link || !link.card.isSpell || link.ctx.targets.length !== 1) return link;
+    const me = link.ctx.targets[0];
+    if (me.name !== 'Big Shield Gardna' || me.location !== 'mzone') return link;
+    const moveId = me.moveId;
+    const ef = link.effect;
+    link.effect = {
+      ...ef,
+      resolve: async (ctx) => {
+        if (me.location === 'mzone' && me.moveId === moveId && !me.faceUp) {
+          g.log(`${me.name} is flipped face-up and negates ${link.card.name}.`, 'action', me.controller);
+          g.negateLink(link, false, me);
+          await g.changePosition(me, 'def', true, me.controller);
+          return;
+        }
+        if (ef.resolve) await ef.resolve(ctx);
+      },
+    };
+    return link;
+  };
+}
+
 monster('Big Shield Gardna', {
   attribute: 'EARTH',
   race: 'Warrior',
@@ -1199,6 +1339,7 @@ monster('Big Shield Gardna', {
   def: 2600,
   text: 'While face-down, if a Spell targets only this card: Flip it face-up and negate that activation. If this card is attacked: change it to Attack Position after damage calculation.',
   aiValue: 300,
+  rules: [bigShieldGardnaRules],
   effects: [
     {
       kind: 'trigger',
@@ -1228,6 +1369,9 @@ monster('Cyber Valley', {
       event: 'attackDeclared',
       label: 'Banish: draw 1, end Battle',
       categories: ['draw', 'negateAttack'],
+      // Banishing itself is the cost, so it activates and resolves under "Skill Drain":
+      // https://edisonrul.ing/cards/c/cyber-valley.html
+      activatesWhileNegated: true,
       eventFilter: (ctx, ev) => ev.other === ctx.self && ctx.self.location === 'mzone',
       activate: async (ctx) => {
         await ctx.banish(ctx.self, 'cost');
@@ -1518,9 +1662,14 @@ monster('Black Luster Soldier - Envoy of the Beginning', {
       label: 'Banish 1 monster',
       categories: ['banish'],
       condition: (ctx) => ctx.self.attacksThisTurn === 0 && ctx.self.flags.blsEnvoyTurn !== ctx.turn,
-      canActivate: (ctx) => ctx.monsters('both', (c) => c !== ctx.self && ctx.canTarget(c)).length > 0,
+      // "can remove itself from play using its first effect": https://edisonrul.ing/cards/b/black-luster-soldier-envoy-of-the-beginning.html
+      canActivate: (ctx) => ctx.monsters('both', (c) => ctx.canTarget(c)).length > 0,
       activate: async (ctx) => {
-        await ctx.selectTargets(ctx.monsters('both', (c) => c !== ctx.self), 1, 1, 'Target 1 monster to banish.', 'banish');
+        // itself listed last
+        const cands = [...ctx.monsters('both', (c) => c !== ctx.self), ctx.self];
+        await ctx.selectTargets(cands, 1, 1, 'Target 1 monster to banish.', 'banish', {
+          aiScore: (c) => (ctx.mine(c) ? -5000 - cardValue(ctx.game, c) : cardValue(ctx.game, c)),
+        });
         ctx.self.flags.blsEnvoyTurn = ctx.turn;
         ctx.self.flags.cannotAttackTurn = ctx.turn;
       },

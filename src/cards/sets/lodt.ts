@@ -1063,12 +1063,15 @@ M('Cross Porter', {
       canActivate: (ctx) =>
         !ctx.game.queryPlayer(ctx.player, 'cannotSpecialSummon') && ctx.monsters('me', (c) => ctx.canTarget(c)).length > 0 && ctx.hand('me', isNeoSpacian).length > 0,
       activate: async (ctx) => {
-        await ctx.selectTargets(ctx.monsters('me'), 1, 1, 'Target 1 monster you control to send to the GY.', 'cost', {
+        const [t] = await ctx.selectTargets(ctx.monsters('me'), 1, 1, 'Target 1 monster you control to send to the GY.', 'cost', {
           aiScore: (c) => (c === ctx.self ? 5000 : -cardValue(ctx.game, c)),
         });
+        if (t) ctx.data.faceUpId = t.faceUpId;
       },
+      // A target flipped face-down (or gone) makes it resolve without effect, except Cross Porter targeting itself, which
+      // still resolves if flipped face-down: https://edisonrul.ing/cards/c/cross-porter.html
       resolve: async (ctx) => {
-        const [t] = ctx.validTargets((c) => c.location === 'mzone' && c.controller === ctx.player);
+        const [t] = ctx.validTargets((c) => c.location === 'mzone' && c.controller === ctx.player && (c === ctx.self || c.faceUpId === ctx.data.faceUpId));
         if (!t) return;
         await ctx.sendToGrave(t);
         if (t.location === 'mzone') return;
@@ -1376,7 +1379,10 @@ function endPhaseMill(n: number): EffectDef {
     label: `End Phase: send top ${n} to GY`,
     categories: ['mill'],
     eventFilter: (ctx, ev) => ev.phase === 'end' && ctx.isMyTurn && faceUpOn(ctx.self),
+    // "must remain face-up on the field in order to activate and resolve this effect":
+    // https://edisonrul.ing/cards/g/gragonith-lightsworn-dragon.html
     resolve: async (ctx) => {
+      if (!faceUpOn(ctx.self)) return;
       await ctx.mill(n);
     },
   };
@@ -3185,7 +3191,19 @@ T('Limit Reverse', 'continuous', {
       noChain: true,
       eventFilter: (ctx, ev) => {
         const c = evc(ev);
-        return ctx.self.faceUp && !!c && ctx.self.linkedTo === c.uid && c.location === 'mzone' && c.pos === 'def';
+        if (!ctx.self.faceUp || !c || ctx.self.linkedTo !== c.uid || c.location !== 'mzone') return false;
+        if (!c.faceUp) {
+          // "If the Special Summoned monster is flipped face-down, 'Limit Reverse's' effect disappears": both stay on the
+          // field, no longer linked. https://edisonrul.ing/cards/l/limit-reverse.html
+          ctx.self.linkedTo = null;
+          ctx.self.flags.linkDestroy = false;
+          if (c.linkedTo === ctx.self.uid) {
+            c.linkedTo = null;
+            c.flags.linkDestroy = false;
+          }
+          return false;
+        }
+        return c.pos === 'def';
       },
       resolve: async (ctx) => {
         const m = ctx.game.card(ctx.self.linkedTo);
@@ -3416,9 +3434,13 @@ T('Glorious Illusion', 'continuous', {
 /** Does this chain link destroy a monster on the field (Destruction Jammer)? APPROX: read from the effect's categories and targets. */
 // Not the Ignition-like effect of a face-up Continuous Spell/Trap (Skull Lair), and only while a monster is on the field
 // (Light and Darkness Dragon): https://edisonrul.ing/cards/d/destruction-jammer.html
+// Not effects that may or may not destroy a monster (a die roll, a choice): "Acid Trap Hole", "Blowback Dragon",
+// "Magical Dimension", "Reign-Beaux, Overlord of Dark World", "Snipe Hunter" (same page).
+const MAYBE_DESTROYS = new Set(['Acid Trap Hole', 'Blowback Dragon', 'Magical Dimension', 'Reign-Beaux, Overlord of Dark World', 'Snipe Hunter']);
 function destroysMonster(l: ChainLink, g: Game) {
   const cats = l.effect.categories ?? [];
   if (!cats.includes('destroy') && !cats.includes('destroyMulti')) return false;
+  if (MAYBE_DESTROYS.has(l.card.name)) return false;
   if ((l.card.isSpell || l.card.isTrap) && !l.isCardActivation && l.effect.kind === 'ignition') return false;
   const ts = l.ctx.targets;
   return ts.length ? ts.some((t) => t.isMonster && t.location === 'mzone') : g.monsters(0).length + g.monsters(1).length > 0;
@@ -3492,10 +3514,30 @@ T('Portable Battery Pack', 'continuous', {
         if (!t.length || !ctx.self.onField) return;
         const r = await ctx.specialSummon(t, { pos: 'atk' });
         if (!r.length || !ctx.self.onField) return;
-        ctx.self.flags.pbp = r.map((c) => ({ uid: c.uid, mid: c.moveId }));
+        ctx.self.flags.pbp = r.map((c) => ({ uid: c.uid, mid: c.moveId, fid: c.faceUpId }));
         for (const c of r) ctx.game.link(c, ctx.self, false);
       },
       ai: { score: (ctx) => reviveScore(ctx, 1500) },
+    },
+    {
+      // https://edisonrul.ing/cards/p/portable-battery-pack.html — "If 1 of the 2 Special Summoned 'Batteryman' monsters
+      // is flipped face-down, when the remaining 'Batteryman' monster is removed from the field, 'Portable Battery Pack'
+      // is destroyed. The 'Batteryman' that was flipped face-down remains on the field." A face-down one no longer
+      // counts as one of "those monsters" and is no longer destroyed with this card.
+      kind: 'trigger',
+      event: 'positionChanged',
+      range: ['szone'],
+      label: 'Batteryman flipped face-down',
+      eventFilter: (ctx, ev) => {
+        const list = ctx.self.flags.pbp as { uid: number; mid: number; fid: number }[] | undefined;
+        const c = evc(ev);
+        if (!list || !c || c.faceUp || !list.some((r) => r.uid === c.uid)) return false;
+        if (c.linkedTo === ctx.self.uid) {
+          c.linkedTo = null;
+          c.flags.linkDestroy = false;
+        }
+        return false;
+      },
     },
     {
       kind: 'trigger',
@@ -3505,12 +3547,12 @@ T('Portable Battery Pack', 'continuous', {
       label: 'Destroy this card',
       categories: ['destroy'],
       eventFilter: (ctx, ev) => {
-        const list = ctx.self.flags.pbp as { uid: number; mid: number }[] | undefined;
+        const list = ctx.self.flags.pbp as { uid: number; mid: number; fid: number }[] | undefined;
         const c = evc(ev);
         if (!ctx.self.faceUp || !list || !c || !list.some((r) => r.uid === c.uid)) return false;
         return list.every((r) => {
           const m = ctx.game.card(r.uid);
-          return !m || m.location !== 'mzone' || m.moveId !== r.mid;
+          return !m || m.location !== 'mzone' || m.moveId !== r.mid || m.faceUpId !== r.fid;
         });
       },
       resolve: async (ctx) => {

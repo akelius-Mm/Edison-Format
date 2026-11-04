@@ -1855,7 +1855,7 @@ export class Game {
       if (ef.gyBanishCost && this.gyBanishLocked(player)) continue;
       // monster on field must still be face-up and not negated (a maintenance cost is not an effect: Skill Drain does not stop it)
       if (card.location === 'mzone' && !card.faceUp && t.event.type !== 'flipped') continue;
-      if (card.location === 'mzone' && !ef.maintenance && this.isNegated(card)) continue;
+      if (card.location === 'mzone' && !ef.maintenance && !ef.activatesWhileNegated && this.isNegated(card)) continue;
       // A chainless "when this card leaves the field" effect does not apply if the card was negated when it left
       // (Il Blud under Skill Drain: https://edisonrul.ing/cards/i/il-blud.html).
       if (ef.noChain && !ef.maintenance && t.event.card === card && t.event.fromNegated) continue;

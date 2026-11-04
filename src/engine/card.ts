@@ -225,6 +225,12 @@ export interface EffectDef {
    */
   maintenance?: boolean;
   /**
+   * For kind 'trigger': its cost removes this monster from the field, so the effect activates and resolves even while
+   * this face-up monster's effects are negated ("Removing this card from play is a cost. This effect can activate and
+   * resolve under 'Skill Drain'", https://edisonrul.ing/cards/c/cyber-valley.html).
+   */
+  activatesWhileNegated?: boolean;
+  /**
    * For kind 'continuous': LP the player must pay to Normal Summon or Special Summon `card` from the hand while this
    * effect applies (Queen of Thorns). Paid as a cost at the Summon (Game.summonLpCost); a player who cannot pay it
    * cannot perform that Summon.

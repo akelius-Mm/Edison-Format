@@ -367,7 +367,9 @@ monster('Level Eater', {
   level: 1,
   atk: 600,
   def: 0,
-  text: 'If this card is in the Graveyard, you can activate its effect by selecting 1 face-up Level 5 or higher monster you control. Reduce that monster\'s Level by 1. Special Summon this card from the Graveyard.',
+  // April 2010 printing: https://edisonrul.ing/cards/l/level-eater.html
+  // The Tribute restriction is not enforced yet (no "cannot be Tributed except for a Tribute Summon" rule in the engine).
+  text: 'If this card is in the Graveyard, you can activate its effect by selecting 1 face-up Level 5 or higher monster you control. Reduce that monster\'s Level by 1. Special Summon this card from the Graveyard. This card cannot be Tributed except for a Tribute Summon.',
   aiValue: 500,
   effects: [
     {
@@ -524,42 +526,25 @@ monster('Nettles', {
   def: 400,
   text: 'If a face-up Plant-Type monster you control would be destroyed, you can return this face-up card to the hand instead.',
   aiValue: 200,
-  // Approximation (no destruction-replacement hook in the engine): Nettles can be returned
-  // to the hand in response to an opponent's destruction effect targeting another Plant, or when
-  // a Plant is attacked, making that Plant indestructible for the rest of the turn.
   effects: [
     {
-      kind: 'quick',
-      label: 'Return to hand: protect a Plant',
-      categories: ['protect'],
-      damageStep: true,
-      condition: (ctx) => {
-        const l = ctx.prevLink();
-        if (l && l.player === ctx.opp && (l.effect.categories ?? []).includes('destroy')) {
-          return l.ctx.targets.some((t) => t !== ctx.self && t.controller === ctx.player && t.faceUpMonster && isPlant(t));
-        }
+      // A destruction replacement (it does not target), for any face-up Plant you control, Nettles itself included.
+      // Not when Nettles was attacked face-down (flipped face-up by the attack, or by "Drillroid"): "If 'Nettles' is
+      // attacked while face-down, its effect cannot be applied when it is destroyed by battle."
+      // https://edisonrul.ing/cards/n/nettles.html
+      // APPROX: when several face-up Plants would be destroyed at once, all of them are saved (no 2010 ruling found).
+      kind: 'continuous',
+      replaceDestroy: async (ctx, cards) => {
+        const me = ctx.self;
+        if (me.location !== 'mzone' || !me.faceUp) return [];
         const b = ctx.battle;
-        return !l && !!b && !!b.target && b.target !== ctx.self && b.target.controller === ctx.player && b.target.faceUp && isPlant(b.target) && !b.inDamageStep;
-      },
-      activate: async (ctx) => {
-        const l = ctx.prevLink();
-        ctx.data.protect = l ? l.ctx.targets.filter((t) => t !== ctx.self && t.controller === ctx.player && t.faceUpMonster && isPlant(t)) : [ctx.battle!.target];
-      },
-      resolve: async (ctx) => {
-        if (!(ctx.self.location === 'mzone' && ctx.self.faceUp)) return;
-        await ctx.toHand(ctx.self);
-        for (const c of ctx.data.protect as CardInstance[]) {
-          if (c.location !== 'mzone') continue;
-          ctx.addTempMod(c, 'indestructibleEffect', true, 'turn');
-          ctx.addTempMod(c, 'indestructibleBattle', true, 'turn');
-        }
-      },
-      ai: {
-        score: (ctx) => {
-          const l = ctx.prevLink();
-          const prot: CardInstance[] = l ? l.ctx.targets : ctx.battle?.target ? [ctx.battle.target] : [];
-          return prot.some((c) => c.controller === ctx.player && cardValue(ctx.game, c) >= 1500) ? 60 : 0;
-        },
+        if (b && b.target === me && b.targetFaceDownAtStart) return [];
+        const saved = cards.filter((c) => c.location === 'mzone' && c.faceUp && c.controller === ctx.player && isPlant(c));
+        if (!saved.length) return [];
+        const worth = saved.some((c) => c === me || cardValue(ctx.game, c) >= cardValue(ctx.game, me));
+        if (!(await ctx.confirm(`Return ${me.name} to the hand instead of destroying ${saved.map((c) => c.name).join(', ')}?`, worth))) return [];
+        await ctx.toHand(me);
+        return saved;
       },
     },
   ],
