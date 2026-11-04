@@ -9,7 +9,7 @@ import { PREMADE_DECKS, buildDeckList } from '../src/decks';
 import { Game } from '../src/engine/game';
 import type { CardInstance } from '../src/engine/card';
 import { GameOver } from '../src/engine/game';
-import { cardsInQuestion, searchCards } from '../src/ui/duel/judgeBook';
+import { cardsInQuestion, rulingsFor, searchCards } from '../src/ui/duel/judgeBook';
 
 let passed = 0;
 const failures: string[] = [];
@@ -34,6 +34,11 @@ for (const [card, notes] of entries) {
 }
 // spot checks: cards whose 2010 rulings are cited next to their code
 for (const card of ['Fortune Lady Wind', 'Treeborn Frog', 'Blackwing Armor Master', "Koa'ki Meiru Drago"]) check((RULINGS[card] ?? []).length > 0, `${card}: has its 2010 ruling`);
+
+// every card links to its full page in the rulings database (when the database has one)
+check(rulingsFor('Sangan').page === 'https://edisonrul.ing/cards/s/sangan.html', 'Sangan: links to its edisonrul.ing page');
+check(rulingsFor('Falchionβ').page === 'https://edisonrul.ing/cards/f/falchion-beta.html', 'Falchionβ: page found despite the Greek letter');
+check(rulingsFor('Monster Reborn').page === undefined, 'Monster Reborn (Forbidden, no page): no link');
 
 // card search
 check(searchCards('judgment dragon')[0] === 'Judgment Dragon', 'search: exact name first');

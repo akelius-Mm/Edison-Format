@@ -24,6 +24,7 @@ const SUITE: string[][] = [
   ['scripts/format-pages-test.ts'],
   ...rulings,
   ['scripts/extract-rulings.ts', '--check'],
+  ['scripts/rulings-db-test.ts'],
   ['scripts/judge-test.ts'],
   // whole duels: determinism, undo, replays, AI
   ['scripts/prompt-test.ts'],

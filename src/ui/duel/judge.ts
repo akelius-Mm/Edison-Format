@@ -2,7 +2,8 @@
 // in the last few things that happened, the card you're looking at) and reads out the 2010 rulings on record for each,
 // with the source to check: the edisonrul.ing historical (pre-UTW) rulings and edisonformat.com, as cited next to each
 // card's code (src/cards/rulings.generated.ts, built by scripts/extract-rulings.ts), plus the plain-language Rules
-// updates (screens/rulesNotes.ts). You can also ask about any card by name. Read-only: nothing here changes the duel.
+// updates (screens/rulesNotes.ts), and a link to the card's full page in the rulings database (rulings-db.generated.ts).
+// You can also ask about any card by name. Read-only: nothing here changes the duel.
 import type { CardInstance } from '../../engine/card';
 import type { Game } from '../../engine/game';
 import type { PlayerId } from '../../engine/types';
@@ -15,7 +16,7 @@ import './judge.css';
 const host = (url: string) => (url.includes('edisonrul.ing') ? 'edisonrul.ing (2010 rulings)' : 'edisonformat.com');
 
 function cardBlock(name: string): HTMLElement {
-  const { notes, updates } = rulingsFor(name);
+  const { notes, updates, page } = rulingsFor(name);
   const el = document.createElement('section');
   el.className = 'jd-card';
   const items = [
@@ -24,7 +25,7 @@ function cardBlock(name: string): HTMLElement {
   ];
   el.innerHTML = `<header><b>${esc(name)}</b><button type="button" class="jd-text">Card text</button></header>${
     items.length ? `<ul>${items.join('')}</ul>` : '<p class="jd-none">No special 2010 rulings on record: it works as its text says.</p>'
-  }`;
+  }${page ? `<a class="jd-all" href="${esc(page)}" target="_blank" rel="noopener">All 2010 rulings for this card (edisonrul.ing)</a>` : ''}`;
   el.querySelector<HTMLButtonElement>('.jd-text')!.onclick = () => {
     const d = findCard(name);
     if (d) zoomCard(d);
