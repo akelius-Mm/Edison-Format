@@ -1500,7 +1500,7 @@ export class Game {
 
     if (ef.opt && this.isOptUsed(this.optKey(card, ef, idx, player))) return null;
     // A card can't activate the same effect twice in one chain.
-    if (this.chain.some((l) => l.card === card && l.effectIndex === idx)) return null;
+    if (!ef.repeatInChain && this.chain.some((l) => l.card === card && l.effectIndex === idx)) return null;
     if (ef.kind === 'activate' && this.chain.some((l) => l.card === card)) return null;
 
     const ctx = new Ctx(this, card, ef, player);

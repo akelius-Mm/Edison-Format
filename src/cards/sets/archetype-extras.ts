@@ -604,6 +604,8 @@ function copyInto(g: Game, ph: C, src: C) {
   g.update();
 }
 
+/** Effect Monsters Phantom of Chaos can target: not Gemini monsters. */
+const phantomCopyable = (c: C) => c.hasType('effect') && !c.hasType('gemini');
 /** How much Phantom of Chaos gains by copying `c` (AI). */
 function phantomValue(c: C) {
   let v = (c.data.atk ?? 0) + (c.data.aiValue ?? 0) / 2;
@@ -629,9 +631,11 @@ M(PHANTOM, {
       categories: ['atkChange'],
       // Rulings audit: the Effect Monster is targeted on activation and banished on resolution (not a cost), so
       // D.D. Crow / Necrovalley in response stop the copy; the copy happens only if it was banished.
-      canActivate: (ctx) => ctx.grave('me', (c) => c.hasType('effect') && ctx.canTarget(c)).length > 0,
+      // "You cannot target a non-effect monster, nor can you target a Gemini monster."
+      // https://edisonrul.ing/cards/p/phantom-of-chaos.html
+      canActivate: (ctx) => ctx.grave('me', (c) => phantomCopyable(c) && ctx.canTarget(c)).length > 0,
       activate: async (ctx) => {
-        const [c] = await ctx.selectTargets(ctx.grave('me', (x) => x.hasType('effect')), 1, 1, 'Target 1 Effect Monster in your Graveyard.', 'banish', {
+        const [c] = await ctx.selectTargets(ctx.grave('me', phantomCopyable), 1, 1, 'Target 1 Effect Monster in your Graveyard.', 'banish', {
           aiScore: (x) => phantomValue(x),
         });
         if (!c) return false;
@@ -648,7 +652,7 @@ M(PHANTOM, {
       ai: {
         score: (ctx) => {
           if (!isMain(ctx)) return 0;
-          const best = Math.max(0, ...ctx.grave('me', (c) => c.hasType('effect')).map(phantomValue));
+          const best = Math.max(0, ...ctx.grave('me', phantomCopyable).map(phantomValue));
           return best >= 1800 ? 64 : 0;
         },
       },
@@ -668,6 +672,9 @@ M(NORLERAS, {
   def: 1500,
   cannotNormalSummon: true,
   nomi: true,
+  // "This card can never be Special Summoned from the Graveyard / removed from play" (only by its own procedure from
+  // the hand). https://edisonrul.ing/cards/s/sky-scourge-norleras.html
+  noSpecialFrom: ['grave', 'banished'],
   aiValue: 600,
   text: 'This card cannot be Normal Summoned or Set. This card can only be Special Summoned by removing from play 1 LIGHT Fairy-Type monster and 3 DARK Fiend-Type monsters in your Graveyard. You can pay 1000 Life Points to send all cards on the field and in both players\' hands to the Graveyard. Then, draw 1 card.',
   effects: [

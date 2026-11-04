@@ -205,6 +205,7 @@ const starBlast = new WeakMap<C, { turn: number; moveId: number; n: number }>();
 
 const faceUpActive = (g: Game, c: C) => c.location === 'mzone' && c.faceUp && !g.isNegated(c);
 const controlsFaceUp = (g: Game, p: PlayerId, name: string) => g.monsters(p).some((c) => c.name === name && faceUpActive(g, c));
+const DFW_NO_ACTIVATE = new Set(['Card Trooper', 'Celestia, Lightsworn Angel', 'Solar Recharge', 'Reasoning', 'Monster Gate', 'Null and Void', 'Destiny Hero - Diamond Dude', 'Destiny HERO - Diamond Dude', 'Future Fusion']);
 const dfwActive = (g: Game) => g.allFieldCards().some((c) => c.name === DFW && faceUpActive(g, c));
 function starBlastCut(g: Game, c: C): number {
   const s = starBlast.get(c);
@@ -226,6 +227,10 @@ export function crmsRules(g: Game) {
   // Night Wing Sorceress: "Assault Mode Activate" can be activated the turn it was Set.
   const origCAE = g.canActivateEffect.bind(g);
   g.canActivateEffect = (player: PlayerId, card: C, ef: EffectDef, idx: number, mode: { open: boolean; window?: any }) => {
+    // Dimension Fortress Weapon: costs that send cards from the Deck to the GY cannot be paid (Card Trooper, Celestia),
+    // and Solar Recharge, Reasoning, Monster Gate, Null and Void, Diamond Dude and Future Fusion "cannot be activated".
+    // https://edisonrul.ing/cards/d/dimension-fortress-weapon.html
+    if ((ef.kind === 'ignition' || ef.kind === 'activate') && DFW_NO_ACTIVATE.has(card.name) && dfwActive(g)) return null;
     if (card.name === AMA && card.location === 'szone' && !card.faceUp && card.setTurn === g.turn && controlsFaceUp(g, player, NIGHT_WING)) {
       const st = card.setTurn;
       card.setTurn = -1;
@@ -541,7 +546,8 @@ monster('Arcanite Magician/Assault Mode', {
 /** The /Assault Mode monster for a Synchro Monster on the field, from a list of candidates. */
 const assaultFor = (base: C) => (c: C) => isAssault(c) && c.name.includes(base.name);
 const amaSources = (ctx: Ctx) =>
-  tributable(ctx, (c) => c.hasType('synchro') && c.faceUp).filter((s) => ctx.deck('me', assaultFor(s)).length > 0);
+  // "You can Tribute a face-down Synchro Monster." https://edisonrul.ing/cards/a/assault-mode-activate.html
+  tributable(ctx, (c) => c.hasType('synchro')).filter((s) => ctx.deck('me', assaultFor(s)).length > 0);
 
 trap(AMA, 'normal', {
   text: 'Tribute 1 Synchro Monster; Special Summon 1 "/Assault Mode" monster, whose name includes the Tributed monster\'s name, from your Deck in Attack Position.',
@@ -969,8 +975,17 @@ monster(SK, {
       categories: ['negateAttack'],
       eventFilter: (ctx, ev) => evc(ev)?.controller === ctx.opp,
       condition: (ctx) => ctx.self.flags.skBurnTurn === ctx.turn && ctx.phase === 'battle' && !!ctx.battle && !ctx.battle.inDamageStep,
+      // "The effect that negates attacks activates when the attack is declared, and targets the attacking monster."
+      // https://edisonrul.ing/cards/s/summon-reactor-sk.html
+      canActivate: (ctx) => !!ctx.battle && ctx.canTarget(ctx.battle.attacker),
+      activate: async (ctx) => {
+        const a = ctx.battle?.attacker;
+        if (!a || !ctx.canTarget(a)) return false;
+        ctx.addTargets([a]);
+      },
       resolve: async (ctx) => {
-        ctx.negateAttack();
+        const [a] = ctx.validTargets((c) => c.location === 'mzone');
+        if (a && ctx.battle?.attacker === a) ctx.negateAttack();
       },
       ai: {
         score: (ctx) => {
@@ -1025,6 +1040,9 @@ function reactor(name: string, kind: 'trap' | 'spell', o: { attribute: Attribute
         opt: true,
         label: `Destroy the ${kind === 'trap' ? 'Trap' : 'Spell'} Card, 800 damage`,
         categories: ['destroy', 'damage'],
+        // "This effect can be activated during the Damage Step." https://edisonrul.ing/cards/s/spell-reactor-re.html,
+        // https://edisonrul.ing/cards/t/trap-reactor-y-fi.html
+        damageStep: true,
         condition: (ctx) => {
           const l = ctx.prevLink();
           return !!l && l.player === ctx.opp && l.isCardActivation && (kind === 'trap' ? l.card.isTrap : l.card.isSpell) && l.card.onField;
@@ -1035,8 +1053,9 @@ function reactor(name: string, kind: 'trap' | 'spell', o: { attribute: Attribute
         },
         resolve: async (ctx) => {
           const c = ctx.data.card as C;
-          if (c.onField && c.moveId === ctx.data.mid) await ctx.destroy(c);
-          await ctx.damage(ctx.opp, 800);
+          // "If the Spell Card cannot be destroyed when this effect resolves ... you do not inflict 800 damage."
+          const gone = c.onField && c.moveId === ctx.data.mid ? await ctx.destroy(c) : [];
+          if (gone.length) await ctx.damage(ctx.opp, 800);
         },
         ai: { score: () => 60 },
       },

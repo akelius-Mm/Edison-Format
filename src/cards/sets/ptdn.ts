@@ -242,7 +242,9 @@ export function ptdnRules(g: Game) {
   const origMove = g.moveCards.bind(g);
   g.moveCards = async (cards: C[], to: Location, opts: Parameters<Game['moveCards']>[2]) => {
     const rs = reasonsOf(opts);
-    if (to === 'grave' && !rs.includes('rule')) {
+    // "When Destiny Hero - Departed is sent to the Graveyard to pay a cost, it is not removed from play."
+    // https://edisonrul.ing/cards/d/destiny-hero-departed.html
+    if (to === 'grave' && !rs.includes('rule') && !rs.includes('cost')) {
       const dep = cards.filter((c) => c.name === DEPARTED && (c.location === 'hand' || c.location === 'deck'));
       if (dep.length) {
         const rest = cards.filter((c) => !dep.includes(c));

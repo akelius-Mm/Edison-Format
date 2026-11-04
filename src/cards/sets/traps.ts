@@ -32,6 +32,16 @@ async function targetAttacker(ctx: Ctx) {
   ctx.addTargets([a]);
 }
 
+/**
+ * The targeted attacker, if it is still "the attacking monster" on resolution: face-up, still controlled by the
+ * opponent, and still the attacker of the current battle. Book of Moon (face-down), Enemy Controller (control change)
+ * or Scrubbed Raid (Battle Phase ended) in response leave Sakuretsu Armor / Dimensional Prison / Magic Cylinder without
+ * effect. https://edisonrul.ing/cards/d/dimensional-prison.html, https://edisonrul.ing/cards/s/sakuretsu-armor.html,
+ * https://edisonrul.ing/cards/m/magic-cylinder.html
+ */
+const stillAttacking = (ctx: Ctx) =>
+  ctx.validTargets((c) => c.location === 'mzone' && c.faceUp && c.controller === ctx.opp && ctx.battle?.attacker === c);
+
 /** Pay a Tribute cost. */
 async function tributeCost(ctx: Ctx, cards: CardInstance[]) {
   if (!cards.length) return;
@@ -334,7 +344,7 @@ defTrap('Dimensional Prison', 'normal', {
       eventFilter: oppAttackTargetableEv,
       activate: targetAttacker,
       resolve: async (ctx) => {
-        const t = ctx.validTargets((c) => c.location === 'mzone');
+        const t = stillAttacking(ctx);
         if (!t.length) return;
         ctx.log(`${t[0].name} is banished.`);
         await ctx.banish(t);
@@ -395,7 +405,7 @@ defTrap('Magic Cylinder', 'normal', {
       eventFilter: oppAttackTargetableEv,
       activate: targetAttacker,
       resolve: async (ctx) => {
-        const t = ctx.validTargets((c) => c.location === 'mzone');
+        const t = stillAttacking(ctx);
         if (!t.length || !ctx.battle) return;
         const atk = ctx.atk(t[0]);
         ctx.negateAttack();
@@ -426,7 +436,7 @@ defTrap('Sakuretsu Armor', 'normal', {
       eventFilter: oppAttackTargetableEv,
       activate: targetAttacker,
       resolve: async (ctx) => {
-        const t = ctx.validTargets((c) => c.location === 'mzone');
+        const t = stillAttacking(ctx);
         if (t.length) await ctx.destroy(t);
       },
       ai: {
@@ -619,7 +629,9 @@ defTrap('Divine Wrath', 'counter', {
       categories: ['negate', 'destroy'],
       condition: (ctx) => {
         const l = ctx.prevLink();
-        return !!l && !l.negated && !l.isCardActivation && l.card.isMonster && l.player === ctx.opp;
+        // Either player's monster effect: the 2010 text has no "your opponent" ("Negate the activation of an Effect
+        // Monster's effect"). https://edisonrul.ing/cards/d/divine-wrath.html
+        return !!l && !l.negated && !l.isCardActivation && l.card.isMonster;
       },
       canActivate: (ctx) => ctx.hand().length > 0,
       activate: async (ctx) => {
@@ -740,7 +752,10 @@ defTrap('Dust Tornado', 'normal', {
       },
       resolve: async (ctx) => {
         const t = ctx.validTargets((c) => c.onField);
-        if (t.length) await ctx.destroy(t);
+        // "You must destroy 1 Spell or Trap Card ... to be able to Set 1 Spell or Trap Card."
+        // https://edisonrul.ing/cards/d/dust-tornado.html
+        const destroyed = t.length ? await ctx.destroy(t) : [];
+        if (!destroyed.length) return;
         const noSet = ctx.game.queryPlayer(ctx.player, 'cannotSet') || ctx.game.queryPlayer(ctx.player, 'cannotSetSpellTrap'); // Cold Wave
         const cands = noSet ? [] : ctx.hand('me', (c) => (c.isSpell || c.isTrap) && (c.data.stype === 'field' || ctx.freeSZones() > 0));
         if (cands.length && (await ctx.confirm('Set 1 Spell/Trap Card from your hand?'))) {
@@ -866,6 +881,9 @@ defTrap('Ultimate Offering', 'continuous', {
       kind: 'quick',
       label: 'Pay 500: extra Normal Summon',
       categories: [],
+      // "If this card is face-up, you can activate this effect multiple times in the same Chain."
+      // https://edisonrul.ing/cards/u/ultimate-offering.html
+      repeatInChain: true,
       condition: (ctx) => (ctx.isMyTurn ? ctx.phase === 'main1' || ctx.phase === 'main2' : ctx.phase === 'battle'),
       canActivate: (ctx) => ctx.lp > 500 && offeringCands(ctx).length > 0,
       activate: async (ctx) => {
@@ -890,6 +908,7 @@ defTrap('Ultimate Offering', 'continuous', {
       },
       ai: {
         score: (ctx) => {
+          if (ctx.game.chain.some((l) => l.card === ctx.self)) return 0; // AI: one extra Summon at a time
           if (ctx.isMyTurn) return offeringUseful(ctx) && ctx.lp > 1500 ? 45 : 0;
           return ctx.lp > 1500 && !ctx.game.chain.length && !!ctx.battle && ctx.monsters('me').length === 0 ? 40 : 0;
         },
@@ -1183,15 +1202,27 @@ defTrap('Ojama Trio', 'normal', {
   ],
 });
 
+/** Waboku: every monster its activator controls this turn cannot be destroyed by battle (player-level, for the turn). */
+function wabokuRules(g: Game) {
+  const orig = g.canDestroy.bind(g);
+  g.canDestroy = (card: CardInstance, reason: Parameters<Game['canDestroy']>[1]) => {
+    if (reason === 'battle' && card.location === 'mzone' && g.turnData[`waboku:${card.controller}`]) return false;
+    return orig(card, reason);
+  };
+}
+
 defTrap('Waboku', 'normal', {
   text: 'You take no battle damage this turn. Your monsters cannot be destroyed by battle this turn.',
+  rules: [wabokuRules],
   effects: [
     {
       kind: 'activate',
       categories: ['protect'],
       resolve: async (ctx) => {
         ctx.addPlayerMod(ctx.player, 'noBattleDamage');
-        for (const m of ctx.monsters('me')) ctx.addTempMod(m, 'indestructibleBattle', true, 'turn');
+        // "Waboku applies to ALL of the monsters on that player's side of the field for the entire turn" — also
+        // monsters Summoned after it resolved (wabokuRules). https://edisonrul.ing/cards/w/waboku.html
+        ctx.game.turnData[`waboku:${ctx.player}`] = true;
         ctx.log('No battle damage and no battle destruction for your monsters this turn.');
       },
       ai: {

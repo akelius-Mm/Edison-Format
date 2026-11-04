@@ -283,7 +283,7 @@ interface GlasState {
   /** Defensive Tactics: `${turn}:${player}`. */
   defTac: Set<string>;
   /** "A" Cell Incubator: A-Counters on field cards at the last update (uid → moveId / count). */
-  aSnap: Map<number, { moveId: number; a: number }>;
+  aSnap: Map<number, { moveId: number; a: number; faceUp: boolean }>;
   syncing: boolean;
 }
 const GSTATE = new WeakMap<Game, GlasState>();
@@ -471,13 +471,20 @@ function syncState(g: Game, s: GlasState) {
       delete c.flags.glasRapt;
     }
   }
+  // Gladiator Beast Dimacari: its double attack "no longer applies if ... has its effects negated by Skill Drain (even if
+  // Skill Drain is later negated / destroyed)". https://edisonrul.ing/cards/g/gladiator-beast-dimacari.html
+  for (const c of [...g.monsters(0), ...g.monsters(1)]) {
+    if (c.name === DIMACARI && c.faceUp && c.flags.gbSummoned && g.isNegated(c)) delete c.flags.gbSummoned;
+  }
   // "A" Cell Incubator: an A-Counter that disappears from a card that stayed on the field was removed by an effect.
   // APPROX: detected at the next Game.update, one counter per update in which a removal happened.
   const field = g.allFieldCards();
   let removed = false;
   for (const c of field) {
     const prev = s.aSnap.get(c.uid);
-    if (prev && prev.moveId === c.moveId && aCount(c) < prev.a) removed = true;
+    // Not when the card was flipped face-down: "these A-Counters are not removed by an effect".
+    // https://edisonrul.ing/cards/a/a-cell-incubator.html
+    if (prev && prev.moveId === c.moveId && (!prev.faceUp || c.faceUp) && aCount(c) < prev.a) removed = true;
   }
   if (removed) {
     for (const inc of liveCards(g, INCUBATOR)) {
@@ -487,7 +494,7 @@ function syncState(g: Game, s: GlasState) {
   }
   s.aSnap.clear();
   for (const c of field) {
-    if (aCount(c) > 0) s.aSnap.set(c.uid, { moveId: c.moveId, a: aCount(c) });
+    if (aCount(c) > 0) s.aSnap.set(c.uid, { moveId: c.moveId, a: aCount(c), faceUp: c.faceUp });
     if (c.name === INCUBATOR) INCUBATOR_COUNT.set(c, { moveId: c.moveId, n: aCount(c) });
   }
 }
@@ -1289,6 +1296,7 @@ cloudian4('Cloudian - Altus', 1300, 'You can remove 3 Fog Counters from anywhere
   ai: { score: () => 45 },
 });
 
+const turbulenceSources = (ctx: Ctx) => [...ctx.cards('me', ['hand', 'deck', 'grave'], (c) => c.name === SMOKE_BALL), ...ctx.grave('opp', (c) => c.name === SMOKE_BALL)];
 cloudian4(
   'Cloudian - Turbulence',
   800,
@@ -1297,13 +1305,15 @@ cloudian4(
     kind: 'ignition',
     label: `Remove 1 Fog Counter: Special Summon "${SMOKE_BALL}"`,
     categories: ['specialSummon'],
-    // APPROX: YGOJSON (modern) text says "from your Deck or either GY"; the GLAS print allows hand, Deck or GY.
-    canActivate: (ctx) => fog(ctx.self) >= 1 && ctx.canSpecialSummon() && ctx.cards('me', ['hand', 'deck', 'grave'], (c) => c.name === SMOKE_BALL).length > 0,
+    // 2010 ruling: it needs a Smoke Ball "in your Deck or in either player's Graveyard", so the opponent's GY is a
+    // source too. https://edisonrul.ing/cards/c/cloudian-turbulence.html
+    // APPROX: the hand (this file's reading of the GLAS print) stays a source; the database has no 2010 card text.
+    canActivate: (ctx) => fog(ctx.self) >= 1 && ctx.canSpecialSummon() && turbulenceSources(ctx).length > 0,
     activate: async (ctx) => {
       await removeOwnFog(ctx, 1);
     },
     resolve: async (ctx) => {
-      const cands = ctx.cards('me', ['hand', 'deck', 'grave'], (c) => c.name === SMOKE_BALL && ctx.canSummonCard(c));
+      const cands = turbulenceSources(ctx).filter((c) => ctx.canSummonCard(c));
       if (!cands.length) return;
       const sel = await ctx.select(cands, 1, 1, `Special Summon 1 "${SMOKE_BALL}".`, 'specialSummon', { aiScore: (c) => (c.location === 'deck' ? 3 : c.location === 'grave' ? 2 : 1) });
       const fromDeck = sel[0]?.location === 'deck';
@@ -1956,7 +1966,9 @@ M(CHAOS_NEOS, {
         let heads = 0;
         for (let i = 0; i < 3; i++) if (await tossCoin(ctx)) heads++;
         if (heads === 3) await ctx.destroy(ctx.monsters('opp'));
-        else if (heads === 2) for (const c of ctx.faceUpMonsters('opp')) ctx.negateEffects(c, 'turn');
+        // 2 Heads: negated for as long as they stay face-up (no duration in the text), even once Chaos Neos is gone.
+        // https://edisonrul.ing/cards/e/elemental-hero-chaos-neos.html
+        else if (heads === 2) for (const c of ctx.faceUpMonsters('opp')) ctx.negateEffects(c, 'field');
         else if (heads === 1) {
           const mine = ctx.monsters('me');
           if (mine.length) await ctx.toHand(mine);

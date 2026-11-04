@@ -103,11 +103,18 @@ function laddRules(g: Game) {
   g.activate = async (player: PlayerId, act: Activation) => {
     const link = await orig(player, act);
     if (!link || g.over || link.speed >= 3) return link;
+    // https://edisonrul.ing/cards/l/light-and-darkness-dragon.html: it chains to the activation of a Spell/Trap Card
+    // (played face-up) or of a monster effect from any location, "not ... to the activated effect of a Spell / Trap
+    // card that is already face-up / in the Graveyard".
+    if ((link.card.isSpell || link.card.isTrap) && !link.isCardActivation) return link;
+    // Another Light and Darkness Dragon's negation is not a new activation to answer: with 2 of them, both chain to the
+    // original activation (the second one, not directly chained to it, resolves without effect).
+    if (link.card.name === 'Light and Darkness Dragon' && link.effectIndex === 0) return link;
     for (const me of g.allFieldCards()) {
       if (me.name !== 'Light and Darkness Dragon' || me === link.card || me.location !== 'mzone' || !me.faceUp || g.isNegated(me)) continue;
       const first = g.chain[0];
       if (me.flags.laddChain && me.flags.laddChain === first) continue;
-      if (g.getAtk(me) < 500 || g.getDef(me) < 500) continue;
+      // "ALWAYS activates (even if this card has <500 ATK or DEF)"; it then negates nothing (see resolve).
       me.flags.laddChain = first;
       const ef = me.data.effects![0];
       await g.activate(me.controller, { card: me, effect: ef, effectIndex: 0, label: ef.label ?? 'Negate activation', event: { type: 'chainActivated', seq: 0, batch: 0, card: link.card, data: { link } } });
@@ -140,10 +147,16 @@ monster('Light and Darkness Dragon', {
       categories: ['negate'],
       activate: async (ctx) => {
         ctx.data.link = (ctx.event?.data as { link?: ChainLink } | undefined)?.link;
+        // Its own link is already on the chain: is it directly chained to the activation it answers?
+        const ch = ctx.game.chain;
+        ctx.data.direct = !!ctx.data.link && ch[ch.length - 2] === ctx.data.link;
       },
       resolve: async (ctx) => {
         const me = ctx.self;
         const target = ctx.data.link as ChainLink | undefined;
+        // 2 Light and Darkness Dragons: the one not directly chained to the activation "resolves without effect ...
+        // and it won't lose ATK or DEF". https://edisonrul.ing/cards/l/light-and-darkness-dragon.html
+        if (!ctx.data.direct) return;
         if (me.location !== 'mzone' || !me.faceUp || ctx.game.isNegated(me)) return;
         if (ctx.game.getAtk(me) < 500 || ctx.game.getDef(me) < 500) return;
         ctx.game.addTempMod(me, 'atk', -500, 'field', me);
@@ -155,6 +168,9 @@ monster('Light and Darkness Dragon', {
           // and every Spirit monster). https://www.edisonformat.com/functional-errata.html
           const ev = target.ctx.event;
           if (target.effect.kind === 'trigger' && target.effect.mandatory && ev?.type === 'phaseStart' && ev.phase === ctx.game.phase) {
+            // Its once-per-turn use is not spent by a negated activation: Arcana Force XXI - The World (Tails) "will
+            // activate again until it resolves". https://edisonrul.ing/cards/a/arcana-force-xxi-the-world.html
+            if (target.effect.opt) ctx.game.clearOpt(ctx.game.optKey(target.card, target.effect, target.effectIndex, target.player));
             ctx.game.pending.push({ card: target.card, effect: target.effect, effectIndex: target.effectIndex, event: ev, player: target.player });
           }
         }
@@ -860,6 +876,23 @@ const cfdCyberDragons = (ctx: Ctx) => {
   return pool.filter((cd) => isCyberDragonName(cd) && pool.some((m) => m !== cd && cfdMachine(m) && (!full || cd.controller === ctx.player || m.controller === ctx.player)));
 };
 
+/**
+ * Chimeratech Fortress Dragon: "If Skill Drain is active, this card's ATK becomes 0 (even if Skill Drain is negated /
+ * destroyed)" — once its effects are negated, its set original ATK is gone for good.
+ * https://edisonrul.ing/cards/c/chimeratech-fortress-dragon.html
+ */
+function cfdRules(g: Game) {
+  const orig = g.update.bind(g);
+  g.update = () => {
+    for (const p of [0, 1] as PlayerId[]) {
+      for (const c of g.monsters(p)) {
+        if (c.name === 'Chimeratech Fortress Dragon' && c.faceUp && c.flags.baseAtk !== undefined && g.isNegated(c)) delete c.flags.baseAtk;
+      }
+    }
+    orig();
+  };
+}
+
 monster('Chimeratech Fortress Dragon', {
   attribute: 'DARK',
   race: 'Machine',
@@ -870,6 +903,7 @@ monster('Chimeratech Fortress Dragon', {
   nomi: true,
   sets: ['cyber'],
   aiValue: 900,
+  rules: [cfdRules],
   text: '"Cyber Dragon" + 1 or more Machine monsters\nMust first be Special Summoned (from your Extra Deck) by sending the above cards from either field to the GY. (You do not use "Polymerization".) The original ATK of this card becomes 1000 x the number of Fusion Materials used for its Special Summon.',
   fusion: { materials: [isCyberDragonName, cfdMachine], noPoly: true, desc: '"Cyber Dragon" + 1+ Machine monsters' },
   effects: [
@@ -1269,10 +1303,15 @@ spell('Prohibition', 'continuous', {
 
 // ABPF: Consecrated Light (ABPF-EN035) is a LIGHT Fairy Effect Monster, not a Continuous Trap (YGOJSON, passcode 02980764).
 const consecratedActive = (ctx: Ctx) => ctx.self.location === 'mzone' && ctx.self.faceUp && !ctx.game.isNegated(ctx.self);
+/**
+ * DARK for Consecrated Light: Light and Darkness Dragon is also DARK while face-up on the field, so "Once it is on the
+ * field, it will be unable to attack" (it can still be Summoned). https://edisonrul.ing/cards/c/consecrated-light.html
+ */
+const isDarkOnField = (c: C) => c.data.attribute === 'DARK' || (c.name === 'Light and Darkness Dragon' && c.location === 'mzone' && c.faceUp);
 const battlingDark = (ctx: Ctx) => {
   const b = ctx.game.battle;
   const o = !b ? null : b.attacker === ctx.self ? b.target : b.target === ctx.self ? b.attacker : null;
-  return !!o && o.data.attribute === 'DARK';
+  return !!o && isDarkOnField(o);
 };
 monster('Consecrated Light', {
   attribute: 'LIGHT',
@@ -1286,7 +1325,7 @@ monster('Consecrated Light', {
     {
       kind: 'continuous',
       mods: [
-        { q: 'cannotAttack', to: 'cards', filter: (_ctx, c: C) => c.location === 'mzone' && c.data.attribute === 'DARK' },
+        { q: 'cannotAttack', to: 'cards', filter: (_ctx, c: C) => c.location === 'mzone' && isDarkOnField(c) },
         { q: 'indestructibleBattle', value: (ctx) => battlingDark(ctx) },
         { q: 'noBattleDamageFrom', value: (ctx) => battlingDark(ctx) },
       ],
@@ -1299,10 +1338,16 @@ monster('Consecrated Light', {
   ],
 });
 
+/**
+ * Cards whose untargeted destruction hits only Spell/Trap Cards: My Body as a Shield "CANNOT negate Heavy Storm that
+ * would destroy a monster(s) treated as an Equip Spell Card". https://edisonrul.ing/cards/m/my-body-as-a-shield.html
+ */
+const SPELL_TRAP_ONLY_DESTROYERS = new Set(['Heavy Storm', "Harpie's Feather Duster", 'Earthbound Whirlwind', 'Reckoned Power', 'Delta Crow - Anti Reverse', 'Release Restraint Wave']);
 /** Would chain link `l` destroy a monster on the field? */
 function destroysMonsters(ctx: Ctx, l: ChainLink, side: 'me' | 'both' = 'both') {
   const cats = l.effect.categories ?? [];
   if (!cats.includes('destroy') && !cats.includes('destroyMulti')) return false;
+  if (SPELL_TRAP_ONLY_DESTROYERS.has(l.card.name)) return false;
   const mons = ctx.monsters(side);
   if (!mons.length) return false;
   if (l.ctx.targets.length) return l.ctx.targets.some((t) => t.location === 'mzone' && mons.includes(t));
@@ -1310,14 +1355,16 @@ function destroysMonsters(ctx: Ctx, l: ChainLink, side: 'me' | 'both' = 'both') 
 }
 
 trap('My Body as a Shield', 'normal', {
-  text: 'When a Spell/Trap Card or monster effect that would destroy a monster(s) on the field is activated: Pay 1500 LP; negate the activation, and if you do, destroy that card.',
+  text: 'Activate only by paying 1500 Life Points when your opponent activates a card with an effect that would destroy 1 or more monster(s) on the field. Negate the activation of that card and destroy it.',
   effects: [
     {
       kind: 'activate',
       categories: ['negate', 'protect'],
       condition: (ctx) => {
         const l = ctx.prevLink();
-        return !!l && !l.negated && l.card !== ctx.self && destroysMonsters(ctx, l);
+        // "Activate only ... when your OPPONENT activates a card with an effect that would destroy" (TU2 / GLD3 text).
+        // https://edisonrul.ing/cards/m/my-body-as-a-shield.html
+        return !!l && !l.negated && l.player === ctx.opp && l.card !== ctx.self && destroysMonsters(ctx, l);
       },
       canActivate: (ctx) => ctx.lp > 1500,
       activate: async (ctx) => {
@@ -1468,6 +1515,8 @@ trap('Light-Imprisoning Mirror', 'continuous', {
 
 /** Tuner's Scheme: monsters it took, so they are banished if destroyed. */
 const schemeTaken = new WeakMap<C, number>();
+/** Tuner's Scheme -> the Synchro Monster it took, so control returns when the Scheme leaves the field. */
+const schemeHosts = new WeakMap<C, { mon: C; moveId: number }>();
 trap("Tuner's Scheme", 'continuous', {
   text: 'Activate only when a Synchro Monster is Special Summoned to your opponent\'s side of the field. Take control of that Synchro Monster. When it is destroyed, banish it. When it leaves the field, destroy this card.',
   effects: [
@@ -1492,6 +1541,7 @@ trap("Tuner's Scheme", 'continuous', {
         if (ok && ctx.self.onField) {
           ctx.game.link(ctx.self, c, false);
           schemeTaken.set(c, c.moveId);
+          schemeHosts.set(ctx.self, { mon: c, moveId: c.moveId });
         }
       },
       ai: {
@@ -1516,6 +1566,29 @@ trap("Tuner's Scheme", 'continuous', {
       resolve: async (ctx) => {
         const c = evc(ctx.event!);
         if (c && c.location === 'grave') await ctx.banish(c);
+      },
+    },
+    {
+      // "If Tuner's Scheme is removed from the field, its effect no longer applies and your opponent regains control
+      // of the Synchro Monster" — unless it was flipped face-down meanwhile (then it is no longer targeted and you keep
+      // it). https://edisonrul.ing/cards/t/tuners-scheme.html
+      // APPROX: like Snatch Steal here, the return is a mandatory trigger rather than an immediate rule change;
+      // "flipped face-down" is checked as "face-down now".
+      kind: 'trigger',
+      event: 'leftField',
+      mandatory: true,
+      label: 'Return control',
+      categories: ['control'],
+      eventFilter: (ctx, ev) => {
+        if (ev.card !== ctx.self) return false;
+        const h = schemeHosts.get(ctx.self);
+        if (h && !(h.mon.location === 'mzone' && h.mon.moveId === h.moveId && h.mon.faceUp)) schemeHosts.delete(ctx.self);
+        return schemeHosts.has(ctx.self);
+      },
+      resolve: async (ctx) => {
+        const h = schemeHosts.get(ctx.self);
+        schemeHosts.delete(ctx.self);
+        if (h && h.mon.location === 'mzone' && h.mon.moveId === h.moveId && h.mon.controller !== h.mon.owner) await ctx.game.returnControl(h.mon);
       },
     },
   ],
