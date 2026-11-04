@@ -7,7 +7,7 @@
 // src/engine/card.ts and src/engine/game.ts ('atkBecomes', 'deckTopInsteadOfGrave', BattleState.calc).
 import { monster, normal, spell, token, trap } from '../define';
 import { bestTarget, cardValue, flip, selfDestroysByBattle } from '../helpers';
-import { dataVariant, type CardInstance, type EffectDef, type TempMod } from '../../engine/card';
+import { dataVariant, faceUpFlag, type CardInstance, type EffectDef, type TempMod } from '../../engine/card';
 import { Ctx } from '../../engine/ctx';
 import { GameOver, type Game } from '../../engine/game';
 import type { Attribute, GameEvent, Location, PlayerId, Race } from '../../engine/types';
@@ -533,8 +533,11 @@ monster('Max Warrior', {
       resolve: async (ctx) => {
         const me = ctx.self;
         if (me.location !== 'mzone' || !me.faceUp) return;
-        me.flags.baseAtk = Math.floor((me.data.atk ?? 0) / 2);
-        me.flags.baseDef = Math.floor((me.data.def ?? 0) / 2);
+        // "If you use the effect of Assault Armor to let Max Warrior attack twice and destroy two monsters, its Level will
+        // be 2 and its original ATK/DEF will be 1/4 of their printed value": it halves the current original ATK/DEF
+        // (https://edisonrul.ing/cards/m/max-warrior.html).
+        me.flags.baseAtk = Math.floor(((me.flags.baseAtk as number | undefined) ?? me.data.atk ?? 0) / 2);
+        me.flags.baseDef = Math.floor(((me.flags.baseDef as number | undefined) ?? me.data.def ?? 0) / 2);
         me.flags.baseLevel = 2;
         ctx.game.update();
         const mid = me.moveId;
@@ -827,10 +830,13 @@ monster('Solitaire Magician', {
         ctx.data.victim = victim;
       },
       resolve: async (ctx) => {
-        const valid = ctx.validTargets((c) => c.location === 'mzone' && c.faceUp);
+        // https://edisonrul.ing/cards/s/solitaire-magician.html — if the "Fortune Lady" is flipped face-down (Book of Moon)
+        // the effect does not apply at all; if the monster to destroy is flipped face-down, it resolves normally.
+        const valid = ctx.validTargets((c) => c.location === 'mzone');
         const fl = ctx.data.fl as C | undefined;
         const victim = ctx.data.victim as C | undefined;
-        if (fl && valid.includes(fl)) ctx.addTempMod(fl, 'level', -Math.min(3, ctx.level(fl) - 1), 'field');
+        if (!fl || !valid.includes(fl) || !fl.faceUp) return;
+        ctx.addTempMod(fl, 'level', -Math.min(3, ctx.level(fl) - 1), 'field');
         if (victim && valid.includes(victim)) await ctx.destroy(victim);
       },
       ai: {
@@ -1075,7 +1081,9 @@ monster('Reptilianne Gorgon', {
       mandatory: true,
       label: 'ATK becomes 0',
       categories: ['atkChange'],
-      eventFilter: (ctx, ev) => ev.card === ctx.self && evo(ev)?.location === 'mzone' && !!evo(ev)?.faceUp,
+      // https://edisonrul.ing/cards/r/reptilianne-gorgon.html — "If this card destroys a monster by battle, its effect will
+      // activate but will resolve without effect"; it applies as long as the monster is face-up on the field.
+      eventFilter: (ctx, ev) => ev.card === ctx.self && !!evo(ev),
       activate: async (ctx) => {
         const t = evo(ctx.event!)!;
         ctx.data.t = t;
@@ -1103,12 +1111,13 @@ monster('Reptilianne Medusa', {
       kind: 'ignition',
       label: 'Send 1 card: ATK becomes 0',
       categories: ['atkChange'],
-      canActivate: (ctx) => ctx.hand('me').length > 0 && ctx.faceUpMonsters('opp', (c) => ctx.canTarget(c)).length > 0,
+      // https://edisonrul.ing/cards/r/reptilianne-medusa.html — "You cannot target a monster with 0 ATK with this effect."
+      canActivate: (ctx) => ctx.hand('me').length > 0 && ctx.faceUpMonsters('opp', (c) => ctx.canTarget(c) && ctx.atk(c) > 0).length > 0,
       activate: async (ctx) => {
         const cost = await ctx.select(ctx.hand('me'), 1, 1, 'Send 1 card from your hand to the GY.', 'cost');
         if (!cost.length) return false;
         await ctx.sendToGrave(cost, 'cost');
-        await ctx.selectTargets(ctx.faceUpMonsters('opp'), 1, 1, 'Select 1 face-up monster your opponent controls.', 'target', {
+        await ctx.selectTargets(ctx.faceUpMonsters('opp', (c) => ctx.atk(c) > 0), 1, 1, 'Select 1 face-up monster your opponent controls.', 'target', {
           aiScore: (c) => ctx.atk(c) + (hasAtkBecomes(c) ? -9000 : 0),
         });
       },
@@ -1702,7 +1711,7 @@ monster('Djinn Releaser of Rituals', {
   def: 2000,
   sets: ['djinn', 'djinn-of-rituals'],
   aiValue: 500,
-  text: 'When you Ritual Summon a monster, you can banish this card from your Graveyard as 1 of the monsters required for the Ritual Summon. If a player Ritual Summons using this card, the other player cannot Special Summon while that Ritual Summoned monster is face-up on the field.',
+  text: 'When you Ritual Summon a Ritual Monster, you can remove from play this card from your Graveyard as 1 of the monsters required for the Ritual Summon. While the monster Ritual Summoned using this card is face-up on the field, your opponent cannot Special Summon.',
   effects: [
     {
       // The lock is granted to the Ritual Monster; it lasts wherever this card is now.
@@ -1780,15 +1789,20 @@ monster('Divine Grace - Northwemko', {
       label: 'Select face-up cards',
       categories: ['protect'],
       eventFilter: (ctx, ev) => ev.card === ctx.self && ev.method === 'ritual',
+      // https://edisonrul.ing/cards/d/divine-grace-northwemko.html — "This effect targets" (chosen on activation) and
+      // continuously targets the selected cards.
+      canActivate: (ctx) => ctx.field('both', (c) => c !== ctx.self && c.faceUp && ctx.canTarget(c)).length > 0,
+      activate: async (ctx) => {
+        const me = ctx.self;
+        const n = Math.max(1, me.flags.ritualMaterialCount ?? 1);
+        await ctx.selectTargets(ctx.field('both', (c) => c !== me && c.faceUp), 1, n, `Target up to ${n} face-up card(s) on the field.`, 'buff', {
+          aiScore: (c) => (c.controller === ctx.player ? 1000 : 0) + (c.isMonster ? 0 : 500) + (c.data.stype === 'continuous' || c.data.ttype === 'continuous' || c.data.stype === 'field' ? 300 : 0),
+        });
+      },
       resolve: async (ctx) => {
         const me = ctx.self;
         if (me.location !== 'mzone') return;
-        const n = Math.max(1, me.flags.ritualMaterialCount ?? 1);
-        const cands = ctx.field('both', (c) => c !== me && c.faceUp);
-        if (!cands.length) return;
-        const sel = await ctx.select(cands, 1, n, `Select up to ${n} face-up card(s) on the field.`, 'buff', {
-          aiScore: (c) => (c.controller === ctx.player ? 1000 : 0) + (c.isMonster ? 0 : 500) + (c.data.stype === 'continuous' || c.data.ttype === 'continuous' || c.data.stype === 'field' ? 300 : 0),
-        });
+        const sel = ctx.validTargets((c) => c.onField && c.faceUp);
         me.flags.sovrGrace = sel.map((c) => ({ c, mid: c.moveId }));
         ctx.game.update();
       },
@@ -1953,6 +1967,9 @@ monster('Reptilianne Hydra', {
   ],
 });
 
+/** `c` would really reach the GY (not banished instead by Dimensional Fissure / Macro Cosmos): a "send to the GY" cost can be paid. */
+const toGraveOk = (ctx: Ctx, c: C) => !ctx.game.queryPlayer(c.owner, 'banishInsteadOfGrave') && !ctx.game.queryCard(c, 'banishInsteadOfGrave');
+
 monster('Black Brutdrago', {
   attribute: 'FIRE',
   race: 'Dragon',
@@ -1969,9 +1986,11 @@ monster('Black Brutdrago', {
       opt: true,
       label: 'Send a Gemini: destroy 1 Spell/Trap',
       categories: ['destroy'],
-      canActivate: (ctx) => ctx.hand('me', isGemini).length > 0 && ctx.spellTraps('opp', (c) => ctx.canTarget(c)).length > 0,
+      // https://edisonrul.ing/cards/b/black-brutdrago.html — sending the Gemini to the GY is a cost: "This effect cannot be
+      // activated while Dimensional Fissure is active" (the card would be banished instead).
+      canActivate: (ctx) => ctx.hand('me', (c) => isGemini(c) && toGraveOk(ctx, c)).length > 0 && ctx.spellTraps('opp', (c) => ctx.canTarget(c)).length > 0,
       activate: async (ctx) => {
-        const cost = await ctx.select(ctx.hand('me', isGemini), 1, 1, 'Send 1 Gemini monster from your hand to the GY.', 'cost');
+        const cost = await ctx.select(ctx.hand('me', (c) => isGemini(c) && toGraveOk(ctx, c)), 1, 1, 'Send 1 Gemini monster from your hand to the GY.', 'cost');
         if (!cost.length) return false;
         await ctx.sendToGrave(cost, 'cost');
         await ctx.selectTargets(ctx.spellTraps('opp'), 1, 1, 'Select 1 Spell/Trap your opponent controls.', 'destroy');
@@ -2225,7 +2244,7 @@ monster('Dark Simorgh', {
   aiValue: 800,
   // APPROX: the engine has one Attribute per card, so "also WIND while face-up" is not applied.
   // Rulings: both self-Special Summons are Ignition Effects (they start a Chain); banishing is the cost.
-  text: 'While face-up on the field, this card is also WIND-Attribute. If this card is in your hand: You can banish 1 DARK and 1 WIND monster from your GY; Special Summon this card. If this card is in your GY: You can banish 1 DARK and 1 WIND monster from your hand; Special Summon this card. Your opponent cannot Set cards.',
+  text: 'While this card is face-up on the field its Attribute is also treated as WIND. You can remove from play 1 DARK monster and 1 WIND monster from your Graveyard to Special Summon this card from your hand. You can remove from play 1 DARK monster and 1 WIND monster from your hand to Special Summon this card from your Graveyard. Your opponent cannot Set any cards on the field.',
   effects: [
     simorghSummon('hand', 'grave'),
     simorghSummon('grave', 'hand'),
@@ -2240,7 +2259,7 @@ monster('Victoria', {
   atk: 1800,
   def: 1500,
   aiValue: 400,
-  text: 'Once per turn: You can target 1 Dragon-Type monster in your opponent\'s Graveyard; Special Summon that target to your side of the field. Your opponent cannot target face-up Fairy-Type monsters for attacks, except this one.',
+  text: 'Once per turn, you can select and Special Summon 1 Dragon-Type monster in your opponent\'s Graveyard to your side of the field. Your opponent cannot select another face-up Fairy-Type monster as an attack target.',
   effects: [
     {
       kind: 'ignition',
@@ -2319,9 +2338,13 @@ monster('Shutendoji', {
       opt: true,
       label: 'Banish 2 Zombies: draw 1 / banished Zombie to Deck top',
       categories: ['draw', 'toDeck'],
-      canActivate: (ctx) => ctx.grave('me', (c) => raceIs(c, 'Zombie')).length >= 2 || ctx.banished('me', (c) => raceIs(c, 'Zombie')).length > 0,
+      // Banishing 2 Zombies from the GY is a cost of the draw mode only (https://edisonrul.ing/cards/s/shutendoji.html):
+      // while GY cards cannot be banished (Necrovalley, Kycoo) the deck-top mode can still be used.
+      canActivate: (ctx) =>
+        (!ctx.game.gyBanishLocked(ctx.player) && ctx.grave('me', (c) => raceIs(c, 'Zombie')).length >= 2) ||
+        ctx.banished('me', (c) => raceIs(c, 'Zombie')).length > 0,
       activate: async (ctx) => {
-        const canDraw = ctx.grave('me', (c) => raceIs(c, 'Zombie')).length >= 2;
+        const canDraw = !ctx.game.gyBanishLocked(ctx.player) && ctx.grave('me', (c) => raceIs(c, 'Zombie')).length >= 2;
         const canTop = ctx.banished('me', (c) => raceIs(c, 'Zombie') && c.faceUp).length > 0;
         const opts: string[] = [];
         if (canDraw) opts.push('Banish 2 Zombies from your GY: draw 1 card');
@@ -2359,7 +2382,7 @@ monster('Archlord Kristya', {
   atk: 2800,
   def: 2300,
   aiValue: 1500,
-  text: 'If you have exactly 4 Fairy monsters in your GY, you can Special Summon this card (from your hand). If Summoned this way: Target 1 Fairy monster in your GY; add that target to your hand. Neither player can Special Summon monsters. If this face-up card would be sent from the field to the GY, place it on top of the Deck, instead.',
+  text: 'If you have exactly 4 Fairy-Type monsters in your Graveyard, you can Special Summon this card from your hand. When you do, add 1 Fairy-Type monster from your Graveyard to your hand. Neither player can Special Summon monsters. If this face-up card would be sent from the field to the Graveyard, it is returned to the top of the owner\'s Deck, instead.',
   effects: [
     {
       kind: 'proc',
@@ -2449,7 +2472,7 @@ monster('Clear Vice Dragon', {
   atk: 0,
   def: 0,
   aiValue: 1500,
-  text: 'You are unaffected by the effects of "Clear World". If this card attacks an opponent\'s monster, this card\'s ATK becomes twice the ATK of the attack target, during damage calculation only. If this card would be destroyed by an opponent\'s card effect, you can discard 1 card instead.',
+  text: 'You are unaffected by the effects of "Clear World". If this card attacks an opponent\'s monster, the ATK of this card becomes twice the ATK of the attack target, during damage calculation only. If this card would be destroyed by an opponent\'s card effect, you can discard 1 card instead.',
   effects: [
     {
       kind: 'continuous',
@@ -2465,34 +2488,21 @@ monster('Clear Vice Dragon', {
       ],
     },
     {
-      // APPROX: no destruction-replacement step in the engine. Instead, in response to an opponent's
-      // destroying effect, you can discard 1 card so this card cannot be destroyed by card effects this turn.
-      kind: 'quick',
-      label: 'Discard 1 instead of being destroyed',
-      categories: ['protect'],
-      condition: (ctx) => {
-        const l = ctx.prevLink();
-        if (!l || l.player !== ctx.opp || l.negated) return false;
-        const cats = l.effect.categories ?? [];
-        if (!cats.includes('destroy') && !cats.includes('destroyMulti')) return false;
-        return l.ctx.targets.length === 0 || l.ctx.targets.includes(ctx.self);
-      },
-      canActivate: (ctx) => ctx.hand('me').length > 0 && !ctx.query(ctx.self, 'indestructibleEffect'),
-      activate: async (ctx) => {
-        const d = await ctx.select(ctx.hand('me'), 1, 1, 'Discard 1 card.', 'discard');
-        if (!d.length) return false;
-        await ctx.discard(d, 'cost');
-      },
-      resolve: async (ctx) => {
-        if (ctx.self.location === 'mzone') ctx.addTempMod(ctx.self, 'indestructibleEffect', true, 'turn');
-      },
-      ai: {
-        score: (ctx) => {
-          const l = ctx.prevLink();
-          if (!l) return 0;
-          const cats = l.effect.categories ?? [];
-          return l.ctx.targets.includes(ctx.self) || cats.includes('destroyMulti') ? 80 : 0;
-        },
+      // ③ is a Continuous Effect that applies while the opponent's effect that would destroy this card resolves;
+      // discarding is an effect, not a cost (Dark World monsters trigger), you choose the card, and it only replaces
+      // this card's destruction (https://edisonrul.ing/cards/c/clear-vice-dragon.html).
+      kind: 'continuous',
+      replaceDestroy: async (ctx, cards, reason) => {
+        const self = ctx.self;
+        if (reason !== 'effect' || !cards.includes(self) || ctx.data.reasonPlayer !== ctx.opp) return [];
+        const hand = ctx.hand('me');
+        if (!hand.length) return [];
+        if (!(await ctx.confirm(`Discard 1 card instead of destroying ${self.name}?`, true))) return [];
+        const d = await ctx.select(hand, 1, 1, 'Discard 1 card.', 'discard');
+        if (!d.length) return [];
+        await ctx.discard(d, 'effect');
+        ctx.log(`${self.name} is not destroyed.`);
+        return [self];
       },
     },
   ],
@@ -2506,6 +2516,10 @@ const fieldSpellScore = (ctx: Ctx, base: number) => {
   const ei = ctx.cards('me', ['hand', 'mzone'], isEI).length;
   return ei ? 55 : base;
 };
+
+// Spider Web's position lock ends when the monster is flipped face-down, even if it is flipped face-up again
+// (https://edisonrul.ing/cards/s/spider-web.html).
+faceUpFlag('sovrSpiderWebUntil');
 
 spell('Spider Web', 'field', {
   text: 'If a monster declares an attack, it is changed to Defense Position at the end of the Damage Step. It cannot change its battle position until the End Phase of its controller\'s next turn, while this card remains on the field.',
@@ -2535,7 +2549,8 @@ spell('Spider Web', 'field', {
     },
     {
       kind: 'continuous',
-      // 2010 ruling: a monster flipped face-down is no longer affected. https://edisonrul.ing/cards/s/spider-web.html
+      // 2010 ruling: a monster flipped face-down is no longer affected (the flag is a face-up flag, see below).
+      // https://edisonrul.ing/cards/s/spider-web.html
       mods: [{ q: 'cannotChangePos', to: 'cards', filter: (ctx, c: C) => c.location === 'mzone' && c.faceUp && (c.flags.sovrSpiderWebUntil ?? -1) >= ctx.game.turn }],
     },
   ],
@@ -2649,6 +2664,13 @@ spell('Molting Escape', 'equip', {
       (ctx, c) => {
         if (!stActive(ctx) || c !== ctx.equipTarget || ctx.self.flags.sovrMoltTurn === ctx.game.turn) return;
         ctx.self.flags.sovrMoltTurn = ctx.game.turn;
+        // "The equipped monster will not gain 300 ATK if it battles while it cannot be destroyed by battle due to a
+        // different effect" (https://edisonrul.ing/cards/m/molting-escape.html): with this card's protection switched
+        // off (sovrMoltTurn is set), is the monster still indestructible? Then this effect was not applied.
+        if (ctx.game.queryCard(c, 'indestructibleBattle')) {
+          delete ctx.self.flags.sovrMoltTurn;
+          return;
+        }
         ctx.self.flags.sovrMoltGain = { uid: c.uid, moveId: c.moveId };
         ctx.game.log(`Molting Escape: ${c.name} is not destroyed.`, 'action', ctx.player);
       },
@@ -2881,7 +2903,7 @@ spell('Ritual of Grace', 'ritual', {
 });
 
 spell('Preparation of Rites', 'normal', {
-  text: 'Add 1 Level 7 or lower Ritual Monster from your Deck to your hand, then you can add 1 Ritual Spell from your GY to your hand.',
+  text: 'Add to your hand 1 Level 7 or lower Ritual Monster Card from your Deck. Then you can add to your hand 1 Ritual Spell Card from your Graveyard.',
   effects: [
     {
       kind: 'activate',
@@ -2902,7 +2924,7 @@ spell('Preparation of Rites', 'normal', {
 });
 
 spell('Moray of Greed', 'normal', {
-  text: 'Shuffle 2 WATER monsters from your hand into the Deck, then draw 3 cards.',
+  text: 'Return 2 WATER monsters from your hand to your Deck and draw 3 cards.',
   effects: [
     {
       kind: 'activate',
@@ -2922,7 +2944,7 @@ spell('Moray of Greed', 'normal', {
 });
 
 spell('Spiritual Forest', 'continuous', {
-  text: 'The first time each Beast, Beast-Warrior, or Plant monster you control would be destroyed by battle each turn, it is not destroyed.',
+  text: 'Once per turn, a Beast-Type, Beast-Warrior-Type, or Plant-Type monster you control is not destroyed by battle.',
   effects: [
     { kind: 'activate', categories: ['protect'], ai: { score: (ctx) => (ctx.cards('me', ['hand', 'mzone'], (c) => raceIs(c, 'Beast', 'Beast-Warrior', 'Plant')).length >= 2 ? 22 : 0) } },
     {
@@ -2932,13 +2954,17 @@ spell('Spiritual Forest', 'continuous', {
           q: 'indestructibleBattle',
           to: 'cards',
           filter: (ctx, c: C) =>
-            c.location === 'mzone' && c.controller === ctx.player && raceIs(c, 'Beast', 'Beast-Warrior', 'Plant') && c.flags.sovrForestTurn !== ctx.game.turn,
+            c.location === 'mzone' && c.controller === ctx.player && raceIs(c, 'Beast', 'Beast-Warrior', 'Plant') && ctx.self.flags.sovrForestTurn !== ctx.game.turn,
         },
       ],
     },
+    // Once per turn per Spiritual Forest, not per monster: "If the effect of Spiritual Forest is resolved once during a
+    // turn, it cannot be resolved again even if Spiritual Forest is negated and then stops being negated in the same
+    // turn"; "It automatically activates the first time the appropriate type of monster would be destroyed"
+    // (https://edisonrul.ing/cards/s/spiritual-forest.html).
     battleSurvivorListener(
       (ctx, c) => {
-        if (stActive(ctx) && c.controller === ctx.player && raceIs(c, 'Beast', 'Beast-Warrior', 'Plant')) c.flags.sovrForestTurn = ctx.game.turn;
+        if (stActive(ctx) && c.controller === ctx.player && raceIs(c, 'Beast', 'Beast-Warrior', 'Plant')) ctx.self.flags.sovrForestTurn = ctx.game.turn;
       },
       ['szone'],
     ),
@@ -3105,7 +3131,7 @@ spell('Reptilianne Poison', 'normal', {
 });
 
 spell('Gateway of the Six', 'continuous', {
-  text: 'Each time a "Six Samurai" monster(s) is Normal or Special Summoned, place 2 Bushido Counters on this card. You can remove Bushido Counters from your field to activate these effects.\n● 2 Counters: Target 1 "Six Samurai" or "Shien" Effect Monster; that target gains 500 ATK until the end of this turn.\n● 4 Counters: Add 1 "Six Samurai" monster from your Deck or GY to your hand.\n● 6 Counters: Target 1 "Shien" Effect Monster in your GY; Special Summon that target.',
+  text: 'Each time a "Six Samurai" monster is Normal or Special Summoned, place 2 Bushido Counters on this card. You can remove Bushido Counters from your side of the field to apply the following effects.\n● 2 Counters: Until the End Phase of this turn, 1 face-up "Six Samurai" or "Shien" Effect Monster gains 500 ATK.\n● 4 Counters: Add 1 "Six Samurai" monster from your Deck or Graveyard to your hand.\n● 6 Counters: Special Summon 1 "Shien" Effect Monster from your Graveyard.',
   effects: [
     { kind: 'activate', categories: ['search'], ai: { score: (ctx) => (ctx.cards('me', ['hand', 'mzone'], isSixSamurai).length ? 30 : 0) } },
     {
@@ -3217,6 +3243,12 @@ const clearViceProtected = (g: Game, p: PlayerId) => g.faceUpMonsters(p).some((c
 /** Clear World's effect for Attribute `a` applies to player `p`. */
 const clearWorldHits = (ctx: Ctx, p: PlayerId, a: Attribute) =>
   stActive(ctx) && !clearViceProtected(ctx.game, p) && ctx.game.faceUpMonsters(p).some((c) => attrIs(c, a));
+/**
+ * Clear World's EARTH / WATER / FIRE effect activates for player `p`: "If you control Clear Vice Dragon and any EARTH,
+ * FIRE, or WATER monsters, the effect of Clear World will still start a Chain but it will resolve without effect"
+ * (https://edisonrul.ing/cards/c/clear-world.html), so Clear Vice Dragon is checked on resolution only.
+ */
+const clearWorldTriggers = (ctx: Ctx, p: PlayerId, a: Attribute) => stActive(ctx) && ctx.game.faceUpMonsters(p).some((c) => attrIs(c, a));
 
 spell('Clear World', 'field', {
   // APPROX: LIGHT's "play with your hand revealed" only marks the hand as revealed for the UI; WIND's 500 LP is
@@ -3288,7 +3320,7 @@ spell('Clear World', 'field', {
       mandatory: true,
       label: 'EARTH: destroy 1 face-up Defense Position monster',
       categories: ['destroy'],
-      eventFilter: (ctx, ev) => ev.phase === 'standby' && clearWorldHits(ctx, ctx.game.turnPlayer, 'EARTH'),
+      eventFilter: (ctx, ev) => ev.phase === 'standby' && clearWorldTriggers(ctx, ctx.game.turnPlayer, 'EARTH'),
       condition: (ctx) => ctx.game.faceUpMonsters(ctx.game.turnPlayer).some((c) => c.pos === 'def'),
       resolve: async (ctx) => {
         const tp = ctx.game.turnPlayer;
@@ -3300,16 +3332,41 @@ spell('Clear World', 'field', {
       },
     },
     {
+      // "The EARTH, FIRE, and WATER effects of Clear World each start their own Chain. You do not form a single Chain
+      // with all 3 effects" (https://edisonrul.ing/cards/c/clear-world.html): WATER is a Chain of its own in the End
+      // Phase; FIRE (below) starts the next Chain once WATER's has resolved.
       kind: 'trigger',
       event: 'phaseStart',
       range: ['fzone'],
       mandatory: true,
-      label: 'WATER: discard 1 / FIRE: take 1000 damage',
-      categories: ['discard', 'damage'],
-      eventFilter: (ctx, ev) => ev.phase === 'end' && (clearWorldHits(ctx, ctx.game.turnPlayer, 'WATER') || clearWorldHits(ctx, ctx.game.turnPlayer, 'FIRE')),
+      label: 'WATER: discard 1 card',
+      categories: ['discard'],
+      eventFilter: (ctx, ev) => ev.phase === 'end' && clearWorldTriggers(ctx, ctx.game.turnPlayer, 'WATER'),
+      resolve: async (ctx) => {
+        const g = ctx.game;
+        const tp = g.turnPlayer;
+        if (clearWorldHits(ctx, tp, 'WATER') && g.players[tp].hand.length) await ctx.discardFromHand(1, undefined, 'effect', tp, 'Clear World (WATER): discard 1 card.');
+        // FIRE waits for this Chain to end (its trigger listens to this event).
+        g.beginBatch();
+        g.emit({ type: 'chainResolved', card: ctx.self, player: ctx.player, minor: true, data: { clearWorldWater: g.turn } });
+      },
+    },
+    {
+      kind: 'trigger',
+      event: ['phaseStart', 'chainResolved'],
+      range: ['fzone'],
+      mandatory: true,
+      label: 'FIRE: take 1000 damage',
+      categories: ['damage'],
+      eventFilter: (ctx, ev) => {
+        const tp = ctx.game.turnPlayer;
+        if (!clearWorldTriggers(ctx, tp, 'FIRE')) return false;
+        if (ev.type === 'chainResolved') return ev.card === ctx.self && ev.data?.clearWorldWater === ctx.game.turn && ctx.game.phase === 'end';
+        // With a WATER monster too, FIRE starts its Chain after WATER's.
+        return ev.phase === 'end' && !clearWorldTriggers(ctx, tp, 'WATER');
+      },
       resolve: async (ctx) => {
         const tp = ctx.game.turnPlayer;
-        if (clearWorldHits(ctx, tp, 'WATER') && ctx.game.players[tp].hand.length) await ctx.discardFromHand(1, undefined, 'effect', tp, 'Clear World (WATER): discard 1 card.');
         if (clearWorldHits(ctx, tp, 'FIRE')) await ctx.damage(tp, 1000);
       },
     },
@@ -3506,27 +3563,53 @@ trap('Inherited Fortune', 'normal', {
       categories: ['specialSummon'],
       condition: (ctx) => !!ctx.game.turnData[`sovrFLDestroyed:${ctx.player}`],
       resolve: async (ctx) => {
-        const p = ctx.player;
-        ctx.later(
-          'standby',
-          async () => {
-            const g = ctx.game;
-            if (g.turnPlayer !== p || g.queryPlayer(p, 'cannotSpecialSummon')) return;
-            const c2 = new Ctx(g, ctx.self, ctx.effect, p);
-            const cands = c2.hand('me', (c) => isFortuneLady(c) && c2.canSummonCard(c));
-            if (!cands.length) return;
-            const max = Math.min(2, cands.length, g.freeMZones(p));
-            if (max <= 0) return;
-            const sel = await c2.select(cands, 0, max, 'Inherited Fortune: Special Summon up to 2 "Fortune Lady" monsters from your hand.', 'specialSummon');
-            if (sel.length) await c2.specialSummon(sel, { pos: 'atk' });
-          },
-          nextOwnTurn(ctx),
-        );
+        // The Special Summon is a separate effect that starts a Chain in your next Standby Phase (effect [2] below).
+        inheritedFortuneDue(ctx.game).set(ctx.self.uid, { player: ctx.player, turn: ctx.game.turn + nextOwnTurn(ctx) });
       },
       ai: { score: (ctx) => (ctx.hand('me', isFortuneLady).length ? 45 : 0) },
     },
+    {
+      // https://edisonrul.ing/cards/i/inherited-fortune.html — "The effect to Special Summon monsters starts a Chain during
+      // your Standby Phase. You can Chain 'Royal Oppression' to the effect"; Royal Decree does not stop it (it does not
+      // activate on the field).
+      kind: 'trigger',
+      event: 'phaseStart',
+      range: ALL_LOCS,
+      mandatory: true,
+      label: 'Special Summon up to 2 "Fortune Lady" monsters',
+      categories: ['specialSummon'],
+      eventFilter: (ctx, ev) => {
+        const due = inheritedFortuneDue(ctx.game).get(ctx.self.uid);
+        return ev.phase === 'standby' && !!due && due.turn === ctx.game.turn && ctx.game.turnPlayer === due.player;
+      },
+      activate: async (ctx) => {
+        const due = inheritedFortuneDue(ctx.game).get(ctx.self.uid);
+        inheritedFortuneDue(ctx.game).delete(ctx.self.uid);
+        ctx.data.p = due?.player;
+      },
+      resolve: async (ctx) => {
+        const g = ctx.game;
+        const p = ctx.data.p as PlayerId | undefined;
+        if (p === undefined || g.queryPlayer(p, 'cannotSpecialSummon')) return;
+        const c2 = new Ctx(g, ctx.self, ctx.effect, p);
+        const cands = c2.hand('me', (c) => isFortuneLady(c) && c2.canSummonCard(c));
+        if (!cands.length) return;
+        const max = Math.min(2, cands.length, g.freeMZones(p));
+        if (max <= 0) return;
+        const sel = await c2.select(cands, 0, max, 'Inherited Fortune: Special Summon up to 2 "Fortune Lady" monsters from your hand.', 'specialSummon');
+        if (sel.length) await c2.specialSummon(sel, { pos: 'atk' });
+      },
+    },
   ],
 });
+
+/** Pending Inherited Fortune Summons, by card uid: whose, and on which turn's Standby Phase. */
+const inheritedFortuneDueMap = new WeakMap<Game, Map<number, { player: PlayerId; turn: number }>>();
+function inheritedFortuneDue(g: Game) {
+  let m = inheritedFortuneDueMap.get(g);
+  if (!m) inheritedFortuneDueMap.set(g, (m = new Map()));
+  return m;
+}
 
 trap('Spider Egg', 'normal', {
   text: 'When your opponent declares a direct attack, while you have 3 or more Insect monsters in your GY: Negate the attack, and if you do, Special Summon 3 "Spider Tokens" (Insect/EARTH/Level 1/ATK 100/DEF 100) in Attack Position.',
@@ -3910,7 +3993,13 @@ trap('Seal of Wickedness', 'continuous', {
       },
       resolve: async (ctx) => {
         const t = ctx.validTargets((c) => c.onField && c.faceUp);
-        if (t.length) ctx.negateEffects(t[0], 'turn');
+        if (!t.length) return;
+        // "If Seal of Wickedness is destroyed, removed from the field, or negated while it is negating a card, its effects
+        // will no longer be applied" (https://edisonrul.ing/cards/s/seal-of-wickedness.html): the negation is the
+        // continuous mod below, kept on this card's flags (cleared when it leaves the field). When Seal targets itself it
+        // "will be negated for 1 turn" (same page), so that case keeps a plain 1-turn negation.
+        if (t[0] === ctx.self) ctx.negateEffects(t[0], 'turn');
+        else if (ctx.self.onField) ctx.self.flags.sealed = { uid: t[0].uid, moveId: t[0].moveId, faceUpId: t[0].faceUpId, turn: ctx.game.turn };
       },
       ai: { score: (ctx) => (ctx.field('opp', (c) => c.faceUp && (c.hasType('effect') || !c.isMonster)).length ? 50 : 0) },
     },
@@ -3932,8 +4021,36 @@ trap('Seal of Wickedness', 'continuous', {
         else await ctx.destroy(ctx.self);
       },
     },
+    {
+      // The negation from effect [1]: applies only while this card is face-up on the field and not negated itself
+      // (https://edisonrul.ing/cards/s/seal-of-wickedness.html).
+      kind: 'continuous',
+      active: (ctx) => sealNotNegated(ctx),
+      mods: [
+        {
+          q: 'negated',
+          to: 'cards',
+          filter: (ctx, c: C) => {
+            const m = ctx.self.flags.sealed as { uid: number; moveId: number; faceUpId: number; turn: number } | undefined;
+            return !!m && m.turn === ctx.game.turn && c.uid === m.uid && c.moveId === m.moveId && c.faceUpId === m.faceUpId && c.onField;
+          },
+        },
+      ],
+    },
   ],
 });
+
+/** Recursion guard: the engine does not check whether a source of 'negated' mods is itself negated. */
+let sealGuard = 0;
+function sealNotNegated(ctx: Ctx) {
+  if (sealGuard > 0) return true;
+  sealGuard++;
+  try {
+    return !ctx.game.isNegated(ctx.self);
+  } finally {
+    sealGuard--;
+  }
+}
 
 trap('Appointer of the Red Lotus', 'normal', {
   text: 'Pay 2000 Life Points and reveal all cards in your hand. Look at your opponent\'s hand and select 1 card. Remove that card from play until the End Phase of your opponent\'s next turn.',

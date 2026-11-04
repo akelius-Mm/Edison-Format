@@ -313,6 +313,8 @@ export interface CardData {
   attackLpCost?: number;
   /** SDMM (The Big Saturn): locations it cannot be Special Summoned from (unless the effect ignores Summoning conditions). */
   noSpecialFrom?: Location[];
+  /** "Can only be Tribute Summoned by Tributing ..." (Red-Eyes Zombie Dragon): the monsters it may be Tribute Summoned with. */
+  tributeSummonFilter?: (tribute: CardInstance) => boolean;
   /** Its effects cannot be negated by Necrovalley (Gravekeeper's Stele's printed text). */
   ignoresGyLock?: boolean;
 }
