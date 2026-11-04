@@ -17,7 +17,7 @@ import { monster, spell, token, trap } from '../define';
 import { bestTarget, cardValue, flip, selfDestroysByBattle, specialSummonBlockers } from '../helpers';
 import { synchroOptions } from './plants';
 import { anprRules } from './anpr';
-import type { CardInstance, EffectDef } from '../../engine/card';
+import { faceUpFlag, type CardInstance, type EffectDef } from '../../engine/card';
 import type { Activation } from '../../engine/controller';
 import { Ctx } from '../../engine/ctx';
 import type { ChainLink, Game } from '../../engine/game';
@@ -263,14 +263,24 @@ function earthboundRules(): EffectDef[] {
       },
     },
     {
-      // APPROX: a second face-up "Earthbound Immortal" that still gets Summoned (by an effect) is sent to the GY.
+      // APPROX: a second face-up "Earthbound Immortal" that still gets Summoned (by an effect) or is flipped face-up is
+      // destroyed by the game rule. This is not "its own effect" (no reasonCard), so Aslla piscu's effect activates:
+      // "If a face-down Aslla piscu is flipped face-up while another Earthbound Immortal is on the field, the flipped
+      // Aslla piscu is destroyed. However, this is not considered as 'destroyed by its own effect'".
+      // https://edisonrul.ing/cards/e/earthbound-immortal-aslla-piscu.html (historical)
       kind: 'trigger',
-      event: 'summoned',
+      event: ['summoned', 'flipped'],
       mandatory: true,
       label: 'Only 1 Earthbound Immortal',
-      eventFilter: (ctx, ev) => ev.card === ctx.self && ctx.game.allFieldCards().some((c) => c !== ctx.self && faceUpOn(c) && isEI(c)),
+      // (a Flip Summon emits both events: counted once, as 'flipped')
+      eventFilter: (ctx, ev) =>
+        ev.card === ctx.self &&
+        !(ev.type === 'summoned' && ev.method === 'flip') &&
+        ctx.game.allFieldCards().some((c) => c !== ctx.self && faceUpOn(c) && isEI(c)),
       resolve: async (ctx) => {
-        if (ctx.self.location === 'mzone') await ctx.game.moveCards([ctx.self], 'grave', { reason: 'rule', reasonPlayer: ctx.player, reasonCard: ctx.self });
+        if (faceUpOn(ctx.self)) {
+          await ctx.game.moveCards([ctx.self], 'grave', { reason: 'rule', reasons: ['rule', 'destroy'], reasonPlayer: ctx.player, destroyed: true });
+        }
       },
     },
   ];
@@ -312,6 +322,22 @@ function gbHunterBlocks(g: Game, c: C, ef: EffectDef) {
   return GB_HUNTER_NAMED.has(c.name);
 }
 /** Grave of the Super Ancient Organism: "nor can players activate their effects". */
+/**
+ * G.B. Hunter: an effect cannot target a card on the field to return it to the Deck or Extra Deck, so it cannot be
+ * activated without another legal target: "you cannot activate effects that would return monsters to the Extra Deck,
+ * such as De-Fusion, De-Synchro, or Compulsory Evacuation Device targeting a Fusion or Synchro Monster".
+ * https://edisonrul.ing/cards/g/gb-hunter.html (historical). Effects that return cards to the Deck are tagged
+ * 'toDeck'; a bounce ('toHand') of a Fusion/Synchro Monster really returns it to the Extra Deck.
+ */
+function gbHunterBarsTarget(g: Game, c: C, ctx: Ctx) {
+  if (!c.onField || !gbHunterActive(g)) return false;
+  const cats = ctx.effect.categories ?? [];
+  if (cats.includes('toDeck')) return true;
+  return c.isMonster && c.isExtra && cats.includes('toHand');
+}
+/** G.B. Hunter: would this move return `c` from the field to the Deck / Extra Deck (an Extra Deck monster sent to the hand goes to the Extra Deck)? */
+const gbHunterBarsMove = (c: C, to: Location) =>
+  c.onField && (to === 'deck' || to === 'extra' || (to === 'hand' && c.isMonster && c.isExtra));
 function organismBlocks(g: Game, c: C, ef: EffectDef) {
   if (!c.isMonster || c.location !== 'mzone' || !c.faceUp || ef.kind === 'continuous' || ef.kind === 'proc') return false;
   return isSpecialSummoned(c) && g.getLevel(c) >= 6 && graveOrganismActive(g);
@@ -352,14 +378,23 @@ export function rgbtRules(g: Game) {
 
   const origMove = g.moveCards.bind(g);
   g.moveCards = async (cards: C[], to: Location, opts: any) => {
-    if ((to === 'deck' || to === 'extra') && cards.some((c) => c.onField) && gbHunterActive(g)) {
-      const kept = cards.filter((c) => c.onField);
+    if (cards.some((c) => gbHunterBarsMove(c, to)) && gbHunterActive(g)) {
+      const kept = cards.filter((c) => gbHunterBarsMove(c, to));
       g.log(`G.B. Hunter: ${kept.map((c) => (c.faceUp ? c.name : 'a face-down card')).join(', ')} cannot be returned to the Deck.`, 'action');
-      cards = cards.filter((c) => !c.onField);
-      if (!cards.length) return [];
+      cards = cards.filter((c) => !gbHunterBarsMove(c, to));
+      // A destroyed card that would be returned to the Deck instead (Grave Protector...) goes to the Graveyard:
+      // "monsters destroyed by battle cannot return to the Deck, so they go to the Graveyard instead".
+      // https://edisonrul.ing/cards/g/gb-hunter.html (historical)
+      const destroyed = opts?.destroyed ? kept : [];
+      const moved = destroyed.length ? await origMove(destroyed, 'grave', opts) : [];
+      if (!cards.length) return moved;
+      return [...moved, ...(await origMove(cards, to, opts))];
     }
     return origMove(cards, to, opts);
   };
+
+  const origTargetAllowed = g.targetAllowed.bind(g);
+  g.targetAllowed = (c: C, ctx: Ctx) => !gbHunterBarsTarget(g, c, ctx) && origTargetAllowed(c, ctx);
 
   const origSS = g.specialSummon.bind(g);
   g.specialSummon = async (cards: C[], player: PlayerId, opts: any = {}) => {
@@ -372,6 +407,8 @@ export function rgbtRules(g: Game) {
     if (dragoBlocks(g, args[1])) return false;
     return origInherent(...args);
   };
+  const origSSAllowed = g.specialSummonAllowed.bind(g);
+  g.specialSummonAllowed = (c: C) => !dragoBlocks(g, c) && origSSAllowed(c);
   const origCanSynchro = g.canSynchro.bind(g);
   g.canSynchro = (p: PlayerId, s: C) => !dragoBlocks(g, s) && origCanSynchro(p, s);
   const origCanProc = g.canProc.bind(g);
@@ -703,7 +740,13 @@ monster('Rose Tentacles', {
       eventFilter: (ctx, ev) => ev.phase === 'battle' && ctx.isMyTurn && faceUpOn(ctx.self) && ctx.faceUpMonsters('opp', (c) => isRace(c, 'Plant')).length > 0,
       resolve: async (ctx) => {
         const n = ctx.faceUpMonsters('opp', (c) => isRace(c, 'Plant')).length;
-        if (n && faceUpOn(ctx.self)) ctx.addTempMod(ctx.self, 'extraAttacks', n, 'turn');
+        // With Wonder Clover it does not stack: 0 or 1 Plant = 2 attacks, 2 Plants = 3 attacks, so only the part of
+        // n above Clover's 1 extra attack is added. https://edisonrul.ing/cards/r/rose-tentacles.html (historical)
+        const clover = ((ctx.game.turnData['rgbt:clover'] ?? []) as { player: PlayerId; uid: number; moveId: number }[]).some(
+          (e) => e.uid === ctx.self.uid && e.moveId === ctx.self.moveId,
+        );
+        const add = n - (clover ? 1 : 0);
+        if (add > 0 && faceUpOn(ctx.self)) ctx.addTempMod(ctx.self, 'extraAttacks', add, 'turn');
       },
     },
     {
@@ -1141,7 +1184,9 @@ monster("Koa'ki Meiru Powerhand", {
           filter: (ctx, c: C) => {
             if (!faceUpOn(c) || c.controller === ctx.player || !isLightOrDark(c) || ctx.phase !== 'battle') return false;
             const b = ctx.game.battle;
-            if (b && b.inDamageStep && battleOpponent(ctx) === c) return true;
+            // "The effect negation ability ... begins when an attack target is declared" (not only in the Damage Step).
+            // https://edisonrul.ing/cards/k/koaki-meiru-powerhand.html (historical)
+            if (b && battleOpponent(ctx) === c) return true;
             const f = c.flags.rgbtPowerhand as { src: number; turn: number } | undefined;
             return !!f && f.src === ctx.self.uid && f.turn === ctx.turn;
           },
@@ -1205,7 +1250,9 @@ monster("Koa'ki Meiru Drago", {
   rules: [rgbtRules],
   effects: [
     koakiUpkeep('Dragon-Type monster', (c) => isRace(c, 'Dragon')),
-    // "Neither player can Special Summon LIGHT or DARK monsters": see ensureRgbtPatches (specialSummon wrappers).
+    // "Neither player can Special Summon LIGHT or DARK monsters": see rgbtRules (specialSummon wrappers, and
+    // Game.specialSummonAllowed so cards/effects that WOULD Special Summon a LIGHT/DARK monster cannot be activated,
+    // e.g. Monster Reborn can't target one). https://edisonrul.ing/cards/k/koaki-meiru-drago.html (historical)
     { kind: 'continuous', label: 'No LIGHT/DARK Special Summons' },
   ],
 });
@@ -1511,7 +1558,16 @@ monster('Alien Dog', {
         const c = evc(ev);
         return !!c && c !== ctx.self && c.controller === ctx.player && isAlien(c);
       },
-      condition: (ctx) => ctx.canSummonSelf(),
+      // "Even if you have more than 1 Alien Dog in your hand, you can only activate the effect of 1" (per Normal
+      // Summon). https://edisonrul.ing/cards/a/alien-dog.html (historical)
+      condition: (ctx) => ctx.canSummonSelf() && !(ctx.event && ctx.game.turnData[`rgbt:alienDog:${ctx.event.seq}`]),
+      // (Several copies are confirmed together before any activates: a later copy's activation is cancelled here.)
+      activate: async (ctx) => {
+        if (!ctx.event) return;
+        const key = `rgbt:alienDog:${ctx.event.seq}`;
+        if (ctx.game.turnData[key]) return false;
+        ctx.game.turnData[key] = true;
+      },
       resolve: async (ctx) => {
         if (ctx.self.location !== 'hand' || !ctx.canSpecialSummon()) return;
         const r = await ctx.specialSummon(ctx.self, { pos: aiPos(ctx, ctx.self) });
@@ -1607,13 +1663,16 @@ monster('Mermaid Archer', {
     { kind: 'continuous', mods: [{ q: 'atk', value: (ctx) => (archerEquip(ctx) ? 800 : 0) }] },
     {
       kind: 'continuous',
-      replaceDestroyOne: async (ctx, card) => {
-        if (card !== ctx.self) return false;
+      // replaceDestroy sees every card destroyed at the same time: "If Mermaid Archer and the monster equipped to it
+      // would be destroyed at the same time (by Judgment Dragon, for example), you cannot destroy the equipped monster
+      // to save Mermaid Archer." https://edisonrul.ing/cards/m/mermaid-archer.html (historical)
+      replaceDestroy: async (ctx, cards) => {
+        if (!cards.includes(ctx.self) || !faceUpOn(ctx.self) || ctx.game.isNegated(ctx.self)) return [];
         const eq = archerEquip(ctx);
-        if (!eq) return false;
-        if (!(await ctx.confirm(`Destroy ${eq.name} instead of ${ctx.self.name}?`, true))) return false;
+        if (!eq || cards.includes(eq)) return [];
+        if (!(await ctx.confirm(`Destroy ${eq.name} instead of ${ctx.self.name}?`, true))) return [];
         await ctx.game.destroy([eq], 'effect', ctx.player, ctx.self);
-        return eq.location !== 'szone';
+        return eq.location !== 'szone' ? [ctx.self] : [];
       },
     },
   ],
@@ -1789,7 +1848,11 @@ monster('Sea Dragon Lord Gishilnodon', {
       categories: ['atkChange'],
       eventFilter: (ctx, ev) => {
         const c = evc(ev);
-        return !!c && c !== ctx.self && c.isMonster && ev.from === 'mzone' && ev.fromFaceUp === true && lvl(c) <= 3 && faceUpOn(ctx.self);
+        // Level 3 or lower on the field AND in the Graveyard (a Level 4 made Level 3 by A Legendary Ocean does not count).
+        // https://edisonrul.ing/cards/s/sea-dragon-lord-gishilnodon.html (historical)
+        if (!c) return false;
+        const fieldLevel = ev.fromLevel ?? lvl(c);
+        return c !== ctx.self && c.isMonster && ev.from === 'mzone' && ev.fromFaceUp === true && fieldLevel <= 3 && lvl(c) <= 3 && faceUpOn(ctx.self);
       },
       resolve: async (ctx) => {
         if (!faceUpOn(ctx.self)) return;
@@ -1833,14 +1896,22 @@ monster('Light End Dragon', {
       },
       activate: async (ctx) => {
         const ev = ctx.event!;
-        ctx.data.other = evc(ev) === ctx.self ? evo(ev) : evc(ev);
+        const o = evc(ev) === ctx.self ? evo(ev) : evc(ev);
+        ctx.data.other = o;
+        ctx.data.battleState = [ctx.self, o].map((c) => c && { c, moveId: c.moveId, pos: c.pos, controller: c.controller });
       },
       resolve: async (ctx) => {
         const o = ctx.data.other as C | undefined;
         if (!faceUpOn(ctx.self)) return;
         ctx.addTempMod(ctx.self, 'atk', -500, 'field');
         ctx.addTempMod(ctx.self, 'def', -500, 'field');
-        if (o && o.location === 'mzone') {
+        // "VS. Enemy Controller: if either effect of E-Con is chained to this effect, this card is no longer treated as
+        // 'battling'. Therefore, this card will lose 500 ATK and DEF, but the opponent's monster will not lose any."
+        // (A negated attack, e.g. Magic Cylinder, still applies both.) https://edisonrul.ing/cards/l/light-end-dragon.html
+        // Either monster switched position / control (or left) since the activation: they are no longer battling.
+        const st = (ctx.data.battleState ?? []) as ({ c: C; moveId: number; pos: BattlePos; controller: PlayerId } | undefined)[];
+        const stillBattling = st.length === 2 && st.every((x) => !!x && x.c.moveId === x.moveId && x.c.pos === x.pos && x.c.controller === x.controller);
+        if (o && o.location === 'mzone' && stillBattling) {
           ctx.addTempMod(o, 'atk', -1500, 'turn');
           ctx.addTempMod(o, 'def', -1500, 'turn');
         }
@@ -3113,6 +3184,9 @@ trap('Tuner Capture', 'normal', {
   ],
 });
 
+// "If a monster receives the ATK boost from Overdoom Line but is flipped face-down, it loses the boost, even if
+// flipped face-up again while Overdoom Line is still on the field." https://edisonrul.ing/cards/o/overdoom-line.html
+faceUpFlag('rgbtOverdoom');
 trap('Overdoom Line', 'continuous', {
   text: 'If a Plant-Type monster(s) is Special Summoned from the Graveyard to your side of the field: It gains 1000 ATK while this card is face-up on the field. Destroy this card during your 2nd End Phase after activation.',
   effects: [
@@ -3287,6 +3361,26 @@ function featherOptions(ctx: Ctx): FeatherOption[] {
   }
   return out;
 }
+/**
+ * Fake Feather: "If the selected Normal Trap Card has a cost, you do NOT have to pay that cost."
+ * https://edisonrul.ing/cards/f/fake-feather.html (historical). While the copied Trap's activation code runs, this
+ * Ctx's cost moves (reason 'cost' / 'tribute') and LP payments do nothing. Returns the function that undoes it.
+ * APPROX: the copied Trap's canActivate still asks for a payable cost, and cost cards are still chosen (then kept).
+ */
+function skipCopiedCosts(ctx: Ctx): () => void {
+  const self = ctx as unknown as Record<string, unknown>;
+  const proto = Ctx.prototype as unknown as Record<string, (...a: unknown[]) => Promise<unknown>>;
+  const isCost = (r: unknown) => r === 'cost' || r === 'tribute';
+  const moves: [string, number][] = [['sendToGrave', 1], ['discard', 1], ['banish', 1], ['destroy', 1], ['toHand', 1], ['toDeck', 2], ['discardFromHand', 2]];
+  for (const [name, at] of moves) {
+    self[name] = async (...a: unknown[]) => (isCost(a[at]) ? [] : proto[name].apply(ctx, a));
+  }
+  self.payLp = async () => undefined;
+  return () => {
+    for (const [name] of moves) delete self[name];
+    delete self.payLp;
+  };
+}
 function featherScore(ctx: Ctx, o: FeatherOption) {
   const sub = new Ctx(ctx.game, ctx.self, o.ef, ctx.player);
   sub.event = o.ev;
@@ -3328,8 +3422,13 @@ trap('Fake Feather', 'normal', {
         ctx.data.copy = o.ef;
         if (o.ev) ctx.event = o.ev;
         if (o.ef.activate) {
-          const r = await o.ef.activate(ctx);
-          if (r === false) ctx.data.copyFailed = true;
+          const restore = skipCopiedCosts(ctx);
+          try {
+            const r = await o.ef.activate(ctx);
+            if (r === false) ctx.data.copyFailed = true;
+          } finally {
+            restore();
+          }
         }
       },
       resolve: async (ctx) => {
@@ -3454,7 +3553,11 @@ trap('Attack of the Cornered Rat', 'continuous', {
       categories: ['atkChange'],
       // 2010 ruling: it can only be activated once during the same Damage Step.
       // https://edisonrul.ing/cards/a/attack-of-the-cornered-rat.html
-      condition: (ctx) => stActive(ctx) && ctx.lp > 100 && !!ratBattle(ctx) && ratUsed.get(ctx.self) !== ctx.battle,
+      // It targets the opponent's monster (same page).
+      condition: (ctx) => {
+        const r = stActive(ctx) && ctx.lp > 100 ? ratBattle(ctx) : null;
+        return !!r && ctx.canTarget(r.theirs) && ratUsed.get(ctx.self) !== ctx.battle;
+      },
       activate: async (ctx) => {
         const r = ratBattle(ctx)!;
         const cap = Math.min(ctx.atk(r.theirs), Math.floor((ctx.lp - 1) / 100) * 100, 5000);
@@ -3468,12 +3571,12 @@ trap('Attack of the Cornered Rat', 'continuous', {
         const amount = (i + 1) * 100;
         await ctx.payLp(amount);
         ratUsed.set(ctx.self, ctx.battle!);
-        ctx.data.theirs = r.theirs;
+        ctx.addTargets([r.theirs]);
         ctx.data.amount = amount;
       },
       resolve: async (ctx) => {
-        const t = ctx.data.theirs as C;
-        if (faceUpOn(t)) ctx.addTempMod(t, 'atk', -ctx.data.amount, 'turn');
+        const t = ctx.validTargets(faceUpOn)[0];
+        if (t) ctx.addTempMod(t, 'atk', -ctx.data.amount, 'turn');
       },
       ai: {
         score: (ctx) => {

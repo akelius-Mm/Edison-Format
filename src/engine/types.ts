@@ -134,6 +134,8 @@ export interface GameEvent {
   from?: Location;
   to?: Location;
   fromFaceUp?: boolean;
+  /** A monster's Level while it was face-up on the field, just before it left (Sea Dragon Lord Gishilnodon). */
+  fromLevel?: number;
   fromController?: PlayerId;
   reason?: Reason;
   reasons?: Reason[];

@@ -121,12 +121,18 @@ export class Ctx {
   }
   /** Can this effect's own card Special Summon itself right now (a free zone, no lock on Special Summons or on this card). */
   canSummonSelf(side: 'me' | 'opp' = 'me') {
-    return this.canSpecialSummon(side) && !this.game.queryCard(this.self, 'cannotBeSummoned') && !this.self.data.noSpecialFrom?.includes(this.self.location);
+    return (
+      this.canSpecialSummon(side) &&
+      !this.game.queryCard(this.self, 'cannotBeSummoned') &&
+      this.game.specialSummonAllowed(this.self) &&
+      !this.self.data.noSpecialFrom?.includes(this.self.location)
+    );
   }
   /** Can the given card be Special Summoned by an effect right now (zone + restrictions + nomi). */
   canSummonCard(c: CardInstance, side: 'me' | 'opp' = 'me') {
     if (!this.canSpecialSummon(side)) return false;
     if (this.game.queryCard(c, 'cannotBeSummoned')) return false;
+    if (!this.game.specialSummonAllowed(c)) return false;
     if (c.data.noSpecialFrom?.includes(c.location)) return false;
     if (c.data.nomi && !c.properlySummoned && (c.location === 'grave' || c.location === 'banished')) return false;
     if (c.data.nomi && (c.location === 'hand' || c.location === 'deck')) return false;
@@ -139,6 +145,7 @@ export class Ctx {
     if ((c.onField || c.location === 'grave' || c.location === 'banished') && this.game.queryCard(c, 'untargetableByAll')) return false;
     if (c.onField && c.faceUp && c.data.targetImmunity && !this.game.isNegated(c) && c.data.targetImmunity(c, this.self, this)) return false;
     if (this.game.isUnaffected(c, this.self, this.player)) return false;
+    if (!this.game.targetAllowed(c, this)) return false;
     // A monster destroyed by battle in damage calculation (still on the field until the end of the Damage Step) cannot
     // be targeted, e.g. by a Flip Effect. Rulebook v7.0 p.34, https://www.edisonformat.com/rulebook.html
     const b = this.game.battle;
