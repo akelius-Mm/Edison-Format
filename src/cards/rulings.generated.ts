@@ -231,6 +231,12 @@ export const RULINGS: Record<string, RulingNote[]> = {
       "url": "https://edisonrul.ing/cards/a/aurkus-lightsworn-druid.html"
     }
   ],
+  "Battle Fader": [
+    {
+      "text": "\"You cannot activate multiple copies of 'Battle Fader' in response to a single attack declaration.\"",
+      "url": "https://edisonrul.ing/cards/b/battle-fader.html"
+    }
+  ],
   "Battle Mania": [
     {
       "text": "Battle Mania, 2010 ruling: \"If your opponent controls a face-up Attack Position monster at the end of their Main Phase 1, they must conduct their Battle Phase during the turn 'Battle Mania' is activated.\" Monsters unaffected by Trap Cards do not have to attack.",
@@ -274,6 +280,10 @@ export const RULINGS: Record<string, RulingNote[]> = {
   "Black Luster Soldier - Envoy of the Beginning": [
     {
       "text": "2010 rulings: \"once per turn\" is per card: if this card is banished and returned, Special Summoned again, or flipped face-down and face-up again, it can use an effect again that turn.",
+      "url": "https://edisonrul.ing/cards/b/black-luster-soldier-envoy-of-the-beginning.html"
+    },
+    {
+      "text": "\"can remove itself from play using its first effect\"",
       "url": "https://edisonrul.ing/cards/b/black-luster-soldier-envoy-of-the-beginning.html"
     }
   ],
@@ -459,6 +469,10 @@ export const RULINGS: Record<string, RulingNote[]> = {
   ],
   "Cross Porter": [
     {
+      "text": "A target flipped face-down (or gone) makes it resolve without effect, except Cross Porter targeting itself, which still resolves if flipped face-down",
+      "url": "https://edisonrul.ing/cards/c/cross-porter.html"
+    },
+    {
       "text": "2010 ruling: also when it is removed from play as it is destroyed by battle.",
       "url": "https://edisonrul.ing/cards/m/miracle-flipper.html"
     },
@@ -492,6 +506,10 @@ export const RULINGS: Record<string, RulingNote[]> = {
     }
   ],
   "Cyber Valley": [
+    {
+      "text": "Banishing itself is the cost, so it activates and resolves under \"Skill Drain\"",
+      "url": "https://edisonrul.ing/cards/c/cyber-valley.html"
+    },
     {
       "text": "2010 rulings: the other target must still be face-up (Cyber Valley itself may be face-down).",
       "url": "https://edisonrul.ing/cards/c/cyber-valley.html"
@@ -581,7 +599,7 @@ export const RULINGS: Record<string, RulingNote[]> = {
   ],
   "Destruction Jammer": [
     {
-      "text": "Not the Ignition-like effect of a face-up Continuous Spell/Trap (Skull Lair), and only while a monster is on the field (Light and Darkness Dragon)",
+      "text": "Not the Ignition-like effect of a face-up Continuous Spell/Trap (Skull Lair), and only while a monster is on the field (Light and Darkness Dragon): Not effects that may or may not destroy a monster (a die roll, a choice): \"Acid Trap Hole\", \"Blowback Dragon\", \"Magical Dimension\", \"Reign-Beaux, Overlord of Dark World\", \"Snipe Hunter\" (same page).",
       "url": "https://edisonrul.ing/cards/d/destruction-jammer.html"
     }
   ],
@@ -725,6 +743,12 @@ export const RULINGS: Record<string, RulingNote[]> = {
     {
       "text": "targets 1 or 2 of the opponent's cards.",
       "url": "https://edisonrul.ing/cards/s/simorgh-bird-of-ancestry.html"
+    }
+  ],
+  "Dupe Frog": [
+    {
+      "text": "\"another monster\": a second face-up Dupe Frog is protected too, so with 2+ the opponent cannot attack your monsters at all.",
+      "url": "https://edisonrul.ing/cards/d/dupe-frog.html"
     }
   ],
   "Earthbound Immortal Aslla piscu": [
@@ -1071,7 +1095,7 @@ export const RULINGS: Record<string, RulingNote[]> = {
   ],
   "Glorious Illusion": [
     {
-      "text": "Not the Ignition-like effect of a face-up Continuous Spell/Trap (Skull Lair), and only while a monster is on the field (Light and Darkness Dragon)",
+      "text": "Not the Ignition-like effect of a face-up Continuous Spell/Trap (Skull Lair), and only while a monster is on the field (Light and Darkness Dragon): Not effects that may or may not destroy a monster (a die roll, a choice): \"Acid Trap Hole\", \"Blowback Dragon\", \"Magical Dimension\", \"Reign-Beaux, Overlord of Dark World\", \"Snipe Hunter\" (same page).",
       "url": "https://edisonrul.ing/cards/d/destruction-jammer.html"
     }
   ],
@@ -1082,6 +1106,10 @@ export const RULINGS: Record<string, RulingNote[]> = {
     }
   ],
   "Gorz the Emissary of Darkness": [
+    {
+      "text": "\"When... you can\": it can miss the timing (e.g. effect damage as Chain Link 2+).",
+      "url": "https://edisonrul.ing/cards/g/gorz-the-emissary-of-darkness.html"
+    },
     {
       "text": "Effect Damage: \"Inflict damage to your opponent equal to the amount of damage you took\" (not an LP gain).",
       "url": "https://edisonrul.ing/cards/g/gorz-the-emissary-of-darkness.html"
@@ -1109,10 +1137,22 @@ export const RULINGS: Record<string, RulingNote[]> = {
       "url": "https://edisonrul.ing/cards/g/gozen-match.html"
     }
   ],
+  "Gragonith, Lightsworn Dragon": [
+    {
+      "text": "\"must remain face-up on the field in order to activate and resolve this effect\"",
+      "url": "https://edisonrul.ing/cards/g/gragonith-lightsworn-dragon.html"
+    }
+  ],
   "Grandmaster of the Six Samurai": [
     {
       "text": "a mandatory Trigger Effect that cannot miss the timing; it targets 1 \"Six Samurai\" monster in your GY (itself included) and activates & resolves in the GY / removed-from-play area, wherever the opponent's card effect destroyed it.",
       "url": "https://edisonrul.ing/cards/g/grandmaster-of-the-six-samurai.html"
+    }
+  ],
+  "Granmarg the Rock Monarch": [
+    {
+      "text": "A target flipped face-up in response (a chained Set Trap, \"Ceasefire\") is no longer a Set card: not destroyed.",
+      "url": "https://edisonrul.ing/cards/g/granmarg-the-rock-monarch.html"
     }
   ],
   "Guardian Eatos": [
@@ -1281,6 +1321,12 @@ export const RULINGS: Record<string, RulingNote[]> = {
     {
       "text": "2010 rulings: it activates even if your opponent has no face-up monster (then nothing returns), and if either this card or the target is not face-up on the field, neither is returned.",
       "url": "https://edisonrul.ing/cards/j/jester-confit.html"
+    }
+  ],
+  "Jinzo - Lord": [
+    {
+      "text": "\"must remain face-up on the field in order to activate and resolve this effect\"",
+      "url": "https://edisonrul.ing/cards/g/gragonith-lightsworn-dragon.html"
     }
   ],
   "Jinzo - Returner": [
@@ -1485,6 +1531,10 @@ export const RULINGS: Record<string, RulingNote[]> = {
     {
       "text": "\"Destroying the Special Summoned monster when it is changed to Defense Position, or when 'Limit Reverse' is removed from the field, does not start a Chain.\" (The leave-the-field part is the Game.link rule cleanup, also chainless.)",
       "url": "https://edisonrul.ing/cards/l/limit-reverse.html"
+    },
+    {
+      "text": "\"If the Special Summoned monster is flipped face-down, 'Limit Reverse's' effect disappears\": both stay on the field, no longer linked.",
+      "url": "https://edisonrul.ing/cards/l/limit-reverse.html"
     }
   ],
   "Limiter Removal": [
@@ -1613,6 +1663,12 @@ export const RULINGS: Record<string, RulingNote[]> = {
     {
       "text": "2010 rulings: it cannot be activated without a Plant-Type monster on the field. At resolution, Black Garden and the Plants must be destroyed, and the target is Summoned only if its ATK still equals the Plants' total ATK; if Black Garden already left the field, nothing is destroyed.",
       "url": "https://edisonrul.ing/cards/b/black-garden.html"
+    }
+  ],
+  "Marshmallon": [
+    {
+      "text": "Substep 5 (after damage calculation), so it chains with other \"after damage calculation\" effects",
+      "url": "https://edisonrul.ing/cards/m/marshmallon.html"
     }
   ],
   "Master Gig": [
@@ -1849,10 +1905,28 @@ export const RULINGS: Record<string, RulingNote[]> = {
       "url": "https://www.edisonformat.com/functional-errata.html"
     }
   ],
+  "Neo-Spacian Grand Mole": [
+    {
+      "text": "An optional Trigger Effect in Substep 1 (start of the Damage Step), before a face-down monster is flipped: a Set Flip monster it battles is returned without its Flip Effect activating. Put on the Chain by grandMoleRules (no event: never offered otherwise).",
+      "url": "https://edisonrul.ing/cards/n/neo-spacian-grand-mole.html"
+    }
+  ],
   "Neos Wiseman": [
     {
       "text": "destroyed: its original ATK/DEF; still on the field: its current ATK/DEF; returned to the hand/Deck or flipped face-down before the end of the Damage Step: no effect.",
       "url": "https://edisonrul.ing/cards/n/neos-wiseman.html"
+    }
+  ],
+  "Nettles": [
+    {
+      "text": "A destruction replacement (it does not target), for any face-up Plant you control, Nettles itself included.",
+      "url": "https://edisonrul.ing/cards/n/nettles.html"
+    }
+  ],
+  "Night Assailant": [
+    {
+      "text": "Mandatory: \"This effect activates even if your opponent doesn't control a monster.\"",
+      "url": "https://edisonrul.ing/cards/n/night-assailant.html"
     }
   ],
   "Nightmare Archfiends": [
@@ -1979,6 +2053,12 @@ export const RULINGS: Record<string, RulingNote[]> = {
     {
       "text": "\"The ② Continuous-like Effect does NOT start a chain. The monster is destroyed simultaneously with 'Pole Position' being removed from the field.\" Applied at once, also mid-Chain (Game.applyChainless); not if Pole Position's effects were negated when it left (GameEvent.fromNegated).",
       "url": "https://edisonrul.ing/cards/p/pole-position.html"
+    }
+  ],
+  "Portable Battery Pack": [
+    {
+      "text": "\"If 1 of the 2 Special Summoned 'Batteryman' monsters is flipped face-down, when the remaining 'Batteryman' monster is removed from the field, 'Portable Battery Pack' is destroyed. The 'Batteryman' that was flipped face-down remains on the field.\" A face-down one no longer counts as one of \"those monsters\" and is no longer destroyed with this card.",
+      "url": "https://edisonrul.ing/cards/p/portable-battery-pack.html"
     }
   ],
   "Pot of Avarice": [
@@ -2163,7 +2243,7 @@ export const RULINGS: Record<string, RulingNote[]> = {
   ],
   "Rescue Cat": [
     {
-      "text": "it Special Summons 2 monsters at once: it cannot be activated to Summon only 1 (2 eligible Beasts and 2 free zones, counting the one Rescue Cat frees), and a Summoned monster that is flipped face-down is not destroyed in the End Phase.",
+      "text": "it Special Summons 2 monsters at once: it cannot be activated to Summon only 1 (2 eligible Beasts and 2 free zones, counting the one Rescue Cat frees), and a Summoned monster that is flipped face-down is not destroyed in the End Phase. Sending it to the GY is the cost: it cannot be activated while \"Macro Cosmos\" is active.",
       "url": "https://edisonrul.ing/cards/r/rescue-cat.html"
     }
   ],
@@ -2491,6 +2571,10 @@ export const RULINGS: Record<string, RulingNote[]> = {
     {
       "text": "(2010 TCG text and rulings).",
       "url": "https://edisonrul.ing/cards/s/swap-frog.html"
+    },
+    {
+      "text": "The cost is a discard (2010 text: \"You can discard 1 WATER monster to Special Summon this card from your hand\").",
+      "url": "https://edisonrul.ing/cards/s/swap-frog.html"
     }
   ],
   "Swing of Memories": [
@@ -2561,6 +2645,10 @@ export const RULINGS: Record<string, RulingNote[]> = {
     {
       "text": "it always activates when Tribute Summoned, even if the opponent has no cards in hand.",
       "url": "https://edisonrul.ing/cards/t/thestalos-the-firestorm-monarch.html"
+    },
+    {
+      "text": "Damage only if it was discarded to the GY (not banished by \"Banisher of the Light\"); it may leave the GY afterwards (Outstanding Dog Marron).",
+      "url": "https://edisonrul.ing/cards/t/thestalos-the-firestorm-monarch.html"
     }
   ],
   "Thorn of Malice": [
@@ -2585,6 +2673,12 @@ export const RULINGS: Record<string, RulingNote[]> = {
     {
       "text": "it cannot be activated during your own turn.",
       "url": "https://edisonrul.ing/cards/t/threatening-roar.html"
+    }
+  ],
+  "Thunder King Rai-Oh": [
+    {
+      "text": "Sending it to the GY is a cost: \"You cannot activate this effect while 'Macro Cosmos' is active.\"",
+      "url": "https://edisonrul.ing/cards/t/thunder-king-rai-oh.html"
     }
   ],
   "Tiger Dragon": [
@@ -2677,6 +2771,12 @@ export const RULINGS: Record<string, RulingNote[]> = {
     {
       "text": "\"Tributing a Warrior to Special Summon 'Turret Warrior' is not a cost; both the Tribute and the ATK increase are part of the effect.\"",
       "url": "https://edisonrul.ing/cards/t/turret-warrior.html"
+    }
+  ],
+  "Twin-Headed Behemoth": [
+    {
+      "text": "The once-per-Duel use is spent in the End Phase, when it would be Special Summoned (even if it cannot be, e.g. zones full or Scapegoat), not when it is destroyed: Special Summoned by \"Monster Reborn\" before then, it has not been used.",
+      "url": "https://edisonrul.ing/cards/t/twin-headed-behemoth.html"
     }
   ],
   "Twin-Shield Defender": [
