@@ -57,6 +57,7 @@ interface MonsterOpts {
   targetImmunity?: CardData['targetImmunity'];
   attackLpCost?: number;
   noSpecialFrom?: CardData['noSpecialFrom'];
+  tributeSummonFilter?: CardData['tributeSummonFilter'];
   synchroLevel?: number;
   /** Its effects cannot be negated by Necrovalley's GY lock (CardData.ignoresGyLock). */
   ignoresGyLock?: boolean;
@@ -92,6 +93,7 @@ export function monster(name: string, o: MonsterOpts): CardData {
     targetImmunity: o.targetImmunity,
     attackLpCost: o.attackLpCost,
     noSpecialFrom: o.noSpecialFrom,
+    tributeSummonFilter: o.tributeSummonFilter,
     synchroLevel: o.synchroLevel,
     ignoresGyLock: o.ignoresGyLock,
   });

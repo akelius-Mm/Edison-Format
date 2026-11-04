@@ -33,8 +33,24 @@ export const GY_BANISH_COSTS: [string, number[]][] = [
   ['Dark Nephthys', [0]],
   ['Future Samurai', [1]],
   ['The Dark Creator', [1]],
-  ['Shutendoji', [0]],
+  // Shutendoji is not listed: only its draw mode banishes from the GY, so the card script checks that mode itself.
   ['Cloudian - Storm Dragon', [0]],
+  // Banish cost (https://edisonrul.ing/cards/c/catoblepas-and-the-witch-of-fate.html).
+  ['Catoblepas and the Witch of Fate', [0]],
+  // Banish cost (https://edisonrul.ing/cards/r/reptilianne-spawn.html).
+  ['Reptilianne Spawn', [0]],
+  // Banish cost (https://edisonrul.ing/cards/y/yellow-baboon-archer-of-the-forest.html).
+  ['Yellow Baboon, Archer of the Forest', [0]],
+  // [1] = the Quick Effect, not the card activation (https://edisonrul.ing/cards/i/insect-neglect.html).
+  ['Insect Neglect', [1]],
+  // [1] = the GY effect: banishing this card from the GY is a cost (https://edisonrul.ing/cards/r/ritual-of-grace.html).
+  ['Ritual of Grace', [1]],
+  // [0] = the Summon procedure (banish 2 Batteryman), [1] = the destroy effect (banish 1 Thunder: a cost)
+  // (https://edisonrul.ing/cards/b/batteryman-industrial-strength.html).
+  ['Batteryman Industrial Strength', [0, 1]],
+  // Kycoo / Necrovalley lock out GY-banish costs (https://edisonrul.ing/cards/k/kycoo-the-ghost-destroyer.html):
+  ['Maniacal Servant', [0]],
+  ['D - Fortune', [0]],
 ];
 
 /** Problems with the table (unknown cards / indexes); empty when every entry resolves. */

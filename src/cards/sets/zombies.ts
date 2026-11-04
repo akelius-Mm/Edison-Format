@@ -47,7 +47,7 @@ monster('Zombie Master', {
   atk: 1800,
   def: 0,
   // TAEV (Edison) text: the face-up clause is part of the card; a target must already be in a GY before the discard (2008 ruling).
-  text: "Once per turn, you can discard 1 monster card to select and Special Summon 1 Level 4 or lower Zombie-Type monster from either player's Graveyard. This card must be face-up on the field to activate and to resolve this effect.",
+  text: 'Once per turn, you can send 1 Monster Card from your hand to the Graveyard to Special Summon 1 Level 4 or lower Zombie-Type Monster from either player\'s Graveyard.',
   aiValue: 500,
   effects: [
     {
@@ -72,7 +72,8 @@ monster('Zombie Master', {
       resolve: async (ctx) => {
         // "This card must be face-up on the field to activate and to resolve this effect."
         if (!ctx.self.faceUpMonster) return;
-        const t = ctx.validTargets((c) => c.location === 'grave');
+        // "If the target is no longer a Zombie-Type, it is not Special Summoned" (https://edisonrul.ing/cards/z/zombie-master.html).
+        const t = ctx.validTargets((c) => c.location === 'grave' && isZombie(ctx, c));
         if (t.length) await ctx.specialSummon(t[0]);
       },
       ai: {
@@ -117,7 +118,7 @@ monster('Goblin Zombie', {
   level: 4,
   atk: 1100,
   def: 1050,
-  text: 'If this card inflicts battle damage to your opponent: They send the top card of their Deck to the GY. When this card is sent from the field to the GY: Add 1 Zombie-Type monster with 1200 or less DEF from your Deck to your hand.',
+  text: 'When this card inflicts Battle Damage to your opponent, send the top card of their Deck to the Graveyard. When this card is sent from the field to the Graveyard, add 1 Zombie-Type monster with 1200 or less DEF from your Deck to your hand.',
   aiValue: 600,
   effects: [
     {
@@ -197,6 +198,24 @@ function putBackScore(ctx: Ctx, c: CardInstance) {
   return dup - cardValue(ctx.game, c) + (c.name === 'Wulf, Lightsworn Beast' ? 1500 : 0);
 }
 
+/**
+ * "Banish it when it leaves the field" for as long as this card stays face-up on the field: the lingering effect
+ * "disappears if Plaguespreader Zombie is flipped face-down" (https://edisonrul.ing/cards/p/plaguespreader-zombie.html).
+ * Game.rawMove reads `banishOnLeave`; a later plain assignment (another card's effect) still works.
+ */
+function banishOnLeaveWhileFaceUp(c: CardInstance) {
+  const mid = c.moveId;
+  const fid = c.faceUpId;
+  let backing = false;
+  Object.defineProperty(c, 'banishOnLeave', {
+    configurable: true,
+    get: () => backing || (c.moveId === mid && c.faceUpId === fid && c.location === 'mzone'),
+    set: (v: boolean) => {
+      backing = v;
+    },
+  });
+}
+
 monster('Plaguespreader Zombie', {
   attribute: 'DARK',
   race: 'Zombie',
@@ -223,7 +242,7 @@ monster('Plaguespreader Zombie', {
       resolve: async (ctx) => {
         if (ctx.self.location !== 'grave') return;
         const r = await ctx.specialSummon(ctx.self, { pos: safePos(ctx, ctx.self) });
-        for (const c of r) c.banishOnLeave = true;
+        for (const c of r) banishOnLeaveWhileFaceUp(c);
       },
       ai: {
         score: (ctx) => {
@@ -281,7 +300,7 @@ monster('Il Blud', {
   atk: 2100,
   def: 800,
   types: ['gemini'],
-  text: 'Gemini: treated as a Normal Monster while face-up on the field or in the GY; you can Normal Summon it again to make it an Effect Monster with these effects.\nOnce per turn: You can Special Summon 1 Zombie-Type monster from your hand or either GY. When this card leaves the field, destroy the monsters Special Summoned by this effect.',
+  text: 'This card is treated as a Normal Monster while face-up on the field or in the Graveyard. While this card is face-up on the field, you can Normal Summon it to have it be treated as an Effect Monster with this effect:\n● Once per turn, you can Special Summon 1 Zombie-Type monster from your hand or from either player\'s Graveyard. When this card is removed from the field, destroy all Zombie-Type monsters Special Summoned by this effect.',
   aiValue: 400,
   effects: [
     geminiSummonEffect(),
@@ -337,7 +356,10 @@ monster('Red-Eyes Zombie Dragon', {
   def: 2000,
   text: 'Can only be Tribute Summoned by Tributing Zombie-Type monsters. When this card destroys a Zombie-Type monster by battle and sends it to the GY: You can Special Summon that monster to your side of the field.',
   aiValue: 300,
-  // Note: the engine has no per-card tribute filter; the Zombie-only Tribute restriction is not enforced.
+  // "Can only be Tribute Summoned by Tributing Zombie-Type monsters" (https://edisonrul.ing/cards/r/red-eyes-zombie-dragon.html).
+  // A Tribute Set is not a Tribute Summon (as for Zombie World: https://edisonrul.ing/cards/z/zombie-world.html), so
+  // the restriction does not apply to it.
+  tributeSummonFilter: (c) => c.isMonster && c.data.race === 'Zombie',
   effects: [
     {
       kind: 'trigger',
@@ -424,33 +446,49 @@ monster('Vampire Lord', {
       },
     },
     {
+      // Bookkeeping (never activates): destroyed by the opponent's card effect and sent to the GY. The Special Summon is
+      // a Trigger Effect that starts a Chain in the owner's next Standby Phase (Royal Oppression can negate it; it is
+      // lost if that Standby Phase is skipped) — https://edisonrul.ing/cards/v/vampire-lord.html. Also when destroyed in
+      // the hand or Deck by the opponent's card effect; it is Special Summoned even under "Necrovalley" (no target).
       kind: 'trigger',
       event: 'destroyed',
+      label: '(destroyed by the opponent)',
+      eventFilter: (ctx, ev) => {
+        if (
+          ev.card === ctx.self &&
+          (ev.from === 'mzone' || ev.from === 'hand' || ev.from === 'deck') &&
+          (ev.from !== 'mzone' || ev.fromController === ctx.self.owner) &&
+          ctx.self.location === 'grave' &&
+          (ev.reasons ?? []).includes('effect') &&
+          ev.reasonPlayer !== undefined &&
+          ev.reasonPlayer !== ctx.self.owner
+        ) {
+          const g = ctx.game;
+          const ownTurn = g.turnPlayer === ctx.self.owner;
+          const due = ownTurn ? (g.phase === 'draw' ? g.turn : g.turn + 2) : g.turn + 1;
+          ctx.self.flags.vampireLord = { due, mid: ctx.self.moveId };
+        }
+        return false;
+      },
+    },
+    {
+      kind: 'trigger',
+      event: 'phaseStart',
+      range: ['grave'],
       mandatory: true,
-      label: 'Return next Standby Phase',
+      label: 'Special Summon this card',
       categories: ['specialSummon'],
-      // https://edisonrul.ing/cards/v/vampire-lord.html — also when destroyed in the hand or Deck by the opponent's card
-      // effect; it is Special Summoned even under "Necrovalley" (it does not target).
-      eventFilter: (ctx, ev) =>
-        ev.card === ctx.self &&
-        (ev.from === 'mzone' || ev.from === 'hand' || ev.from === 'deck') &&
-        (ev.from !== 'mzone' || ev.fromController === ctx.self.owner) &&
-        ctx.self.location === 'grave' &&
-        (ev.reasons ?? []).includes('effect') &&
-        ev.reasonPlayer === ctx.opp,
+      eventFilter: (ctx, ev) => {
+        const f = ctx.self.flags.vampireLord as { due: number; mid: number } | undefined;
+        return ev.phase === 'standby' && ctx.game.turnPlayer === ctx.self.owner && !!f && f.mid === ctx.self.moveId && f.due === ctx.game.turn;
+      },
       resolve: async (ctx) => {
         const self = ctx.self;
-        const id = self.moveId;
-        const offset = ctx.isMyTurn ? 2 : 1;
-        ctx.later(
-          'standby',
-          async () => {
-            if (self.location !== 'grave' || self.moveId !== id) return;
-            if (ctx.game.freeMZones(self.owner) <= 0) return;
-            await ctx.game.specialSummon([self], self.owner, { pos: 'atk', reasonCard: self });
-          },
-          offset,
-        );
+        const f = self.flags.vampireLord as { mid: number } | undefined;
+        self.flags.vampireLord = undefined;
+        if (!f || self.location !== 'grave' || self.moveId !== f.mid) return;
+        if (ctx.game.freeMZones(self.owner) <= 0) return;
+        await ctx.game.specialSummon([self], self.owner, { pos: 'atk', reasonCard: self });
       },
     },
   ],
@@ -521,7 +559,7 @@ monster('Despair from the Dark', {
 // ==================================================================== spells
 
 spell('Book of Life', 'quickplay', {
-  text: 'Target 1 Zombie-Type monster in your GY and 1 monster in your opponent\'s GY; Special Summon the first target, and banish the second target.',
+  text: 'Special Summon 1 Zombie-Type monster from your Graveyard and remove from play 1 monster from your opponent\'s Graveyard.',
   effects: [
     {
       kind: 'activate',
@@ -542,7 +580,9 @@ spell('Book of Life', 'quickplay', {
         const valid = ctx.validTargets();
         const z = ctx.data.zombie as CardInstance | undefined;
         const o = ctx.data.other as CardInstance | undefined;
-        if (z && valid.includes(z) && z.location === 'grave') await ctx.specialSummon(z);
+        // "If the target in your Graveyard is no longer a Zombie-Type monster, it is not Special Summoned, but the target in
+        // your opponent's Graveyard is still removed from play" (https://edisonrul.ing/cards/b/book-of-life.html).
+        if (z && valid.includes(z) && z.location === 'grave' && isZombie(ctx, z)) await ctx.specialSummon(z);
         if (o && valid.includes(o) && o.location === 'grave') await ctx.banish(o);
       },
       ai: {
@@ -566,7 +606,7 @@ spell('Book of Life', 'quickplay', {
 });
 
 spell('Zombie World', 'field', {
-  text: 'All monsters on the field and in the GYs become Zombie-Type monsters. Neither player can Tribute Summon monsters, except Zombie-Type monsters.',
+  text: 'All monsters on the field and in any Graveyard become Zombie-Type monsters. Neither player can Tribute Summon monsters, except Zombie-Type monsters.',
   aiValue: 200,
   // The Type change is a dataMod: every check that reads `data.race` sees it (also in the GY under Necrovalley: non-targeting Type
   // changes apply, https://edisonrul.ing/cards/n/necrovalley.html).
@@ -587,7 +627,9 @@ spell('Zombie World', 'field', {
       range: ['fzone'],
       dataMod: {
         to: 'cards',
-        filter: (c) => c.isMonster && (c.location === 'mzone' || c.location === 'grave'),
+        // "This effect only affects face-up monsters. Face-down monsters are unaffected."
+        // (https://edisonrul.ing/cards/z/zombie-world.html)
+        filter: (c) => c.isMonster && ((c.location === 'mzone' && c.faceUp) || c.location === 'grave'),
         apply: (d) => (d.race === 'Zombie' ? d : dataVariant(d, 'race:Zombie', { race: 'Zombie' })),
       },
     },

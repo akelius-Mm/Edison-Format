@@ -1147,6 +1147,9 @@ export class Game {
   async changePosition(card: CardInstance, pos: BattlePos, faceUp = true, reasonPlayer?: PlayerId) {
     if (card.location !== 'mzone') return;
     const wasFaceDown = !card.faceUp;
+    // Turning a face-up monster face-down by a card effect Sets it: not while its controller cannot Set cards
+    // ("Book of Moon" vs. Dark Simorgh: https://edisonrul.ing/cards/d/dark-simorgh.html).
+    if (!faceUp && !wasFaceDown && this.queryPlayer(card.controller, 'cannotSet')) return;
     card.pos = pos;
     card.faceUp = faceUp;
     if (!faceUp) {
@@ -1184,6 +1187,9 @@ export class Game {
   ): Promise<CardInstance[]> {
     const ctrl = opts.controller ?? player;
     if (this.queryPlayer(player, 'cannotSpecialSummon')) return [];
+    // A player who cannot Set cards cannot Special Summon face-down either ("The Shallow Grave" vs. Dark Simorgh:
+    // https://edisonrul.ing/cards/d/dark-simorgh.html).
+    if (opts.faceDown && this.queryPlayer(ctrl, 'cannotSet')) return [];
     const list: CardInstance[] = [];
     let lpCost = 0;
     for (const c of cards) {
@@ -2015,12 +2021,14 @@ export class Game {
     return 0;
   }
 
-  tributeCandidates(p: PlayerId, forCard?: CardInstance) {
+  tributeCandidates(p: PlayerId, forCard?: CardInstance, set = false) {
     return this.monsters(p).filter(
       (c) =>
-        (!this.queryCard(c, 'cannotBeTributed') && !c.flags.noTributeSummonFodder) ||
-        // ABPF: monsters that can only be Tributed for specific Tribute Summons (Ceremonial Token → "Earthbound Immortal")
-        (!!forCard && typeof c.flags.tributeFodderFor === 'function' && !!c.flags.tributeFodderFor(forCard)),
+        ((!this.queryCard(c, 'cannotBeTributed') && !c.flags.noTributeSummonFodder) ||
+          // ABPF: monsters that can only be Tributed for specific Tribute Summons (Ceremonial Token → "Earthbound Immortal")
+          (!!forCard && typeof c.flags.tributeFodderFor === 'function' && !!c.flags.tributeFodderFor(forCard))) &&
+        // "Can only be Tribute Summoned by Tributing ..." (CardData.tributeSummonFilter; a Tribute Set is not a Summon).
+        (set || !forCard?.data.tributeSummonFilter || forCard.data.tributeSummonFilter(c)),
     );
   }
 
@@ -2037,7 +2045,7 @@ export class Game {
       }
     }
     if (!rules.length) return [];
-    return this.tributeCandidates(p, card).filter((c) => rules.some((r) => r(c)));
+    return this.tributeCandidates(p, card, set).filter((c) => rules.some((r) => r(c)));
   }
 
   canNormalSummon(p: PlayerId, card: CardInstance, set = false): boolean {
@@ -2052,7 +2060,7 @@ export class Game {
     const need = this.tributesNeeded(card);
     if (need === 0) return this.freeMZones(p) > 0;
     if (!set && this.queryCard(card, 'cannotTributeSummon')) return false;
-    const trib = this.tributeCandidates(p, card);
+    const trib = this.tributeCandidates(p, card, set);
     return trib.length >= need || this.altTributeCandidates(p, card, set).length > 0; // ABPF: alternative Tribute rule
   }
 
@@ -2077,7 +2085,7 @@ export class Game {
       // ABPF: alternative 1-Tribute rule (EffectDef.altTribute). Without one, this is the plain N-Tribute selection.
       const alt = this.altTributeCandidates(p, card, set);
       let n = need;
-      let pool = this.tributeCandidates(p, card);
+      let pool = this.tributeCandidates(p, card, set);
       if (alt.length) {
         const plainOk = pool.length >= need;
         const useAlt = !plainOk || (await this.option(p, `Tribute Summon ${card.name}:`, [`Tribute ${need} monsters`, 'Tribute 1 monster (card effect)'], card, (i) => i)) === 1;

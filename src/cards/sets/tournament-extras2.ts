@@ -154,14 +154,18 @@ function unionEffects(): EffectDef[] {
       },
     },
     {
-      // "If the equipped monster would be destroyed by battle or card effect, destroy this card instead."
+      // "If the equipped monster would be destroyed by battle or card effect, destroy this card instead." Not when this
+      // card would be destroyed at the same time ("If an effect (ex: Black Rose Dragon) would simultaneously destroy
+      // Gearframe and the equipped Machine-Type monster; destroy both cards, you CANNOT apply this effect":
+      // https://edisonrul.ing/cards/m/machina-gearframe.html), hence the list-wide replaceDestroy hook.
       kind: 'continuous',
       range: ['szone'],
-      replaceDestroyOne: async (ctx, card, reason) => {
-        if (card !== host(ctx) || !ctx.self.onField || (reason !== 'battle' && reason !== 'effect')) return false;
+      replaceDestroy: async (ctx, cards, reason) => {
+        const h = host(ctx);
+        if (!h || !cards.includes(h) || cards.includes(ctx.self) || !ctx.self.onField || (reason !== 'battle' && reason !== 'effect')) return [];
         ctx.log(`${ctx.self.name} is destroyed instead.`);
         await ctx.game.destroy([ctx.self], 'effect', ctx.player, ctx.self);
-        return ctx.self.location !== 'szone';
+        return ctx.self.location !== 'szone' ? [h] : [];
       },
     },
   ];
@@ -177,7 +181,7 @@ once('Electric Virus', () =>
     atk: 1000,
     def: 1000,
     aiValue: 300,
-    text: 'You can discard this card to the GY, then target 1 Machine or Dragon monster your opponent controls; take control of that target until the End Phase.',
+    text: 'By discarding this card from your hand to the Graveyard, take control of 1 face-up Machine or Dragon-Type monster your opponent controls until the end of this turn.',
     effects: [
       {
         kind: 'ignition',
@@ -373,7 +377,7 @@ once('Dimensional Alchemist', () =>
     atk: 1300,
     def: 200,
     aiValue: 300,
-    text: 'Once per turn: You can activate this effect; banish the top card of your Deck, and if you do, until the end of this turn, this card gains 500 ATK. When this card you control is destroyed and sent to your GY: You can target 1 of your banished monsters; add it to your hand.',
+    text: 'Once per turn, you can remove from play the top card of your Deck; this card gains 500 ATK until the End Phase. When this card is destroyed and sent from your side of the field to the Graveyard, you can select 1 of your removed from play monsters and return it to your hand.',
     effects: [
       {
         kind: 'ignition',
@@ -400,6 +404,9 @@ once('Dimensional Alchemist', () =>
       {
         kind: 'trigger',
         event: 'sentToGrave',
+        // An optional "When ... you can" Trigger Effect: it can miss the timing (e.g. destroyed as Chain Link 2+).
+        // https://edisonrul.ing/cards/d/dimensional-alchemist.html
+        when: true,
         label: 'Add 1 banished monster',
         categories: ['toHand'],
         // 2010 text: "When this card is destroyed and sent from your side of the field to the Graveyard" (not while the
@@ -559,7 +566,7 @@ once('Machina Gearframe', () =>
     types: ['union'],
     sets: ['machina'],
     aiValue: 700,
-    text: 'When this card is Normal Summoned: You can add 1 "Machina" monster from your Deck to your hand, except "Machina Gearframe". Once per turn, you can either: Target 1 Machine monster you control; equip this card to that target, OR: Unequip this card and Special Summon it. If the equipped monster would be destroyed by battle or card effect, destroy this card instead.',
+    text: 'When this card is Normal Summoned, you can add 1 "Machina" monster, except "Machina Gearframe", from your Deck to your hand. Once per turn, during your Main Phase, you can equip this card to a Machine-Type monster you control as an Equip Card, OR unequip it to Special Summon this card in face-up Attack Position. (A monster can only be equipped with 1 Union Monster at a time. If the equipped monster would be destroyed, destroy this card instead.)',
     effects: [
       {
         kind: 'trigger',
@@ -588,7 +595,7 @@ once('Machina Peacekeeper', () =>
     types: ['union'],
     sets: ['machina'],
     aiValue: 600,
-    text: 'When this card on the field is destroyed and sent to the GY: You can add 1 Union monster from your Deck to your hand. Once per turn, you can either: Target 1 Machine monster you control; equip this card to that target, OR: Unequip this card and Special Summon it. If the equipped monster would be destroyed by battle or card effect, destroy this card instead.',
+    text: 'When this card on the field is destroyed and sent to the Graveyard, you can add 1 Union Monster from your Deck to your hand. Once per turn, during your Main Phase, you can equip this card to a Machine-Type monster you control as an Equip Card, OR unequip it to Special Summon this card in face-up Attack Position. (A monster can only be equipped with 1 Union Monster at a time. If the equipped monster would be destroyed, destroy this card instead.)',
     effects: [
       {
         kind: 'trigger',
@@ -783,7 +790,7 @@ once('Royal Tribute', () =>
 
 once('Wave-Motion Cannon', () =>
   spell('Wave-Motion Cannon', 'continuous', {
-    text: 'During your Main Phase: You can send this face-up card to the GY; inflict 1000 damage to your opponent for each of your Standby Phases that have passed since this card was activated.',
+    text: 'During your Main Phase, you can send this card to the Graveyard to inflict 1000 damage to your opponent for each of your Standby Phases that have passed since this card was activated.',
     aiValue: 400,
     effects: [
       { kind: 'activate', categories: ['damage'], ai: { score: () => 25 } },
@@ -827,7 +834,7 @@ once('Wave-Motion Cannon', () =>
 
 once('Dimensional Fissure', () =>
   spell('Dimensional Fissure', 'continuous', {
-    text: 'Any monster sent to the GY is banished instead.',
+    text: 'Any monster sent to the Graveyard is removed from play instead.',
     aiValue: 300,
     effects: [
       {
@@ -842,8 +849,10 @@ once('Dimensional Fissure', () =>
         kind: 'continuous',
         range: ['szone'],
         active: stActive,
-        // Monsters only (the card switch); Spells and Traps still go to the GY.
-        mods: [{ q: 'banishInsteadOfGrave', to: 'cards', filter: (_ctx, c: C) => c.isMonster }],
+        // Monsters only (the card switch); Spells and Traps still go to the GY. A monster card in the Spell & Trap Zone is
+        // an Equip Card: "If 'Dimensional Fissure' is active when an equipped Union Monster is sent to the Graveyard, it will
+        // not be banished, because it was treated as a Spell" (https://edisonrul.ing/cards/m/machina-gearframe.html).
+        mods: [{ q: 'banishInsteadOfGrave', to: 'cards', filter: (_ctx, c: C) => c.isMonster && c.location !== 'szone' }],
       },
     ],
   }),
