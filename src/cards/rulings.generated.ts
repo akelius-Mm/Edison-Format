@@ -403,6 +403,12 @@ export const RULINGS: Record<string, RulingNote[]> = {
       "url": "https://edisonrul.ing/cards/c/chain-disappearance.html"
     }
   ],
+  "Chain Material": [
+    {
+      "text": "Chain Material: using its effect for a Fusion Summon is optional.",
+      "url": "https://edisonrul.ing/cards/c/chain-material.html"
+    }
+  ],
   "Changing Destiny": [
     {
       "text": "2010 rulings: if the monster cannot be changed to Defense Position (e.g. it already is), the rest of the effect is not applied.",
@@ -429,6 +435,16 @@ export const RULINGS: Record<string, RulingNote[]> = {
     {
       "text": "It targets an \"Alien\" monster in your GY, removing the counters is a cost, and this card must still be face-up on the field when it resolves.",
       "url": "https://edisonrul.ing/cards/c/code-a-ancient-ruins.html"
+    }
+  ],
+  "Cold Wave": [
+    {
+      "text": "2010 ruling: besides playing Spell/Trap Cards, neither player can activate the Ignition-like / Quick-like effects of face-up Spells/Traps (Blaze Accelerator, Valhalla, Royal Oppression) nor the Normal Spell effect that Destiny Hero - Diamond Dude puts off; Continuous-like effects still apply.",
+      "url": "https://edisonrul.ing/cards/c/cold-wave.html"
+    },
+    {
+      "text": "Cold Wave stops this effect too",
+      "url": "https://edisonrul.ing/cards/c/cold-wave.html"
     }
   ],
   "Colosseum - Cage of the Gladiator Beasts": [
@@ -545,6 +561,10 @@ export const RULINGS: Record<string, RulingNote[]> = {
   ],
   "Dark Horus": [
     {
+      "text": "April 2010 printing: — it does not \"select\" (target): the monster is chosen when the effect resolves.",
+      "url": "https://edisonrul.ing/cards/d/dark-horus.html"
+    },
+    {
       "text": "Activates after the Spell resolves and misses the timing unless that Spell was Chain Link 1",
       "url": "https://edisonrul.ing/cards/d/dark-horus.html"
     }
@@ -589,6 +609,12 @@ export const RULINGS: Record<string, RulingNote[]> = {
     {
       "text": "2010 text and rulings (the Standby Phase effect has no once-per-turn and does not target)",
       "url": "https://edisonrul.ing/cards/d/destiny-end-dragoon.html"
+    }
+  ],
+  "Destiny Hero - Disk Commander": [
+    {
+      "text": "Cold Wave stops this effect too",
+      "url": "https://edisonrul.ing/cards/c/cold-wave.html"
     }
   ],
   "Destruct Potion": [
@@ -1029,6 +1055,12 @@ export const RULINGS: Record<string, RulingNote[]> = {
       "url": "https://edisonrul.ing/cards/g/ghost-gardna.html"
     }
   ],
+  "Giant Trunade": [
+    {
+      "text": "Normal / Quick-Play Spells and Normal / Counter Traps chained to it are not returned (they are spent). The historical section has no rulings; this is from the Revised section. (The cards activated after this one in the Chain, read from the event log: their links have resolved already.)",
+      "url": "https://edisonrul.ing/cards/g/giant-trunade.html"
+    }
+  ],
   "Gigantic Cephalotus": [
     {
       "text": "Gigantic Cephalotus, 2010 ruling: \"If 'Skill Drain' is active, 'Gigantic Cephalotus' loses any ATK gained by its effect. The ATK is not regained when 'Skill Drain' is negated or removed from the field.\"",
@@ -1097,6 +1129,12 @@ export const RULINGS: Record<string, RulingNote[]> = {
     {
       "text": "Not the Ignition-like effect of a face-up Continuous Spell/Trap (Skull Lair), and only while a monster is on the field (Light and Darkness Dragon): Not effects that may or may not destroy a monster (a die roll, a choice): \"Acid Trap Hole\", \"Blowback Dragon\", \"Magical Dimension\", \"Reign-Beaux, Overlord of Dark World\", \"Snipe Hunter\" (same page).",
       "url": "https://edisonrul.ing/cards/d/destruction-jammer.html"
+    }
+  ],
+  "Golden Flying Fish": [
+    {
+      "text": "A non-targeting effect whose card never mentions monsters (Heavy Storm, Harpie's Feather Duster) cannot destroy one: the Quick Effect only answers an effect that would destroy a monster(s) on the field.",
+      "url": "https://edisonrul.ing/cards/p/prime-material-dragon.html"
     }
   ],
   "Golden Ladybug": [
@@ -1272,6 +1310,10 @@ export const RULINGS: Record<string, RulingNote[]> = {
   "Inferno Reckless Summon": [
     {
       "text": "2010 ruling: not when a monster Token is Special Summoned, and the opponent cannot choose a Token.",
+      "url": "https://edisonrul.ing/cards/i/inferno-reckless-summon.html"
+    },
+    {
+      "text": "If both your Special Summoned monster and every face-up monster your opponent controls were flipped face-down or removed from the field by chained effects, the effect disappears (only one of them gone: it still resolves).",
       "url": "https://edisonrul.ing/cards/i/inferno-reckless-summon.html"
     }
   ],
@@ -1681,6 +1723,10 @@ export const RULINGS: Record<string, RulingNote[]> = {
     {
       "text": "2010 ruling: several \"Megamorph\" on one monster are the same as one (only the first one applies).",
       "url": "https://edisonrul.ing/cards/m/megamorph.html"
+    },
+    {
+      "text": "VS. \"Shrink\" on the same monster: the effect that resolved last is applied.",
+      "url": "https://edisonrul.ing/cards/s/shrink.html"
     }
   ],
   "Mermaid Archer": [
@@ -1693,6 +1739,12 @@ export const RULINGS: Record<string, RulingNote[]> = {
     {
       "text": "\"The maintenance cost is optional, you may chose not to pay 100 Life Points and 'Messenger of Peace' will be destroyed\": a maintenance cost, applied without a Chain.",
       "url": "https://edisonrul.ing/cards/m/messenger-of-peace.html"
+    }
+  ],
+  "Metabo Globster": [
+    {
+      "text": "Only when Tributed face-up (the face-down ruling was reversed only in May 2011) and not for a Tribute Set; the historical section has no rulings, these are from the Revised section.",
+      "url": "https://edisonrul.ing/cards/m/metabo-globster.html"
     }
   ],
   "Metamorphosis": [
@@ -1963,6 +2015,12 @@ export const RULINGS: Record<string, RulingNote[]> = {
       "url": "https://edisonrul.ing/cards/n/nitro-warrior.html"
     }
   ],
+  "Offering to the Snake Deity": [
+    {
+      "text": "If a chained effect removed 1 of the targets from the field, the whole effect disappears; a target that is only unaffected by Traps still lets the others be destroyed.",
+      "url": "https://edisonrul.ing/cards/o/offering-to-the-snake-deity.html"
+    }
+  ],
   "Ojama Country": [
     {
       "text": "sending the \"Ojama\" card is a cost; the effect targets 1 \"Ojama\" monster in your GY and cannot be activated without one there (the card just sent can then be the target).",
@@ -2093,6 +2151,12 @@ export const RULINGS: Record<string, RulingNote[]> = {
     {
       "text": "if your monster's ATK is no longer lower than the ATK of the monster it battles when this resolves, the effect disappears.",
       "url": "https://edisonrul.ing/cards/p/prideful-roar.html"
+    }
+  ],
+  "Prime Material Dragon": [
+    {
+      "text": "A non-targeting effect whose card never mentions monsters (Heavy Storm, Harpie's Feather Duster) cannot destroy one: the Quick Effect only answers an effect that would destroy a monster(s) on the field.",
+      "url": "https://edisonrul.ing/cards/p/prime-material-dragon.html"
     }
   ],
   "Psi-Impulse": [
@@ -2382,6 +2446,10 @@ export const RULINGS: Record<string, RulingNote[]> = {
   "Shrink": [
     {
       "text": "it halves the ORIGINAL ATK: a second \"Shrink\" on the same monster achieves nothing.",
+      "url": "https://edisonrul.ing/cards/s/shrink.html"
+    },
+    {
+      "text": "VS. \"Shrink\" on the same monster: the effect that resolved last is applied.",
       "url": "https://edisonrul.ing/cards/s/shrink.html"
     }
   ],
@@ -2905,6 +2973,18 @@ export const RULINGS: Record<string, RulingNote[]> = {
     {
       "text": "2010 ruling: if the opponent gains control of the targeted Neos first, it still returns to the Deck and all cards are destroyed.",
       "url": "https://edisonrul.ing/cards/w/wrath-of-neos.html"
+    }
+  ],
+  "X-Saber Galahad": [
+    {
+      "text": "③: the database's historical section has no text or rulings for this card; the Edison-accurate text and \"it can activate on a replayed attack\" come from the Revised section.",
+      "url": "https://edisonrul.ing/cards/x/x-saber-galahad.html"
+    }
+  ],
+  "XX-Saber Faultroll": [
+    {
+      "text": "2010 ruling: it can only be Special Summoned (by its own procedure) from the hand — never revived from the GY (not even by \"Gottoms' Emergency Call\") or Summoned from the Deck / banishment.",
+      "url": "https://edisonrul.ing/cards/x/xx-saber-faultroll.html"
     }
   ],
   "XX-Saber Fulhelmknight": [
