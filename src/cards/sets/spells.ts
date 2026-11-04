@@ -2108,5 +2108,3 @@ spell('Mirage of Nightmare', 'continuous', {
     },
   ],
 });
-
-export const SPELLS_LOADED = true;

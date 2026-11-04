@@ -1404,5 +1404,3 @@ monster('Dark Balter the Terrible', {
     },
   ],
 });
-
-export const EXTRA_LOADED = true;

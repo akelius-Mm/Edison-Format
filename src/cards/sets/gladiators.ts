@@ -743,5 +743,3 @@ monster('Gladiator Beast Heraklinos', {
     },
   ],
 });
-
-export const GLADIATORS_LOADED = true;

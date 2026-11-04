@@ -525,5 +525,3 @@ S('Call of the Mummy', 'continuous', {
     },
   ],
 });
-
-export const ARCHETYPE_EXTRAS2_LOADED = true;

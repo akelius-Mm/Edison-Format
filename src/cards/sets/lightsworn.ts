@@ -599,5 +599,3 @@ spell('Realm of Light', 'field', {
     },
   ],
 });
-
-export const LIGHTSWORN_LOADED = true;

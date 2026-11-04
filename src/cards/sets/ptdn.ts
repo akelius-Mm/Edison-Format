@@ -3758,5 +3758,3 @@ trap('Call of the Earthbound', 'normal', {
     },
   ],
 });
-
-export const PTDN_LOADED = true;

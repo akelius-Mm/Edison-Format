@@ -2171,5 +2171,3 @@ normal('Celtic Guardian', 'EARTH', 'Warrior', 4, 1400, 1200, 'An elven swordsman
 normal('Insect Knight', 'EARTH', 'Insect', 4, 1900, 1500, 'An armored insect champion who leads the swarm into battle.');
 normal('Sea Serpent Warrior of Darkness', 'WATER', 'Sea Serpent', 4, 1800, 1500, 'A warrior of the deep who rose from the sea to defend its realm.');
 normal('7 Colored Fish', 'WATER', 'Fish', 4, 1800, 800, 'A rare fish whose seven-hued scales are said to bring good fortune.');
-
-export const MONSTERS_LOADED = true;

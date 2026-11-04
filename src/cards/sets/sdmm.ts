@@ -814,5 +814,3 @@ trap('Roll Out!', 'normal', {
     },
   ],
 });
-
-export const SDMM_LOADED = true;

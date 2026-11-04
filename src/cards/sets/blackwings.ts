@@ -709,4 +709,3 @@ monster('Blackwing - Silverwind the Ascendant', {
 });
 
 void inSet;
-export const BLACKWINGS_LOADED = true;

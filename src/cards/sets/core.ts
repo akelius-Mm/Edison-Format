@@ -856,8 +856,6 @@ monster('Brionac, Dragon of the Ice Barrier', {
     },
   ],
 });
-
-export const CORE_LOADED = true;
 void isST;
 void faceUp;
 void levelMax;

@@ -3371,5 +3371,3 @@ T('The Selection', 'counter', {
     },
   ],
 });
-
-export const TDGS_LOADED = true;

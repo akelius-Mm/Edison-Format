@@ -475,5 +475,3 @@ monster('XX-Saber Hyunlei', {
     },
   ],
 });
-
-export const SABERS_LOADED = true;

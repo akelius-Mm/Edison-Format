@@ -3724,5 +3724,3 @@ trap('Evil Blast', 'normal', {
     },
   ],
 });
-
-export const ABPF_LOADED = true;

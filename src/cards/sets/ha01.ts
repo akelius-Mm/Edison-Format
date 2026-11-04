@@ -745,5 +745,3 @@ spell('Evolution Burst', 'normal', {
     },
   ],
 });
-
-export const HA01_LOADED = true;

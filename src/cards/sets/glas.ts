@@ -3245,5 +3245,3 @@ T('Security Orb', 'normal', {
     },
   ],
 });
-
-export const GLAS_LOADED = true;

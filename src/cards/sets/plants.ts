@@ -61,11 +61,6 @@ export function synchroOptions(ctx: Ctx, add: { card: CardInstance; level?: numb
   return out;
 }
 
-/** Best (highest ATK + aiValue) synchro reachable, 0 if none. */
-export function bestSynchroValue(ctx: Ctx, add: { card: CardInstance; level?: number }[] = [], remove: CardInstance[] = []) {
-  return Math.max(0, ...synchroOptions(ctx, add, remove).map((s) => (s.data.atk ?? 0) + (s.data.aiValue ?? 0)));
-}
-
 /**
  * The Gemini Summon of a Gemini monster: a Normal Summon of the face-up monster that does not start a chain
  * (Game.geminiSummon). https://edisonrul.ing/cards/misc/gemini-monsters-gigaplant-elemental-hero-neos-alius-etc.html
@@ -589,5 +584,3 @@ monster('Copy Plant', {
     },
   ],
 });
-
-export const PLANTS_LOADED = true;

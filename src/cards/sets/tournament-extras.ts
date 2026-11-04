@@ -1651,5 +1651,3 @@ trap('Pole Position', 'continuous', {
     },
   ],
 });
-
-export const TOURNAMENT_EXTRAS_LOADED = true;

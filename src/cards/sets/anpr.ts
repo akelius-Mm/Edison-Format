@@ -3822,5 +3822,3 @@ trap('Revival of the Immortals', 'normal', {
     },
   ],
 });
-
-export const ANPR_LOADED = true;

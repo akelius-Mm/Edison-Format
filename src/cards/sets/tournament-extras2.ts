@@ -1080,5 +1080,3 @@ once('Shadow-Imprisoning Mirror', () =>
     ],
   }),
 );
-
-export const TOURNAMENT_EXTRAS2_LOADED = true;

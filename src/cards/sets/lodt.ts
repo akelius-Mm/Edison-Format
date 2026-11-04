@@ -3717,5 +3717,3 @@ T('Vanquishing Light', 'counter', {
     },
   ],
 });
-
-export const LODT_LOADED = true;

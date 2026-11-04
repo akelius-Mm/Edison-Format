@@ -3766,5 +3766,3 @@ trap('Berserking', 'continuous', {
     },
   ],
 });
-
-export const RGBT_LOADED = true;

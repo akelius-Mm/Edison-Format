@@ -635,5 +635,3 @@ spell('Zombie World', 'field', {
     },
   ],
 });
-
-export const ZOMBIES_LOADED = true;

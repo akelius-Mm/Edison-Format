@@ -1926,5 +1926,3 @@ for (const d of DEFINED) {
     ef.ai!.score = (ctx) => (decreeUp(ctx) ? -1 : score(ctx));
   }
 }
-
-export const TRAPS_LOADED = true;
