@@ -3,7 +3,8 @@ import { monster, spell, trap } from '../define';
 import { cardValue } from '../helpers';
 import { faceUpFlag, type CardInstance, type EffectDef } from '../../engine/card';
 import type { Ctx } from '../../engine/ctx';
-import type { GameEvent } from '../../engine/types';
+import type { Game } from '../../engine/game';
+import type { GameEvent, PlayerId } from '../../engine/types';
 
 const GB = ['gladiator'];
 const isGB = (c: CardInstance) => c.isMonster && c.inSet('gladiator');
@@ -125,6 +126,38 @@ const markGB: EffectDef = {
     return false;
   },
 };
+
+/**
+ * Gladiator Beast Laquari: "If this card is Special Summoned by the effect of a Gladiator Beast monster, its original ATK
+ * is 2100" — an original ATK (flags.baseAtk), not a +300 modifier. It "no longer applies if Laquari is flipped
+ * face-down, leaves the field, or has its effects negated by Skill Drain (even if Skill Drain is later negated /
+ * destroyed)". https://edisonrul.ing/cards/g/gladiator-beast-laquari.html
+ */
+const markLaquari: EffectDef = {
+  kind: 'trigger',
+  event: 'specialSummoned',
+  eventFilter: (ctx, ev) => {
+    if (ev.card === ctx.self && byGB(ev) && ctx.self.location === 'mzone') {
+      ctx.self.flags.gbSummoned = true;
+      ctx.self.flags.baseAtk = 2100;
+    }
+    return false;
+  },
+};
+function laquariRules(g: Game) {
+  const orig = g.update.bind(g);
+  g.update = () => {
+    for (const p of [0, 1] as PlayerId[]) {
+      for (const c of g.monsters(p)) {
+        if (c.name === LAQUARI && c.faceUp && c.flags.gbSummoned && g.isNegated(c)) {
+          delete c.flags.gbSummoned;
+          delete c.flags.baseAtk;
+        }
+      }
+    }
+    orig();
+  };
+}
 
 const statBoost = (q: 'atk' | 'def', amount: number): EffectDef => ({
   kind: 'continuous',
@@ -252,7 +285,8 @@ monster(LAQUARI, {
   sets: GB,
   aiValue: 300,
   text: `If this card is Special Summoned by the effect of a "Gladiator Beast" monster, its original ATK becomes 2100. ${TAG_TEXT} "${LAQUARI}".`,
-  effects: [markGB, statBoost('atk', 300), tagOut()],
+  rules: [laquariRules],
+  effects: [markLaquari, tagOut()],
 });
 
 monster('Gladiator Beast Murmillo', {

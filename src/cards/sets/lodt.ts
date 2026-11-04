@@ -376,7 +376,10 @@ export function lodtRules(g: Game) {
         const i = await g.option(p, `Normal Summon ${card.name}:`, opts, card, (k) => (k === 1 && cheapest < 1500 ? 2 : k === 0 ? 1 : 0));
         card.flags.lodtFogNeed = i;
       }
-      return await origNS(p, card, set, opts);
+      const r = await origNS(p, card, set, opts);
+      // Fog King: its ATK counts the Tributes only while it stays face-up since that Summon.
+      if (card.name === FOG_KING && card.location === 'mzone') card.flags.lodtFogFace = card.faceUpId;
+      return r;
     } finally {
       if (card.location === 'hand') {
         delete card.flags.lodtSetting;
@@ -2550,8 +2553,12 @@ M(FOG_KING, {
       mods: [
         {
           q: 'atk',
+          // "If this card is flipped face-down / leaves the field, or if this effect is negated, its ATK becomes 0."
+          // https://edisonrul.ing/cards/f/fog-king.html
           value: (ctx) =>
-            ((ctx.self.flags.tributedMonsters ?? []) as { uid: number }[]).reduce((s, t) => s + (ctx.game.card(t.uid)?.data.atk ?? 0), 0),
+            ctx.self.flags.lodtFogFace !== ctx.self.faceUpId
+              ? 0
+              : ((ctx.self.flags.tributedMonsters ?? []) as { uid: number }[]).reduce((s, t) => s + (ctx.game.card(t.uid)?.data.atk ?? 0), 0),
         },
         { q: 'cannotBeTributed', to: 'cards', filter: (_ctx, c: C) => c.location === 'mzone' },
       ],

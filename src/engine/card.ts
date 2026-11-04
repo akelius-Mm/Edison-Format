@@ -135,6 +135,8 @@ export interface EffectDef {
   opt?: boolean | string;
   /** Can be activated during the damage step. */
   damageStep?: boolean;
+  /** This effect of the same card can be activated again in the same Chain (Ultimate Offering). */
+  repeatInChain?: boolean;
   /** Can be used in the summon-negation window (Solemn Judgment, Royal Oppression...). */
   negateSummon?: boolean;
   /**
@@ -370,6 +372,11 @@ export const FACE_UP_FLAGS = new Set<string>([
   'setAtk',
   'setAtkTurn',
   'negatedTurn',
+  // "its original ATK becomes X" applied to it (Chimeratech Fortress Dragon, Evil HERO Dark Gaia, Beast King Barbaros):
+  // "If this card is flipped face-down ..., its ATK becomes 0 when it is face-up again".
+  // https://edisonrul.ing/cards/c/chimeratech-fortress-dragon.html, https://edisonrul.ing/cards/e/evil-hero-dark-gaia.html
+  'baseAtk',
+  'baseDef',
 ]);
 /** Register flag keys that reset when the card is turned face-down (see FACE_UP_FLAGS). */
 export function faceUpFlag(...keys: string[]) {

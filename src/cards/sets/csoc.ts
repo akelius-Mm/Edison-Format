@@ -243,7 +243,10 @@ function figLocked(g: Game, card: C) {
   }
   return false;
 }
-const hadesNegated = (g: Game, c: C) => c.location === 'grave' && c.flags.hadesNeg === g.turn;
+// The negation lasts while the monster stays in the GY ("Treeborn Frog, Plaguespreader Zombie, Sinister Serpent ... The
+// negation is reset if these cards are removed from the Graveyard"), not just this turn.
+// https://edisonrul.ing/cards/r/revived-king-ha-des.html
+const hadesNegated = (_g: Game, c: C) => c.location === 'grave' && c.flags.hadesNeg === c.moveId;
 /** Attribute player p is locked to by Gozen Match (the Attribute of its face-up monsters), or null. */
 function gozenAttr(g: Game, p: PlayerId): Attribute | null {
   if (!liveCards(g, GOZEN).length) return null;
@@ -373,6 +376,10 @@ export function csocRules(g: Game) {
         r.direct = false;
       }
     }
+    // "If you control 2 or more Morphtronic Magnens in Defense Position, your opponent cannot attack, unless they
+    // control a monster that can attack directly due to an effect." https://edisonrul.ing/cards/m/morphtronic-magnen.html
+    const defMagnens = g.monsters(g.opp(attacker.controller)).filter((c) => c.name === MAGNEN && faceUpOn(c) && c.pos === 'def' && !g.isNegated(c));
+    if (defMagnens.length >= 2) r.targets = [];
     if (urActive(g, attacker) && attacker.attacksThisTurn >= 1) {
       const hit = urHit(g, attacker);
       r.targets = r.targets.filter((t) => !hit.has(t.uid));
@@ -514,7 +521,7 @@ function onEvent(g: Game, ev: GameEvent) {
   if (ev.type === 'battleDestroyed' && c && c.hasType('effect')) {
     const by = evo(ev);
     if (by && by.location === 'mzone' && isZombie(by) && by.controller !== ev.fromController && liveCards(g, HA_DES, by.controller).length) {
-      c.flags.hadesNeg = g.turn;
+      c.flags.hadesNeg = c.moveId;
       g.log(`${c.name}'s effects are negated (${HA_DES}).`, 'action', by.controller);
     }
   }
@@ -2428,9 +2435,12 @@ S(GARDEN, 'field', {
         const s = gs(g);
         s.gardenBusy++;
         try {
+          // The Rose Token is Special Summoned by Black Garden's controller's card effect: "If Player A activates
+          // Scapegoat while Player B controls Black Garden, Black Garden ... Special Summons a Rose Token" (and with
+          // Summon Limit it counts for Player B). https://edisonrul.ing/cards/b/black-garden.html
           for (const ctrl of [...new Set(mons.map((m) => m.controller))]) {
-            if (g.freeMZones(g.opp(ctrl)) <= 0 || g.queryPlayer(ctrl, 'cannotSpecialSummon')) continue;
-            await g.createTokens(ctrl, ROSE_TOKEN, 1, 'atk', g.opp(ctrl));
+            if (g.freeMZones(g.opp(ctrl)) <= 0 || g.queryPlayer(ctx.player, 'cannotSpecialSummon')) continue;
+            await g.createTokens(ctx.player, ROSE_TOKEN, 1, 'atk', g.opp(ctrl));
           }
         } finally {
           s.gardenBusy--;
@@ -3499,7 +3509,9 @@ T('DNA Checkup', 'normal', {
 T(GOZEN, 'continuous', {
   text: 'Each player sends monsters they control to the Graveyard until they each control monsters of only 1 Attribute. Each player cannot control monsters with different Attributes.',
   // The Attribute rule is a state check and a Summon restriction (ensureCsocPatches).
-  // APPROX: Flip Summons of another Attribute are allowed (the monster is then sent by the state check).
+  // Flip Summons of another Attribute are not offered while you control a face-up monster (legalMainActions filter):
+  // "YOU CANNOT: Flip / Normal / Special Summoning a monster of a different Attribute".
+  // https://edisonrul.ing/cards/g/gozen-match.html
   effects: [
     {
       kind: 'activate',
