@@ -79,16 +79,17 @@ function dropFlipTriggers(g: Game, c: C) {
 }
 
 /** Return a banished monster to the field (not a Summon). If there is no zone it goes to the GY. */
-async function returnToField(g: Game, c: C, controller: PlayerId, pos: BattlePos = 'atk') {
+async function returnToField(g: Game, c: C, controller: PlayerId, pos: BattlePos = 'atk', faceUp = true) {
   if (c.location !== 'banished') return false;
   if (g.freeMZones(controller) <= 0) {
     await g.sendToGrave([c], 'rule');
     return false;
   }
   g.beginBatch();
-  g.rawMove(c, 'mzone', { controller, faceUp: true, pos });
+  g.rawMove(c, 'mzone', { controller, faceUp, pos: faceUp ? pos : 'def' });
   c.summonTurn = g.turn;
-  g.log(`${c.name} returns to the field.`, 'action', controller);
+  if (!faceUp) c.setTurn = g.turn;
+  g.log(`${faceUp ? c.name : 'A face-down monster'} returns to the field.`, 'action', controller);
   await g.anim({ type: 'summon', cards: [c.uid], method: 'special', from: ['banished'] });
   g.update();
   return true;
@@ -130,7 +131,11 @@ const equippedDestroysByBattle = (ctx: Ctx, ev: GameEvent) => {
   return (ev.fromController ?? evc(ev)?.owner) !== eq.controller;
 };
 
-/** Monsters destroyed by card effects this turn that are still in the GY where that destruction sent them. */
+/**
+ * Monsters destroyed by card effects this turn that are still in the GY where that destruction sent them — from the
+ * field, the hand or the Deck ("You can Special Summon monsters that were destroyed while they were in your hand or
+ * Deck", https://edisonrul.ing/cards/e/emergency-assistance.html).
+ */
 function destroyedByEffectThisTurn(g: Game): Set<C> {
   const out = new Set<C>();
   const last = new Map<C, GameEvent>();
@@ -141,7 +146,7 @@ function destroyedByEffectThisTurn(g: Game): Set<C> {
   }
   for (const [c, ev] of last) {
     const rs = reasonsOf(ev);
-    if (c.location === 'grave' && ev.to === 'grave' && fromField(ev) && rs.includes('destroy') && rs.includes('effect') && !rs.includes('battle')) out.add(c);
+    if (c.location === 'grave' && ev.to === 'grave' && rs.includes('destroy') && rs.includes('effect') && !rs.includes('battle')) out.add(c);
   }
   return out;
 }
@@ -339,9 +344,12 @@ monster('Kuribon', {
       damageStep: true,
       label: 'Return to hand',
       categories: ['protect', 'toHand'],
+      // 2010 ruling: "If you cannot take Battle Damage because of the effect of "Waboku" or "Tornado Wall" you cannot
+      // activate the effect of "Kuribon."" https://edisonrul.ing/cards/k/kuribon.html
       condition: (ctx) => {
         const b = ctx.battle;
-        return !!b && b.inDamageStep && b.target === ctx.self && b.attacker.controller === ctx.opp && faceUpOn(ctx.self);
+        if (!b || !b.inDamageStep || b.target !== ctx.self || b.attacker.controller !== ctx.opp || !faceUpOn(ctx.self)) return false;
+        return !ctx.game.queryPlayer(ctx.player, 'noBattleDamage') && !b.noDamageFor?.some((s) => s.player === ctx.player);
       },
       activate: async (ctx) => {
         ctx.data.attacker = ctx.battle!.attacker;
@@ -349,7 +357,10 @@ monster('Kuribon', {
       resolve: async (ctx) => {
         const a = ctx.data.attacker as C;
         if (!faceUpOn(ctx.self)) return;
-        // No battle damage: Kuribon leaves the battle, so no damage calculation happens.
+        // APPROX: Kuribon goes back to the hand at once, so this battle has no damage calculation. 2010 ruling: "When
+        // you use this effect, damage calculation is still conducted and "Kuribon" is considered to be destroyed by
+        // battle, so you can activate cards like "Byroad Sacrifice."" (https://edisonrul.ing/cards/k/kuribon.html) —
+        // the engine has no "destroyed by battle, but returned to the hand" outcome.
         if (a) await ctx.recover(ctx.opp, faceUpOn(a) ? ctx.atk(a) : a.data.atk ?? 0);
         await ctx.toHand(ctx.self);
       },
@@ -714,6 +725,18 @@ monster('Infernity Beast', {
   ],
 });
 
+/**
+ * The Synchro Summon this material (ctx.event: its usedAsMaterial event) was used for was negated: the Synchro Monster
+ * left the Monster Zone without a "synchroSummoned" event (Solemn Judgment, Black Horn of Heaven...).
+ */
+function synchroSummonNegated(ctx: Ctx) {
+  const ev = ctx.event;
+  const s = ev?.reasonCard as C | undefined;
+  if (!ev || !s) return false;
+  if (ctx.game.eventLog.some((e) => e.type === 'synchroSummoned' && e.card === s && e.seq > ev.seq)) return false;
+  return s.location !== 'mzone';
+}
+
 monster('Darksea Rescue', {
   attribute: 'DARK',
   race: 'Machine',
@@ -730,6 +753,9 @@ monster('Darksea Rescue', {
       label: 'Draw 1',
       categories: ['draw'],
       eventFilter: (ctx, ev) => ev.card === ctx.self && ev.reason === 'synchro' && ctx.self.location === 'grave',
+      // 2010 ruling: "If the Synchro Summon is negated, you do not draw 1 card."
+      // https://edisonrul.ing/cards/d/darksea-rescue.html
+      condition: (ctx) => !synchroSummonNegated(ctx),
       resolve: async (ctx) => {
         await ctx.draw(1, ctx.self.owner);
       },
@@ -902,7 +928,9 @@ monster('Earthbound Immortal Chacu Challhua', {
     {
       kind: 'continuous',
       active: (ctx) => ctx.self.pos === 'def',
-      mods: [{ q: 'cannotDeclareAttack', to: 'players', filter: (ctx, p) => p === ctx.opp }],
+      // It stops the opponent from entering the Battle Phase only: "If this card is changed to Defense Position during
+      // your opponent's Battle Phase, the Battle Phase will continue." https://edisonrul.ing/cards/e/earthbound-immortal-chacu-challhua.html
+      mods: [{ q: 'cannotDeclareAttack', to: 'players', filter: (ctx, p) => p === ctx.opp && ctx.game.phase !== 'battle' }],
     },
   ],
 });
@@ -986,9 +1014,15 @@ monster("Koa'ki Meiru Speeder", {
       label: 'Reveal Iron Core: draw 1',
       categories: ['draw'],
       eventFilter: (ctx, ev) => ev.player === ctx.player && ev.reason === 'draw' && ctx.phase === 'draw' && !!evc(ev) && isIronCore(evc(ev)!),
-      resolve: async (ctx) => {
+      // 2010 ruling: "Revealing "Iron Core of Koa'ki Meiru" is a cost to activate this effect."
+      // https://edisonrul.ing/cards/k/koaki-meiru-speeder.html
+      canActivate: (ctx) => !!ctx.event && evc(ctx.event)?.location === 'hand',
+      activate: async (ctx) => {
         const c = evc(ctx.event!)!;
-        if (c.location === 'hand') reveal(ctx, c);
+        if (c.location !== 'hand') return false;
+        reveal(ctx, c);
+      },
+      resolve: async (ctx) => {
         await ctx.draw(1);
       },
     },
@@ -1216,8 +1250,14 @@ monster('Shiny Black "C"', {
         const t = evc(ctx.event!)!;
         await ctx.banish(ctx.self, 'cost');
         if (faceUpOn(t)) ctx.addTargets([t]);
+        ctx.data.faceUpId = t.faceUpId;
       },
-      resolve: destroyTargets,
+      // 2010 ruling: "If the target is flipped face-down before this effect resolves, it is not destroyed."
+      // https://edisonrul.ing/cards/s/shiny-black-c.html
+      resolve: async (ctx) => {
+        const t = ctx.validTargets((c) => faceUpOn(c) && c.faceUpId === ctx.data.faceUpId);
+        if (t.length) await ctx.destroy(t);
+      },
       ai: { score: (ctx) => (ctx.event && cardValue(ctx.game, evc(ctx.event)!) >= 1500 ? 80 : 0) },
     },
   ],
@@ -3166,13 +3206,17 @@ trap('Pixie Ring', 'continuous', {
   ],
 });
 
+const FAIRY_WIND_IGNORES = ['Heavy Storm', 'Giant Trunade'];
 trap('Fairy Wind', 'normal', {
   text: 'Destroy as many face-up Spells/Traps on the field as possible, except this card, and if you do, each player takes damage equal to the total number of cards destroyed by this effect x 300.',
   effects: [
     {
       kind: 'activate',
       categories: ['destroy', 'destroyMulti', 'damage'],
-      canActivate: (ctx) => ctx.spellTraps('both', (c) => c !== ctx.self && c.faceUp).length > 0,
+      // 2010 ruling: "If "Heavy Storm" or "Giant Trunade" is activated, you cannot activate "Fairy Wind" unless there is
+      // another face-up Spell or Trap Card other than "Heavy Storm" or "Giant Trunade."" https://edisonrul.ing/cards/f/fairy-wind.html
+      canActivate: (ctx) =>
+        ctx.spellTraps('both', (c) => c !== ctx.self && c.faceUp && !ctx.game.chain.some((l) => l.card === c && l.isCardActivation && FAIRY_WIND_IGNORES.includes(c.name))).length > 0,
       resolve: async (ctx) => {
         const r = await ctx.destroy(ctx.spellTraps('both', (c) => c !== ctx.self && c.faceUp));
         if (!r.length) return;
@@ -3270,21 +3314,32 @@ trap('Slip of Fortune', 'normal', {
         const a = evc(ev);
         return !!a && a.controller === ctx.opp && !!evo(ev) && !!ctx.battle && !ctx.battle.inDamageStep;
       },
+      // 2010 rulings (https://edisonrul.ing/cards/s/slip-of-fortune.html): "Slip of Fortune targets 2 monsters: the
+      // attacking monster and the attack target monster"; the attack is still negated if the attack target left the
+      // field in response; a face-down Defense Position target is removed from play face-down and returns in face-down
+      // Defense Position; returning it is not a Special Summon.
+      canActivate: (ctx) => {
+        const b = ctx.battle;
+        return !!b && !!b.target && ctx.canTarget(b.attacker) && ctx.canTarget(b.target);
+      },
       activate: async (ctx) => {
-        const t = ctx.battle?.target;
-        if (t && ctx.canTarget(t)) ctx.addTargets([t]);
+        const b = ctx.battle;
+        if (!b || !b.target) return;
+        ctx.data.attackTarget = b.target;
+        ctx.addTargets([b.attacker, b.target]);
       },
       resolve: async (ctx) => {
         if (ctx.battle) ctx.negateAttack();
-        const [t] = ctx.validTargets((c) => c.location === 'mzone');
+        const [t] = ctx.validTargets((c) => c === ctx.data.attackTarget && c.location === 'mzone');
         if (!t) return;
         const pos = t.pos;
-        const r = await ctx.banish(t);
+        const faceDown = !t.faceUp;
+        const r = await ctx.banish(t, 'effect', faceDown);
         if (!r.length || t.location !== 'banished') return;
         const id = t.moveId;
         const g = ctx.game;
         g.addDelayed('standby', async () => {
-          if (t.location === 'banished' && t.moveId === id) await returnToField(g, t, t.owner, pos);
+          if (t.location === 'banished' && t.moveId === id) await returnToField(g, t, t.owner, pos, !faceDown);
         }, 1);
       },
       ai: {
@@ -3397,7 +3452,9 @@ trap('Battle Teleportation', 'normal', {
       // 2010 rulings: it can be activated any time from your Draw Phase to the end of your Battle Phase (not if you cannot
       // conduct a Battle Phase); if your opponent has no open Monster Card Zone, the monster cannot move and is
       // destroyed. https://edisonrul.ing/cards/b/battle-teleportation.html
-      condition: (ctx) => ctx.isMyTurn && ctx.game.turn > 1 && ['draw', 'standby', 'main1', 'battle'].includes(ctx.phase),
+      // "cannotDeclareAttack" (player) is the engine's "cannot conduct your Battle Phase" (Game.availableActions).
+      condition: (ctx) =>
+        ctx.isMyTurn && ctx.game.turn > 1 && ['draw', 'standby', 'main1', 'battle'].includes(ctx.phase) && !ctx.game.queryPlayer(ctx.player, 'cannotDeclareAttack'),
       canActivate: (ctx) => {
         const ps = ctx.faceUpMonsters('me', isRace('Psychic'));
         return ps.length === 1 && ctx.canTarget(ps[0]);

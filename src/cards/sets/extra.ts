@@ -3,7 +3,7 @@ import { monster } from '../define';
 import { attr, cardValue, named, race, selfDestroysByBattle } from '../helpers';
 import type { CardInstance, EffectDef } from '../../engine/card';
 import type { Ctx } from '../../engine/ctx';
-import type { ChainLink } from '../../engine/game';
+import type { ChainLink, Game } from '../../engine/game';
 import type { GameEvent } from '../../engine/types';
 
 // ============================================================ shared helpers
@@ -110,10 +110,14 @@ monster('Stardust Dragon', {
       condition: (ctx) => isDestroyLink(ctx.prevLink()) && !ctx.query(ctx.self, 'cannotBeTributed'),
       activate: async (ctx) => {
         await tributeCost(ctx, [ctx.self]);
-        if (ctx.self.location === 'grave') ctx.self.flags.stardustRevive = ctx.turn;
+        ctx.data.stardustMove = ctx.self.moveId;
       },
+      // 2010 ruling: the End Phase revival "only activates if Stardust Dragon successfully resolved its ① effect this
+      // turn" — not when this effect's activation (or effect) was negated (Divine Wrath, Royal Oppression...).
+      // https://edisonrul.ing/cards/s/stardust-dragon.html
       resolve: async (ctx) => {
         await ctx.negateAndDestroy(ctx.prevLink());
+        if (ctx.self.location === 'grave' && ctx.self.moveId === ctx.data.stardustMove) ctx.self.flags.stardustRevive = ctx.turn;
       },
       ai: {
         score: (ctx) => {
@@ -348,6 +352,16 @@ monster('Ancient Fairy Dragon', {
       canActivate: (ctx) => ctx.canSpecialSummon() && ctx.hand('me', (c) => c.isMonster && (c.data.level ?? 0) <= 4 && ctx.canSummonCard(c)).length > 0,
       activate: async (ctx) => {
         ctx.addPlayerMod(ctx.player, 'cannotDeclareAttack');
+        ctx.data.lock = ctx.game.playerMods.slice(-1);
+      },
+      // 2010 ruling: "If the activation of this effect is negated (by "Divine Wrath"), the Ⓒ Condition is not applied.
+      // If this effect resolves negated (by "Skill Drain"), the Ⓒ Condition still applies."
+      // https://edisonrul.ing/cards/a/ancient-fairy-dragon.html
+      onActivationNegated: (ctx) => {
+        const g = ctx.game;
+        const lock = (ctx.data.lock ?? []) as typeof g.playerMods;
+        g.playerMods = g.playerMods.filter((m) => !lock.includes(m));
+        g.update();
       },
       resolve: async (ctx) => {
         const cands = ctx.hand('me', (c) => c.isMonster && (c.data.level ?? 0) <= 4 && ctx.canSummonCard(c));
@@ -504,6 +518,29 @@ monster('Mist Wurm', {
   ],
 });
 
+/** Nitro Warrior's second attack (flags.nitroAgain): the monster it changed to Attack Position, or no attack at all. */
+type NitroAgain = { turn: number; after: number; target: C; moveId: number; faceUpId: number };
+function nitroAgain(g: Game, c: C): NitroAgain | null {
+  const n = c.flags.nitroAgain as NitroAgain | undefined;
+  return n && n.turn === g.turn && c.attacksThisTurn >= n.after ? n : null;
+}
+const nitroTargetOk = (n: NitroAgain) => n.target.location === 'mzone' && n.target.faceUp && n.target.moveId === n.moveId && n.target.faceUpId === n.faceUpId;
+function nitroRules(g: Game) {
+  const canAttack = g.canAttack.bind(g);
+  g.canAttack = (c: C) => {
+    if (!canAttack(c)) return false;
+    const n = nitroAgain(g, c);
+    return !n || nitroTargetOk(n);
+  };
+  const attackTargets = g.attackTargets.bind(g);
+  g.attackTargets = (attacker: C) => {
+    const r = attackTargets(attacker);
+    const n = nitroAgain(g, attacker);
+    if (!n) return r;
+    return { targets: r.targets.filter((t) => t === n.target && nitroTargetOk(n)), direct: false };
+  };
+}
+
 monster('Nitro Warrior', {
   attribute: 'FIRE',
   race: 'Warrior',
@@ -511,9 +548,10 @@ monster('Nitro Warrior', {
   atk: 2800,
   def: 1800,
   types: ['synchro'],
-  text: '"Nitro Synchron" + 1 or more non-Tuner monsters\nOnce per turn, if you activate a Spell Card during your turn, this card gains 1000 ATK during damage calculation of its next battle this turn. Once per turn, when this card destroys an opponent\'s monster by battle: You can target 1 face-up Defense Position monster your opponent controls; change it to Attack Position, and this card can attack once again in a row.',
+  text: '"Nitro Synchron" + 1 or more non-Tuner monsters\nOnce during each of your turns, if you activated a Spell Card, this card gains 1000 ATK during its next attack, for damage calculation only. Once per turn, if this attacking card destroys an opponent\'s monster by battle, you can change 1 face-up Defense Position monster your opponent controls to Attack Position, and attack it with this card.',
   synchro: { tuner: synchronNamed('Nitro Synchron'), desc: '"Nitro Synchron" + 1+ non-Tuner monsters' },
   aiValue: 400,
+  rules: [nitroRules],
   effects: [
     {
       // Not an activated effect: the eventFilter only records the Spell activation.
@@ -531,12 +569,14 @@ monster('Nitro Warrior', {
         return false;
       },
     },
+    // 2010 text and rulings (https://edisonrul.ing/cards/n/nitro-warrior.html): "this card gains 1000 ATK during its
+    // next attack, for damage calculation only" — only when it attacks (being attacked neither uses nor gets the boost).
     {
       kind: 'trigger',
       event: 'damageStepEnd',
       label: 'Nitro charge used',
       eventFilter: (ctx, ev) => {
-        if (ev.card === ctx.self || ev.other === ctx.self) delete ctx.self.flags.nitroCharge;
+        if (ev.card === ctx.self) delete ctx.self.flags.nitroCharge;
         return false;
       },
     },
@@ -545,7 +585,7 @@ monster('Nitro Warrior', {
       mods: [
         {
           q: 'atk',
-          value: (ctx) => (ctx.self.flags.nitroCharge === ctx.turn && !!ctx.battle?.inDamageStep && battleOpponent(ctx) ? 1000 : 0),
+          value: (ctx) => (ctx.self.flags.nitroCharge === ctx.turn && !!ctx.battle?.inDamageStep && ctx.battle.attacker === ctx.self && battleOpponent(ctx) ? 1000 : 0),
         },
       ],
     },
@@ -556,7 +596,9 @@ monster('Nitro Warrior', {
       opt: true,
       label: 'Attack again',
       categories: ['position'],
-      eventFilter: (ctx, ev) => selfDestroysByBattle(ctx, ev),
+      // 2010 text: "if this ATTACKING card destroys an opponent's monster by battle" (not when it is attacked).
+      // https://edisonrul.ing/cards/n/nitro-warrior.html
+      eventFilter: (ctx, ev) => selfDestroysByBattle(ctx, ev) && ctx.battle?.attacker === ctx.self,
       canActivate: (ctx) => ctx.monsters('opp', (c) => c.faceUp && c.pos === 'def' && ctx.canTarget(c)).length > 0,
       activate: async (ctx) => {
         await ctx.selectTargets(ctx.monsters('opp', (c) => c.faceUp && c.pos === 'def'), 1, 1, 'Target 1 face-up Defense Position monster.', 'position', {
@@ -567,7 +609,13 @@ monster('Nitro Warrior', {
         const t = ctx.validTargets((c) => c.location === 'mzone' && c.faceUp && c.pos === 'def')[0];
         if (!t) return;
         await ctx.changePos(t, 'atk', true);
-        if (ctx.self.location === 'mzone' && ctx.self.faceUp) ctx.addTempMod(ctx.self, 'extraAttacks', 1, 'turn');
+        if (ctx.self.location === 'mzone' && ctx.self.faceUp) {
+          // "attack it with this card": the extra attack can only be declared on that monster, and is lost if it was
+          // flipped face-down or left the field ("If the target is flipped face-down / leaves the field, you do not make a
+          // second attack", https://edisonrul.ing/cards/n/nitro-warrior.html). See nitroRules.
+          ctx.addTempMod(ctx.self, 'extraAttacks', 1, 'turn');
+          ctx.self.flags.nitroAgain = { turn: ctx.turn, after: ctx.self.attacksThisTurn, target: t, moveId: t.moveId, faceUpId: t.faceUpId };
+        }
       },
       ai: {
         score: (ctx) => (ctx.monsters('opp', (c) => c.faceUp && c.pos === 'def' && ctx.atk(c) < ctx.atk(ctx.self)).length ? 1 : 0),
@@ -650,7 +698,14 @@ monster('Armory Arm', {
       },
       resolve: async (ctx) => {
         const t = ctx.validTargets((c) => c.location === 'mzone' && c.faceUp)[0];
-        if (!t || ctx.self.location !== 'mzone' || !ctx.self.faceUp || ctx.freeSZones() <= 0) return;
+        if (ctx.self.location !== 'mzone' || !ctx.self.faceUp) return;
+        // 2010 ruling: "If the target leaves the field before this effect resolves, "Armory Arm" is destroyed."
+        // https://edisonrul.ing/cards/a/armory-arm.html
+        if (!t) {
+          await ctx.destroy(ctx.self);
+          return;
+        }
+        if (ctx.freeSZones() <= 0) return;
         const proper = ctx.self.properlySummoned;
         await ctx.game.moveCards([ctx.self], 'szone', { reason: 'effect', reasonPlayer: ctx.player, reasonCard: ctx.self, minor: true });
         if ((ctx.self.location as string) !== 'szone') return;
@@ -836,9 +891,11 @@ monster('Turbo Warrior', {
         {
           q: 'atk',
           to: 'cards',
+          // 2010 ruling: "If it attacks a face-down Synchro Monster, "Turbo Warrior's" effect does not activate."
+          // https://edisonrul.ing/cards/t/turbo-warrior.html
           filter: (ctx, c) => {
             const b = ctx.battle;
-            return !!b && b.inDamageStep && b.attacker === ctx.self && b.target === c && c.faceUp && c.hasType('synchro') && ctx.level(c) >= 6;
+            return !!b && b.inDamageStep && !b.targetFaceDownAtStart && b.attacker === ctx.self && b.target === c && c.faceUp && c.hasType('synchro') && ctx.level(c) >= 6;
           },
           value: (ctx, c) => {
             if (turboGuard) return 0;

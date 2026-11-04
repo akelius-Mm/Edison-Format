@@ -170,6 +170,14 @@ monster('Tuningware', {
       label: 'Draw 1',
       categories: ['draw'],
       eventFilter: (ctx, ev) => ev.card === ctx.self && ev.reason === 'synchro' && ctx.self.location === 'grave',
+      // 2010 ruling: "This effect cannot activate if the Synchro Summon is negated (by "Black Horn of Heaven")": the
+      // Synchro Monster left the Monster Zone without being Synchro Summoned. https://edisonrul.ing/cards/t/tuningware.html
+      condition: (ctx) => {
+        const ev = ctx.event;
+        const s = ev?.reasonCard as CardInstance | undefined;
+        if (!ev || !s) return true;
+        return s.location === 'mzone' || ctx.game.eventLog.some((e) => e.type === 'synchroSummoned' && e.card === s && e.seq > ev.seq);
+      },
       resolve: async (ctx) => {
         await ctx.draw(1);
       },
