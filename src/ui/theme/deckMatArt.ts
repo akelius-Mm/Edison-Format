@@ -7,7 +7,9 @@
 // The deck's colour is washed over the whole picture, with a dark vignette at the edges. A printed motif (light rays
 // or teleport rings) can sit behind the cards.
 //
-// It is painted once per mat and launch on a canvas and kept in memory as a JPEG data URL. Painting needs the
+// It is painted once per mat and launch, and kept as a JPEG blob URL. Painting is gentle on memory, because a
+// phone that runs out kills the app (and the app then opens with card images paused, see app.ts). Mats are painted
+// one at a time, on two canvases reused for every mat, with only that mat's artwork loaded. Painting needs the
 // artwork to load with CORS. When it can't (offline, a host that doesn't allow it, no DOM in the tests), the mat
 // shows its key card alone, like an ordinary art mat.
 
@@ -36,11 +38,34 @@ export interface PaintSpec {
 export const PAINTED_CARDS: Record<PaintedKind, number> = { collage: 3, showcase: 1, duo: 2 };
 
 /** Canvas size: about the shape of one player's half of the mat (it is cropped with `cover`). */
-export const DECK_ART_W = 1600;
-export const DECK_ART_H = 700;
+export const DECK_ART_W = 1200;
+export const DECK_ART_H = 525;
 
 const done = new Map<string, string | null>();
 const running = new Map<string, Promise<string | null>>();
+/** Paints wait their turn: one mat at a time. */
+let queue: Promise<unknown> = Promise.resolve();
+
+/** The two canvases every painting uses: the picture, and one layer at a time drawn onto it. */
+let pictureCanvas: HTMLCanvasElement | null = null;
+let layerCanvas: HTMLCanvasElement | null = null;
+function blank(c: HTMLCanvasElement | null): HTMLCanvasElement {
+  const canvas = c ?? document.createElement('canvas');
+  if (canvas.width !== DECK_ART_W || canvas.height !== DECK_ART_H) {
+    canvas.width = DECK_ART_W;
+    canvas.height = DECK_ART_H;
+  }
+  const g = canvas.getContext('2d')!;
+  g.setTransform(1, 0, 0, 1, 0, 0);
+  g.globalAlpha = 1;
+  g.globalCompositeOperation = 'source-over';
+  g.clearRect(0, 0, DECK_ART_W, DECK_ART_H);
+  return canvas;
+}
+/** The picture canvas, cleared. */
+function pictureSurface(): HTMLCanvasElement {
+  return (pictureCanvas = blank(pictureCanvas));
+}
 
 /** The painted picture for a deck mat: a data URL, null when it can't be painted, undefined while not tried yet. */
 export function deckMatPicture(id: string): string | null | undefined {
@@ -62,9 +87,8 @@ type Ctx = CanvasRenderingContext2D;
 
 /** Draw `img` as a square of `size` at (x, y), cropped from its centre (the top for tall art), on a layer of its own. */
 function layer(img: HTMLImageElement, x: number, y: number, size: number): { c: HTMLCanvasElement; g: Ctx } {
-  const c = document.createElement('canvas');
-  c.width = DECK_ART_W;
-  c.height = DECK_ART_H;
+  // the one layer canvas, reused: each layer is drawn onto the picture before the next one starts
+  const c = (layerCanvas = blank(layerCanvas));
   const g = c.getContext('2d')!;
   const s = Math.min(img.naturalWidth, img.naturalHeight);
   const sx = (img.naturalWidth - s) / 2;
@@ -111,9 +135,7 @@ function tint(g: Ctx, colour: string, amount: number, darken: number) {
 export function paintDeckArt(imgs: [HTMLImageElement, HTMLImageElement, HTMLImageElement], tone: DeckTone): HTMLCanvasElement {
   const W = DECK_ART_W;
   const H = DECK_ART_H;
-  const out = document.createElement('canvas');
-  out.width = W;
-  out.height = H;
+  const out = pictureSurface();
   const g = out.getContext('2d')!;
   const [left, centre, right] = imgs;
 
@@ -338,9 +360,7 @@ function finish(g: Ctx, tone: DeckTone, lightX: number) {
 export function paintShowcase(img: HTMLImageElement, spec: PaintSpec): HTMLCanvasElement {
   const W = DECK_ART_W;
   const H = DECK_ART_H;
-  const out = document.createElement('canvas');
-  out.width = W;
-  out.height = H;
+  const out = pictureSurface();
   const g = out.getContext('2d')!;
   const tone = spec.tone;
   background(g, tone, W * 0.65);
@@ -375,9 +395,7 @@ export function paintShowcase(img: HTMLImageElement, spec: PaintSpec): HTMLCanva
 export function paintDuo(imgs: [HTMLImageElement, HTMLImageElement], spec: PaintSpec): HTMLCanvasElement {
   const W = DECK_ART_W;
   const H = DECK_ART_H;
-  const out = document.createElement('canvas');
-  out.width = W;
-  out.height = H;
+  const out = pictureSurface();
   const g = out.getContext('2d')!;
   const tone = spec.tone;
   background(g, tone, W / 2);
@@ -419,7 +437,7 @@ export function ensureDeckMatPicture(id: string, urls: readonly (string | undefi
   if (done.has(id)) return Promise.resolve(done.get(id)!);
   let p = running.get(id);
   if (p) return p;
-  p = (async () => {
+  const work = async (): Promise<string | null> => {
     // no DOM (the tests), or a card whose artwork isn't known: the mat shows its key card alone
     if (typeof document === 'undefined' || urls.length !== PAINTED_CARDS[spec.kind] || !urls.every(Boolean)) return null;
     const imgs = await Promise.all((urls as string[]).map(loadCors));
@@ -432,16 +450,20 @@ export function ensureDeckMatPicture(id: string, urls: readonly (string | undefi
           : spec.kind === 'duo'
             ? paintDuo([all[0], all[1]], spec)
             : paintDeckArt([all[0], all[1], all[2]], spec.tone);
-      return canvas.toDataURL('image/jpeg', 0.86);
+      // a blob URL, not a data URL: the CSS that shows it stays small
+      const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.85));
+      return blob ? URL.createObjectURL(blob) : null;
     } catch {
       // the artwork loaded without CORS after all (a tainted canvas can't be read back)
       return null;
     }
-  })().then((url) => {
+  };
+  p = queue.then(work, work).then((url) => {
     done.set(id, url);
     running.delete(id);
     return url;
   });
+  queue = p.catch(() => null);
   running.set(id, p);
   return p;
 }
