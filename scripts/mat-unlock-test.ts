@@ -12,6 +12,7 @@ const GLAD_ART = (c: string) => `https://art.test/${encodeURIComponent(c)}.jpg`;
 store.set('edison.officialArt.v2', JSON.stringify(Object.fromEntries(['Gladiator Beast Bestiari', 'Gladiator Beast Gyzarus', 'Gladiator Beast Heraklinos'].map((c) => [c, { full: GLAD_ART(c), art: GLAD_ART(c) }]))));
 
 import { EVENT_KEYS, eventTableMat, isMatUnlocked, loadUnlockedMats, matsEarnedFrom, syncMatUnlocks, unlockMats, MAT_UNLOCK_TEXT } from '../src/events';
+import { deckMatPicture, ensureDeckMatPicture } from '../src/ui/theme/deckMatArt';
 import { DECK_MAT_IDS, PLAYMATS, PRESTIGE_MAT_IDS, artMatId, opponentMat, playmatById } from '../src/ui/theme/playmats';
 import { DECKS as T1 } from '../src/decks/tournament';
 import { DECKS as T2 } from '../src/decks/tournament2';
@@ -67,19 +68,24 @@ for (const id of DECK_MAT_IDS) {
   if (id !== 'deck-gladiator') check(!/url\("https?:/.test(m.css), `${id}: without the artwork, plain neoprene`);
   check(!(PRESTIGE_MAT_IDS as readonly string[]).includes(id), `${id}: not locked behind an event`);
 }
-// once the artwork is known (seeded at the top for the Gladiator Beasts) the mat shows all three cards: the centre
-// card in front with its shaded seams, then the two side cards behind it
+// once the artwork is known (seeded at the top for the Gladiator Beasts), the three cards are painted into one
+// picture on a canvas (src/ui/theme/deckMatArt.ts). Until that picture exists, or where it can't be painted (no
+// canvas here, artwork without CORS), the mat shows its key card alone like an art mat: never the cards as
+// separate squares side by side.
 {
   const css = playmatById('deck-gladiator').css;
-  const at = (c: string) => css.indexOf(`url("${GLAD_ART(c)}")`);
-  const [l, c, r] = ['Gladiator Beast Bestiari', 'Gladiator Beast Gyzarus', 'Gladiator Beast Heraklinos'].map(at);
-  check(l > 0 && c > 0 && r > 0, 'deck-gladiator: all three artworks in the css');
-  check(c < l && c < r, 'deck-gladiator: centre card drawn in front of the side cards');
-  check(css.includes(`url("${GLAD_ART('Gladiator Beast Bestiari')}") left center / auto 100%`), 'deck-gladiator: left card at full height on the left');
-  check(css.includes(`url("${GLAD_ART('Gladiator Beast Heraklinos')}") right center / auto 100%`), 'deck-gladiator: right card at full height on the right');
-  const seam = css.lastIndexOf('linearGradient', c) >= 0 || /center \/ auto 100% no-repeat, url\("https:\/\/art\.test/.test(css);
-  check(seam, 'deck-gladiator: shaded seam over the centre card');
+  check(css.includes(`url("${GLAD_ART('Gladiator Beast Gyzarus')}") center 15% / cover no-repeat`), 'deck-gladiator: unpainted, the key card fills the mat');
+  check(!css.includes(GLAD_ART('Gladiator Beast Bestiari')) && !css.includes(GLAD_ART('Gladiator Beast Heraklinos')), 'deck-gladiator: unpainted, no side cards as separate squares');
   check(!/NaN|undefined/.test(css), 'deck-gladiator: no NaN/undefined in the css');
+}
+// without a DOM (or with a card's artwork unknown) the picture can't be painted: settled as null, so the mat is
+// not asked to repaint again and again
+{
+  const tone = { base: '#000', mid: '#111', dark: '#000', edge: '#fff' };
+  check((await ensureDeckMatPicture('deck-gladiator', ['a', 'b', 'c'], tone)) === null, 'no canvas: picture settles as null');
+  check(deckMatPicture('deck-gladiator') === null, 'no canvas: remembered, not retried');
+  check((await ensureDeckMatPicture('deck-zombies', ['a', undefined, 'c'], tone)) === null, 'a card without artwork: no picture');
+  check(playmatById('deck-gladiator').css.includes(`url("${GLAD_ART('Gladiator Beast Gyzarus')}")`), 'no picture: still the key card alone');
 }
 check(new Set(PLAYMATS.map((m) => m.id)).size === PLAYMATS.length, 'mat ids are unique');
 for (const m of PLAYMATS) if (m.art) check(cardNames.has(m.art), `${m.id}: art card ${m.art} is in the card pool`);
