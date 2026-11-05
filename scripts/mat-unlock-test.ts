@@ -7,16 +7,9 @@ const store = new Map<string, string>();
   setItem: (k: string, v: string) => void store.set(k, String(v)),
   removeItem: (k: string) => void store.delete(k),
 };
-// official artwork already looked up for the Gladiator Beasts deck mat's three cards (the cache is read on first use)
-const GLAD_ART = (c: string) => `https://art.test/${encodeURIComponent(c)}.jpg`;
-store.set('edison.officialArt.v2', JSON.stringify(Object.fromEntries(['Gladiator Beast Bestiari', 'Gladiator Beast Gyzarus', 'Gladiator Beast Heraklinos'].map((c) => [c, { full: GLAD_ART(c), art: GLAD_ART(c) }]))));
 
 import { EVENT_KEYS, eventTableMat, isMatUnlocked, loadUnlockedMats, matsEarnedFrom, syncMatUnlocks, unlockMats, MAT_UNLOCK_TEXT } from '../src/events';
-import { DECK_MAT_IDS, PLAYMATS, PRESTIGE_MAT_IDS, artMatId, opponentMat, playmatById } from '../src/ui/theme/playmats';
-import { DECKS as T1 } from '../src/decks/tournament';
-import { DECKS as T2 } from '../src/decks/tournament2';
-import { DECKS as T3 } from '../src/decks/tournament3';
-import { DECKS as T4 } from '../src/decks/tournament4';
+import { PLAYMATS, PRESTIGE_MAT_IDS, artMatId, opponentMat, playmatById } from '../src/ui/theme/playmats';
 import { SLEEVES, artSleeveId, sleeveById } from '../src/ui/theme/sleeves';
 import { allCards } from '../src/cards';
 
@@ -47,39 +40,23 @@ for (const id of PRESTIGE_MAT_IDS) {
   check(open === close, `${id}: balanced tags (${open} open, ${close} close)`);
   check(!/NaN|undefined/.test(m.css), `${id}: no NaN/undefined in the css`);
 }
-check(PLAYMATS.length === 30, `30 mats offered (got ${PLAYMATS.length})`);
-
-// ---- deck mats: three official artworks of one real tournament deck's cards, collaged on one mat with the deck's
-// name printed in the corner
-const tournamentCards = new Set([...T1, ...T2, ...T3, ...T4].flatMap((d) => [...d.main, ...d.extra, ...(d.side ?? [])].map(([n]) => n)));
-check(DECK_MAT_IDS.length === 10, `10 deck mats (got ${DECK_MAT_IDS.length})`);
-for (const id of ['deck-gladiator', 'deck-blackwings', 'deck-lightsworn']) check(DECK_MAT_IDS.includes(id), `${id}: offered`);
-for (const id of DECK_MAT_IDS) {
-  const m = playmatById(id);
-  check(m.id === id, `${id}: registered in PLAYMATS`);
-  check(m.collage?.length === 3 && new Set(m.collage).size === 3, `${id}: three different cards`);
-  check(m.art === m.collage?.[1], `${id}: the centre card is the mat's art card`);
-  for (const c of m.collage ?? []) {
-    check(cardNames.has(c), `${id}: ${c} is in the card pool`);
-    check(tournamentCards.has(c), `${id}: ${c} was played in a bundled tournament deck`);
-  }
-  check(m.css.includes('%3Ctext') || m.css.includes('<text'), `${id}: deck name printed`);
-  if (id !== 'deck-gladiator') check(!/url\("https?:/.test(m.css), `${id}: without the artwork, plain neoprene`);
-  check(!(PRESTIGE_MAT_IDS as readonly string[]).includes(id), `${id}: not locked behind an event`);
+check(PLAYMATS.length === 26, `26 mats offered (got ${PLAYMATS.length})`);
+// single-card art mats asked for by name
+for (const c of ['Krebons', 'Honest', 'Destiny Hero - Malicious', 'Destiny Draw', 'Gladiator Beast Heraklinos', 'Pot of Greed']) {
+  const m = PLAYMATS.find((x) => x.id === artMatId(c));
+  check(!!m && m.art === c, `${c}: offered as an art mat`);
 }
-// once the artwork is known (seeded at the top for the Gladiator Beasts) the mat shows all three cards: the centre
-// card in front with its shaded seams, then the two side cards behind it
+// the withdrawn deck mats (several cards on one mat) still load from older saves, as their key card's art mat
+check(playmatById('deck-gladiator').id === artMatId('Gladiator Beast Gyzarus'), 'legacy deck-gladiator: Gyzarus art mat');
+check(playmatById('deck-lightsworn').id === artMatId('Judgment Dragon'), 'legacy deck-lightsworn: Judgment Dragon art mat');
+check(playmatById('dad-dark-armed').id === artMatId('Dark Armed Dragon'), 'legacy dad-dark-armed: Dark Armed Dragon art mat');
+for (const id of ['deck-gladiator', 'deck-blackwings', 'deck-lightsworn', 'deck-twilight', 'deck-plant-synchro', 'deck-machina-gadgets', 'deck-monarchs', 'deck-x-sabers', 'deck-gravekeepers', 'deck-zombies', 'ls-judgment-day', 'ls-celestia', 'ls-dawn', 'dad-dark-armed', 'dad-thought-ruler', 'dad-teleport'])
+  check(!!playmatById(id).art && cardNames.has(playmatById(id).art!), `legacy ${id}: an art mat of a card in the pool`);
+// a long event name fits its corner print (it was clipped on the left)
 {
-  const css = playmatById('deck-gladiator').css;
-  const at = (c: string) => css.indexOf(`url("${GLAD_ART(c)}")`);
-  const [l, c, r] = ['Gladiator Beast Bestiari', 'Gladiator Beast Gyzarus', 'Gladiator Beast Heraklinos'].map(at);
-  check(l > 0 && c > 0 && r > 0, 'deck-gladiator: all three artworks in the css');
-  check(c < l && c < r, 'deck-gladiator: centre card drawn in front of the side cards');
-  check(css.includes(`url("${GLAD_ART('Gladiator Beast Bestiari')}") left center / auto 100%`), 'deck-gladiator: left card at full height on the left');
-  check(css.includes(`url("${GLAD_ART('Gladiator Beast Heraklinos')}") right center / auto 100%`), 'deck-gladiator: right card at full height on the right');
-  const seam = css.lastIndexOf('linearGradient', c) >= 0 || /center \/ auto 100% no-repeat, url\("https:\/\/art\.test/.test(css);
-  check(seam, 'deck-gladiator: shaded seam over the centre card');
-  check(!/NaN|undefined/.test(css), 'deck-gladiator: no NaN/undefined in the css');
+  const svg = [...playmatById('nationals-indy').css.matchAll(/data:image\/svg\+xml;utf8,([^"]*)"\)/g)].map((x) => decodeURIComponent(x[1])).find((x) => x.includes('<text')) ?? '';
+  const w = Number(/viewBox="0 0 (\d+)/.exec(svg)?.[1]);
+  check(w >= 'NATIONAL CHAMPIONSHIP · INDIANAPOLIS 2010'.length * 17, `long corner print fits (viewBox width ${w})`);
 }
 check(new Set(PLAYMATS.map((m) => m.id)).size === PLAYMATS.length, 'mat ids are unique');
 for (const m of PLAYMATS) if (m.art) check(cardNames.has(m.art), `${m.id}: art card ${m.art} is in the card pool`);
