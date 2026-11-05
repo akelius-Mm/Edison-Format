@@ -6,7 +6,6 @@
 // shows as plain neoprene in its base colour, with its event print and stitched edge.
 import { cachedOfficialImage, getOfficialImage, officialArtEnabled } from '../cards/officialArt';
 import { customSrc } from './customImages';
-import { deckMatPicture, ensureDeckMatPicture, type DeckTone, type PaintSpec } from './deckMatArt';
 import { svgUri } from './util';
 
 export interface Playmat {
@@ -24,7 +23,7 @@ export interface Playmat {
   printedZones?: boolean;
   /** Card whose official artwork is printed on the mat (a deck mat's centre card). */
   art?: string;
-  /** A painted mat's cards, left to right: the official artwork of each, painted into one picture. */
+  /** A deck mat's three cards, left to right: the official artwork of each, collaged across the mat. */
   collage?: readonly string[];
   /** Colour of the stitched edge. */
   edge?: string;
@@ -51,8 +50,13 @@ const LIGHT = 'radial-gradient(ellipse at 50% 38%, rgba(255,255,255,.07), rgba(2
 export const ART_FOCUS = 'center 15%';
 /** Keeps zone lines readable over busy artwork. */
 const ART_SCRIM = 'linear-gradient(rgba(0,0,0,.30), rgba(0,0,0,.30))';
-/** The same for a deck mat's picture, which is already darkened at its edges and between its cards. */
-const DECK_SCRIM = 'linear-gradient(rgba(0,0,0,.22), rgba(0,0,0,.22))';
+/** Pushes a deck mat's side cards back behind its centre card. */
+const SIDE_SCRIM = 'linear-gradient(rgba(0,0,0,.28), rgba(0,0,0,.28))';
+/** A deck mat's centre panel is square (sized like the artwork) and this shades its two edges, so the cards
+ *  behind meet it in a soft dark band with a thin printed line, not a hard seam. */
+const collageSeam = (line: string) =>
+  `${svgUri(`<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100"><defs><linearGradient id="s"><stop offset="0" stop-color="#000" stop-opacity=".85"/><stop offset=".07" stop-color="#000" stop-opacity=".35"/><stop offset=".13" stop-color="#000" stop-opacity="0"/><stop offset=".87" stop-color="#000" stop-opacity="0"/><stop offset=".93" stop-color="#000" stop-opacity=".35"/><stop offset="1" stop-color="#000" stop-opacity=".85"/></linearGradient></defs><rect width="100" height="100" fill="url(#s)"/><g stroke="${line}" stroke-opacity=".55" stroke-width=".6"><line x1="1.2" y1="0" x2="1.2" y2="100"/><line x1="98.8" y1="0" x2="98.8" y2="100"/></g></svg>`)} center / auto 100% no-repeat`;
+
 const WOOD = svgUri(
   `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1000" preserveAspectRatio="none"><filter id="w" x="0" y="0" width="100%" height="100%"><feTurbulence type="fractalNoise" baseFrequency=".0035 .09" numOctaves="4" seed="7" stitchTiles="stitch"/><feColorMatrix values="0 0 0 .55 .2  0 0 0 .32 .11  0 0 0 .16 .05  0 0 0 0 .55"/></filter><rect width="1600" height="1000" filter="url(#w)"/><g stroke="#000" stroke-opacity=".28" stroke-width="3">${[0, 1, 2, 3, 4, 5].map((i) => `<line x1="0" y1="${i * 200 + 40}" x2="1600" y2="${i * 200 + 40}"/>`).join('')}</g></svg>`,
 );
@@ -77,10 +81,8 @@ interface Def {
   /** Material texture over the surface. */
   texture?: string;
   art?: string;
-  /** Painted mat: the cards painted into its picture, left to right (see ./deckMatArt.ts). */
+  /** Deck mat: three cards, left / centre / right (centre = art). */
   collage?: readonly string[];
-  /** Painted mat: how its picture is laid out and coloured. */
-  paint?: PaintSpec;
   print?: string;
   edge?: string;
 }
@@ -278,10 +280,9 @@ const PRESTIGE: Def[] = [
 ];
 
 // ---------------------------------------------------------------- deck mats
-// Archetype mats, like the official collage mats that blend a deck's monsters into one picture: three official
-// artworks of a top Edison deck's key cards painted together (./deckMatArt.ts), the key card large in the middle,
-// with the deck's name printed in the corner. Each deck is one of the real 2010 tournament decks in
-// src/decks/tournament*.ts.
+// Archetype mats, like the official ones that put a deck's monsters side by side on one mat: three official
+// artworks of a top Edison deck's key cards, the centre card in front and its two partners behind, with the deck's
+// name printed in the corner. Each deck is one of the real 2010 tournament decks in src/decks/tournament*.ts.
 
 /** A deck mat: [left, centre, right] cards on coloured neoprene. */
 function deckDef(id: string, name: string, cards: readonly [string, string, string], c: { base: string; mid: string; dark: string; edge: string; line: string }, description: string): Def {
@@ -297,7 +298,6 @@ function deckDef(id: string, name: string, cards: readonly [string, string, stri
     printedZones: true,
     zoneLine: c.line,
     collage: cards,
-    paint: { kind: 'collage', tone: { base: c.base, mid: c.mid, dark: c.dark, edge: c.edge } },
   });
 }
 
@@ -316,51 +316,6 @@ const DECK: Def[] = [
 
 /** The deck mats, in the order they're offered. */
 export const DECK_MAT_IDS = DECK.map((d) => d.id);
-
-// ---------------------------------------------------------------- showcase mats
-// Styled on the mats people actually brought in 2010: the tournament and tin mats with one boss monster printed
-// large, and the deck's logo along the player's edge. "Showcase" puts one card on the right and the wordmark on the
-// left; "duo" puts two cards face to face with the wordmark between them. Painted like the deck mats; until the
-// picture exists (or where it can't be painted) the mat shows its first card alone with the name in the corner.
-
-const LIGHT_GOLD: DeckTone = { base: '#1f1a0e', mid: '#4d3f1f', dark: '#0a0803', edge: '#f7e6a6' };
-const DAWN: DeckTone = { base: '#141a24', mid: '#33425c', dark: '#05080d', edge: '#e6efff' };
-const DAD_VIOLET: DeckTone = { base: '#120a1c', mid: '#2e1846', dark: '#040208', edge: '#b98cff' };
-const PSYCHIC_TEAL: DeckTone = { base: '#0b1420', mid: '#17344d', dark: '#03070b', edge: '#7fe0ff' };
-const SYNCHRO_ROSE: DeckTone = { base: '#1a0a18', mid: '#3d1739', dark: '#070206', edge: '#ff92dc' };
-
-/** '#rrggbb' at an opacity, as rgba(). */
-const hexAlpha = (hex: string, a: number) => `rgba(${[1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16)).join(',')},${a})`;
-
-function paintedDef(id: string, name: string, cards: readonly string[], spec: Omit<PaintSpec, 'kind'> & { kind: 'showcase' | 'duo' }, description: string): Def {
-  const t = spec.tone;
-  return artDef(cards[0], {
-    id,
-    name,
-    description,
-    base: t.base,
-    accent: t.edge,
-    surface: neoprene(t.base, t.mid, t.dark),
-    print: `${spec.wordmark} · ${spec.tagline}`,
-    edge: t.edge,
-    printedZones: true,
-    zoneLine: hexAlpha(t.edge, 0.72),
-    collage: cards,
-    paint: spec,
-  });
-}
-
-const SHOWCASE: Def[] = [
-  paintedDef('ls-judgment-day', 'Lightsworn · Judgment Day', ['Judgment Dragon'], { kind: 'showcase', tone: LIGHT_GOLD, motif: 'rays', wordmark: 'LIGHTSWORN', tagline: 'JUDGMENT DAY' }, 'Judgment Dragon in a burst of light, the Lightsworn logo along your edge.'),
-  paintedDef('ls-celestia', 'Lightsworn · Light Brigade', ['Celestia, Lightsworn Angel'], { kind: 'showcase', tone: LIGHT_GOLD, motif: 'rays', wordmark: 'LIGHTSWORN', tagline: 'CHARGE OF THE LIGHT BRIGADE' }, 'Celestia descending in gold, with the Lightsworn logo.'),
-  paintedDef('ls-dawn', 'Lightsworn · Dawn Patrol', ['Lumina, Lightsworn Summoner', 'Wulf, Lightsworn Beast'], { kind: 'duo', tone: DAWN, motif: 'rays', wordmark: 'LIGHTSWORN', tagline: 'SOLAR RECHARGE' }, 'Lumina and Wulf face to face under a pale morning sky.'),
-  paintedDef('dad-dark-armed', 'Tele-DAD · Dark Armed Dragon', ['Dark Armed Dragon'], { kind: 'showcase', tone: DAD_VIOLET, motif: 'rings', wordmark: 'TELE-DAD', tagline: 'DARK ARMED DRAGON' }, 'Dark Armed Dragon over violet teleport rings, the Tele-DAD logo along your edge.'),
-  paintedDef('dad-thought-ruler', 'Tele-DAD · Thought Ruler', ['Thought Ruler Archfiend'], { kind: 'showcase', tone: PSYCHIC_TEAL, motif: 'rings', wordmark: 'TELE-DAD', tagline: 'EMERGENCY TELEPORT' }, 'Thought Ruler Archfiend in psychic teal.'),
-  paintedDef('dad-teleport', 'Tele-DAD · Psychic Synchro', ['Krebons', 'Magical Android'], { kind: 'duo', tone: SYNCHRO_ROSE, motif: 'rings', wordmark: 'TELE-DAD', tagline: 'PSYCHIC SYNCHRO' }, 'Krebons and the Magical Android it becomes, face to face.'),
-];
-
-/** The showcase mats, in the order they're offered. */
-export const SHOWCASE_MAT_IDS = SHOWCASE.map((d) => d.id);
 
 /** Mats you earn at Regionals, the Championship Series and Nationals; locked until then. */
 export const PRESTIGE_MAT_IDS = ['regional-silver', 'regional-top16', 'championship-edison', 'feature-table', 'nationals-indy', 'national-champion'] as const;
@@ -396,15 +351,18 @@ function cssOf(d: Def): string {
   const layers: string[] = [];
   if (d.texture) layers.push(d.texture);
   layers.push(LIGHT);
-  const picture = d.paint ? deckMatPicture(d.id) : undefined;
-  // a showcase or duo picture has the name printed in it already
-  if (d.print && !(picture && d.paint?.wordmark)) layers.push(printLayer(d.print, d.edge ?? d.accent));
-  if (d.paint) {
-    // Painted mat: its picture, or (until it's painted, or when it can't be) its key card alone, like an art mat.
-    if (picture) {
-      layers.push(DECK_SCRIM, `url("${picture}") center / cover no-repeat`, d.surface);
-      return layers.join(', ');
-    }
+  if (d.print) layers.push(printLayer(d.print, d.edge ?? d.accent));
+  if (d.collage) {
+    // Deck mat: three square artworks at full height, left / centre / right. On a mat half (about 2–2.5 times as
+    // wide as tall) they overlap a little, and the centre card sits in front with shaded edges.
+    const [left, centre, right] = d.collage.map(artUrl);
+    if (left || centre || right) layers.push(ART_SCRIM);
+    if (centre) layers.push(collageSeam(d.edge ?? d.accent), `url("${centre}") center / auto 100% no-repeat`);
+    if (left || right) layers.push(SIDE_SCRIM);
+    if (left) layers.push(`url("${left}") left center / auto 100% no-repeat`);
+    if (right) layers.push(`url("${right}") right center / auto 100% no-repeat`);
+    layers.push(d.surface);
+    return layers.join(', ');
   }
   const url = artUrl(d.art);
   // A mat half is about twice as wide as the (square) artwork, so cover crops its top and bottom. Anchor near the
@@ -435,8 +393,8 @@ function build(d: Def): Playmat {
 
 export const CUSTOM_MAT_ID = 'custom';
 
-/** Every offered mat: plain surfaces, the art mats, the deck mats, the showcase mats, then the six event mats. */
-export const PLAYMATS: Playmat[] = [...PLAIN, ...ART_MAT_CARDS.map((c) => artDef(c)), ...DECK, ...SHOWCASE, ...PRESTIGE].map(build);
+/** Every offered mat: plain surfaces, the art mats, the deck mats, then the six event mats. */
+export const PLAYMATS: Playmat[] = [...PLAIN, ...ART_MAT_CARDS.map((c) => artDef(c)), ...DECK, ...PRESTIGE].map(build);
 
 const artCache = new Map<string, Playmat>();
 
@@ -457,22 +415,14 @@ export function playmatById(id: string): Playmat {
   return PLAYMATS[0];
 }
 
-const PAINTED_DEFS = new Map([...DECK, ...SHOWCASE].map((d) => [d.id, d]));
-
-/** Once an art mat's artwork is looked up (and a deck mat's picture painted), paint it again (if the element still
- *  shows that mat). */
+/** Once an art mat's artwork is looked up, paint it again (if the element still shows that mat). */
 function whenArtKnown(el: HTMLElement, id: string, m: Playmat, paint: () => void) {
   if (!officialArtEnabled()) return;
-  const cards = m.collage ?? (m.art ? [m.art] : []);
-  const unknown = cards.filter((c) => cachedOfficialImage(c) === undefined);
-  const deck = m.collage ? PAINTED_DEFS.get(m.id) : undefined;
-  if (!unknown.length && (!deck || deckMatPicture(m.id) !== undefined)) return;
-  const still = () => el.dataset.playmat === m.id && el.dataset.playmatReq === id;
-  const before = deckMatPicture(m.id);
-  void Promise.all(unknown.map((c) => getOfficialImage(c))).then(async (imgs) => {
-    if (deck) await ensureDeckMatPicture(deck.id, cards.map(artUrl), deck.paint!);
-    // repaint only when something new is known (never in a loop while the art lookup is failing)
-    if ((imgs.some(Boolean) || deckMatPicture(m.id) !== before) && still()) paint();
+  const unknown = (m.collage ?? (m.art ? [m.art] : [])).filter((c) => cachedOfficialImage(c) === undefined);
+  if (!unknown.length) return;
+  // a deck mat repaints once all three are known (one repaint, not three)
+  void Promise.all(unknown.map(getOfficialImage)).then((imgs) => {
+    if (imgs.some(Boolean) && el.dataset.playmat === m.id && el.dataset.playmatReq === id) paint();
   });
 }
 
