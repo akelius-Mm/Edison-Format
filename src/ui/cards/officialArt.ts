@@ -199,10 +199,11 @@ export function attachOfficialArt(artEl: HTMLElement, cardName: string, mode: 'a
 
 /**
  * Swap a rendered card face for the real full card scan once it loads.
- * Badges (limit status, chain numbers) stay on top. Drawn face stays if loading fails.
+ * Badges (limit status, chain numbers) stay on top. The drawn face stays if loading fails, and `onMissing` runs
+ * then (or when there is no scan, or official images are off), so the caller can draw the art it left out.
  */
-export function attachOfficialCard(cardEl: HTMLElement, cardName: string) {
-  if (!officialArtEnabled()) return;
+export function attachOfficialCard(cardEl: HTMLElement, cardName: string, onMissing?: () => void) {
+  if (!officialArtEnabled()) return onMissing?.();
   // When the scan is known, hide the drawn face while it loads (briefly), so a played card never shows the
   // drawing first; if it is slow or fails, the drawn face comes back.
   const known = cachedOfficialImage(cardName);
@@ -215,8 +216,12 @@ export function attachOfficialCard(cardEl: HTMLElement, cardName: string) {
     cardEl.classList.add('yc--awaiting-art');
     waitTimer = window.setTimeout(stopWaiting, 900);
   }
+  const missing = () => {
+    stopWaiting();
+    onMissing?.();
+  };
   void getOfficialImage(cardName).then((img) => {
-    if (!img) return stopWaiting();
+    if (!img) return missing();
     const el = new Image();
     el.decoding = 'async';
     el.alt = cardName;
@@ -228,7 +233,7 @@ export function attachOfficialCard(cardEl: HTMLElement, cardName: string) {
       cardEl.classList.add('yc--official');
       stopWaiting();
     };
-    el.onerror = stopWaiting;
+    el.onerror = missing;
     el.src = img.full;
   });
 }

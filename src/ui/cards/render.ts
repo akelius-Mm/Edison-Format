@@ -12,34 +12,41 @@ import { LEVEL_STAR_SVG, attributeIconSVG, spellTypeIcon } from './icons';
 
 export { cardArtSVG, cardArtSrc };
 
+/** An empty 1×1 image: what a thumbnail shows while its official artwork is looked up. */
+const BLANK = 'data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==';
+
 /**
- * Point a small artwork thumbnail at the card's official cropped art: straight away when the
- * lookup is cached, otherwise once it arrives. The drawn art shows meanwhile and stays as the
- * fallback when official images are off or cannot load.
+ * Point a small artwork thumbnail at the card's official cropped art: straight away when the lookup is cached,
+ * otherwise once it arrives (blank meanwhile). The drawn art is only a fallback: official images off, or no
+ * official artwork for this card, or it can't load.
  */
 export function setArtThumb(img: HTMLImageElement, data: CardData) {
-  const fallback = cardArtSrc(data);
   img.decoding = 'async';
   img.draggable = false;
   if (!img.alt) img.alt = '';
-  img.onerror = () => {
+  const drawn = () => {
     img.onerror = null;
-    img.src = fallback;
+    img.src = cardArtSrc(data);
   };
+  img.onerror = drawn;
   const official = officialArtEnabled() && !data.isToken;
   const hit = official ? cachedOfficialImage(data.name) : null;
   if (hit) {
     img.src = hit.art;
     return img;
   }
-  img.src = fallback;
-  if (official && hit === undefined)
-    void getOfficialImage(data.name).then((o) => {
-      if (!o) return;
-      const pre = new Image();
-      pre.onload = () => (img.src = o.art);
-      pre.src = o.art;
-    });
+  if (!official || hit === null) {
+    drawn();
+    return img;
+  }
+  img.src = BLANK;
+  void getOfficialImage(data.name).then((o) => {
+    if (!o) return drawn();
+    const pre = new Image();
+    pre.onload = () => (img.src = o.art);
+    pre.onerror = drawn;
+    pre.src = o.art;
+  });
   return img;
 }
 
@@ -182,17 +189,53 @@ export function renderCard(data: CardData, opts: RenderCardOptions = {}): HTMLEl
   el.dataset.frame = frame;
   el.dataset.cardId = data.id;
   el.dataset.cardName = data.name;
-  el.innerHTML = cardFaceHTML(data, opts);
-  // Real card scans replace the drawn face when available (tokens have no scan).
-  if (!data.isToken) attachOfficialCard(el, data.name);
-  else {
+  // Real card scans replace the drawn face (tokens have no scan). With official images on, the drawn art is only a
+  // fallback: it is never drawn for a card whose scan is known, and drawn for the others only once their scan
+  // turns out to be missing or fails to load.
+  const official = officialArtEnabled() && !data.isToken;
+  const known = official ? cachedOfficialImage(data.name) : null;
+  if (known) {
+    const img = new Image();
+    img.className = 'official-card';
+    img.decoding = 'async';
+    img.alt = data.name;
+    img.draggable = false;
+    if (opts.lazy) img.loading = 'lazy';
+    img.onerror = () => {
+      el.classList.remove('yc--official');
+      el.innerHTML = cardFaceHTML(data, opts);
+    };
+    img.src = known.full;
+    el.classList.add('yc--official');
+    el.appendChild(img);
+    el.insertAdjacentHTML('beforeend', limitHTML(data, opts));
+    return el;
+  }
+  const waiting = official && known === undefined;
+  el.innerHTML = cardFaceHTML(data, opts, waiting);
+  if (waiting)
+    attachOfficialCard(el, data.name, () => {
+      // no scan for this card after all: draw its art
+      const art = el.querySelector('.yc-art');
+      if (art && !art.firstChild) art.innerHTML = artImgHTML(data, opts);
+    });
+  else if (data.isToken) {
     const art = el.querySelector('.yc-art') as HTMLElement | null;
     if (art) attachOfficialArt(art, data.name);
   }
   return el;
 }
 
-export function cardFaceHTML(data: CardData, opts: RenderCardOptions = {}): string {
+const artImgHTML = (data: CardData, opts: RenderCardOptions) => `<img src="${cardArtSrc(data)}" alt="" draggable="false" decoding="async"${opts.lazy ? ' loading="lazy"' : ''}>`;
+
+function limitHTML(data: CardData, opts: RenderCardOptions): string {
+  return opts.showLimit && data.limit !== undefined && data.limit < 3
+    ? `<div class="yc-limit yc-limit--${data.limit}" title="${['Forbidden', 'Limited', 'Semi-Limited'][data.limit]}">${data.limit === 0 ? '✕' : data.limit}</div>`
+    : '';
+}
+
+/** The drawn card face. `blankArt`: leave the art box empty (the official scan is on its way). */
+export function cardFaceHTML(data: CardData, opts: RenderCardOptions = {}, blankArt = false): string {
   const frame = frameOf(data);
   const isMon = data.kind === 'monster';
   const attr = isMon ? data.attribute ?? 'EARTH' : data.kind === 'spell' ? 'SPELL' : 'TRAP';
@@ -216,15 +259,12 @@ export function cardFaceHTML(data: CardData, opts: RenderCardOptions = {}): stri
   }
   const typeRow = isMon ? `<div class="yc-type">[${esc(typeLine(data)).replace(/ \/ /g, '/')}]</div>` : '';
   const flavor = frame === 'normal' ? ' flavor' : '';
-  const limit =
-    opts.showLimit && data.limit !== undefined && data.limit < 3
-      ? `<div class="yc-limit yc-limit--${data.limit}" title="${['Forbidden', 'Limited', 'Semi-Limited'][data.limit]}">${data.limit === 0 ? '✕' : data.limit}</div>`
-      : '';
+  const limit = limitHTML(data, opts);
   return `<div class="yc-in">
   <div class="yc-frame"></div>
   <div class="yc-name${foil ? ' yc-name--foil' : ''}"><span class="yc-name-text" style="--nfs:${nameFontSize(data.name)}cqw">${esc(data.name)}</span><span class="yc-attr">${attributeIconSVG(attr as any)}</span></div>
   ${row}
-  <div class="yc-art"><img src="${cardArtSrc(data)}" alt="" draggable="false" decoding="async"${opts.lazy ? ' loading="lazy"' : ''}></div>
+  <div class="yc-art">${blankArt ? '' : artImgHTML(data, opts)}</div>
   <div class="yc-box${isMon ? '' : ' yc-box--st'}">${typeRow}<div class="yc-desc${descCls}${flavor}">${text}</div>${stats}${isMon ? '' : `<div class="yc-mini">${esc(typeLine(data))}</div>`}</div>
   ${foil ? '<div class="yc-foil"></div>' : ''}
 </div>${limit}`;
