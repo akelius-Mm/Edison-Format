@@ -2856,3 +2856,106 @@
 @media (prefers-reduced-motion: reduce) {
   .duel-root .mats-split .side::before { transition: none; }
 }
+
+/* =====================================================================
+   Duel HUD: portraits, life totals as the main read-out, one clear turn button.
+   The portrait is the same ringed initial the event match-up shows, in the player's colour.
+   ===================================================================== */
+.duel-root .pp .pp-avatar,
+.duel-root .pp.is-turn .pp-avatar {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  background: #22242a !important;
+  box-shadow: 0 0 0 2px #15161a, 0 0 0 4px color-mix(in srgb, var(--pc) 55%, #3a3b40) !important;
+  transition: box-shadow var(--dur-slow) var(--ease-out);
+}
+.duel-root .pp.is-turn .pp-avatar {
+  box-shadow: 0 0 0 2px #15161a, 0 0 0 4px var(--pc), 0 0 16px color-mix(in srgb, var(--pc) 45%, transparent) !important;
+}
+.duel-root .pp-ini {
+  font: 700 15px/1 var(--dl-font);
+  letter-spacing: 0.02em;
+  color: var(--dl-ink);
+}
+/* Damage lands on the portrait: it flinches and flashes red; healing lifts it. */
+.duel-root .pp.lp-hit .pp-avatar { animation: ppFlinch calc(420ms * var(--sp)) var(--ease-out) !important; }
+.duel-root .pp.lp-hit.is-big .pp-avatar { animation: ppFlinchBig calc(520ms * var(--sp)) var(--ease-out) !important; }
+.duel-root .pp.lp-heal .pp-avatar { animation: ppLift calc(420ms * var(--sp)) var(--ease-spring) !important; }
+@keyframes ppFlinch {
+  0% { transform: none; background-color: #22242a; }
+  18% { transform: translateX(-3px) scale(0.94); background-color: #a8323e; }
+  40% { transform: translateX(2px); }
+  100% { transform: none; background-color: #22242a; }
+}
+@keyframes ppFlinchBig {
+  0% { transform: none; background-color: #22242a; }
+  14% { transform: translateX(-5px) scale(0.88) rotate(-4deg); background-color: #d23a48; }
+  34% { transform: translateX(4px) rotate(3deg); }
+  56% { transform: translateX(-2px); }
+  100% { transform: none; background-color: #22242a; }
+}
+@keyframes ppLift {
+  30% { transform: translateY(-2px) scale(1.06); background-color: #2f6b4a; }
+}
+.duel-root .pp.lp-hit { border-color: rgba(255, 93, 108, 0.7) !important; }
+
+@media (max-width: 600px) and (orientation: portrait) {
+  /* Player bars: portrait, name over hand/deck/graveyard counts, and the life total large on the right. */
+  .duel-root .pp {
+    min-height: 46px;
+    padding: 5px 12px 6px 7px;
+    gap: 10px;
+  }
+  .duel-root .pp .pp-avatar,
+  .duel-root .pp.is-turn .pp-avatar {
+    width: 32px;
+    height: 32px;
+    margin-left: 3px;
+  }
+  .duel-root .pp-ini { font-size: 12.5px; }
+  .duel-root .pp-info {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas: 'name lp' 'stats lp';
+    align-items: center;
+    gap: 1px 10px;
+  }
+  .duel-root .pp-name { grid-area: name; font-size: 13.5px; line-height: 1.2; }
+  .duel-root .pp-stats,
+  .duel-root .pp--opp .pp-stats { grid-area: stats; display: flex; gap: 8px; font-size: 10.5px; line-height: 1.2; }
+  .duel-root .pp-lprow { grid-area: lp; align-self: center; }
+  .duel-root .pp-lp { font-size: 24px !important; letter-spacing: -0.02em; }
+  .duel-root .pp-bar { left: 52px; }
+
+  /* Phase bar: the turn and the six phases on the left, and only the buttons you can press on the right.
+     End Turn is always there (dimmed while it is not yours), so the bar never changes height. */
+  .duel-root .phasebar {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas: 'turn btns' 'list btns';
+    gap: 5px 10px;
+    padding: 8px 8px 8px 12px;
+  }
+  .duel-root .phasebar-list { justify-content: start; grid-template-columns: repeat(6, auto); gap: 2px; }
+  .duel-root .phasebar-btns { align-items: stretch; gap: 6px; }
+  .duel-root .btn--phase {
+    min-height: 46px;
+    padding: 4px 14px;
+    font-size: 14px;
+    border-radius: 14px;
+  }
+  .duel-root .btn--phase:not(.btn--end):disabled { display: none; }
+  /* "Battle" and "Main 2": the short names leave room for the six phases beside them */
+  .duel-root .btn--phase i { display: none; }
+  .duel-root .btn--end {
+    min-width: 104px;
+    font-size: 15.5px;
+    font-weight: 700;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .duel-root .pp .pp-avatar { animation: none !important; transition: none; }
+}
+.duel-root .btn--phase i { font-style: normal; }

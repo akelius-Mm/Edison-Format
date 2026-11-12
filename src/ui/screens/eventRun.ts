@@ -257,7 +257,7 @@ export function eventRunScreen(r: EventRun, autoResume = false): Screen {
       const s = prior.find((x) => x.id === id)!;
       return r.phase === 'top' ? `Seed ${seedOf(r, id)}` : `${recordString(s)} · ${s.mp} pts`;
     };
-    const side = (e: typeof me, right = false) => h('div', { class: ['lx-seat-player', right && 'right'] }, avatar(e, 40), h('div', { class: 'lx-seat-pn' }, h('b', null, e.human ? 'You' : e.name), h('span', null, rec(e.id))));
+    const side = (e: typeof me, right = false) => h('div', { class: ['lx-seat-player', right && 'right'] }, avatar(e, 64), h('div', { class: 'lx-seat-pn' }, h('b', null, e.human ? 'You' : e.name), h('span', null, rec(e.id))));
     const flip = flipMatch === m.id;
     flipMatch = null;
     const deckBox = h(

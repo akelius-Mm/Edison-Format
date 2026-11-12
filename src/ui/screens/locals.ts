@@ -456,7 +456,7 @@ function hubScreen(n: LocalsNight, autoResume = false): Screen {
       h(
         'div',
         { class: ['lx-seat-player', right && 'right'] },
-        avatar(e, 40),
+        avatar(e, 64),
         h('div', { class: 'lx-seat-pn' }, h('b', null, e.human ? 'You' : e.name), h('span', null, rec(e.id))),
       );
     const flip = flipMatch === m.id;

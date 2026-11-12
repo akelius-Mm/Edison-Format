@@ -1534,3 +1534,178 @@
     transition: none;
   }
 }
+
+/* ==========================================================================
+   Match-up stage and live board (Locals, Events, Friends Locals).
+   A round is one moment: you against a named opponent, and one button. The pairings and results are a
+   live board in the app's own surface, not a sheet of paper taped to a wall.
+   ========================================================================== */
+/* The action bar sticks to the bottom of the screen from the start. Its own wrapper used to be exactly its
+   height, which left a sticky bar nowhere to stick: the one button sat below the whole pairings list. */
+.lx-bar-host {
+  display: contents;
+}
+
+.lx-seat {
+  position: relative;
+  overflow: hidden;
+  padding: 0;
+  border-radius: 24px;
+  /* your side in your colour, theirs in theirs: the same blue and red as the duel table */
+  background:
+    linear-gradient(90deg, rgba(143, 179, 217, 0.17), transparent 44%, transparent 56%, rgba(217, 143, 143, 0.17)),
+    var(--surface-grad);
+  box-shadow: var(--surface-hi), 0 0 0 1px rgba(255, 255, 255, 0.05), 0 14px 34px rgba(0, 0, 0, 0.4);
+}
+.lx-seat--out,
+.lx-seat--bye {
+  background: var(--surface-grad);
+}
+.lx-seat-head {
+  align-items: center;
+  padding: 11px 16px;
+  border-bottom: 0;
+  background: rgba(0, 0, 0, 0.2);
+}
+.lx-seat-table,
+.lx-timer {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.lx-seat-table b,
+.lx-seat--top .lx-seat-table b,
+.lx-seat--out .lx-seat-table b {
+  margin: 0;
+  font-size: 19px;
+  letter-spacing: -0.02em;
+}
+.lx-timer-v {
+  margin: 0;
+  font-size: 16px;
+}
+.lx-seat-vs {
+  align-items: start;
+  gap: 4px;
+  padding: 24px 12px 22px;
+  border-bottom: 0;
+}
+.lx-seat-player,
+.lx-seat-player.right {
+  --side: #8fb3d9;
+  flex-direction: column;
+  gap: 12px;
+  text-align: center;
+}
+.lx-seat-player.right {
+  --side: #d98f8f;
+}
+.lx-seat-vs .lx-av {
+  background: #22242a;
+  color: var(--text);
+  box-shadow: 0 0 0 3px #15161a, 0 0 0 5px var(--side), 0 12px 24px rgba(0, 0, 0, 0.5);
+}
+.lx-seat-pn {
+  justify-items: center;
+  gap: 3px;
+}
+.lx-seat-pn b {
+  font: 700 17px/1.2 var(--font-display);
+  letter-spacing: -0.015em;
+}
+.lx-seat-pn span {
+  font-size: 13px;
+}
+.lx-vs {
+  align-self: center;
+  margin-top: 20px;
+  font: italic 800 22px/1 var(--font-display);
+  letter-spacing: -0.03em;
+  color: var(--text);
+}
+.lx-seat-deck {
+  padding: 14px 16px 16px;
+  border-top: 1px solid var(--sep);
+  background: rgba(0, 0, 0, 0.16);
+}
+.lx-seat > .lx-seat-note,
+.lx-seat > .lx-bye,
+.lx-seat > .lx-id {
+  margin: 0 16px 16px;
+}
+.lx-seat > .lx-seat-note,
+.lx-seat > .lx-bye {
+  padding-top: 14px;
+}
+
+/* The live board */
+.lx-sheet {
+  --lx-ink: var(--text);
+  --lx-ink-2: var(--text-2);
+  --lx-ink-3: var(--muted);
+  --lx-rule: var(--sep);
+  --lx-mark: rgba(143, 179, 217, 0.14);
+  margin-top: 14px;
+  padding: 16px 16px 12px;
+  border-radius: 20px;
+  background: var(--surface-grad);
+  box-shadow: var(--surface-hi), 0 0 0 1px rgba(255, 255, 255, 0.04);
+}
+.lx-tape {
+  display: none;
+}
+.lx-sheet.is-posting {
+  animation: lx-board-in var(--dur-slow) var(--ease-out) both;
+}
+@keyframes lx-board-in {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+}
+.lx-sheet-head {
+  align-items: baseline;
+  border-bottom: 1px solid var(--sep);
+}
+.lx-sheet-title {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.lx-sheet-title b {
+  font: 700 18px/1.1 var(--font-display);
+  letter-spacing: -0.02em;
+  text-transform: none;
+}
+.lx-sheet-title span {
+  margin: 0;
+}
+.lx-row {
+  min-height: 40px;
+  font-size: 14px;
+}
+.lx-row.is-mine::before {
+  inset: 3px -8px;
+  border-radius: 10px;
+  transform: none;
+  box-shadow: inset 0 0 0 1px rgba(143, 179, 217, 0.4);
+}
+.lx-cell.is-won .lx-cell-n {
+  color: var(--text);
+}
+.lx-mid.is-res {
+  color: var(--text);
+}
+.lx-mid.is-draw,
+.lx-mid.is-id {
+  color: var(--gold);
+}
+@media (prefers-reduced-motion: reduce) {
+  .lx-sheet.is-posting {
+    animation: none;
+  }
+}
+.lx-bar-row .lx-btn {
+  min-width: 0;
+  white-space: nowrap;
+}
