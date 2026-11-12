@@ -193,13 +193,150 @@
   text-shadow: 0 2px 0 rgba(0, 0, 0, 0.8), 0 0 22px currentColor;
 }
 
-/* ---------------------------------------------------------------- outside the duel */
-.lab body::before,
-.lab .home {
-  background: radial-gradient(120% 60% at 50% 0%, #2a1c12 0%, #0f0b08 62%) !important;
+/* ---------------------------------------------------------------- the shop: menus
+   The whole app sits in a card shop after hours: walnut, brass, lamplight. The clean graphite app stays as it
+   is next door; here the same tokens are re-cut in warm materials, so every screen follows. */
+.lab {
+  --bg-0: #140d08;
+  --bg-1: #1a110b;
+  --bg-2: #22160e;
+  --bg-3: #2c1d13;
+  --panel: rgba(34, 22, 14, 0.96);
+  --panel-solid: #22160e;
+  --panel-hi: #2c1d13;
+  --line: rgba(255, 214, 160, 0.1);
+  --line-2: rgba(255, 214, 160, 0.18);
+  --sep: rgba(255, 214, 160, 0.1);
+  --grp: #24170f;
+  --grp-hi: #36251a;
+  --fill: rgba(170, 120, 70, 0.22);
+  --fill-2: rgba(190, 140, 80, 0.38);
+  --text: #f6ead2;
+  --text-2: #dcc9a6;
+  --muted: #a8926f;
+  --faint: #7a6648;
+  --gold: #e2bb62;
+  --gold-hi: #ffe2a0;
+  --gold-lo: #9a7426;
+  --gold-line: rgba(226, 187, 98, 0.35);
+  --cta: #f0c35a;
+  --cta-text: #2a1700;
+  --cta-grad: linear-gradient(180deg, #ffe9a8 0%, #eab94a 55%, #c98a1c 100%);
+  --cta-shadow: inset 0 1px 0 #fff6d0, 0 4px 0 #7d520f, 0 12px 20px rgba(0, 0, 0, 0.5);
+  --surface-grad: linear-gradient(180deg, #36251a 0%, #24170f 100%);
+  --surface-hi: inset 0 1px 0 rgba(255, 226, 170, 0.14);
+  --font-display: 'Iowan Old Style', 'Palatino Linotype', Palatino, 'Book Antiqua', Georgia, serif;
 }
-.lab .home-eyebrow {
-  color: var(--lab-brass);
+/* the room: the wooden counter under one warm lamp */
+.lab body {
+  background: #140d08;
+}
+.lab body::before {
+  background:
+    radial-gradient(110% 55% at 50% 0%, rgba(255, 190, 110, 0.2), transparent 70%),
+    linear-gradient(180deg, rgba(16, 10, 6, 0.55), rgba(16, 10, 6, 0.86)),
+    var(--lab-wood) !important;
+}
+.lab .home,
+.lab .home-hero {
+  background: transparent !important;
+}
+.lab .home-hero-shade {
+  background:
+    radial-gradient(70% 46% at 50% 26%, rgba(255, 200, 120, 0.2), transparent 70%),
+    linear-gradient(180deg, transparent 45%, rgba(16, 10, 6, 0.75) 100%);
+}
+.lab .home-eyebrow,
+.lab .lx-hub-eyebrow {
+  color: var(--gold);
+}
+/* titles are gilt lettering */
+.lab .home-title,
+.lab .frame h1,
+.lab .lx-hub-title {
+  background: linear-gradient(180deg, #fff3cf 0%, #e9c46d 58%, #b9842a 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+  text-shadow: none;
+  filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.65));
+  letter-spacing: -0.02em;
+}
+.lab .home-title {
+  font-weight: 700;
+}
+/* gold buttons you push: they stand off the page and sink under your thumb */
+.lab .cta:not(.cta--dark),
+.lab .home-cta,
+.lab .ui-btn-primary,
+.lab .rv-go,
+.lab .home-resume-go {
+  color: #2a1700 !important;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.45);
+  translate: 0 -2px;
+  transition: translate 70ms ease-out, box-shadow 70ms ease-out;
+}
+.lab .rv-go,
+.lab .home-resume-go {
+  box-shadow: inset 0 1px 0 #fff6d0, 0 3px 0 #7d520f, 0 6px 12px rgba(0, 0, 0, 0.45);
+}
+.lab .cta:not(.cta--dark):active,
+.lab .home-cta:active,
+.lab .ui-btn-primary:active,
+.lab .rv-go:active {
+  translate: 0 2px;
+  scale: none;
+  filter: none;
+  box-shadow: inset 0 1px 0 #fff6d0, 0 0 0 #7d520f, 0 3px 8px rgba(0, 0, 0, 0.5);
+}
+/* plaques: every card, row and tile is a piece of wood with a brass edge */
+.lab .home-tile,
+.lab .home-resume,
+.lab .dkc-box,
+.lab .rv-card,
+.lab .lx-seat,
+.lab .lx-sheet,
+.lab .ios-list,
+.lab .home-more {
+  border: 1px solid rgba(226, 187, 98, 0.34);
+  box-shadow: inset 0 1px 0 rgba(255, 226, 170, 0.16), inset 0 0 0 3px rgba(20, 13, 8, 0.55), 0 10px 22px rgba(0, 0, 0, 0.45);
+}
+.lab .home-resume .icon:first-child {
+  color: var(--gold);
+}
+/* the tab bar is a shelf */
+.lab .tabbar {
+  background: linear-gradient(180deg, #3d2a1c 0%, #22160e 100%) !important;
+  border-top: 1px solid rgba(255, 214, 160, 0.28);
+  box-shadow: 0 -8px 20px rgba(0, 0, 0, 0.55);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+.lab .tab {
+  color: #8f7a58;
+}
+.lab .tab.on {
+  color: var(--gold-hi);
+  text-shadow: 0 0 12px rgba(255, 200, 110, 0.45);
+}
+.lab .tab.on .icon {
+  filter: drop-shadow(0 0 6px rgba(255, 200, 110, 0.55));
+}
+/* segmented controls: a brass plate slides along a wooden track */
+.lab .seg {
+  background: #1a110b !important;
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.7), inset 0 0 0 1px rgba(255, 214, 160, 0.12);
+}
+.lab .seg-btn.on {
+  background: linear-gradient(180deg, #f6d886 0%, #cf9b2f 100%) !important;
+  color: #2a1700 !important;
+  box-shadow: inset 0 1px 0 #fff6d0, 0 2px 0 #7d520f, 0 3px 8px rgba(0, 0, 0, 0.4) !important;
+  font-weight: 700 !important;
+}
+.lab .frame-head {
+  background: linear-gradient(180deg, rgba(42, 28, 18, 0.96), rgba(28, 18, 11, 0.9)) !important;
+  border-bottom: 1px solid rgba(255, 214, 160, 0.18);
 }
 
 @media (prefers-reduced-motion: reduce) {
