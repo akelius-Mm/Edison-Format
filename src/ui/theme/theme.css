@@ -103,6 +103,11 @@
   --fill-2: rgba(118, 118, 128, 0.32);
   --cta: #f2efe8;
   --cta-text: #111;
+  /* Depth for the light call-to-action and for dark surfaces: lit from above, like the duel table. */
+  --cta-grad: linear-gradient(180deg, #fbf9f4 0%, #ece8de 55%, #e2ddd1 100%);
+  --cta-shadow: inset 0 1px 0 #fff, inset 0 -2px 0 rgba(0, 0, 0, 0.1), 0 8px 22px rgba(0, 0, 0, 0.42);
+  --surface-grad: linear-gradient(180deg, #1d1e22 0%, #151619 100%);
+  --surface-hi: inset 0 1px 0 rgba(255, 255, 255, 0.055);
   --win: #8fd1a8;
   --loss: #e38b8b;
   --page-max: 760px;
