@@ -57,6 +57,7 @@ import { ctaButton, lobbySection, stickyBar } from './components';
 import { confirmDialog, h, icon, segmented, toast, type Child } from './dom';
 import { sleevePreview } from './ext';
 import { avatar, deckArtEl, listLine, timer, toTop } from './locals';
+import { labVenue } from '../../lab/art';
 import { runMatch, type MatchSetup } from './match';
 import { reconcileActiveDuel, type SavedDuel } from '../duel/resume';
 import { beginRisky, endRisky } from '../crashGuard';
@@ -141,6 +142,7 @@ export function eventRunScreen(r: EventRun, autoResume = false): Screen {
   let busy = false;
 
   const header = h('div', { class: 'lx-hub-head' });
+  labVenue(header, r.kind);
   const tabsHost = h('div', { class: 'lx-tabs' });
   const content = h('div', { class: 'lx-content' });
   const bar = h('div', { class: 'lx-bar-host' });

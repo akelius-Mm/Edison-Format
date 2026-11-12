@@ -44,11 +44,30 @@ function labBuild(): Plugin {
   };
 }
 
+/**
+ * The Lab's painted backdrops (src/lab/art) belong to the Lab only. The other builds drop src/lab's code, but
+ * Vite still copies the image files it saw there into the output, unreferenced. Remove them, so the normal app
+ * never ships them.
+ */
+function noLabArt(): Plugin {
+  return {
+    name: 'edison-no-lab-art',
+    apply: 'build',
+    generateBundle(_, bundle) {
+      for (const [file, out] of Object.entries(bundle)) {
+        if (out.type !== 'asset') continue;
+        const from = [...(out.originalFileNames ?? []), out.originalFileName ?? ''];
+        if (from.some((f) => f.replace(/\\/g, '/').includes('src/lab/art/'))) delete bundle[file];
+      }
+    },
+  };
+}
+
 export default defineConfig(({ mode }) => ({
   base: './',
   // __LAB__ is a build-time constant: the normal build drops every `if (__LAB__)` branch and never loads src/lab
   define: { __BUILD_ID__: JSON.stringify(BUILD_ID), __LAB__: JSON.stringify(mode === 'lab') },
-  plugins: mode === 'single' ? [viteSingleFile()] : mode === 'lab' ? [versionFile(), labBuild()] : [versionFile()],
+  plugins: mode === 'single' ? [noLabArt(), viteSingleFile()] : mode === 'lab' ? [versionFile(), labBuild()] : [versionFile(), noLabArt()],
   build: {
     outDir: mode === 'single' ? 'dist-single' : mode === 'lab' ? 'dist/lab' : 'dist',
     target: 'es2020',
