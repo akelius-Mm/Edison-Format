@@ -1,4 +1,5 @@
 // Animation director: turns engine AnimEvents into visual effects + sound, paced by the speed setting.
+import { LAB } from '../../lab/flag';
 import type { CardInstance } from '../../engine/card';
 import type { AnimEvent, Game } from '../../engine/game';
 import { phaseName } from '../../engine/game';
@@ -231,6 +232,8 @@ export class FxDirector {
           this.pulse(u, method === 'tribute' ? 'fx-summon fx-tribute' : 'fx-summon', 520);
           this.ring(u, method === 'tribute' ? 'ring--tribute' : 'ring--summon');
         }
+        // Lab: a monster hitting the table moves the table
+        if (LAB) this.shakeScreen(method === 'tribute' ? 0.8 : 0.35);
         return this.wait(method === 'tribute' ? STEP.tribute : STEP.summon);
       }
       case 'activate': {
@@ -303,6 +306,8 @@ export class FxDirector {
         // a strong monster hitting the player directly: the board takes it
         const atk = h.game.card(a.attacker);
         if (a.target == null && atk && h.game.getAtk(atk) >= 2000) this.shakeScreen(0.8);
+        // Lab: every clash is felt
+        else if (LAB) this.shakeScreen(0.55);
         return this.wait(STEP.battle);
       }
       case 'damage': {
@@ -318,6 +323,7 @@ export class FxDirector {
         }
         this.floatNumber(a.player as PlayerId, `\u2212${amt}`, cost ? 'num--cost' : 'num--dmg', big);
         if (big) this.shakeScreen(amt >= 4000 ? 1.2 : 1);
+        if (LAB && !cost) this.labHit(big);
         if (a.kind !== 'cost') this.flashSide(a.player as PlayerId, 'flash--dmg');
         // the LP counter keeps ticking down under the next step
         return this.wait(big ? STEP.bigDamage : STEP.damage);
@@ -483,18 +489,31 @@ export class FxDirector {
     if (sp <= 0 || reducedMotion()) return;
     const p = center(a);
     const q = center(b);
-    const dx = (q.x - p.x) * 0.42;
-    const dy = (q.y - p.y) * 0.42;
+    // Lab: the attacker travels almost all the way and rears back first
+    const reach = LAB ? 0.88 : 0.42;
+    const dx = (q.x - p.x) * reach;
+    const dy = (q.y - p.y) * reach;
     const fx = a.querySelector('.dc-fx') as HTMLElement | null;
     fx?.animate(
       [
         { transform: 'translate(0,0) scale(1)' },
-        { transform: `translate(${-dx * 0.08}px, ${-dy * 0.08}px) scale(1.08)`, offset: 0.25 },
-        { transform: `translate(${dx}px, ${dy}px) scale(1.12)`, offset: 0.6 },
+        { transform: `translate(${-dx * (LAB ? 0.12 : 0.08)}px, ${-dy * (LAB ? 0.12 : 0.08)}px) scale(${LAB ? 1.18 : 1.08})`, offset: LAB ? 0.3 : 0.25 },
+        { transform: `translate(${dx}px, ${dy}px) scale(${LAB ? 1.3 : 1.12})`, offset: 0.6 },
         { transform: 'translate(0,0) scale(1)' },
       ],
-      { duration: 440 * sp, easing: EASE.inOut },
+      { duration: (LAB ? 540 : 440) * sp, easing: EASE.inOut },
     );
+  }
+
+  /** Lab: a red flash around the edge of the screen when Life Points are lost. */
+  private labHit(big: boolean) {
+    const root = this.h.board.stage.closest('.duel-root');
+    if (!root || this.h.speed() <= 0) return;
+    root.classList.remove('lab-hit', 'is-big');
+    void (root as HTMLElement).offsetWidth;
+    root.classList.add('lab-hit');
+    if (big) root.classList.add('is-big');
+    window.setTimeout(() => root.classList.remove('lab-hit', 'is-big'), 700);
   }
 
   private spark(t: HTMLElement) {
@@ -528,7 +547,7 @@ export class FxDirector {
     const now = performance.now();
     if (now - this.shookAt < 650) return;
     this.shookAt = now;
-    const d = 5 * strength;
+    const d = (LAB ? 9 : 5) * strength;
     const px = (x: number, y: number) => `${(x * d).toFixed(1)}px ${(y * d).toFixed(1)}px`;
     this.h.board.stage.animate(
       [

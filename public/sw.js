@@ -2,7 +2,7 @@
 // Sound effects (./audio/sfx/, about 0.4 MB) are pre-cached in their own cache, which survives app
 // updates. Music (./audio/music/) is cached the first time each track plays, keeping at most about
 // 8 MB of it (the least recently played tracks are dropped first).
-const VERSION = 'edison-v8';
+const VERSION = 'edison-v9';
 // v2: v1 kept whatever came back, including the image host's errors (rate limit, blocked), so a card could stay
 // broken for good. Only pictures that loaded are kept now.
 const CARDS_CACHE = 'edison-cards-v2';
@@ -107,6 +107,10 @@ self.addEventListener('fetch', (e) => {
   const req = e.request;
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
+
+  // The Lab (./lab/, an experimental build published next to the app) is not this app: its pages and files go
+  // straight to the network, and never into this app's offline copy.
+  if (url.origin === self.location.origin && url.pathname.startsWith(new URL('./lab/', self.location.href).pathname)) return;
 
   // The version check must always reach the network.
   if (url.origin === self.location.origin && url.pathname.endsWith('/version.json')) return;

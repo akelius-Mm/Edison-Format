@@ -7,6 +7,8 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "build:single": "vite build --mode single",
+    "build:lab": "vite build --mode lab",
+    "dev:lab": "vite --mode lab",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "sim": "tsx scripts/sim.ts",

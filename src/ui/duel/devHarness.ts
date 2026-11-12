@@ -10,6 +10,9 @@ import { SLEEVES, applySleeve } from '../theme/sleeves';
 import { startDuel } from './duelScreen';
 import type { Difficulty } from '../../ai/ai';
 
+import { LAB } from '../../lab/flag';
+if (LAB) void import('../../lab');
+
 const app = document.getElementById('app')!;
 const q = new URLSearchParams(location.search);
 
