@@ -127,8 +127,26 @@ export interface HistoryEntry {
   finishedAt: number;
 }
 
+/** The last time you played a regular: what they remember about you. */
+export interface RivalMeeting {
+  at: number;
+  /** From your side. */
+  result: 'W' | 'L' | 'D';
+  /** Games, yours first: "2-1". */
+  score: string;
+  /** The deck you played, and the one they played. */
+  myDeck: string;
+  theirDeck: string;
+  /** "Kettle Hill Cards & Games", "Regional Qualifier · Dallas, TX", "a challenge". */
+  where: string;
+}
+
+/** Your match record against one of the regulars (matches, from your side). */
 export interface RivalRecord {
   w: number;
   l: number;
   d: number;
+  /** Matches in a row: positive while you keep winning, negative while they do, 0 after a draw. */
+  streak?: number;
+  last?: RivalMeeting;
 }

@@ -7,7 +7,7 @@ import { hash, pickOne, rand, shuffleIn, type RngState } from './rng';
 import { expectedTurnout, nightDate, nightShop, swissRoundsFor, topCutFor } from './shops';
 import { simMatch } from './sim';
 import { computeStandings, finalPlacements, idCheck, idRecordOk, nextTopRound, pairSwissRound, seedTopCut, winnerOf, type IdCheck } from './swiss';
-import type { DeckSnapshot, FieldSize, GameResult, HistoryEntry, LocalsEntrant, LocalsMatch, LocalsNight, LocalsStanding, PrizeLine, RivalRecord, Shop } from './types';
+import type { DeckSnapshot, FieldSize, GameResult, HistoryEntry, LocalsEntrant, LocalsMatch, LocalsNight, LocalsStanding, PrizeLine, RivalMeeting, RivalRecord, Shop } from './types';
 
 const ACTIVE_KEY = 'edison.locals.active.v1';
 const HISTORY_KEY = 'edison.locals.history.v1';
@@ -263,17 +263,46 @@ export function deckLabel(e: Pick<LocalsEntrant, 'meta' | 'deck'>) {
 
 // ------------------------------------------------------------------ the player's match
 
+/**
+ * A match against one of the regulars is over: count it, keep the streak, and remember the meeting (the decks,
+ * the score, where). Events, Locals and a direct challenge all end up here.
+ */
+export function recordRivalMatch(regularId: string, meeting: RivalMeeting): RivalRecord {
+  const all = loadRivals();
+  const r = all[regularId] ?? { w: 0, l: 0, d: 0 };
+  const streak = r.streak ?? 0;
+  if (meeting.result === 'D') {
+    r.d++;
+    r.streak = 0;
+  } else if (meeting.result === 'W') {
+    r.w++;
+    r.streak = streak > 0 ? streak + 1 : 1;
+  } else {
+    r.l++;
+    r.streak = streak < 0 ? streak - 1 : -1;
+  }
+  r.last = meeting;
+  all[regularId] = r;
+  save(RIVALS_KEY, all);
+  return r;
+}
+
 function bumpRival(n: LocalsNight, m: LocalsMatch) {
   const opp = opponentOf(n, m);
   if (!opp?.regular || !m.result) return;
-  const all = loadRivals();
-  const r = all[opp.regular] ?? { w: 0, l: 0, d: 0 };
+  const me = entrantOf(n, n.humanId);
   const won = winnerOf(m);
-  if (m.result === 'draw') r.d++;
-  else if (won === n.humanId) r.w++;
-  else r.l++;
-  all[opp.regular] = r;
-  save(RIVALS_KEY, all);
+  const mine = m.a === n.humanId ? 0 : 1;
+  const gw = m.games.filter((g) => g.winner === mine).length;
+  const gl = m.games.filter((g) => g.winner === 1 - mine).length;
+  recordRivalMatch(opp.regular, {
+    at: Date.now(),
+    result: m.result === 'draw' ? 'D' : won === n.humanId ? 'W' : 'L',
+    score: `${gw}-${gl}`,
+    myDeck: me ? deckLabel(me) : '',
+    theirDeck: deckLabel(opp),
+    where: n.shop?.name ?? 'an event',
+  });
 }
 
 /**

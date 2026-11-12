@@ -1,4 +1,5 @@
 // "Duel vs AI" setup screen, and the "Watch AI vs AI" exhibition setup.
+import { recordRivalMatch, regularById } from '../../locals';
 import type { Difficulty } from '../../ai/ai';
 import { PREMADE_DECKS } from '../../decks';
 import type { DuelSide } from '../duel/api';
@@ -239,15 +240,17 @@ interface VsAIMeta {
   oppName: string;
   persona: PersonaState;
   ranked: boolean;
+  /** A challenge to one of the regulars (Rivals): the match counts on your record against them. */
+  rivalId?: string;
 }
 
-export async function playVsAI(mine: DeckInfo, opp: DeckInfo, persona: PersonaState, bestOf: 1 | 3, ranked = false) {
+export async function playVsAI(mine: DeckInfo, opp: DeckInfo, persona: PersonaState, bestOf: 1 | 3, ranked = false, rivalId?: string) {
   const s = getSettings();
   const sides: [DuelSide, DuelSide] = [
     { name: s.playerName, deck: toDeckList(mine), avatar: s.avatar, sleeve: s.sleeve, control: 'human', title: mine.name },
     { name: persona.name, deck: toDeckList(opp), avatar: persona.avatar, sleeve: randomSleeve(), control: persona.difficulty, title: opp.name },
   ];
-  const meta: VsAIMeta = { mine: mine.key, mineName: mine.name, opp: opp.key, oppName: opp.name, persona: { ...persona }, ranked };
+  const meta: VsAIMeta = { mine: mine.key, mineName: mine.name, opp: opp.key, oppName: opp.name, persona: { ...persona }, ranked, rivalId };
   const setup: MatchSetup = {
     sides,
     bestOf,
@@ -279,22 +282,24 @@ async function playVsAISetup(setup: MatchSetup) {
   const res = outcome.result === 'a' ? 'W' : outcome.result === 'b' ? 'L' : 'D';
   const wa = outcome.games.filter((g) => g.winner === 0).length;
   const wb = outcome.games.filter((g) => g.winner === 1).length;
-  recordMatch({ date: Date.now(), deckName: m.mineName, oppName: persona.name, oppDeck: m.oppName, result: res, score: `${wa}-${wb}`, context: ranked ? 'Duel vs AI · Ranked' : 'Duel vs AI' });
-  const rated = ranked ? recordConstructedResult(aiRating(persona.difficulty), res) : null;
+  recordMatch({ date: Date.now(), deckName: m.mineName, oppName: persona.name, oppDeck: m.oppName, result: res, score: `${wa}-${wb}`, context: m.rivalId ? 'Rival match' : ranked ? 'Duel vs AI · Ranked' : 'Duel vs AI' });
+  const rival = regularById(m.rivalId);
+  const rated = ranked ? recordConstructedResult(aiRating(persona.difficulty, rival?.skill ?? 0), res) : null;
+  if (rival) recordRivalMatch(rival.id, { at: Date.now(), result: res, score: `${wa}-${wb}`, myDeck: m.mineName, theirDeck: m.oppName, where: 'a challenge' });
   const rematch = () => {
     const mine = deckFromKey(m.mine);
     const opp = deckFromKey(m.opp);
-    if (mine && opp) void playVsAI(mine, opp, persona, bestOf, ranked);
-    else go('duel');
+    if (mine && opp) void playVsAI(mine, opp, persona, bestOf, ranked, m.rivalId);
+    else go(rival ? 'rivals' : 'duel');
   };
   showResults({
     setup,
     outcome,
     human: 0,
-    context: `Duel vs AI · ${persona.difficulty[0].toUpperCase() + persona.difficulty.slice(1)}${rated ? ` · Ranked · Rating ${rated.after} (${signed(rated.delta)})` : ''}`,
+    context: `${rival ? `Rival match · ${rival.name}` : `Duel vs AI · ${persona.difficulty[0].toUpperCase() + persona.difficulty.slice(1)}`}${rated ? ` · Ranked · Rating ${rated.after} (${signed(rated.delta)})` : ''}`,
     actions: [
       { label: 'Rematch', variant: 'primary', icon: 'refresh', onClick: rematch },
-      { label: 'New duel', icon: 'swords', onClick: () => go('duel') },
+      rival ? { label: 'Rivals', icon: 'user', onClick: () => go('rivals') } : { label: 'New duel', icon: 'swords', onClick: () => go('duel') },
       { label: 'Home', icon: 'home', onClick: () => go('title') },
     ],
   });

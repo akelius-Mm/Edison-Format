@@ -55,6 +55,7 @@ const ROUTES = [
   'collection',
   'duel',
   'exhibition',
+  'rivals',
   'deck-builder',
   'deck-builder?from=blackwings',
   'database',

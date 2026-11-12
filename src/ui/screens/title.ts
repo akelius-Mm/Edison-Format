@@ -1,7 +1,7 @@
 // Play tab (route `title`, also `play`): the hero with Duel vs AI, anything in progress, this week's event,
 // playing friends and Watch AI vs AI (the practice Tournament lives under Events). Settings and Profile sit in the hero's corner. Also the Collection tab.
 import { isToday, shortDate } from '../../calendar';
-import { nightDate } from '../../locals';
+import { REGULARS, loadRivals, nightDate, rivalTag } from '../../locals';
 import { getSettings, loadJSON } from '../settings';
 import { applyPlaymat } from '../theme/playmats';
 import { renderCard, sleevePreview } from './ext';
@@ -91,6 +91,7 @@ export function titleScreen(): Screen {
       { class: 'home-body' },
       duelCard,
       resume,
+      rivalsCard(),
       thisWeekCard(),
       h('h2', { class: 'home-h' }, 'With friends'),
       friends,
@@ -196,6 +197,25 @@ export function resumeRows(): { duelCard: Child; resume: Child } {
     : null;
 
   return { duelCard, resume };
+}
+
+/** Home shortcut to Rivals: your nemesis if you have one, else how many of the regulars you have beaten. */
+function rivalsCard(): Child {
+  const recs = loadRivals();
+  const nemesis = REGULARS.filter((r) => rivalTag(recs[r.id]) === 'nemesis').sort((a, b) => recs[b.id].l - recs[b.id].w - (recs[a.id].l - recs[a.id].w))[0];
+  const beaten = REGULARS.filter((r) => (recs[r.id]?.w ?? 0) > 0).length;
+  const desc = nemesis
+    ? `${nemesis.name} is ${recs[nemesis.id].l}–${recs[nemesis.id].w} up on you`
+    : beaten
+      ? `${beaten} of ${REGULARS.length} regulars beaten`
+      : `${REGULARS.length} regulars with decks and grudges`;
+  return h(
+    'button',
+    { type: 'button', class: 'home-resume home-week', 'data-test': 'home-rivals', onclick: () => go('rivals') },
+    icon('user'),
+    h('span', { class: 'home-resume-text' }, h('b', null, 'Rivals'), h('span', null, desc)),
+    icon('chevron'),
+  );
 }
 
 /** Home shortcut to this week's play: the Circuit week when a season is running, else Locals Night. */

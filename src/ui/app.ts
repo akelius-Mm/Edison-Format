@@ -18,6 +18,7 @@ import { tournamentScreen } from './screens/tournament';
 import { mountTabBar } from './screens/tabbar';
 import { loadActiveDuel } from './duel/resume';
 import { bootGuard } from './crashGuard';
+import { rivalsScreen } from './screens/rivals';
 import { getSettings, updateSettings } from './settings';
 import { toast } from './screens/dom';
 // Play a friend (online, room codes).
@@ -31,6 +32,7 @@ export function startApp(root: HTMLElement) {
   registerRoute('collection', collectionScreen);
   registerRoute('duel', duelSetupScreen);
   registerRoute('exhibition', exhibitionScreen);
+  registerRoute('rivals', rivalsScreen);
   registerRoute('deck-builder', deckBuilderScreen);
   registerRoute('database', databaseScreen);
   registerRoute('customize', customizeScreen);
