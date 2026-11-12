@@ -1556,3 +1556,17 @@ a,
     transition-delay: 0ms !important;
   }
 }
+
+/* ---------------------------------------------------------------- light buttons have weight
+   Every light call to action (Duel, Check in, Open pack, Resume...) is lit from above and sits on a soft
+   shadow, so the one thing to press on a screen reads as a button, not a label. Tokens in theme.css. */
+.cta:not(.cta--dark),
+.home-cta,
+.home-resume-go,
+.ui-btn-primary,
+.ui-btn-gold {
+  background-image: var(--cta-grad) !important;
+  box-shadow: var(--cta-shadow);
+}
+.home-resume-go { box-shadow: inset 0 1px 0 #fff, 0 3px 10px rgba(0, 0, 0, 0.35); }
+.cta:not(.cta--dark):disabled { box-shadow: none; }

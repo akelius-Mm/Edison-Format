@@ -2748,3 +2748,111 @@
   cursor: zoom-in;
   padding: 0;
 }
+
+/* =====================================================================
+   Table lighting and turn presence.
+   The clean style above stays (graphite, system font, no gold glows): this adds a lamp over the table,
+   quieter empty zones, and a clear answer to "whose turn is it?" in each player's own colour.
+   ===================================================================== */
+/* One lamp over the middle of the table; the corners fall away into shadow. */
+.duel-root .duel-mat.mats-split {
+  background:
+    radial-gradient(125% 62% at 50% 47%, rgba(255, 244, 222, 0.075), transparent 64%),
+    radial-gradient(150% 105% at 50% 50%, transparent 52%, rgba(0, 0, 0, 0.55)),
+    linear-gradient(180deg, #17181b, #0c0d0f);
+}
+/* Each mat sits on the table: a lit near edge, a soft falloff toward its far corners. */
+.duel-root .mats-split .side::before {
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.09) inset,
+    0 0 calc(var(--zh) * 0.8) rgba(0, 0, 0, 0.32) inset,
+    0 10px 26px rgba(0, 0, 0, 0.6);
+  transition:
+    filter calc(var(--dur-big) * var(--sp)) var(--ease-out),
+    box-shadow calc(var(--dur-big) * var(--sp)) var(--ease-out);
+}
+/* The player whose turn it is has the lit mat, ringed in their colour; the other mat waits in half light. */
+.duel-root:not(.is-opp-turn) .mats-split .side-opp::before,
+.duel-root.is-opp-turn .mats-split .side-me::before {
+  filter: brightness(0.8) saturate(0.88);
+}
+.duel-root:not(.is-opp-turn) .mats-split .side-me::before {
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.12) inset,
+    0 0 calc(var(--zh) * 0.8) rgba(0, 0, 0, 0.24) inset,
+    0 0 0 1px color-mix(in srgb, var(--dl-me) 60%, transparent),
+    0 0 30px color-mix(in srgb, var(--dl-me) 20%, transparent),
+    0 10px 26px rgba(0, 0, 0, 0.6);
+}
+.duel-root.is-opp-turn .mats-split .side-opp::before {
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.12) inset,
+    0 0 calc(var(--zh) * 0.8) rgba(0, 0, 0, 0.24) inset,
+    0 0 0 1px color-mix(in srgb, var(--dl-opp) 60%, transparent),
+    0 0 30px color-mix(in srgb, var(--dl-opp) 20%, transparent),
+    0 10px 26px rgba(0, 0, 0, 0.6);
+}
+/* Empty zones are printed on the mat, not drawn over it: a hairline and a slight recess. Zones you can
+   act on keep their full outline (.zone.can-act above). */
+.duel-root .zone {
+  border-color: color-mix(in srgb, var(--zone-line) 42%, transparent);
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+.duel-root .zone--m::before,
+.duel-root .zone--s::before,
+.duel-root .zone--f::before { opacity: 0.22; }
+
+/* Player bars: the turn player's bar carries their colour; the other one steps back. */
+.duel-root .pp {
+  background: linear-gradient(180deg, rgba(27, 28, 32, 0.96), rgba(16, 17, 20, 0.96)) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+.duel-root .pp.is-turn {
+  border-color: color-mix(in srgb, var(--pc) 70%, transparent) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 0 0 1px color-mix(in srgb, var(--pc) 22%, transparent),
+    0 6px 22px color-mix(in srgb, var(--pc) 18%, transparent);
+}
+.duel-root .pp:not(.is-turn) .pp-name { color: var(--text-2); }
+/* Life bars in each player's colour; red when low (the .is-low rule keeps its own colours). */
+.duel-root .pp:not(.is-low) .pp-bar-fill { background: linear-gradient(90deg, color-mix(in srgb, var(--pc) 70%, #000), var(--pc)) !important; }
+.duel-root .pp.is-low .pp-bar-fill { background: linear-gradient(90deg, #8f2530, #ff5d6c) !important; }
+.duel-root .pp.is-low .pp-lp { color: #ff8f99; }
+
+/* Phase bar: the current phase is filled with the turn player's colour. */
+.duel-root .phasebar {
+  background: linear-gradient(180deg, rgba(27, 28, 32, 0.96), rgba(16, 17, 20, 0.96)) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+.duel-root .ph.is-current {
+  background: color-mix(in srgb, var(--tc) 46%, #26272c) !important;
+  color: #fff;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16);
+}
+.duel-root .phasebar-turn b,
+.duel-root .phasebar-turn strong { color: color-mix(in srgb, var(--tc) 70%, #fff); }
+/* End Turn is the one bright button on the table: give it weight. */
+.duel-root .phasebar.is-active .btn--end:not(:disabled) {
+  box-shadow: inset 0 -2px 0 rgba(0, 0, 0, 0.14), 0 6px 18px rgba(0, 0, 0, 0.45) !important;
+}
+
+/* Phones held upright have no room for the life bar inside the player bar: it runs along the bar's
+   bottom edge instead, so both life totals read at a glance. */
+@media (max-width: 600px) and (orientation: portrait) {
+  .duel-root .pp-bar {
+    display: block;
+    position: absolute;
+    left: 12px;
+    right: 12px;
+    bottom: -1px;
+    height: 2px;
+    margin: 0;
+    border-radius: 2px;
+    background: rgba(255, 255, 255, 0.07);
+    box-shadow: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .duel-root .mats-split .side::before { transition: none; }
+}

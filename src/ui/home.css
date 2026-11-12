@@ -462,3 +462,53 @@ body.in-duel .tabbar {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+/* ---------------------------------------------------------------- depth and light
+   Home is lit like the duel table: one lamp over your cards, surfaces with a lit top edge, and a call to
+   action with some weight. Same graphite palette, no glows. */
+.home-hero-shade {
+  background:
+    radial-gradient(70% 46% at 50% 26%, rgba(255, 244, 222, 0.1), transparent 70%),
+    linear-gradient(180deg, rgba(11, 12, 14, 0.1) 0%, rgba(11, 12, 14, 0.25) 45%, rgba(11, 12, 14, 0.92) 82%, var(--bg-0) 100%);
+  pointer-events: none;
+}
+.home-table-cards .yc { box-shadow: 0 2px 3px rgba(0, 0, 0, 0.5), 0 14px 26px rgba(0, 0, 0, 0.55); }
+/* Your ace hovers a little above the mat. */
+.home-ace { animation: homeAce 6s var(--ease-in-out) infinite; }
+.home-ace .yc { box-shadow: 0 2px 3px rgba(0, 0, 0, 0.5), 0 20px 34px rgba(0, 0, 0, 0.6); }
+@keyframes homeAce {
+  0%, 100% { transform: rotate(-1.5deg) translateY(10px); }
+  50% { transform: rotate(-0.5deg) translateY(5px); }
+}
+.home-title { text-shadow: 0 2px 18px rgba(0, 0, 0, 0.55); }
+.home-tile,
+.home-resume,
+.home-more {
+  background-image: var(--surface-grad);
+  box-shadow: var(--surface-hi), 0 6px 18px rgba(0, 0, 0, 0.28);
+}
+.home-tile-art.has-art { box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08); }
+/* The tab you are on: its icon sits a touch larger. */
+.tab .icon { transition: transform var(--dur-base) var(--ease-spring); }
+.tab.on .icon { transform: translateY(-1px) scale(1.08); }
+
+/* Wide screens: your cards sit to the right of the title instead of behind it. */
+@media (min-width: 760px) and (min-height: 501px) {
+  .home-table-cards {
+    --w: clamp(92px, 9vw, 118px);
+    left: auto;
+    right: max(24px, calc(50% - 352px));
+    transform: none;
+    top: calc(max(14px, env(safe-area-inset-top, 0px)) + 34px);
+  }
+  .home-hero { height: calc(clamp(340px, 46vh, 480px) + env(safe-area-inset-top, 0px)); }
+}
+/* Two tiles on a wide screen share the row as banners, instead of leaving half of it empty. */
+@media (min-width: 900px) {
+  .home-tiles:not(:has(> :nth-child(3))) { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .home-tiles:not(:has(> :nth-child(3))) .home-tile { aspect-ratio: 16 / 7; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .home-ace { animation: none; }
+  .tab .icon { transition: none; }
+}
