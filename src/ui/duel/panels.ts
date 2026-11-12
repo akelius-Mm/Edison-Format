@@ -5,6 +5,7 @@ import type { Phase, PlayerId } from '../../engine/types';
 import { artThumb, liveStats, renderCard, typeLine } from '../cards/render';
 import { zoomCard } from '../cards/zoom';
 import { renderAvatar } from '../theme/avatars';
+import { labPortrait } from '../../lab/art';
 import { isTouchUI } from './dialogs';
 import { esc } from '../theme/util';
 import type { DuelSide } from './api';
@@ -60,6 +61,7 @@ export class PlayerPanel {
     ini.textContent = (words.length > 1 ? words[0][0] + words[words.length - 1][0] : (words[0] ?? '?').slice(0, 1)).toUpperCase();
     ini.setAttribute('aria-hidden', 'true');
     this.avatarEl.appendChild(ini);
+    if (side.control !== 'human') labPortrait(this.avatarEl, side.name);
     const info = h('div', 'pp-info');
     const name = h('div', 'pp-name');
     name.textContent = side.name;

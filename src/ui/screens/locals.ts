@@ -64,6 +64,7 @@ import { frame, go, type Screen } from './nav';
 import { showResults } from './results';
 import { allDeckInfos, ordinal, recordMatch, toDeckList, type DeckInfo } from './store';
 import './locals.css';
+import { labPortrait, labVenue } from '../../lab/art';
 // Events agent: Locals Night matches you play count toward your Constructed rating.
 import { aiRating, recordConstructedResult, signed } from '../../events/ratings';
 
@@ -104,7 +105,9 @@ const roundKey = (ms: LocalsMatch[]) => ms[0]?.id.replace(/-\d+$|-bye$/, '') ?? 
 export function avatar(e: { name: string; human?: boolean }, size: number) {
   const words = e.name.replace(/^Big /, '').replace(/[^A-Za-z ]/g, ' ').trim().split(/\s+/).filter(Boolean);
   const ini = words.length > 1 ? words[0][0] + words[words.length - 1][0] : (words[0] ?? '?').slice(0, 1);
-  return h('span', { class: ['lx-av', e.human && 'is-you'], style: { width: `${size}px`, height: `${size}px`, fontSize: `${Math.round(size * 0.36)}px` }, 'aria-hidden': 'true' }, ini.toUpperCase());
+  const el = h('span', { class: ['lx-av', e.human && 'is-you'], style: { width: `${size}px`, height: `${size}px`, fontSize: `${Math.round(size * 0.36)}px` }, 'aria-hidden': 'true' }, ini.toUpperCase());
+  if (!e.human) labPortrait(el, e.name);
+  return el;
 }
 
 /** The app scrolls inside <body>; reset both scrollers. */
@@ -340,6 +343,7 @@ function hubScreen(n: LocalsNight, autoResume = false): Screen {
   let busy = false;
 
   const header = h('div', { class: 'lx-hub-head' });
+  labVenue(header, 'locals');
   const tabsHost = h('div', { class: 'lx-tabs' });
   const content = h('div', { class: 'lx-content' });
   const bar = h('div', { class: 'lx-bar-host' });

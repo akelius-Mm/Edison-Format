@@ -1,7 +1,8 @@
 /* ==========================================================================
    Edison Lab: a maximalist table. Wood, brass, thick mats and cards with weight.
    Every rule is under html.lab, which only the Lab build sets (src/lab/index.ts).
-   Materials are drawn in code (gradients and SVG noise), plus a few small painted backdrops in src/lab/art.
+   Materials are drawn in code (gradients and SVG noise), plus a few small painted pictures in src/lab/art (backdrops, the regulars'
+   portraits, venues).
    Those are original art generated with scripts/lab-art, each a WebP under 100 KB and about 1000 px a side.
    They are only referenced from this file, so the normal build never bundles them, and each one is a CSS
    background on its own screen, so the browser fetches it only when that screen is first shown.
@@ -344,6 +345,55 @@
 .lab .frame-head {
   background: linear-gradient(180deg, rgba(42, 28, 18, 0.96), rgba(28, 18, 11, 0.9)) !important;
   border-bottom: 1px solid rgba(255, 214, 160, 0.18);
+}
+
+/* ---------------------------------------------------------------- the regulars: painted portraits
+   src/lab/art.ts tags a regular's initials badge with data-regular; here each one gets its picture. The
+   picture is a variable, used only by a badge that is on screen, so nine portraits never load at once
+   unless all nine regulars are listed. Each is 192 px square and about 4 KB. */
+.lab [data-regular='marcus'] { --lab-portrait: url('./art/rival-marcus.webp'); }
+.lab [data-regular='priya'] { --lab-portrait: url('./art/rival-priya.webp'); }
+.lab [data-regular='dave'] { --lab-portrait: url('./art/rival-dave.webp'); }
+.lab [data-regular='theo'] { --lab-portrait: url('./art/rival-theo.webp'); }
+.lab [data-regular='nadia'] { --lab-portrait: url('./art/rival-nadia.webp'); }
+.lab [data-regular='kenji'] { --lab-portrait: url('./art/rival-kenji.webp'); }
+.lab [data-regular='jonah'] { --lab-portrait: url('./art/rival-jonah.webp'); }
+.lab [data-regular='felix'] { --lab-portrait: url('./art/rival-felix.webp'); }
+.lab [data-regular='gus'] { --lab-portrait: url('./art/rival-gus.webp'); }
+.lab .lx-av[data-regular],
+.lab .rv-portrait .lx-av[data-regular],
+.lab .duel-root .pp .pp-avatar[data-regular],
+.lab .duel-root .pp.is-turn .pp-avatar[data-regular] {
+  background: var(--lab-portrait) center / cover no-repeat, #22160e !important;
+  color: transparent !important;
+}
+.lab .lx-av[data-regular] {
+  box-shadow: 0 0 0 1px #1a110b, 0 0 0 2px var(--lab-brass-lo);
+}
+.lab .rv-portrait .lx-av[data-regular] {
+  box-shadow: 0 0 0 2px #1a110b, 0 0 0 4px var(--lab-brass), 0 4px 10px rgba(0, 0, 0, 0.6);
+}
+.lab .pp-avatar[data-regular] .pp-ini {
+  display: none;
+}
+
+/* ---------------------------------------------------------------- venues
+   The header of a running event is a window onto the room: the shop's back room on Locals night, a hotel
+   ballroom at Regionals, the convention hall at the Championship Series (Nationals plays in the same hall). */
+.lab .lx-hub-head[data-venue='locals'] { --lab-venue: url('./art/venue-locals.webp'); }
+.lab .lx-hub-head[data-venue='regional'] { --lab-venue: url('./art/venue-regional.webp'); }
+.lab .lx-hub-head[data-venue='sjc'],
+.lab .lx-hub-head[data-venue='nationals'] { --lab-venue: url('./art/venue-sjc.webp'); }
+.lab .lx-hub-head[data-venue] {
+  margin: 10px 0 12px;
+  padding: 64px 14px 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(226, 187, 98, 0.34);
+  background:
+    linear-gradient(180deg, rgba(16, 10, 6, 0.05) 0%, rgba(16, 10, 6, 0.5) 45%, rgba(16, 10, 6, 0.93) 100%),
+    var(--lab-venue) center 30% / cover no-repeat,
+    #1c110a;
+  box-shadow: inset 0 1px 0 rgba(255, 226, 170, 0.16), 0 10px 22px rgba(0, 0, 0, 0.45);
 }
 
 @media (prefers-reduced-motion: reduce) {
