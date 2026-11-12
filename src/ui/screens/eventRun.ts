@@ -1,6 +1,7 @@
 // A live event of any tier (route events?view=run): the Locals Night table experience scaled up
 // to Regionals, SJCs and Nationals. Big fields show feature tables, your table and your
 // neighbourhood in the standings, with "show all" for the full sheet. Engine in src/events.
+import { shortDate } from '../../calendar';
 import {
   EVENT_SPECS,
   FEATURE_TABLES,
@@ -179,7 +180,7 @@ export function eventRunScreen(r: EventRun, autoResume = false): Screen {
       h(
         'div',
         { class: 'lx-hub-sub' },
-        `${r.dateLabel.replace(/, 2010$/, '')} · ${r.size} players · Top ${r.topCut}`,
+        `${shortDate(r.dateLabel)} · ${r.size} players · Top ${r.topCut}`,
         r.season ? ` · Week ${r.season.week}` : '',
         r.phase === 'top' && humanEliminated(r) ? ' · Spectating' : '',
       ),

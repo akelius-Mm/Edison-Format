@@ -1,5 +1,6 @@
 // Profile (route `profile`): ratings with their history, circuit rank and invites, trophies,
 // best finishes, win rate by deck, rivals among the Locals regulars and the event history.
+import { shortDate } from '../../calendar';
 import {
   BEST_OF,
   EVENT_KINDS,
@@ -49,7 +50,7 @@ function allHistory(): HistoryRow[] {
       kind: e.kind,
       title: e.title,
       where: e.city || e.title,
-      sub: `${e.dateLabel.replace(/^\w+, /, '').replace(/, 2010$/, '')} · ${e.size} players · ${e.deckName} · ${e.record}${e.week ? ` · Season week ${e.week}` : ''}`,
+      sub: `${shortDate(e.dateLabel, { noWeekday: true })} · ${e.size} players · ${e.deckName} · ${e.record}${e.week ? ` · Season week ${e.week}` : ''}`,
       place: e.place,
       size: e.size,
       cut: e.madeCut,
@@ -61,7 +62,7 @@ function allHistory(): HistoryRow[] {
       kind: 'locals',
       title: n.shop,
       where: n.shop,
-      sub: `Locals Night · ${n.dateLabel.replace(/^\w+, /, '').replace(/, 2010$/, '')} · ${n.size} players · ${n.deckName} · ${n.record}`,
+      sub: `Locals Night · ${shortDate(n.dateLabel, { noWeekday: true })} · ${n.size} players · ${n.deckName} · ${n.record}`,
       place: n.place,
       size: n.size,
       cut: n.madeCut,
@@ -175,7 +176,7 @@ export function profileScreen(): Screen {
         h('span', { class: 'ios-detail' }, a.score ? `${ordinal(a.finalRank)} / ${a.field}` : '—'),
       ),
     );
-  if (!circuitRows.length) circuitRows.push(iosNav('Start a season', () => go('events'), { icon: 'flag', desc: '12 weeks: Locals, Regionals, an SJC, then Nationals' }));
+  if (!circuitRows.length) circuitRows.push(iosNav('Start a season', () => go('events'), { icon: 'flag', desc: '12 weeks: Locals, Regionals, a Championship Series, then Nationals' }));
 
   // ---- trophies and best finishes
   const wins = hist.filter((x) => x.place === 1);

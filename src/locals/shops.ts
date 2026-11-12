@@ -1,4 +1,5 @@
-// The local scene: fictional card shops and the Friday nights of the Edison format window.
+// The local scene: fictional card shops and their Friday nights.
+import { eventDateOf, nextWeekday, type EventDate } from '../calendar';
 import type { FieldSize, Shop } from './types';
 import { hash } from './rng';
 
@@ -26,18 +27,9 @@ export const SHOPS: Shop[] = [
 
 export const shopById = (id: string) => SHOPS.find((s) => s.id === id) ?? SHOPS[0];
 
-// Edison format ran from March to the end of August 2010. Night 1 is the Friday after
-// SJC Edison (April 17–18, 2010); later nights step a week at a time and wrap within the window.
-const WINDOW_START = Date.UTC(2010, 2, 5); // Friday, March 5, 2010
-const FRIDAYS = 26; // through Friday, August 27, 2010
-const FIRST_NIGHT_INDEX = 7; // Friday, April 23, 2010
-
-export function nightDate(number: number): { iso: string; label: string } {
-  const idx = (FIRST_NIGHT_INDEX + Math.max(0, number - 1)) % FRIDAYS;
-  const d = new Date(WINDOW_START + idx * 7 * 86400000);
-  const iso = d.toISOString().slice(0, 10);
-  const label = d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
-  return { iso, label };
+/** Locals is this Friday: tonight on a Friday, otherwise the coming one. A night keeps the date it was played on. */
+export function nightDate(at = Date.now()): EventDate {
+  return eventDateOf(nextWeekday(5, at));
 }
 
 /** The shop hosting a given night (the scene rotates between the three shops). */

@@ -1,5 +1,7 @@
 // Play tab (route `title`, also `play`): the hero with Duel vs AI, anything in progress, this week's event,
 // playing friends and Watch AI vs AI (the practice Tournament lives under Events). Settings and Profile sit in the hero's corner. Also the Collection tab.
+import { isToday, shortDate } from '../../calendar';
+import { nightDate } from '../../locals';
 import { getSettings, loadJSON } from '../settings';
 import { applyPlaymat } from '../theme/playmats';
 import { renderCard, sleevePreview } from './ext';
@@ -38,7 +40,7 @@ export function titleScreen(): Screen {
     h(
       'div',
       { class: 'home-hero-body' },
-      h('div', { class: 'home-eyebrow' }, 'Edison Format · April 2010'),
+      h('div', { class: 'home-eyebrow' }, `Edison Format · ${new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}`),
       h('h1', { class: 'home-title' }, 'Edison'),
       h(
         'div',
@@ -201,7 +203,12 @@ function thisWeekCard(): Child {
   const s = loadSeason();
   const live = s && !s.done;
   const label = live ? `The Circuit · Week ${s.week} of ${SEASON_WEEKS}` : 'Locals Night';
-  const desc = live ? eventsThisWeek(s).map((e) => EVENT_SPECS[e.kind].short).join(' · ') + ' this week' : 'Friday at the card shop';
+  const fri = nightDate();
+  const desc = live
+    ? eventsThisWeek(s).map((e) => EVENT_SPECS[e.kind].short).join(' · ') + ' this week'
+    : isToday(fri.iso)
+      ? 'Tonight at the card shop'
+      : `This ${shortDate(fri.label).replace(/^(\w+), (\w{3})\w* /, '$1, $2 ')} at the card shop`;
   return h(
     'button',
     { type: 'button', class: 'home-resume home-week', onclick: () => (live ? go('events', { view: 'season' }) : go('locals')) },

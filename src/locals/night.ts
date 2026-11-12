@@ -71,7 +71,7 @@ export interface Upcoming {
 
 export function upcomingNight(): Upcoming {
   const number = Math.max(0, ...loadHistory().map((x) => x.number)) + 1;
-  const d = nightDate(number);
+  const d = nightDate();
   return { number, shop: nightShop(number), date: d.iso, dateLabel: d.label, size: expectedTurnout(number) };
 }
 
@@ -108,7 +108,7 @@ export interface CheckInOptions {
 export function createNight(o: CheckInOptions): LocalsNight {
   const up = upcomingNight();
   const number = o.number ?? up.number;
-  const date = nightDate(number);
+  const date = nightDate();
   const size: FieldSize = o.size ?? expectedTurnout(number);
   const seed = (o.seed ?? Math.floor(Math.random() * 2 ** 31)) >>> 0;
   const s: RngState = { rng: seed };
