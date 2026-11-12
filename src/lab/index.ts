@@ -1,6 +1,5 @@
-// The Lab's experimental look: a physical table and heavier, louder feedback. Loaded only in the Lab build
-// (src/lab/flag.ts). Materials are drawn in code (gradients and SVG noise); the few painted
-// backdrops in src/lab/art are small WebP files that lab.css loads one screen at a time.
+// The Lab's experimental look: Nordic-office menus (light, flat, quiet) and heavier duel feedback. Loaded only
+// in the Lab build (src/lab/flag.ts). The only pictures are the regulars' small portraits in src/lab/art.
 import './lab.css';
 
 document.documentElement.classList.add('lab');
