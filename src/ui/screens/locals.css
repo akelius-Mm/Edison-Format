@@ -1709,3 +1709,118 @@
   min-width: 0;
   white-space: nowrap;
 }
+
+/* ---------------------------------------------------------------- check-in: painted flyer, one-row deck pick */
+.lx-flyer--art {
+  isolation: isolate;
+}
+.lx-flyer--art::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 170px;
+  z-index: -1;
+  background:
+    linear-gradient(90deg, rgba(20, 21, 25, 0.92) 0%, rgba(20, 21, 25, 0.55) 55%, rgba(20, 21, 25, 0.2) 100%),
+    var(--vart) right center / cover no-repeat;
+  -webkit-mask-image: linear-gradient(180deg, #000 45%, transparent);
+  mask-image: linear-gradient(180deg, #000 45%, transparent);
+}
+/* the Lab's menus are light: no dark painting behind dark text there */
+html.lab .lx-flyer--art::before {
+  display: none;
+}
+.lx-flyer--slim {
+  margin-bottom: 20px;
+}
+.lx-flyer-when {
+  margin: 10px 0 12px;
+  font: 600 14px var(--font);
+  color: var(--text-2);
+}
+.lx-pick-wrap {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+.lx-pick {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 72px;
+  padding: 9px 14px 9px 9px;
+  border: 0;
+  border-radius: 16px;
+  background: var(--grp);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+.lx-pick-art {
+  flex: none;
+  width: 54px;
+  height: 54px;
+  border-radius: 12px;
+  background: linear-gradient(160deg, var(--deck, #3a3c44), #17181c) center 28% / cover no-repeat;
+}
+.lx-pick-text {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+.lx-pick-text b {
+  font: 600 16px/1.25 var(--font);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lx-pick-text span {
+  font-size: 13px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lx-pick-change {
+  flex: none;
+  font: 600 14px var(--font);
+  color: var(--gold-hi);
+}
+.lx-more {
+  margin: 0 0 18px;
+  border-radius: 14px;
+  background: var(--grp);
+}
+.lx-more summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 52px;
+  padding: 0 14px 0 16px;
+  font: 600 15px var(--font);
+  color: var(--text);
+  list-style: none;
+  cursor: pointer;
+}
+.lx-more summary::-webkit-details-marker {
+  display: none;
+}
+.lx-more summary .icon {
+  width: 14px;
+  height: 14px;
+  color: var(--faint);
+  transition: transform 0.18s;
+}
+.lx-more[open] summary .icon {
+  transform: rotate(90deg);
+}
+.lx-more .lx-flyer-blurb {
+  margin: 0;
+  padding: 0 16px 12px;
+}
+.lx-more .lx-prize-list {
+  padding: 0 16px 14px;
+}

@@ -10,6 +10,7 @@ import { deckById } from '../../decks';
 import { loadActiveTournament, currentRoundLabel } from '../../tournament/tournament';
 import {
   BEST_OF,
+  CALENDAR,
   CIRCUIT_INVITE_RANK,
   EVENT_KINDS,
   EVENT_SPECS,
@@ -54,7 +55,7 @@ import {
   type CircuitRow,
 } from '../../events';
 import { getSettings, loadJSON, saveJSON } from '../settings';
-import { artInto, ctaButton, deckShelf, iosGroup, iosNav, linkButton, lobbySection, stickyBar } from './components';
+import { ctaButton, iosGroup, iosNav, linkButton, lobbySection, stickyBar } from './components';
 import { confirmDialog, h, icon, segmented, toast, type Child } from './dom';
 import { reconcileActiveDuel } from '../duel/resume';
 import { eventRunScreen, eventScope } from './eventRun';
@@ -62,7 +63,7 @@ import { endRisky, installCrashGuard, interruptedStep, type RiskyMark } from '..
 import { reportError } from '../diag';
 import { eventSafePoint } from '../updater';
 import { AVATAR_PRESETS, SLEEVES } from './ext';
-import { avatar, packIcon } from './locals';
+import { avatar, deckPick, packIcon } from './locals';
 import { frame, go, type Screen } from './nav';
 import { allDeckInfos, ordinal, type DeckInfo } from './store';
 import type { DeckSnapshot } from '../../locals/types';
@@ -165,11 +166,6 @@ export function eventRecoveryScreen(run: EventRun, why: { damaged?: string; cras
 
 const KIND_ICON = (k: EventKind) => EVENT_SPECS[k].icon;
 
-function kindArt(k: EventKind) {
-  const el = h('span', { class: 'ev-kind-art', 'aria-hidden': 'true' }, icon(KIND_ICON(k)));
-  return artInto(el, EVENT_SPECS[k].art);
-}
-
 function kindDesc(k: EventKind) {
   const s = EVENT_SPECS[k];
   const sizes = s.sizes;
@@ -226,13 +222,17 @@ function hubScreen(): Screen {
     { eyebrow: `Organized Play · ${new Date().getFullYear()} season`, cls: 'lobby-screen ev-screen ev-hub', root: true },
     resume,
     circuitCard(season),
-    iosGroup(
-      'Events',
-      [
-        eventRow('locals', 'Locals Night', 'Friday at the card shop\u00a0· 16–32\u00a0players\u00a0· Top\u00a04/8', () => go('locals'), night ? 'In progress' : undefined),
-        ...EVENT_KINDS.filter((k) => k !== 'locals').map((k) => eventRow(k, EVENT_SPECS[k].label, kindDesc(k), () => go('events', { view: 'checkin', kind: k }), run?.kind === k && !run.season ? 'In progress' : undefined)),
-      ],
-      'Every event is open any time as a one-off. Bigger events bring stronger fields: more real tournament-winning lists, higher-tier decks and harder AI.',
+    h(
+      'section',
+      { class: 'ios-group' },
+      h('h2', { class: 'ios-group-h' }, 'Events'),
+      h(
+        'div',
+        { class: 'ev-venues' },
+        venueCard('locals', 'Locals Night', 'Friday at the card shop\u00a0· 16–32\u00a0players\u00a0· Top\u00a04/8', () => go('locals'), night ? 'In progress' : undefined),
+        EVENT_KINDS.filter((k) => k !== 'locals').map((k) => venueCard(k, EVENT_SPECS[k].label, kindDesc(k), () => go('events', { view: 'checkin', kind: k }), run?.kind === k && !run.season ? 'In progress' : undefined)),
+      ),
+      h('p', { class: 'ios-foot' }, 'Every event is open any time as a one-off. Bigger events bring stronger fields: more real tournament-winning lists, higher-tier decks and harder AI.'),
     ),
     iosGroup('Practice', [
       iosNav('Tournament', () => go('tournament'), {
@@ -255,29 +255,46 @@ function hubScreen(): Screen {
   return { el };
 }
 
-function eventRow(k: EventKind, label: string, desc: string, onClick: () => void, badge?: string) {
+/** One event as a card with its venue painted behind it (src/ui/art, mapped in events.css by data-vart). */
+function venueCard(k: EventKind, label: string, desc: string, onClick: () => void, badge?: string) {
   return h(
     'button',
-    { type: 'button', class: 'ios-row ios-row--nav ev-row', onclick: onClick },
-    kindArt(k),
-    h('span', { class: 'ios-row-text' }, h('span', { class: 'ios-label' }, label), h('span', { class: 'ios-desc' }, desc)),
+    { type: 'button', class: 'ev-venue', 'data-vart': k, onclick: onClick },
+    h('span', { class: 'ev-venue-text' }, h('b', null, label), h('span', null, desc)),
     badge ? h('span', { class: 'ev-tag is-gold' }, badge) : null,
-    icon('chevron', 'icon ios-chev'),
+    icon('chevron', 'icon ev-venue-chev'),
   );
 }
 
-function ladder(active?: EventKind) {
-  const items: [EventKind, string][] = [
-    ['locals', 'Locals'],
-    ['regional', 'Regionals'],
-    ['sjc', 'Series'],
-    ['nationals', 'Nationals'],
-  ];
+/** The 12 weeks as a track: a dot for a Locals-only week, the event's icon where a bigger one is held. */
+function seasonTrack(week?: number) {
+  const done = week ? Math.min(SEASON_WEEKS, week) - 1 : 0;
   return h(
     'ol',
-    { class: 'ev-ladder', 'aria-label': 'The Organized Play ladder' },
-    items.map(([k, l]) => h('li', { class: [active === k && 'is-on'] }, h('span', { class: 'ev-ladder-dot' }, icon(KIND_ICON(k))), h('span', null, l))),
+    { class: 'ev-track', style: { '--p': String(done / (SEASON_WEEKS - 1)) }, 'aria-label': week ? `Week ${Math.min(SEASON_WEEKS, week)} of ${SEASON_WEEKS}` : `The ${SEASON_WEEKS} weeks of a season` },
+    Array.from({ length: SEASON_WEEKS }, (_, i) => {
+      const w = i + 1;
+      const big = (CALENDAR[w] ?? []).find((k) => k !== 'locals');
+      return h(
+        'li',
+        { class: [big && 'is-big', big === 'nationals' && 'is-final', week != null && w < week && 'is-past', w === week && 'is-now'], title: big ? `Week ${w}: Locals and ${EVENT_SPECS[big].short}` : `Week ${w}: Locals` },
+        h('span', { class: 'ev-track-dot' }, big ? icon(KIND_ICON(big)) : null),
+        h('span', { class: 'ev-track-wk' }, String(w)),
+      );
+    }),
   );
+}
+
+function trackLegend() {
+  const item = (k: EventKind, label: string) => h('span', null, icon(KIND_ICON(k)), label);
+  return h('div', { class: 'ev-track-legend' }, h('span', null, h('i', { class: 'ev-track-key' }), 'Locals every Friday'), item('regional', 'Regional'), item('sjc', 'Series'), item('nationals', 'Nationals'));
+}
+
+/** How far you are from a Nationals seat: invited, inside the circuit cut, or places short of it. */
+function nationalsGap(s: Season, me: CircuitRow) {
+  if (s.invites[YOU]?.nationals) return 'Invited';
+  if (!me.score) return '—';
+  return me.rank <= CIRCUIT_INVITE_RANK ? `Top ${CIRCUIT_INVITE_RANK}` : `${me.rank - CIRCUIT_INVITE_RANK} short`;
 }
 
 function circuitCard(s: Season | null) {
@@ -286,9 +303,10 @@ function circuitCard(s: Season | null) {
       'section',
       { class: 'ev-circuit', 'aria-label': 'The Circuit' },
       h('div', { class: 'ev-circuit-eyebrow' }, 'The Circuit · Optional'),
-      h('h2', null, 'Play a 12-week season'),
-      h('p', null, `Locals every Friday, Regional Qualifiers, a Championship Series mid-season, then an invite-only Nationals to close it out. Your rank counts your best ${BEST_OF} results from the last ${RANK_WINDOW} weeks, so every week you need to prove yourself.`),
-      ladder(),
+      h('h2', null, `A ${SEASON_WEEKS}-week season`),
+      seasonTrack(),
+      trackLegend(),
+      h('p', null, `Your rank counts your best ${BEST_OF} results from the last ${RANK_WINDOW} weeks. The circuit Top ${CIRCUIT_INVITE_RANK} are invited to Nationals.`),
       ctaButton('Start a season', () => void begin(), 'flag'),
     );
   if (s.done && s.summary)
@@ -309,13 +327,14 @@ function circuitCard(s: Season | null) {
     { class: 'ev-circuit', 'aria-label': 'Your season' },
     h('div', { class: 'ev-circuit-eyebrow' }, `Season ${s.number} · ${weekRange(s.week)}`),
     h('h2', null, `Week ${s.week} of ${SEASON_WEEKS}`),
-    h('p', null, big ? `This week: Locals and ${big.title}.` : 'This week: Locals.'),
+    seasonTrack(s.week),
+    h('p', { class: 'ev-circuit-week' }, big ? `This week: Locals and ${big.title}.` : 'This week: Locals.'),
     h(
       'div',
       { class: 'ev-circuit-stats' },
       h('div', null, h('b', null, me.score ? ordinal(me.rank) : '—'), h('span', null, `of ${circuitStandings(s).length}`)),
       h('div', null, h('b', null, String(me.score)), h('span', null, `Pts · ${RANK_WINDOW} wk`)),
-      h('div', null, h('b', null, String(loadRatings().constructed.rating)), h('span', null, 'Rating')),
+      h('div', null, h('b', null, nationalsGap(s, me)), h('span', null, 'Nationals')),
     ),
     s.invites[YOU]?.nationals ? h('div', { class: 'ev-circuit-tags' }, inviteTags(s.invites[YOU])) : null,
     ctaButton('Open season', () => go('events', { view: 'season' }), 'flag'),
@@ -360,7 +379,7 @@ function checkInScreen(params: Record<string, string>): Screen {
 
   const flyer = h(
     'section',
-    { class: 'lx-flyer', 'aria-label': 'The event' },
+    { class: 'lx-flyer lx-flyer--art', 'data-vart': kind, 'aria-label': 'The event' },
     h('div', { class: 'lx-flyer-eyebrow' }, h('span', null, spec.label.length > 20 ? spec.short : spec.label), h('span', { class: 'lx-dot' }), h('span', null, 'Edison Format')),
     h('h2', { class: 'lx-flyer-shop' }, kind === 'sjc' || !venue.city ? venue.name : venue.city),
     h('div', { class: 'lx-flyer-where' }, venue.where),
@@ -450,7 +469,7 @@ function checkInScreen(params: Record<string, string>): Screen {
     },
     flyer,
     sizePicker,
-    lobbySection('Your deck', linkButton('Deck Builder', () => go('deck-builder')), deckShelf(decks, deckKey, (d) => ((deckKey = d?.key ?? null), persist(), drawBar()), { label: 'Your deck' })),
+    lobbySection('Your deck', linkButton('Deck Builder', () => go('deck-builder')), deckPick(decks, deckKey, (d) => ((deckKey = d?.key ?? null), persist(), drawBar()))),
     notable,
     lobbySection(sev ? 'Prizes and circuit points' : 'Prize support', null, h('div', { class: 'lx-prize-list' }, prizeRows)),
     inviteNote ? h('p', { class: 'ev-points-note', style: { marginTop: '-14px' } }, inviteNote) : null,
@@ -508,14 +527,7 @@ function seasonScreen(s: Season): Screen {
   const runHere = run && run.season?.seasonId === s.id ? run : null;
   const week = eventsThisWeek(s);
 
-  const progress = h(
-    'div',
-    { class: 'ev-progress', 'aria-hidden': 'true' },
-    Array.from({ length: SEASON_WEEKS }, (_, i) => {
-      const w = i + 1;
-      return h('span', { class: [w < s.week && 'is-past', w === s.week && 'is-now'] });
-    }),
-  );
+  const progress = seasonTrack(s.week);
   const head = h(
     'section',
     { class: 'ev-week' },
@@ -641,7 +653,7 @@ function seasonScreen(s: Season): Screen {
 function weekCard(s: Season, ev: SeasonEvent, run: ReturnType<typeof loadActiveEvent>) {
   const spec = EVENT_SPECS[ev.kind];
   const sub = `${shortDate(ev.dateLabel)} · ${ev.size} players · ${formatLine(ev.kind, ev.size)}`;
-  const top = h('div', { class: 'ev-card-top' }, kindArt(ev.kind), h('div', { class: 'ev-card-text' }, h('b', null, ev.title), h('span', null, sub)));
+  const top = h('div', { class: 'ev-card-top' }, h('div', { class: 'ev-card-text' }, h('b', null, ev.title), h('span', null, sub)));
   let body: Child = null;
   if (ev.status === 'played' && ev.result) {
     body = h(
@@ -657,7 +669,7 @@ function weekCard(s: Season, ev: SeasonEvent, run: ReturnType<typeof loadActiveE
   } else {
     body = h('div', { class: 'ev-card-actions' }, h('button', { type: 'button', class: 'lx-btn lx-btn--primary', onclick: () => go('events', { view: 'checkin', event: ev.id }) }, icon('clipboard'), 'Register'));
   }
-  return h('section', { class: 'ev-card' }, top, body);
+  return h('section', { class: 'ev-card ev-card--art', 'data-vart': ev.kind }, top, body);
 }
 
 /** Top 5, a gap, then the rows around you. */

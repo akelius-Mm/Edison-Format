@@ -1,7 +1,7 @@
 // Locals Night: check in at a card shop this Friday, read the pairings off the
 // wall, play your match, watch the result slips come in, check standings, make the cut, collect
 // prize packs. Engine in src/locals.
-import { isToday, shortDate, yearOf } from '../../calendar';
+import { isToday, shortDate } from '../../calendar';
 import {
   PRIZE_TABLE,
   REGULARS,
@@ -122,6 +122,40 @@ export function deckArtEl(deck: Pick<DeckSnapshot, 'id' | 'main' | 'extra' | 'co
   return el;
 }
 
+/** The chosen deck as one row. "Change" opens the full shelf under it; with no deck chosen it starts open. */
+export function deckPick(decks: DeckInfo[], selected: string | null, onSelect: (d: DeckInfo | null) => void) {
+  let cur = selected;
+  let open = !decks.some((d) => d.key === cur);
+  const row = h('button', { type: 'button', class: 'lx-pick' });
+  const shelf = h(
+    'div',
+    { class: 'lx-pick-shelf' },
+    deckShelf(decks, selected, (d) => {
+      cur = d?.key ?? null;
+      draw();
+      onSelect(d);
+    }, { label: 'Your deck' }),
+  );
+  const draw = () => {
+    const d = decks.find((x) => x.key === cur);
+    row.setAttribute('aria-expanded', String(open));
+    shelf.hidden = !open;
+    row.replaceChildren(
+      d ? deckArtEl({ id: d.key, main: d.main, extra: d.extra, color: d.color }, 'lx-pick-art') : h('span', { class: 'lx-pick-art' }),
+      h('span', { class: 'lx-pick-text' }, h('b', null, d ? d.name : 'Choose a deck'), h('span', null, d ? `${d.archetype} · Tier ${d.tier}` : 'Winners, archetypes or your own')),
+      h('span', { class: 'lx-pick-change' }, open ? 'Done' : 'Change'),
+    );
+  };
+  row.onclick = () => {
+    open = !open;
+    draw();
+    // the shelf laid itself out while hidden: bring the chosen deck into view now that it has a size
+    if (open) shelf.querySelector('.dkc-box.on')?.scrollIntoView({ block: 'nearest', inline: 'center' });
+  };
+  draw();
+  return h('div', { class: 'lx-pick-wrap' }, row, shelf);
+}
+
 /** Decks the player has seen: their own, opponents they sat down with, the top cut once posted. */
 function knownDeck(n: LocalsNight, id: string) {
   if (id === n.humanId || n.phase === 'done') return true;
@@ -170,15 +204,9 @@ function checkInScreen(): Screen {
   let size: FieldSize = form.size?.night === up.number ? form.size.size : up.size;
   const persist = () => saveJSON(FORM_KEY, { deck: deckKey, size: { night: up.number, size } } satisfies CheckInForm);
 
-  const facts = h('div', { class: 'lx-facts' });
+  const when = h('div', { class: 'lx-flyer-when' }, `${isToday(up.date) ? 'Tonight' : shortDate(up.dateLabel)} · Free entry`);
   const formatLine = h('div', { class: 'lx-flyer-format' });
   const drawFacts = () => {
-    const [wd, md] = up.dateLabel.split(', ');
-    facts.replaceChildren(
-      fact(wd.slice(0, 3), md.replace(/^(\w{3})\w*/, '$1'), isToday(up.date) ? 'Tonight' : yearOf(up.date)),
-      fact('Players', String(size), size === 16 ? 'Quiet week' : size === 24 ? 'Usual crowd' : 'Packed house'),
-      fact('Entry', 'Free', 'Store-sponsored'),
-    );
     formatLine.replaceChildren(
       h('span', null, `${swissRoundsFor(size)} Swiss rounds`),
       h('span', null, 'Best of 3'),
@@ -186,18 +214,16 @@ function checkInScreen(): Screen {
       h('span', null, '45-min rounds'),
     );
   };
-  const fact = (k: string, v: string, sub: string) => h('div', { class: 'lx-fact' }, h('span', { class: 'lx-fact-k' }, k), h('b', { class: 'lx-fact-v' }, v), h('span', { class: 'lx-fact-s' }, sub));
   drawFacts();
 
   const flyer = h(
     'section',
-    { class: 'lx-flyer', 'aria-label': 'Tonight' },
+    { class: 'lx-flyer lx-flyer--art lx-flyer--slim', 'data-vart': 'locals', 'aria-label': 'Tonight' },
     h('div', { class: 'lx-flyer-eyebrow' }, h('span', null, 'Friday Locals'), h('span', { class: 'lx-dot' }), h('span', null, 'Edison Format')),
     h('h2', { class: 'lx-flyer-shop' }, up.shop.name),
     h('div', { class: 'lx-flyer-where' }, up.shop.where),
-    facts,
+    when,
     formatLine,
-    h('p', { class: 'lx-flyer-blurb' }, up.shop.blurb),
   );
 
   const turnout = segmented<FieldSize>(
@@ -262,18 +288,18 @@ function checkInScreen(): Screen {
     'Locals Night',
     { eyebrow: `Night ${up.number} · ${shortDate(up.dateLabel)}`, cls: 'lobby-screen lx-screen lx-checkin', backTo: () => go('events'), backLabel: 'Events' },
     flyer,
-    lobbySection('Turnout', h('span', { class: 'lob-count' }, 'Who shows up'), turnout),
     lobbySection(
       'Your deck',
       linkButton('Deck Builder', () => go('deck-builder')),
-      deckShelf(decks, deckKey, (d) => {
+      deckPick(decks, deckKey, (d) => {
         deckKey = d?.key ?? null;
         persist();
         drawBar();
-      }, { label: 'Your deck' }),
+      }),
     ),
+    lobbySection('Turnout', h('span', { class: 'lob-count' }, 'More players, longer night'), turnout),
     lobbySection('Regulars tonight', h('span', { class: 'lob-count' }, 'Your store record'), regularsRow),
-    lobbySection('Prize support', null, prizeList),
+    h('details', { class: 'lx-more' }, h('summary', null, h('span', null, 'Venue and prizes'), icon('chevron')), h('p', { class: 'lx-flyer-blurb' }, up.shop.blurb), prizeList),
     history.length
       ? h(
           'button',
