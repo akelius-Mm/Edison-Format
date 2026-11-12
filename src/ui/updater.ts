@@ -5,6 +5,7 @@
 // (as the event screen opens: the event is saved and no duel is running), or when the player taps
 // "Restart" on the small note on Home or the event screen.
 declare const __BUILD_ID__: string;
+import { LAB } from '../lab/flag';
 
 const CHECK_EVERY_MS = 15 * 60 * 1000;
 let pending = false;
@@ -121,7 +122,8 @@ export function startUpdater() {
   setInterval(() => void check(), CHECK_EVERY_MS);
   setTimeout(() => void check(), 3000);
 
-  if (!('serviceWorker' in navigator)) return;
+  // The Lab has no service worker of its own (it is online only, and must not sit beside the app's worker).
+  if (!('serviceWorker' in navigator) || LAB) return;
   window.addEventListener('load', () => {
     // A new service worker taking over also means a new version.
     const hadController = !!navigator.serviceWorker.controller;

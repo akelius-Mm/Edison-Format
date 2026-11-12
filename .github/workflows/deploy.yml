@@ -29,6 +29,8 @@ jobs:
       - name: Rules tests and AI-vs-AI smoke test
         run: npm test
       - run: npx vite build
+      # The Lab: the same code with the experimental look, published at <site>/lab/ (vite.config.ts labBuild).
+      - run: npx vite build --mode lab
       - run: touch dist/.nojekyll
       # Home-screen icon: the Dark Armed Dragon artwork, saved next to the site so iOS can use it.
       - name: App icon (Dark Armed Dragon)

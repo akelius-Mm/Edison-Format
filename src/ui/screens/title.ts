@@ -1,5 +1,6 @@
 // Play tab (route `title`, also `play`): the hero with Duel vs AI, anything in progress, this week's event,
 // playing friends and Watch AI vs AI (the practice Tournament lives under Events). Settings and Profile sit in the hero's corner. Also the Collection tab.
+import { LAB } from '../../lab/flag';
 import { isToday, shortDate } from '../../calendar';
 import { REGULARS, loadRivals, nightDate, rivalTag } from '../../locals';
 import { getSettings, loadJSON } from '../settings';
@@ -40,7 +41,7 @@ export function titleScreen(): Screen {
     h(
       'div',
       { class: 'home-hero-body' },
-      h('div', { class: 'home-eyebrow' }, `Edison Format · ${new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}`),
+      h('div', { class: 'home-eyebrow' }, `${LAB ? 'Edison Lab' : 'Edison Format'} · ${new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}`),
       h('h1', { class: 'home-title' }, 'Edison'),
       h(
         'div',

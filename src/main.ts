@@ -1,6 +1,7 @@
 import './ui/app.css';
 import './ui/screens/screens.css';
 import { startApp } from './ui/app';
+import { LAB } from './lab/flag';
 import { music } from './ui/audio/music';
 import { loadSfxSamples } from './ui/audio/samples';
 import { startUpdater } from './ui/updater';
@@ -24,3 +25,6 @@ setTimeout(() => void loadSfxSamples(), 1500);
 
 // Installable app: offline service worker plus automatic updates (hosted site only).
 startUpdater();
+
+// The Lab build only (vite --mode lab): the experimental look. The normal build drops this line.
+if (LAB) void import('./lab');
