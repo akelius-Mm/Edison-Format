@@ -1,6 +1,7 @@
-// Locals Night: check in at a card shop on a Friday in spring 2010, read the pairings off the
+// Locals Night: check in at a card shop this Friday, read the pairings off the
 // wall, play your match, watch the result slips come in, check standings, make the cut, collect
 // prize packs. Engine in src/locals.
+import { isToday, shortDate, yearOf } from '../../calendar';
 import {
   PRIZE_TABLE,
   REGULARS,
@@ -171,7 +172,7 @@ function checkInScreen(): Screen {
   const drawFacts = () => {
     const [wd, md] = up.dateLabel.split(', ');
     facts.replaceChildren(
-      fact(wd.slice(0, 3), md, '2010'),
+      fact(wd.slice(0, 3), md.replace(/^(\w{3})\w*/, '$1'), isToday(up.date) ? 'Tonight' : yearOf(up.date)),
       fact('Players', String(size), size === 16 ? 'Quiet week' : size === 24 ? 'Usual crowd' : 'Packed house'),
       fact('Entry', 'Free', 'Store-sponsored'),
     );
@@ -256,7 +257,7 @@ function checkInScreen(): Screen {
   const history = loadHistory();
   const el = frame(
     'Locals Night',
-    { eyebrow: `Night ${up.number} · ${up.dateLabel.replace(/, 2010$/, '')}`, cls: 'lobby-screen lx-screen lx-checkin', backTo: () => go('events'), backLabel: 'Events' },
+    { eyebrow: `Night ${up.number} · ${shortDate(up.dateLabel)}`, cls: 'lobby-screen lx-screen lx-checkin', backTo: () => go('events'), backLabel: 'Events' },
     flyer,
     lobbySection('Turnout', h('span', { class: 'lob-count' }, 'Who shows up'), turnout),
     lobbySection(
@@ -377,7 +378,7 @@ function hubScreen(n: LocalsNight, autoResume = false): Screen {
         h('h1', { class: 'lx-hub-title' }, done ? 'Final standings' : roundLabel(n)),
         h('span', { class: ['lx-pill', done && placeOf(n) <= n.topCut && 'is-gold'] }, pill),
       ),
-      h('div', { class: 'lx-hub-sub' }, `${n.dateLabel.replace(/, 2010$/, '')} · ${n.size} players · Top ${n.topCut}`, n.phase === 'top' && humanEliminated(n) ? ' · Spectating' : ''),
+      h('div', { class: 'lx-hub-sub' }, `${shortDate(n.dateLabel)} · ${n.size} players · Top ${n.topCut}`, n.phase === 'top' && humanEliminated(n) ? ' · Spectating' : ''),
     );
   }
 
@@ -455,7 +456,7 @@ function hubScreen(n: LocalsNight, autoResume = false): Screen {
       h(
         'div',
         { class: ['lx-seat-player', right && 'right'] },
-        avatar(e, 40),
+        avatar(e, 64),
         h('div', { class: 'lx-seat-pn' }, h('b', null, e.human ? 'You' : e.name), h('span', null, rec(e.id))),
       );
     const flip = flipMatch === m.id;
@@ -1036,7 +1037,7 @@ function historyScreen(): Screen {
                 'div',
                 { class: 'lx-night-row' },
                 h('span', { class: ['lx-night-place', x.place === 1 && 'is-first', x.madeCut && 'is-cut'] }, placeText(x.place)),
-                h('span', { class: 'lx-night-main' }, h('b', null, x.shop), h('span', null, `${x.dateLabel.replace(/, 2010$/, '')} · ${x.size} players`), h('span', null, `${x.deckName} · ${x.record}${x.madeCut ? ` · Top ${x.topCut}` : ''}`)),
+                h('span', { class: 'lx-night-main' }, h('b', null, x.shop), h('span', null, `${shortDate(x.dateLabel)} · ${x.size} players`), h('span', null, `${x.deckName} · ${x.record}${x.madeCut ? ` · Top ${x.topCut}` : ''}`)),
                 h('span', { class: 'lx-night-prize' }, x.packs ? `${x.packs} packs` : `${x.coins} DP`),
               ),
             ),

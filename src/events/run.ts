@@ -186,7 +186,7 @@ export function createEvent(o: CreateEventOptions): EventRun {
   const seed = (o.seed ?? Math.floor(Math.random() * 2 ** 31)) >>> 0;
   const s: RngState = { rng: seed };
   const venue = o.venue ?? venueFor(o.kind, String(number));
-  const date = o.date ?? standaloneDate(o.kind, number);
+  const date = o.date ?? standaloneDate(o.kind);
   const week = o.season?.week ?? 1;
   const seeds = shuffleIn(s, Array.from({ length: size }, (_, i) => i + 1));
   const attendees = (o.attendees ?? []).slice(0, size - 1);

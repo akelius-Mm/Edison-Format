@@ -72,8 +72,8 @@ const SKILL_SPREAD = [80, 70, 70, 60, 50];
 const TIER_TITLES: string[][] = [
   [],
   ['Store Champion', 'Road Warrior', 'Regional Regular', 'Weekend Grinder', 'Deck Tinkerer', 'Locals Legend', 'First Big Event'],
-  ['Regional Top 8', 'Former SJC Top 32', 'Road Warrior', 'Store Champion', 'Team Captain', 'Grinder', 'National Qualifier'],
-  ['National Qualifier', 'Regional Champion', 'SJC Top 8', 'Circuit Grinder', 'Former Top 16'],
+  ['Regional Top 8', 'Former Series Top 32', 'Road Warrior', 'Store Champion', 'Team Captain', 'Grinder', 'National Qualifier'],
+  ['National Qualifier', 'Regional Champion', 'Series Top 8', 'Circuit Grinder', 'Former Top 16'],
   ['National Champion', 'National Finalist', 'Circuit Leader'],
 ];
 
@@ -154,7 +154,7 @@ export function duelistEntrant(d: CircuitDuelist, id: string, seed: number, slee
 
 const LOCAL_TITLES = ['Locals regular', 'Binder trader', 'Friday grinder', 'New to the scene', 'Deck tinkerer', 'Weekend duelist', 'Store veteran'];
 const REGIONAL_TITLES = ['Road warrior', 'Regional regular', 'Store champion', 'Team captain', 'Weekend grinder', 'Regional Top 16'];
-const PRO_TITLES = ['National qualifier', 'SJC Top 8', 'Regional champion', 'Circuit grinder', 'Former Top 16 at Nationals', 'Feature-match regular'];
+const PRO_TITLES = ['National qualifier', 'Series Top 8', 'Regional champion', 'Circuit grinder', 'Former Top 16 at Nationals', 'Feature-match regular'];
 
 /** Circuit sizes by tier (local includes the nine Locals regulars). */
 export const CIRCUIT_SHAPE = { local: 60, regional: 90, pro: 50 } as const;

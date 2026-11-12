@@ -54,6 +54,12 @@ export class PlayerPanel {
     this.el = h('div', `pp ${isMe ? 'pp--me' : 'pp--opp'}`);
     this.avatarEl = h('div', 'pp-avatar');
     this.avatarEl.appendChild(renderAvatar(side.avatar, 64));
+    // The portrait: the player's initials in a ring of their colour, the same one the event match-up shows.
+    const words = side.name.replace(/[^A-Za-z0-9 ]/g, ' ').trim().split(/\s+/).filter(Boolean);
+    const ini = h('span', 'pp-ini');
+    ini.textContent = (words.length > 1 ? words[0][0] + words[words.length - 1][0] : (words[0] ?? '?').slice(0, 1)).toUpperCase();
+    ini.setAttribute('aria-hidden', 'true');
+    this.avatarEl.appendChild(ini);
     const info = h('div', 'pp-info');
     const name = h('div', 'pp-name');
     name.textContent = side.name;
@@ -180,8 +186,8 @@ export class PhaseBar {
       list.appendChild(it);
     }
     const btns = h('div', 'phasebar-btns');
-    this.btnBattle = h('button', 'btn btn--phase', '<span>Battle Phase</span>') as HTMLButtonElement;
-    this.btnMain2 = h('button', 'btn btn--phase', '<span>Main Phase 2</span>') as HTMLButtonElement;
+    this.btnBattle = h('button', 'btn btn--phase', '<span>Battle<i> Phase</i></span>') as HTMLButtonElement;
+    this.btnMain2 = h('button', 'btn btn--phase', '<span>Main<i> Phase</i> 2</span>') as HTMLButtonElement;
     this.btnEnd = h('button', 'btn btn--phase btn--end', '<span>End Turn</span>') as HTMLButtonElement;
     for (const b of [this.btnBattle, this.btnMain2, this.btnEnd]) b.disabled = true;
     btns.append(this.btnBattle, this.btnMain2, this.btnEnd);

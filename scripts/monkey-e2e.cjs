@@ -29,7 +29,7 @@ const SEEDS = (process.env.SEEDS || '11,22,33,44').split(',').map(Number);
 const STEPS = Number(process.env.STEPS || 900);
 const STUCK_MS = 10000;
 
-const ROUTES = ['title', 'play', 'duel', 'exhibition', 'deck-builder', 'database', 'customize', 'settings', 'rules', 'tournament', 'draft', 'packs', 'binder', 'locals', 'events', 'events?view=season', 'profile', 'friend', 'friend-locals'];
+const ROUTES = ['title', 'play', 'duel', 'rivals', 'exhibition', 'deck-builder', 'database', 'customize', 'settings', 'rules', 'tournament', 'draft', 'packs', 'binder', 'locals', 'events', 'events?view=season', 'profile', 'friend', 'friend-locals'];
 const IGNORED = /Failed to load resource|net::ERR|ygoprodeck|yugipedia|ERR_TUNNEL|ERR_PROXY|ERR_CONNECTION|peerjs|PeerJS|Lost connection to server|Could not get an ID|socket|WebSocket/i;
 
 function rng(seed) {

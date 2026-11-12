@@ -1,8 +1,9 @@
-// The 2010 Organized Play ladder: Locals → Regional Qualifier → Shonen Jump Championship →
+// The Organized Play ladder: Locals → Regional Qualifier → Championship Series →
 // Nationals. Field sizes, Swiss rounds, top cuts, venues, prize support and circuit points.
 import { SHOPS, swissRoundsFor as localsSwiss, topCutFor as localsCut } from '../locals/shops';
 import { hash } from '../locals/rng';
 import type { Shop } from '../locals/types';
+import { eventDateOf, nextWeekday, seasonFriday, type EventDate } from '../calendar';
 
 export type EventKind = 'locals' | 'regional' | 'sjc' | 'nationals';
 export const EVENT_KINDS: EventKind[] = ['locals', 'regional', 'sjc', 'nationals'];
@@ -62,8 +63,8 @@ export const EVENT_SPECS: Record<EventKind, EventSpec> = {
   },
   sjc: {
     kind: 'sjc',
-    label: 'Shonen Jump Championship',
-    short: 'SJC',
+    label: 'Championship Series',
+    short: 'Series',
     pitch: 'The big open: hundreds of duelists, two days, one trophy',
     sizes: [224, 384, 512],
     defaultSize: 384,
@@ -141,9 +142,9 @@ const REGIONAL_VENUES: Venue[] = [
 ];
 
 const SJC_VENUES: Venue[] = [
-  { id: 'sjc-edison', city: 'Edison, NJ', name: 'SJC Edison, NJ', where: 'Expo center · Two days', blurb: 'The event the format is named after. Feature tables on a stage, coverage writers at every round.' },
-  { id: 'sjc-dallas', city: 'Dallas, TX', name: 'SJC Dallas, TX', where: 'Convention center · Two days', blurb: 'Day one is a marathon of Swiss. Day two is single elimination under the lights.' },
-  { id: 'sjc-indianapolis', city: 'Indianapolis, IN', name: 'SJC Indianapolis, IN', where: 'Convention center · Two days', blurb: 'Hundreds of duelists, a ballroom of side events, and Championship packs for the cut.' },
+  { id: 'sjc-edison', city: 'Edison, NJ', name: 'Championship Series · Edison, NJ', where: 'Expo center · Two days', blurb: 'The city the format is named after. Feature tables on a stage, coverage writers at every round.' },
+  { id: 'sjc-dallas', city: 'Dallas, TX', name: 'Championship Series · Dallas, TX', where: 'Convention center · Two days', blurb: 'Day one is a marathon of Swiss. Day two is single elimination under the lights.' },
+  { id: 'sjc-indianapolis', city: 'Indianapolis, IN', name: 'Championship Series · Indianapolis, IN', where: 'Convention center · Two days', blurb: 'Hundreds of duelists, a ballroom of side events, and Championship packs for the cut.' },
 ];
 
 const NATIONALS_VENUE: Venue = {
@@ -151,7 +152,7 @@ const NATIONALS_VENUE: Venue = {
   city: 'Indianapolis, IN',
   name: 'National Championship · Indianapolis, IN',
   where: 'Convention center · Invitation only',
-  blurb: 'Regional qualifiers, SJC finishers and the circuit leaders. The season ends here: one National Champion.',
+  blurb: 'Regional qualifiers, Championship Series finishers and the circuit leaders. The season ends here: one National Champion.',
 };
 
 /** Pick a venue for an event (stable per key). */
@@ -176,20 +177,18 @@ export const venueList = (kind: EventKind) => (kind === 'regional' ? REGIONAL_VE
 // ------------------------------------------------------------------ dates
 
 const DAY = 86400000;
-/** Week 1 of a season starts Friday, March 19, 2010; the SJC (week 5) lands on April 17. */
-export const SEASON_START = Date.UTC(2010, 2, 19);
 
-/** Event day within a week: Friday for Locals, Saturday for everything else. */
-export function eventDate(kind: EventKind, week: number) {
-  const d = new Date(SEASON_START + (week - 1) * 7 * DAY + (kind === 'locals' ? 0 : DAY));
-  const iso = d.toISOString().slice(0, 10);
-  const label = d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
-  return { iso, label };
+/**
+ * An event's day in a season week: Friday for Locals, the Saturday after it for everything else. Week 1 is the
+ * week the season started in, on the real calendar.
+ */
+export function eventDate(kind: EventKind, week: number, seasonStartedAt = Date.now()): EventDate {
+  return eventDateOf(seasonFriday(seasonStartedAt, week) + (kind === 'locals' ? 0 : DAY));
 }
 
-/** Stand-alone events borrow a date from the Edison window by a running number. */
-export function standaloneDate(kind: EventKind, number: number) {
-  return eventDate(kind, 1 + ((number - 1) % 24));
+/** A one-off event is the next one on the calendar: this Friday for Locals, this Saturday for the rest. */
+export function standaloneDate(kind: EventKind, at = Date.now()): EventDate {
+  return eventDateOf(nextWeekday(kind === 'locals' ? 5 : 6, at));
 }
 
 // ------------------------------------------------------------------ prizes and circuit points

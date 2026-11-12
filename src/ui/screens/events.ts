@@ -1,7 +1,8 @@
-// Events hub (route `events`): every 2010 Organized Play event, playable any time, plus the
+// Events hub (route `events`): every Organized Play event, playable any time, plus the
 // optional Circuit season on top. Views: hub (default), check-in (?view=checkin&kind= or
 // &event= for a season event), live event (?view=run), season (?view=season) and circuit
 // standings (?view=standings). Engine in src/events; the live event screen is eventRun.ts.
+import { isToday, shortDate, yearOf } from '../../calendar';
 import { loadActiveNight } from '../../locals';
 import { REGULARS } from '../../locals/regulars';
 import { metaLabel } from '../../locals/meta';
@@ -185,7 +186,7 @@ function inviteTags(inv: { nationals?: string } | undefined) {
 }
 
 function weekRange(week: number) {
-  const fri = eventDate('locals', week).label.replace(/^\w+, /, '').replace(/, 2010$/, '');
+  const fri = shortDate(eventDate('locals', week, loadSeason()?.startedAt).label, { noWeekday: true });
   return `Week of ${fri}`;
 }
 
@@ -222,7 +223,7 @@ function hubScreen(): Screen {
 
   const el = frame(
     'Events',
-    { eyebrow: 'Organized Play · Spring 2010', cls: 'lobby-screen ev-screen ev-hub', root: true },
+    { eyebrow: `Organized Play · ${new Date().getFullYear()} season`, cls: 'lobby-screen ev-screen ev-hub', root: true },
     resume,
     circuitCard(season),
     iosGroup(
@@ -231,7 +232,7 @@ function hubScreen(): Screen {
         eventRow('locals', 'Locals Night', 'Friday at the card shop\u00a0· 16–32\u00a0players\u00a0· Top\u00a04/8', () => go('locals'), night ? 'In progress' : undefined),
         ...EVENT_KINDS.filter((k) => k !== 'locals').map((k) => eventRow(k, EVENT_SPECS[k].label, kindDesc(k), () => go('events', { view: 'checkin', kind: k }), run?.kind === k && !run.season ? 'In progress' : undefined)),
       ],
-      'Every event is open any time as a one-off. Bigger events bring stronger fields: more real SJC lists, higher-tier decks and harder AI.',
+      'Every event is open any time as a one-off. Bigger events bring stronger fields: more real tournament-winning lists, higher-tier decks and harder AI.',
     ),
     iosGroup('Practice', [
       iosNav('Tournament', () => go('tournament'), {
@@ -269,12 +270,12 @@ function ladder(active?: EventKind) {
   const items: [EventKind, string][] = [
     ['locals', 'Locals'],
     ['regional', 'Regionals'],
-    ['sjc', 'SJC'],
+    ['sjc', 'Series'],
     ['nationals', 'Nationals'],
   ];
   return h(
     'ol',
-    { class: 'ev-ladder', 'aria-label': 'The 2010 Organized Play ladder' },
+    { class: 'ev-ladder', 'aria-label': 'The Organized Play ladder' },
     items.map(([k, l]) => h('li', { class: [active === k && 'is-on'] }, h('span', { class: 'ev-ladder-dot' }, icon(KIND_ICON(k))), h('span', null, l))),
   );
 }
@@ -286,7 +287,7 @@ function circuitCard(s: Season | null) {
       { class: 'ev-circuit', 'aria-label': 'The Circuit' },
       h('div', { class: 'ev-circuit-eyebrow' }, 'The Circuit · Optional'),
       h('h2', null, 'Play a 12-week season'),
-      h('p', null, `Locals every Friday, Regional Qualifiers, an SJC mid-season, then an invite-only Nationals to close it out. Your rank counts your best ${BEST_OF} results from the last ${RANK_WINDOW} weeks, so every week you need to prove yourself.`),
+      h('p', null, `Locals every Friday, Regional Qualifiers, a Championship Series mid-season, then an invite-only Nationals to close it out. Your rank counts your best ${BEST_OF} results from the last ${RANK_WINDOW} weeks, so every week you need to prove yourself.`),
       ladder(),
       ctaButton('Start a season', () => void begin(), 'flag'),
     );
@@ -344,7 +345,7 @@ function checkInScreen(params: Record<string, string>): Screen {
   let size = sev?.size ?? (form.sizes?.[kind] && spec.sizes.includes(form.sizes[kind]!) ? form.sizes[kind]! : spec.defaultSize);
   const number = nextStandaloneNumber(kind);
   const venue = sev ? { ...venueFor(kind, kind === 'locals' ? `${season!.seed}-${sev.week}` : sev.id), name: sev.title, city: sev.city } : venueFor(kind, String(number));
-  const date = sev ? { iso: sev.date, label: sev.dateLabel } : standaloneDate(kind, number);
+  const date = sev ? { iso: sev.date, label: sev.dateLabel } : standaloneDate(kind);
   const persist = () => saveJSON(FORM_KEY, { deck: deckKey, sizes: { ...(form.sizes ?? {}), ...(sev ? {} : { [kind]: size }) } } satisfies CheckInForm);
 
   const facts = h('div', { class: 'lx-facts' });
@@ -352,7 +353,7 @@ function checkInScreen(params: Record<string, string>): Screen {
   const fact = (k: string, v: string, sub: string) => h('div', { class: 'lx-fact' }, h('span', { class: 'lx-fact-k' }, k), h('b', { class: 'lx-fact-v' }, v), h('span', { class: 'lx-fact-s' }, sub));
   const drawFacts = () => {
     const [wd, md] = date.label.split(', ');
-    facts.replaceChildren(fact(wd.slice(0, 3), md, '2010'), fact('Players', String(size), spec.inviteOnly ? 'Invitation only' : size >= 384 ? 'Two-day open' : 'Open'), fact('Rounds', String(swissRoundsFor(kind, size)), `Top ${topCutFor(kind, size)} cut`));
+    facts.replaceChildren(fact(wd.slice(0, 3), md.replace(/^(\w{3})\w*/, '$1'), isToday(date.iso) ? 'Today' : yearOf(date.iso)), fact('Players', String(size), spec.inviteOnly ? 'Invitation only' : size >= 384 ? 'Two-day open' : 'Open'), fact('Rounds', String(swissRoundsFor(kind, size)), `Top ${topCutFor(kind, size)} cut`));
     formatEl.replaceChildren(h('span', null, formatLine(kind, size)), h('span', null, 'Best of 3'), h('span', null, `${spec.roundMinutes}-min rounds`), sev ? h('span', null, `Season week ${sev.week}`) : h('span', null, 'One-off'));
   };
   drawFacts();
@@ -442,7 +443,7 @@ function checkInScreen(params: Record<string, string>): Screen {
   const el = frame(
     sev ? spec.short : spec.label,
     {
-      eyebrow: sev ? `Season ${season!.number} · Week ${sev.week}` : `${date.label.replace(/, 2010$/, '')}`,
+      eyebrow: sev ? `Season ${season!.number} · Week ${sev.week}` : shortDate(date.label),
       cls: 'lobby-screen lx-screen ev-screen ev-checkin',
       backTo: () => go('events', sev ? { view: 'season' } : {}),
       backLabel: sev ? 'Season' : 'Events',
@@ -639,7 +640,7 @@ function seasonScreen(s: Season): Screen {
 
 function weekCard(s: Season, ev: SeasonEvent, run: ReturnType<typeof loadActiveEvent>) {
   const spec = EVENT_SPECS[ev.kind];
-  const sub = `${ev.dateLabel.replace(/, 2010$/, '')} · ${ev.size} players · ${formatLine(ev.kind, ev.size)}`;
+  const sub = `${shortDate(ev.dateLabel)} · ${ev.size} players · ${formatLine(ev.kind, ev.size)}`;
   const top = h('div', { class: 'ev-card-top' }, kindArt(ev.kind), h('div', { class: 'ev-card-text' }, h('b', null, ev.title), h('span', null, sub)));
   let body: Child = null;
   if (ev.status === 'played' && ev.result) {
@@ -652,7 +653,7 @@ function weekCard(s: Season, ev: SeasonEvent, run: ReturnType<typeof loadActiveE
   } else if (ev.status === 'active' && run?.season?.eventId === ev.id) {
     body = h('div', { class: 'ev-card-actions' }, h('button', { type: 'button', class: 'lx-btn lx-btn--primary', onclick: () => go('events', { view: 'run' }) }, icon('play'), run.phase === 'done' ? 'Collect prizes' : `Continue · ${roundLabel(run)}`));
   } else if (!canEnter(s, ev)) {
-    body = h('p', { class: 'ev-card-note' }, icon('flag'), ` ${spec.short} is invitation only. Earn an invite at a Regional, the SJC, or by ranking in the circuit Top ${CIRCUIT_INVITE_RANK}. The field plays without you.`);
+    body = h('p', { class: 'ev-card-note' }, icon('flag'), ` ${spec.short} is invitation only. Earn an invite at a Regional, the Championship Series, or by ranking in the circuit Top ${CIRCUIT_INVITE_RANK}. The field plays without you.`);
   } else {
     body = h('div', { class: 'ev-card-actions' }, h('button', { type: 'button', class: 'lx-btn lx-btn--primary', onclick: () => go('events', { view: 'checkin', event: ev.id }) }, icon('clipboard'), 'Register'));
   }

@@ -64,10 +64,10 @@
   background: rgba(21, 22, 25, 0.94) !important;
 }
 
-/* No duelist badges anywhere */
+/* No drawn duelist badges anywhere. (The duel's player bars show initials in a ring instead: .pp-avatar in
+   duel.css, the same portrait as the event match-up.) */
 .avatar,
 .avatar-ring,
-.pp-avatar,
 .pt-player > .avatar {
   display: none !important;
 }

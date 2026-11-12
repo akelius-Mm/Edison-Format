@@ -1,0 +1,164 @@
+/* Rivals: the regulars as a ladder of people. Same surfaces and the same blue/red as the duel and events. */
+.rv-summary {
+  margin: 2px 0 14px;
+  font-size: 14px;
+  color: var(--muted);
+}
+.rv-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin: 22px 0 10px;
+}
+.rv-head h2 {
+  font: 700 20px var(--font-display);
+  letter-spacing: -0.02em;
+}
+.rv-head span {
+  font-size: 13px;
+  color: var(--muted);
+}
+.rv-list {
+  display: grid;
+  gap: 12px;
+  padding-bottom: 24px;
+}
+.rv-card {
+  --side: #d98f8f;
+  position: relative;
+  padding: 14px 14px 12px;
+  border-radius: 20px;
+  background: var(--surface-grad);
+  box-shadow: var(--surface-hi), 0 0 0 1px rgba(255, 255, 255, 0.05), 0 8px 22px rgba(0, 0, 0, 0.3);
+}
+/* a nemesis glows their red; someone you have on the run sits in your blue */
+.rv-card.is-nemesis {
+  background: linear-gradient(100deg, rgba(217, 143, 143, 0.2), transparent 60%), var(--surface-grad);
+  box-shadow: var(--surface-hi), 0 0 0 1px rgba(217, 143, 143, 0.4), 0 8px 22px rgba(0, 0, 0, 0.3);
+}
+.rv-card.is-streak {
+  --side: #8fb3d9;
+  background: linear-gradient(100deg, rgba(143, 179, 217, 0.16), transparent 60%), var(--surface-grad);
+}
+.rv-top {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.rv-rank {
+  flex: none;
+  width: 16px;
+  font: 700 13px var(--font);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  color: var(--faint);
+}
+.rv-portrait .lx-av {
+  background: #22242a;
+  color: var(--text);
+  box-shadow: 0 0 0 2px #15161a, 0 0 0 4px var(--side);
+}
+.rv-who {
+  flex: 1;
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.rv-who b {
+  font: 700 17px/1.2 var(--font-display);
+  letter-spacing: -0.015em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rv-who span {
+  font-size: 13px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rv-rating {
+  flex: none;
+  display: grid;
+  justify-items: end;
+}
+.rv-rating b {
+  font: 700 20px/1.1 var(--font-display);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+.rv-rating span {
+  font: 600 10px var(--font);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+.rv-memory {
+  margin: 12px 0;
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--text-2);
+}
+.rv-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.rv-tag,
+.rv-rec {
+  flex: none;
+  padding: 5px 9px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  font: 600 12px var(--font);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-2);
+  white-space: nowrap;
+}
+.rv-tag.is-new {
+  color: var(--muted);
+}
+.rv-tag.is-nemesis {
+  background: rgba(217, 143, 143, 0.18);
+  color: #f0b4b4;
+}
+.rv-tag.is-streak {
+  background: rgba(143, 179, 217, 0.18);
+  color: #b9d2ec;
+}
+.rv-tag.is-rematch {
+  background: rgba(201, 182, 142, 0.16);
+  color: var(--gold-hi);
+}
+.rv-rec.is-up {
+  color: var(--win);
+}
+.rv-rec.is-down {
+  color: var(--loss);
+}
+.rv-go {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 40px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--cta);
+  background-image: var(--cta-grad);
+  box-shadow: inset 0 1px 0 #fff, 0 4px 12px rgba(0, 0, 0, 0.35);
+  color: var(--cta-text);
+  font: 700 14.5px var(--font);
+  cursor: pointer;
+}
+.rv-go .icon {
+  width: 16px;
+  height: 16px;
+}
+@media (min-width: 900px) {
+  .rv-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

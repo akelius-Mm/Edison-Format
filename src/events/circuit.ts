@@ -1,5 +1,5 @@
-// The optional Circuit: a 12-week season of 2010 Organized Play. Locals every Friday, Regional
-// Qualifiers on some Saturdays, an SJC mid-season and an invite-only Nationals finale in week 12.
+// The optional Circuit: a 12-week season of Organized Play on the real calendar. Locals every Friday, Regional
+// Qualifiers on some Saturdays, a Championship Series mid-season and an invite-only Nationals finale in week 12.
 // Placings earn circuit points; your circuit rank counts only your best results
 // from the last 8 weeks, so you have to keep proving yourself. ~200 AI duelists play the same
 // season: regulars at your Locals, travellers at Regionals and SJCs.
@@ -115,8 +115,15 @@ export function loadSeason(): Season | null {
   for (const inv of Object.values(s.invites ?? {})) delete (inv as { worlds?: string }).worlds;
   for (const e of s.events)
     if (e.kind === 'nationals' && e.week !== NATIONALS_WEEK && e.status === 'upcoming' && s.week <= e.week) {
-      const d = eventDate('nationals', NATIONALS_WEEK);
+      const d = eventDate('nationals', NATIONALS_WEEK, s.startedAt);
       Object.assign(e, { week: NATIONALS_WEEK, date: d.iso, dateLabel: d.label });
+    }
+  // Seasons saved when events were dated in spring 2010: put the weeks still to play on the real calendar,
+  // counted from the day the season was started. (Played events keep the date they were played under.)
+  for (const e of s.events)
+    if (e.status === 'upcoming' && e.date.startsWith('2010-')) {
+      const d = eventDate(e.kind, e.week, s.startedAt);
+      Object.assign(e, { date: d.iso, dateLabel: d.label });
     }
   return s;
 }
@@ -158,7 +165,7 @@ function sizeFor(kind: EventKind, key: string): number {
   }
 }
 
-export function buildCalendar(seed: number): SeasonEvent[] {
+export function buildCalendar(seed: number, startedAt = Date.now()): SeasonEvent[] {
   const out: SeasonEvent[] = [];
   const regionals = shuffleIn({ rng: hash(`regionals-${seed}`) }, [...venueList('regional')]);
   let ri = 0;
@@ -167,7 +174,7 @@ export function buildCalendar(seed: number): SeasonEvent[] {
       const id = `w${w}-${kind}`;
       const venue =
         kind === 'regional' ? regionals[ri++ % regionals.length] : kind === 'sjc' ? venueList('sjc')[0] : kind === 'locals' ? venueFor('locals', `${seed}-${w}`) : venueFor(kind, id);
-      const d = eventDate(kind, w);
+      const d = eventDate(kind, w, startedAt);
       out.push({ id, week: w, kind, title: venue.name, city: venue.city, venueId: venue.id, size: sizeFor(kind, `${seed}-${id}`), date: d.iso, dateLabel: d.label, status: 'upcoming' });
     }
   return out;
@@ -180,15 +187,16 @@ export function startSeason(seed = Math.floor(Math.random() * 2 ** 31)): Season 
   const active = loadActiveEvent();
   if (active?.season && active.season.seasonId === prev?.id) clearActiveEvent();
   const number = Math.max(0, ...loadSeasonArchive().map((a) => a.number), prev?.number ?? 0) + 1;
+  const startedAt = Date.now();
   const s: Season = {
     version: 1,
     id: `season-${number}-${(seed >>> 0).toString(36)}`,
     number,
     seed: seed >>> 0,
-    startedAt: Date.now(),
+    startedAt,
     week: 1,
     done: false,
-    events: buildCalendar(seed >>> 0),
+    events: buildCalendar(seed >>> 0, startedAt),
     points: {},
     invites: {},
     rankHistory: [],

@@ -1,4 +1,4 @@
-// Locals Night: a Friday-night Edison tournament at a (fictional) card shop, spring 2010.
+// Locals Night: a Friday-night Edison tournament at a (fictional) card shop.
 // Built on the tournament engine's shapes (Entrant, Match, GameResult) so the existing match
 // flow and simulators plug straight in.
 import type { Entrant, Match } from '../tournament/types';
@@ -53,9 +53,9 @@ export interface LocalsNight {
   /** Running night number (1 = your first Locals Night). */
   number: number;
   shop: Shop;
-  /** ISO date, e.g. "2010-04-23". */
+  /** ISO date of the Friday it was played, e.g. "2026-11-13". */
   date: string;
-  /** "Friday, April 23, 2010" */
+  /** "Friday, November 13, 2026" */
   dateLabel: string;
   size: FieldSize;
   /** Entry fee in DP (0 = free). */
@@ -127,8 +127,26 @@ export interface HistoryEntry {
   finishedAt: number;
 }
 
+/** The last time you played a regular: what they remember about you. */
+export interface RivalMeeting {
+  at: number;
+  /** From your side. */
+  result: 'W' | 'L' | 'D';
+  /** Games, yours first: "2-1". */
+  score: string;
+  /** The deck you played, and the one they played. */
+  myDeck: string;
+  theirDeck: string;
+  /** "Kettle Hill Cards & Games", "Regional Qualifier · Dallas, TX", "a challenge". */
+  where: string;
+}
+
+/** Your match record against one of the regulars (matches, from your side). */
 export interface RivalRecord {
   w: number;
   l: number;
   d: number;
+  /** Matches in a row: positive while you keep winning, negative while they do, 0 after a draw. */
+  streak?: number;
+  last?: RivalMeeting;
 }
