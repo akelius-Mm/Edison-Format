@@ -1,76 +1,225 @@
 /* ==========================================================================
-   Edison Lab: a maximalist table. Wood, brass, thick mats and cards with weight.
-   Every rule is under html.lab, which only the Lab build sets (src/lab/index.ts).
-   Materials are drawn in code (gradients and SVG noise), plus a few small painted pictures in src/lab/art (backdrops, the regulars'
-   portraits, venues).
-   Those are original art generated with scripts/lab-art, each a WebP under 100 KB and about 1000 px a side.
-   They are only referenced from this file, so the normal build never bundles them, and each one is a CSS
-   background on its own screen, so the browser fetches it only when that screen is first shown.
+   Edison Lab: Nordic office. Paper white, soft grey, charcoal ink and one muted green; flat surfaces, thin
+   lines, generous space, no ornament. Every rule is under html.lab, which only the Lab build sets
+   (src/lab/index.ts). The menus are light; a duel keeps the app's dark table so the cards stay the brightest
+   thing on screen (the light tokens switch off while a duel is on screen).
+   The only pictures are the regulars' portraits in src/lab/art (192 px WebP, about 4 KB each, shown in black
+   and white). They are referenced only from this file, so the normal build never bundles them.
    ========================================================================== */
-.lab {
-  /* walnut planks: long vertical grain from stretched noise, over a dark base, with seams */
-  --lab-wood:
-    repeating-linear-gradient(90deg, transparent 0 129px, rgba(0, 0, 0, 0.5) 129px 131px, rgba(255, 214, 160, 0.06) 131px 132px),
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='396' height='900'%3E%3Cfilter id='w' x='0' y='0' width='100%25' height='100%25'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.028 .003' numOctaves='3' seed='4' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .46 0 0 0 0 .28 0 0 0 0 .15 .7 0 0 0 -.24'/%3E%3C/filter%3E%3Crect width='396' height='900' fill='%2327170d'/%3E%3Crect width='396' height='900' filter='url(%23w)'/%3E%3C/svg%3E");
-  --lab-brass: #d7b467;
-  --lab-brass-lo: #7a5418;
-  --lab-plate: linear-gradient(180deg, #3b2a1e 0%, #261a12 100%);
+.lab:not(:has(.duel-root)) {
+  color-scheme: light;
+  --bg-0: #f4f2ed;
+  --bg-1: #efede7;
+  --bg-2: #ffffff;
+  --bg-3: #e9e6df;
+  --panel: rgba(255, 255, 255, 0.96);
+  --panel-solid: #ffffff;
+  --panel-hi: #f7f5f1;
+  --line: rgba(24, 30, 36, 0.08);
+  --line-2: rgba(24, 30, 36, 0.14);
+  --sep: rgba(24, 30, 36, 0.08);
+  --grp: #ffffff;
+  --grp-hi: #f1efe9;
+  --fill: rgba(60, 72, 82, 0.08);
+  --fill-2: rgba(60, 72, 82, 0.15);
+  --text: #1c2126;
+  --text-2: #3d454b;
+  --muted: #77808a;
+  --faint: #a7aeb4;
+  /* the accent: a muted pine green (the app's "gold" tokens are its accent) */
+  --gold: #4f7164;
+  --gold-hi: #2f4b41;
+  --gold-lo: #8ca69c;
+  --gold-line: rgba(79, 113, 100, 0.3);
+  --gold-grad: linear-gradient(#2f4b41, #2f4b41);
+  --cta: #1c2126;
+  --cta-text: #ffffff;
+  --cta-grad: linear-gradient(180deg, #2a3137 0%, #1c2126 100%);
+  --cta-shadow: 0 1px 0 rgba(255, 255, 255, 0.08) inset, 0 6px 16px rgba(28, 33, 38, 0.18);
+  --surface-grad: linear-gradient(180deg, #ffffff 0%, #ffffff 100%);
+  --surface-hi: 0 0 0 transparent;
+  --shadow: 0 14px 34px rgba(28, 33, 38, 0.1);
+  --shadow-sm: 0 2px 8px rgba(28, 33, 38, 0.07);
+  --win: #2f8a5c;
+  --loss: #c2534f;
+  --green: #2f8a5c;
+  --red: #c2534f;
+  --blue: #3f74b8;
+  --orange: #c27a2c;
+  --ef-bg-0: #f4f2ed;
+  --ef-bg-1: #efede7;
+  --ef-bg-2: #ffffff;
+  --ef-panel: rgba(255, 255, 255, 0.96);
+  --ef-panel-solid: #ffffff;
+  --ef-panel-border: rgba(24, 30, 36, 0.1);
+  --ef-gold: #4f7164;
+  --ef-gold-hi: #2f4b41;
+  --ef-gold-lo: #8ca69c;
+  --ef-text: #1c2126;
+  --ef-text-dim: #77808a;
+  --ef-text-faint: #a7aeb4;
+  --ef-shadow: 0 14px 34px rgba(28, 33, 38, 0.12);
+  --radius: 14px;
+  --font-display: 'Avenir Next', Avenir, 'Helvetica Neue', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+}
+.lab:not(:has(.duel-root)) body {
+  background: #f4f2ed;
+}
+.lab:not(:has(.duel-root)) body::before {
+  background: #f4f2ed !important;
 }
 
-/* ---------------------------------------------------------------- the table */
-.lab .duel-root {
-  background: #120b07 !important;
+/* ---------------------------------------------------------------- menus: chrome
+   Bars are paper with a hairline, never a dark slab. */
+.lab:not(:has(.duel-root)) .tabbar {
+  background: rgba(255, 255, 255, 0.96) !important;
+  border-top: 1px solid var(--line-2);
 }
-.lab .duel-root .duel-mat.mats-split {
-  border-radius: 18px;
+.lab:not(:has(.duel-root)) .tab { color: #9aa2a9; }
+.lab:not(:has(.duel-root)) .tab.on { color: var(--text); }
+.lab:not(:has(.duel-root)) .frame.is-scrolled .frame-head,
+.lab:not(:has(.duel-root)) .frame--compact .frame-head,
+.lab:not(:has(.duel-root)) .flow-steps,
+.lab:not(:has(.duel-root)) .dr-dock,
+.lab:not(:has(.duel-root)) .sd-bar,
+.lab:not(:has(.duel-root)) .sd-opp,
+.lab:not(:has(.duel-root)) .setup-bar {
+  background: rgba(244, 242, 237, 0.96) !important;
+  border-color: var(--line) !important;
+}
+/* segmented control: a white tab on a grey track */
+.lab:not(:has(.duel-root)) .seg-btn.on {
+  background: #ffffff !important;
+  color: var(--text) !important;
+  box-shadow: 0 1px 3px rgba(28, 33, 38, 0.14) !important;
+}
+/* titles: one weight, tight tracking, no effects */
+.lab:not(:has(.duel-root)) .frame h1,
+.lab:not(:has(.duel-root)) .lx-hub-title,
+.lab:not(:has(.duel-root)) .home-title {
+  font-weight: 600;
+  letter-spacing: -0.035em;
+  text-shadow: none;
+}
+/* surfaces: flat white with a hairline; depth comes from space, not shadow */
+.lab:not(:has(.duel-root)) .home-tile,
+.lab:not(:has(.duel-root)) .home-resume,
+.lab:not(:has(.duel-root)) .home-more,
+.lab:not(:has(.duel-root)) .rv-card,
+.lab:not(:has(.duel-root)) .ios-list,
+.lab:not(:has(.duel-root)) .lx-seat,
+.lab:not(:has(.duel-root)) .lx-sheet {
+  border: 1px solid var(--line);
+  box-shadow: none;
+}
+
+/* ---------------------------------------------------------------- Home
+   The hero is a quiet poster: a sage hill and a clay sun on warm grey, with your deck and its ace in front.
+   (The mat you chose still shows in duels and in Customize.) */
+.lab .home,
+.lab .home-hero {
+  background: transparent !important;
+}
+.lab .home-table {
   background:
-    radial-gradient(150% 105% at 50% 50%, transparent 50%, rgba(0, 0, 0, 0.6)),
-    url('./art/table.webp') center / cover no-repeat,
-    #1c110a;
-  /* a raised rail around the playing surface: dark gap, wooden lip, a line of light on its inner edge */
-  box-shadow:
-    inset 0 0 0 2px #0a0604,
-    inset 0 0 0 7px #4b3120,
-    inset 0 0 0 8px rgba(255, 222, 170, 0.22),
-    inset 0 14px 40px rgba(0, 0, 0, 0.55),
-    0 10px 30px rgba(0, 0, 0, 0.6);
+    radial-gradient(circle 58px at 80% 30%, #d7a78f 0 57px, transparent 58px),
+    radial-gradient(ellipse 62% 78% at 22% 100%, #b7c6bd 0 99.5%, transparent 100%),
+    radial-gradient(ellipse 70% 46% at 88% 100%, #d5d9d2 0 99.5%, transparent 100%),
+    linear-gradient(180deg, #eceae4 0%, #e3e0d8 100%) !important;
+  outline: none;
 }
-.lab .duel-root .duel-mat.mats-split::after {
-  border-color: transparent;
+.lab .home-hero-shade {
+  background: linear-gradient(180deg, rgba(244, 242, 237, 0) 58%, rgba(244, 242, 237, 0.85) 86%, #f4f2ed 100%) !important;
 }
-
-/* Mats are 3 mm of neoprene lying on the wood: a visible edge and a deep soft shadow. */
-.lab .duel-root .mats-split .side::before,
-.lab .duel-root:not(.is-opp-turn) .mats-split .side-me::before,
-.lab .duel-root.is-opp-turn .mats-split .side-opp::before {
-  box-shadow:
-    0 1px 0 rgba(255, 255, 255, 0.14) inset,
-    0 0 calc(var(--zh) * 0.8) rgba(0, 0, 0, 0.26) inset,
-    0 2px 0 rgba(0, 0, 0, 0.75),
-    0 3px 0 rgba(255, 255, 255, 0.05),
-    0 20px 34px rgba(0, 0, 0, 0.75);
+.lab .home-eyebrow,
+.lab .home-record {
+  color: var(--text-2);
 }
-.lab .duel-root:not(.is-opp-turn) .mats-split .side-me::before {
-  box-shadow:
-    0 1px 0 rgba(255, 255, 255, 0.16) inset,
-    0 0 calc(var(--zh) * 0.8) rgba(0, 0, 0, 0.2) inset,
-    0 0 0 2px color-mix(in srgb, var(--dl-me) 80%, transparent),
-    0 0 38px color-mix(in srgb, var(--dl-me) 38%, transparent),
-    0 2px 0 rgba(0, 0, 0, 0.75),
-    0 20px 34px rgba(0, 0, 0, 0.75);
+.lab .home-title {
+  color: var(--text);
 }
-.lab .duel-root.is-opp-turn .mats-split .side-opp::before {
-  box-shadow:
-    0 1px 0 rgba(255, 255, 255, 0.16) inset,
-    0 0 calc(var(--zh) * 0.8) rgba(0, 0, 0, 0.2) inset,
-    0 0 0 2px color-mix(in srgb, var(--dl-opp) 80%, transparent),
-    0 0 38px color-mix(in srgb, var(--dl-opp) 38%, transparent),
-    0 2px 0 rgba(0, 0, 0, 0.75),
-    0 20px 34px rgba(0, 0, 0, 0.75);
+.lab .home-cta,
+.lab .home-cta:hover {
+  color: #ffffff;
+}
+/* on a phone the deck sits small in the top right, in front of the sun, so the title has the left to itself */
+@media (max-width: 719px) {
+  .lab .home-table-cards {
+    --w: clamp(46px, 13vw, 64px);
+    left: auto;
+    right: max(16px, env(safe-area-inset-right, 0px));
+    transform: none;
+    top: calc(max(14px, env(safe-area-inset-top, 0px)) + 52px);
+  }
+}
+.lab:not(:has(.duel-root)) .home-tile-text span {
+  color: var(--muted);
+}
+.lab .home-gear,
+.lab .home-profile {
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: inset 0 0 0 1px var(--line-2);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
 }
 
-/* ---------------------------------------------------------------- cards with weight */
-/* Every card on the table casts a shadow; cards in your hand float higher. */
+/* ---------------------------------------------------------------- picture tiles
+   A tile with card art keeps its dark caption strip and white text; a tile without art is plain white. */
+.lab:not(:has(.duel-root)) .home-tile:not(:has(.home-tile-art.has-art)) .home-tile-shade,
+.lab:not(:has(.duel-root)) .fr-hero:not(:has(.home-tile-art.has-art)) .home-tile-shade {
+  display: none;
+}
+.lab:not(:has(.duel-root)) .home-tile:has(.home-tile-art.has-art) .home-tile-text b,
+.lab:not(:has(.duel-root)) .fr-hero:has(.home-tile-art.has-art) .fr-hero-text b {
+  color: #ffffff;
+}
+.lab:not(:has(.duel-root)) .home-tile:has(.home-tile-art.has-art) .home-tile-text span,
+.lab:not(:has(.duel-root)) .fr-hero:has(.home-tile-art.has-art) .fr-hero-text > span {
+  color: rgba(255, 255, 255, 0.82);
+}
+/* deck tiles are always dark, coloured by their deck */
+.lab:not(:has(.duel-root)) .dkc-box:not(.dkc-new) .dkc-text b {
+  color: #ffffff;
+}
+
+/* ---------------------------------------------------------------- dialogs, badges, the match-up card */
+.lab:not(:has(.duel-root)) .modal {
+  background: #ffffff !important;
+  box-shadow: 0 24px 60px rgba(28, 33, 38, 0.22);
+}
+.lab:not(:has(.duel-root)) .modal-backdrop {
+  background: rgba(28, 33, 38, 0.32) !important;
+}
+.lab:not(:has(.duel-root)) .ui-btn:hover {
+  background: var(--grp-hi);
+}
+.lab:not(:has(.duel-root)) .ui-btn-primary:hover,
+.lab:not(:has(.duel-root)) .ui-btn-gold:hover {
+  background: #2a3137 !important;
+}
+.lab:not(:has(.duel-root)) .input:focus {
+  border-color: var(--gold) !important;
+}
+/* initials badges are pale stone; yours is the accent */
+.lab:not(:has(.duel-root)) .lx-av,
+.lab:not(:has(.duel-root)) .rv-portrait .lx-av,
+.lab:not(:has(.duel-root)) .lx-seat-vs .lx-av {
+  background: #e6e3dc;
+  color: var(--text-2);
+  box-shadow: none;
+}
+.lab:not(:has(.duel-root)) .lx-av.is-you {
+  background: #dfe8e3;
+  color: var(--gold-hi);
+}
+.lab:not(:has(.duel-root)) .lx-seat-vs .lx-av {
+  box-shadow: 0 0 0 3px #ffffff, 0 0 0 5px var(--side);
+}
+.lab:not(:has(.duel-root)) .lx-pill.is-gold {
+  background: rgba(79, 113, 100, 0.14);
+}
+
+/* ---------------------------------------------------------------- duel: weight and impact (unchanged) */
 .lab .duel-root .side ~ .dc .dc-shadow,
 .lab .duel-root .dc:not(.dc-ghost) .dc-shadow {
   opacity: 0.85;
@@ -79,7 +228,6 @@
 .lab .duel-root .hand-me .dc .dc-shadow {
   box-shadow: 0 calc(var(--cw) * 0.2) calc(var(--cw) * 0.3) rgba(0, 0, 0, 0.75);
 }
-/* A card played to the table is slapped down: it drops in from above, squashes, and settles. */
 .lab .duel-root .dc.dc-land {
   animation: labLand calc(460ms * var(--sp)) cubic-bezier(0.3, 1.3, 0.5, 1);
 }
@@ -98,73 +246,9 @@
   38% { opacity: 1; transform: scale(1); }
   100% { opacity: 0.85; transform: none; }
 }
-/* Summons throw a wider, brighter ring and a flash of light on the card. */
 .lab .duel-root .dc.fx-summon .dc-fx {
   animation-duration: calc(640ms * var(--sp));
 }
-
-/* ---------------------------------------------------------------- brass and wood HUD */
-.lab .duel-root .pp,
-.lab .duel-root .phasebar {
-  background: var(--lab-plate) !important;
-  border-color: rgba(215, 180, 103, 0.35) !important;
-  box-shadow: inset 0 1px 0 rgba(255, 226, 170, 0.16), inset 0 -1px 0 rgba(0, 0, 0, 0.5), 0 6px 16px rgba(0, 0, 0, 0.5);
-}
-.lab .duel-root .pp.is-turn {
-  border-color: var(--lab-brass) !important;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 226, 170, 0.22),
-    0 0 0 1px color-mix(in srgb, var(--pc) 45%, transparent),
-    0 0 22px color-mix(in srgb, var(--pc) 40%, transparent),
-    0 6px 16px rgba(0, 0, 0, 0.5);
-}
-/* portraits sit in a brass frame, lit by the player's colour on their turn */
-.lab .duel-root .pp .pp-avatar,
-.lab .duel-root .pp.is-turn .pp-avatar {
-  background: radial-gradient(circle at 50% 30%, #3a3d46, #17181c 70%) !important;
-  box-shadow: 0 0 0 2px #1a110b, 0 0 0 4px var(--lab-brass), 0 0 0 5px var(--lab-brass-lo), 0 4px 10px rgba(0, 0, 0, 0.6) !important;
-}
-.lab .duel-root .pp.is-turn .pp-avatar {
-  box-shadow: 0 0 0 2px #1a110b, 0 0 0 4px var(--lab-brass), 0 0 0 5px var(--lab-brass-lo), 0 0 18px 2px var(--pc), 0 4px 10px rgba(0, 0, 0, 0.6) !important;
-}
-.lab .duel-root .pp-lp {
-  color: #fff3d6;
-  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.7), 0 0 14px rgba(255, 200, 110, 0.25);
-}
-.lab .duel-root .ph.is-current {
-  background: linear-gradient(180deg, color-mix(in srgb, var(--tc) 70%, #fff), var(--tc)) !important;
-  color: #14100c;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5), 0 0 12px color-mix(in srgb, var(--tc) 60%, transparent);
-}
-/* End Turn is a brass button you push: it stands off the bar and sinks when pressed. */
-.lab .duel-root .phasebar.is-active .btn--end:not(:disabled) {
-  background: linear-gradient(180deg, #ffe9a8 0%, #eab94a 55%, #c98a1c 100%) !important;
-  color: #2a1700 !important;
-  box-shadow: inset 0 1px 0 #fff6d0, 0 4px 0 #7d520f, 0 10px 18px rgba(0, 0, 0, 0.55) !important;
-  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.45);
-  translate: 0 -2px;
-  scale: none;
-  filter: none;
-  transition: translate 70ms ease-out, box-shadow 70ms ease-out;
-}
-.lab .duel-root .phasebar.is-active .btn--end:not(:disabled):active,
-.lab .duel-root .phasebar.is-active .btn--end.is-pressed:not(:disabled) {
-  translate: 0 2px;
-  box-shadow: inset 0 1px 0 #fff6d0, 0 0 0 #7d520f, 0 3px 8px rgba(0, 0, 0, 0.5) !important;
-}
-.lab .duel-root .btn--phase:not(.btn--end):not(:disabled) {
-  background: linear-gradient(180deg, #4a3526, #33241a) !important;
-  border-color: rgba(215, 180, 103, 0.5) !important;
-  color: #f3e3c0 !important;
-  box-shadow: inset 0 1px 0 rgba(255, 226, 170, 0.18), 0 3px 0 #17100a !important;
-}
-.lab .duel-root .icon-btn {
-  background: var(--lab-plate) !important;
-  border-color: rgba(215, 180, 103, 0.35) !important;
-  color: #e9d7ae;
-}
-
-/* ---------------------------------------------------------------- impact */
 /* A hit paints the edge of the screen red for a moment (fx.ts adds .lab-hit to the duel). */
 .lab .duel-root::after {
   content: '';
@@ -191,166 +275,12 @@
   10% { opacity: 1; }
   100% { opacity: 0; }
 }
-/* damage numbers are bigger and heavier */
 .lab .duel-root .fx-num {
   font-size: 1.35em;
   text-shadow: 0 2px 0 rgba(0, 0, 0, 0.8), 0 0 22px currentColor;
 }
 
-/* ---------------------------------------------------------------- the shop: menus
-   The whole app sits in a card shop after hours: walnut, brass, lamplight. The clean graphite app stays as it
-   is next door; here the same tokens are re-cut in warm materials, so every screen follows. */
-.lab {
-  --bg-0: #140d08;
-  --bg-1: #1a110b;
-  --bg-2: #22160e;
-  --bg-3: #2c1d13;
-  --panel: rgba(34, 22, 14, 0.96);
-  --panel-solid: #22160e;
-  --panel-hi: #2c1d13;
-  --line: rgba(255, 214, 160, 0.1);
-  --line-2: rgba(255, 214, 160, 0.18);
-  --sep: rgba(255, 214, 160, 0.1);
-  --grp: #24170f;
-  --grp-hi: #36251a;
-  --fill: rgba(170, 120, 70, 0.22);
-  --fill-2: rgba(190, 140, 80, 0.38);
-  --text: #f6ead2;
-  --text-2: #dcc9a6;
-  --muted: #a8926f;
-  --faint: #7a6648;
-  --gold: #e2bb62;
-  --gold-hi: #ffe2a0;
-  --gold-lo: #9a7426;
-  --gold-line: rgba(226, 187, 98, 0.35);
-  --cta: #f0c35a;
-  --cta-text: #2a1700;
-  --cta-grad: linear-gradient(180deg, #ffe9a8 0%, #eab94a 55%, #c98a1c 100%);
-  --cta-shadow: inset 0 1px 0 #fff6d0, 0 4px 0 #7d520f, 0 12px 20px rgba(0, 0, 0, 0.5);
-  --surface-grad: linear-gradient(180deg, #36251a 0%, #24170f 100%);
-  --surface-hi: inset 0 1px 0 rgba(255, 226, 170, 0.14);
-  --font-display: 'Iowan Old Style', 'Palatino Linotype', Palatino, 'Book Antiqua', Georgia, serif;
-}
-/* the room: the wooden counter under one warm lamp */
-.lab body {
-  background: #140d08;
-}
-.lab body::before {
-  background:
-    radial-gradient(110% 55% at 50% 0%, rgba(255, 190, 110, 0.2), transparent 70%),
-    linear-gradient(180deg, rgba(16, 10, 6, 0.55), rgba(16, 10, 6, 0.86)),
-    var(--lab-wood) !important;
-}
-.lab .home,
-.lab .home-hero {
-  background: transparent !important;
-}
-/* Home: the shop counter under its lamp. Your sleeved deck and its ace lie on the wood (the mat you chose
-   still shows in duels and in Customize). */
-.lab .home-table {
-  background: url('./art/counter.webp') 22% 40% / cover no-repeat, #1c110a !important;
-  outline: none;
-}
-.lab .home-hero-shade {
-  background: linear-gradient(180deg, rgba(16, 10, 6, 0.1) 0%, rgba(16, 10, 6, 0.2) 40%, rgba(16, 10, 6, 0.86) 84%, #140d08 100%);
-}
-.lab .home-eyebrow,
-.lab .lx-hub-eyebrow {
-  color: var(--gold);
-}
-/* titles are gilt lettering */
-.lab .home-title,
-.lab .frame h1,
-.lab .lx-hub-title {
-  background: linear-gradient(180deg, #fff3cf 0%, #e9c46d 58%, #b9842a 100%);
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
-  color: transparent;
-  text-shadow: none;
-  filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.65));
-  letter-spacing: -0.02em;
-}
-.lab .home-title {
-  font-weight: 700;
-}
-/* gold buttons you push: they stand off the page and sink under your thumb */
-.lab .cta:not(.cta--dark),
-.lab .home-cta,
-.lab .ui-btn-primary,
-.lab .rv-go,
-.lab .home-resume-go {
-  color: #2a1700 !important;
-  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.45);
-  translate: 0 -2px;
-  transition: translate 70ms ease-out, box-shadow 70ms ease-out;
-}
-.lab .rv-go,
-.lab .home-resume-go {
-  box-shadow: inset 0 1px 0 #fff6d0, 0 3px 0 #7d520f, 0 6px 12px rgba(0, 0, 0, 0.45);
-}
-.lab .cta:not(.cta--dark):active,
-.lab .home-cta:active,
-.lab .ui-btn-primary:active,
-.lab .rv-go:active {
-  translate: 0 2px;
-  scale: none;
-  filter: none;
-  box-shadow: inset 0 1px 0 #fff6d0, 0 0 0 #7d520f, 0 3px 8px rgba(0, 0, 0, 0.5);
-}
-/* plaques: every card, row and tile is a piece of wood with a brass edge */
-.lab .home-tile,
-.lab .home-resume,
-.lab .dkc-box,
-.lab .rv-card,
-.lab .lx-seat,
-.lab .lx-sheet,
-.lab .ios-list,
-.lab .home-more {
-  border: 1px solid rgba(226, 187, 98, 0.34);
-  box-shadow: inset 0 1px 0 rgba(255, 226, 170, 0.16), inset 0 0 0 3px rgba(20, 13, 8, 0.55), 0 10px 22px rgba(0, 0, 0, 0.45);
-}
-.lab .home-resume .icon:first-child {
-  color: var(--gold);
-}
-/* the tab bar is a shelf */
-.lab .tabbar {
-  background: linear-gradient(180deg, #3d2a1c 0%, #22160e 100%) !important;
-  border-top: 1px solid rgba(255, 214, 160, 0.28);
-  box-shadow: 0 -8px 20px rgba(0, 0, 0, 0.55);
-  -webkit-backdrop-filter: none;
-  backdrop-filter: none;
-}
-.lab .tab {
-  color: #8f7a58;
-}
-.lab .tab.on {
-  color: var(--gold-hi);
-  text-shadow: 0 0 12px rgba(255, 200, 110, 0.45);
-}
-.lab .tab.on .icon {
-  filter: drop-shadow(0 0 6px rgba(255, 200, 110, 0.55));
-}
-/* segmented controls: a brass plate slides along a wooden track */
-.lab .seg {
-  background: #1a110b !important;
-  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.7), inset 0 0 0 1px rgba(255, 214, 160, 0.12);
-}
-.lab .seg-btn.on {
-  background: linear-gradient(180deg, #f6d886 0%, #cf9b2f 100%) !important;
-  color: #2a1700 !important;
-  box-shadow: inset 0 1px 0 #fff6d0, 0 2px 0 #7d520f, 0 3px 8px rgba(0, 0, 0, 0.4) !important;
-  font-weight: 700 !important;
-}
-.lab .frame-head {
-  background: linear-gradient(180deg, rgba(42, 28, 18, 0.96), rgba(28, 18, 11, 0.9)) !important;
-  border-bottom: 1px solid rgba(255, 214, 160, 0.18);
-}
-
-/* ---------------------------------------------------------------- the regulars: painted portraits
-   src/lab/art.ts tags a regular's initials badge with data-regular; here each one gets its picture. The
-   picture is a variable, used only by a badge that is on screen, so nine portraits never load at once
-   unless all nine regulars are listed. Each is 192 px square and about 4 KB. */
+/* ---------------------------------------------------------------- the regulars: portraits, black and white */
 .lab [data-regular='marcus'] { --lab-portrait: url('./art/rival-marcus.webp'); }
 .lab [data-regular='priya'] { --lab-portrait: url('./art/rival-priya.webp'); }
 .lab [data-regular='dave'] { --lab-portrait: url('./art/rival-dave.webp'); }
@@ -364,36 +294,12 @@
 .lab .rv-portrait .lx-av[data-regular],
 .lab .duel-root .pp .pp-avatar[data-regular],
 .lab .duel-root .pp.is-turn .pp-avatar[data-regular] {
-  background: var(--lab-portrait) center / cover no-repeat, #22160e !important;
+  background: var(--lab-portrait) center / cover no-repeat, #d9d6cf !important;
   color: transparent !important;
-}
-.lab .lx-av[data-regular] {
-  box-shadow: 0 0 0 1px #1a110b, 0 0 0 2px var(--lab-brass-lo);
-}
-.lab .rv-portrait .lx-av[data-regular] {
-  box-shadow: 0 0 0 2px #1a110b, 0 0 0 4px var(--lab-brass), 0 4px 10px rgba(0, 0, 0, 0.6);
+  filter: grayscale(1) contrast(1.05) brightness(1.15);
 }
 .lab .pp-avatar[data-regular] .pp-ini {
   display: none;
-}
-
-/* ---------------------------------------------------------------- venues
-   The header of a running event is a window onto the room: the shop's back room on Locals night, a hotel
-   ballroom at Regionals, the convention hall at the Championship Series (Nationals plays in the same hall). */
-.lab .lx-hub-head[data-venue='locals'] { --lab-venue: url('./art/venue-locals.webp'); }
-.lab .lx-hub-head[data-venue='regional'] { --lab-venue: url('./art/venue-regional.webp'); }
-.lab .lx-hub-head[data-venue='sjc'],
-.lab .lx-hub-head[data-venue='nationals'] { --lab-venue: url('./art/venue-sjc.webp'); }
-.lab .lx-hub-head[data-venue] {
-  margin: 10px 0 12px;
-  padding: 64px 14px 12px;
-  border-radius: 14px;
-  border: 1px solid rgba(226, 187, 98, 0.34);
-  background:
-    linear-gradient(180deg, rgba(16, 10, 6, 0.05) 0%, rgba(16, 10, 6, 0.5) 45%, rgba(16, 10, 6, 0.93) 100%),
-    var(--lab-venue) center 30% / cover no-repeat,
-    #1c110a;
-  box-shadow: inset 0 1px 0 rgba(255, 226, 170, 0.16), 0 10px 22px rgba(0, 0, 0, 0.45);
 }
 
 @media (prefers-reduced-motion: reduce) {
